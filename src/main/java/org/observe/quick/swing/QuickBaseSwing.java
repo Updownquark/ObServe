@@ -24,6 +24,7 @@ import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.event.CaretListener;
 import javax.swing.text.BadLocationException;
@@ -106,6 +107,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickSlider.Interpreted.class, QuickSwingPopulator.class, widget(SwingSlider::new));
 		tx.with(QuickSpinner.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSpinner<>(i));
 		tx.with(QuickRadioButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButtons::new));
+		tx.with(QuickToggleButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingToggleButtons::new));
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
 		tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
 			(qd, tx2) -> QuickBaseSwing.interpretDynamicStyledDoc(qd, tx2));
@@ -1003,6 +1005,15 @@ public class QuickBaseSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickRadioButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			panel.addRadioField(null, quick.getValue(), quick.getValues(), rf -> component.accept(rf));
+		}
+	}
+
+	static class SwingToggleButtons<T> extends QuickSwingPopulator.Abstract<QuickToggleButtons<T>> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickToggleButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addToggleField(null, quick.getValue(), quick.getValues(), JToggleButton.class, __ -> new JToggleButton(),
+				rf -> component.accept(rf));
 		}
 	}
 

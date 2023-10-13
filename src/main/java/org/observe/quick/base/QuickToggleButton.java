@@ -13,6 +13,7 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -34,6 +35,7 @@ public class QuickToggleButton extends QuickCheckBox {
 			super(parent, type);
 		}
 
+		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
 		}

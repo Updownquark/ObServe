@@ -3,6 +3,9 @@
 <quick xmlns:base="Quick-X v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
 	title="`Simple Miscellaneous Quick Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
 	<head>
+		<imports>
+			<import>org.observe.quick.swing.SwingTestEntity</import>
+		</imports>
 		<models>
 			<model name="app">
 				<value name="text" type="String" init="`This is some text`" />
@@ -24,6 +27,14 @@
 	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
 		<model>
 			<value name="intValue" type="Integer" init="10" />
+			<value name="boolValue" init="false" />
+			<value name="strValue" init="`ABC`" />
+			<list name="strValues" type="String">{"ABC", "DEF", "GHI"}</list>
+			<value name="entity1">new SwingTestEntity()</value>
+			<value name="entity2">new SwingTestEntity()</value>
+			<value name="entity3">new SwingTestEntity()</value>
+			<value name="entity4">new SwingTestEntity()</value>
+			<list name="entities" type="SwingTestEntity">{entity1, entity2, entity3, entity4}</list>
 		</model>
 		<label>This is a demo I created to just throw a bunch of miscellaneous widgets in.
 			<style style-set="header" />
@@ -60,6 +71,22 @@
 				</box>
 				<slider value="sliderValue" min="min" max="max" />
 			</box>
+			<toggle-button field-label="`Toggle Button`" value="boolValue" icon="`/icons/greenDot.png`">`A toggle button`</toggle-button>
+			<toggle-buttons field-label="`Toggle Buttons`" value="strValue" values="strValues" />
+			<table fill="true" rows="entities" active-value-name="row">
+				<column name="`Check`" value="row.getBoolean()" column-value-name="b">
+					<check-box value="b" />
+					<column-edit type="modify-row-value" commit="row.setBoolean(newB)" column-edit-value-name="newB">
+						<check-box />
+					</column-edit>
+				</column>
+				<column name="`Button`" value="row.getBoolean()">
+					<button action="row.setBoolean(true)" enabled="!row.getBoolean()">`Set`</button>
+					<column-edit type="modify-row-value" commit="row.setBoolean(true)" enabled="!row.getBoolean()">
+						<button action="row.setBoolean(true)" />
+					</column-edit>
+				</column>
+			</table>
 		</field-panel>
 	</box>
 </quick>

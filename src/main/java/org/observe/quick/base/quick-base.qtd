@@ -416,7 +416,7 @@
 			<?DOC The number of clicks required to initiated editing on this column?>
 			<attribute name="clicks" type="int" specify="optional" />
 			<?DOC The widget that allows the user to create a new value for this column?>
-			<child-def name="editor" type="value-widget" min="0" inherits="cell-editor" />
+			<child-def name="editor" type="value-widget" inherits="cell-editor" />
 		</element-def>
 		<element-def name="columns-ref" inherits="column-set">
 			<attribute name="model-value" type="expression" />
