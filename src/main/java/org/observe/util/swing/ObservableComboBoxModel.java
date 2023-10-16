@@ -5,8 +5,8 @@ import java.awt.EventQueue;
 import java.awt.Point;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionAdapter;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -157,24 +157,18 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				comboBox.setToolTipText(evt.getNewValue());
 		}));
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
-		AccessibleContext accessible = comboBox.getAccessibleContext();
-		ComboPopup popup;
-		{
-			ComboPopup tempPopup = null;
-			for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
-				Accessible child = accessible.getAccessibleChild(i);
-				if (child instanceof ComboPopup) {
-					tempPopup = (ComboPopup) child;
-					break;
-				}
-			}
-			popup = tempPopup;
-		}
+		ComboPopup popup = getComboPopup(comboBox);
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
+			if (index < 0 || index >= comboBox.getItemCount())
+				return;
+			else if (index == comboBox.getSelectedIndex())
+				return;
+			else if (comboBox.getSelectedItem() == safeValues.get(index))
+				return;
 			// Ignore update events when the popup is expanded
-			if ((index != comboBox.getSelectedIndex() || (index >= 0 && comboBox.getSelectedItem() != safeValues.get(index))
-				|| !popup.isVisible()) && index < comboBox.getItemCount())
-				comboBox.setSelectedIndex(index);
+			else if (popup != null && popup.isVisible())
+				return;
+			comboBox.setSelectedIndex(index);
 		}, listener -> {
 			ItemListener itemListener = evt -> {
 				if (evt.getStateChange() != ItemEvent.SELECTED)
@@ -212,15 +206,28 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 		int[] hoveredItem = new int[] { -1 };
 		if (popup != null) {
-			@SuppressWarnings("cast") // In some JDKs, the return value is not generic. Keep this cast to JList<T> when saving.
-			JList<T> popupList = (JList<T>) popup.getList();
-			class PopupMouseListener extends MouseMotionAdapter {
+			JList<T> popupList = getPopupList(comboBox, popup);
+			class PopupMouseListener extends MouseAdapter {
 				private Point lastHover;
 
 				@Override
 				public void mouseMoved(MouseEvent e) {
 					lastHover = e.getPoint();
+					int index = popupList.locationToIndex(lastHover);
+					if (index != hoveredItem[0]) {
+						hoveredItem[0] = index;
+						popupList.repaint();
+					}
 					_showToolTip();
+				}
+
+				@Override
+				public void mouseExited(MouseEvent e) {
+					lastHover = null;
+					if (hoveredItem[0] >= 0) {
+						hoveredItem[0] = -1;
+						popupList.repaint();
+					}
 				}
 
 				void showToolTip() {
@@ -246,13 +253,35 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 						ObservableSwingUtils.setTooltipVisible(popupList, true);
 				}
 			}
-			;
 			PopupMouseListener popupMouseListener = new PopupMouseListener();
 			subs.add(availableValues.simpleChanges().act(__ -> popupMouseListener.showToolTip()));
+			popupList.addMouseListener(popupMouseListener);
 			popupList.addMouseMotionListener(popupMouseListener);
 			subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
 		}
 		return ComboHookup.of(Subscription.forAll(subs), () -> hoveredItem[0]);
+	}
+
+	public static ComboPopup getComboPopup(JComboBox<?> comboBox) {
+		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
+		AccessibleContext accessible = comboBox.getAccessibleContext();
+		for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
+			Accessible child = accessible.getAccessibleChild(i);
+			if (child instanceof ComboPopup)
+				return (ComboPopup) child;
+		}
+		return null;
+	}
+
+	public static <T> JList<T> getPopupList(JComboBox<T> comboBox, ComboPopup popup){
+		if(popup==null)
+			popup=getComboPopup(comboBox);
+		if(popup==null)
+			return null;
+		// I'm doing it this way because in some JDKs, the return value is not generic.
+		@SuppressWarnings("rawtypes")
+		JList list=popup.getList();
+		return list;
 	}
 
 	/**
@@ -283,9 +312,9 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				try {
 					if (selected.isAcceptable(item) != null) {
 						if (currentSelectedElement[0] == null)
-							setSelected.accept(-1);
+							EventQueue.invokeLater(() -> setSelected.accept(-1));
 						else if (currentSelectedElement[0].isPresent())
-							setSelected.accept(availableValues.getElementsBefore(currentSelectedElement[0]));
+							EventQueue.invokeLater(() -> setSelected.accept(availableValues.getElementsBefore(currentSelectedElement[0])));
 						return false;
 					}
 					currentSelectedElement[0] = availableValues.getElement(idx).getElementId();
@@ -309,15 +338,15 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
 					? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
 						: null;
-					if (found != null) {
-						currentSelectedElement[0] = found.getElementId();
-						currentSelected[0] = found.get();
-						setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
-					} else {
-						currentSelectedElement[0] = null;
-						currentSelected[0] = null;
-						setSelected.accept(-1);
-					}
+				if (found != null) {
+					currentSelectedElement[0] = found.getElementId();
+					currentSelected[0] = found.get();
+					setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+				} else {
+					currentSelectedElement[0] = null;
+					currentSelected[0] = null;
+					setSelected.accept(-1);
+				}
 			} finally {
 				callbackLock[0] = false;
 			}

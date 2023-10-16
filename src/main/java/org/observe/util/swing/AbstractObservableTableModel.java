@@ -804,9 +804,6 @@ public abstract class AbstractObservableTableModel<R> {
 		@Override
 		public void mouseMoved(MouseEvent e) {
 			thePrevious = getValue(e, false).moved(e, thePrevious);
-			if (thePrevious != null)
-				setHover(thePrevious.theRow == null ? -1 : thePrevious.theRow.getRowIndex(), //
-					thePrevious.theCell == null ? -1 : thePrevious.theCell.getColumnIndex());
 		}
 
 		@Override
@@ -831,7 +828,7 @@ public abstract class AbstractObservableTableModel<R> {
 			else
 				row = getModelRow(evt);
 			int column = getModelColumn(evt);
-			if (row != theHoveredRow)
+			if (row != theHoveredRow || column != theHoveredColumn)
 				setHover(row, column);
 			if (row < 0) {
 				CategoryRenderStrategy<R, C> category = column < 0 ? null : (CategoryRenderStrategy<R, C>) getColumn(column);

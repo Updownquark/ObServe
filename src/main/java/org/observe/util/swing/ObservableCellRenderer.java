@@ -286,9 +286,9 @@ public interface ObservableCellRenderer<M, C> {
 
 		private Function<? super ModelCell<? extends M, ? extends C>, String> theText;
 
-		public CheckCellRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> render) {
+		public CheckCellRenderer(JCheckBox checkBox, Predicate<? super ModelCell<? extends M, ? extends C>> render) {
 			theRender = render;
-			theCheckBox = new JCheckBox();
+			theCheckBox = checkBox;
 			theCheckBox.setHorizontalAlignment(JCheckBox.CENTER);
 		}
 
@@ -327,9 +327,9 @@ public interface ObservableCellRenderer<M, C> {
 		private final Function<? super ModelCell<? extends M, ? extends C>, String> theText;
 		private final JButton theButton;
 
-		public ButtonCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+		public ButtonCellRenderer(JButton button, Function<? super ModelCell<? extends M, ? extends C>, String> text) {
 			theText = text;
-			theButton = new JButton();
+			theButton = button;
 		}
 
 		public JButton getButton() {
@@ -404,11 +404,21 @@ public interface ObservableCellRenderer<M, C> {
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> checkRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> value) {
-		return new CheckCellRenderer<>(value);
+		return checkRenderer(new JCheckBox(), value);
+	}
+
+	public static <M, C> ObservableCellRenderer<M, C> checkRenderer(JCheckBox checkBox,
+		Predicate<? super ModelCell<? extends M, ? extends C>> value) {
+		return new CheckCellRenderer<>(checkBox, value);
 	}
 
 	public static <M, C> ButtonCellRenderer<M, C> buttonRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
-		return new ButtonCellRenderer<>(text);
+		return new ButtonCellRenderer<>(new JButton(), text);
+	}
+
+	public static <M, C> ButtonCellRenderer<M, C> buttonRenderer(JButton button,
+		Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+		return new ButtonCellRenderer<>(button, text);
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> linkRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {

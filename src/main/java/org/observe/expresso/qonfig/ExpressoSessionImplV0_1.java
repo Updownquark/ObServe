@@ -82,7 +82,6 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		}
 	};
 
-	private QonfigToolkit theToolkit;
 	private ElementModelValue.Cache theDyamicValueCache;
 
 	@Override
@@ -116,7 +115,6 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
-		theToolkit = toolkit;
 	}
 
 	@Override

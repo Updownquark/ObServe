@@ -1,5 +1,6 @@
 package org.observe.quick.swing;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Insets;
@@ -13,16 +14,7 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import javax.swing.AbstractButton;
-import javax.swing.Icon;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JPopupMenu;
-import javax.swing.ListCellRenderer;
+import javax.swing.*;
 import javax.swing.text.StyledDocument;
 
 import org.observe.Observable;
@@ -186,7 +178,7 @@ class QuickSwingTablePopulation {
 		private final TypeToken<C> theValueType;
 		private final Supplier<C> theValue;
 
-		private JComponent theOwner;
+		protected JComponent theOwner;
 		private ObservableValue<String> theTooltip;
 		private Function<ModelCell<? extends R, ? extends C>, String> isEnabled;
 
@@ -207,10 +199,7 @@ class QuickSwingTablePopulation {
 				// This is in the modifier because we don't have the component yet
 				swingRenderer.addModifier((comp, w) -> {
 					comp.modifyComponent(c -> {
-						if (parent.get().getEditor() instanceof JComponent)
-							theOwner = (JComponent) parent.get().getEditor();
-						else if (parent.get().getComponent() instanceof JComponent)
-							theOwner = (JComponent) parent.get().getComponent();
+						theOwner = getOwner(parent.get());
 					});
 				});
 
@@ -223,6 +212,15 @@ class QuickSwingTablePopulation {
 
 			if (renderPopulator != null)
 				swingRenderer.populate(renderPopulator, theRenderer);
+		}
+
+		protected JComponent getOwner(ComponentEditor<?, ?> parentEditor) {
+			if (parentEditor.getEditor() instanceof JComponent)
+				return (JComponent) parentEditor.getEditor();
+			else if (parentEditor.getComponent() instanceof JComponent)
+				return (JComponent) parentEditor.getComponent();
+			else
+				return null;
 		}
 
 		public QuickWidget getRenderer() {
@@ -347,8 +345,6 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-		private JComponent theOwner;
-
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
 			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
@@ -393,6 +389,14 @@ class QuickSwingTablePopulation {
 
 		void withEditor(ObservableCellEditor<R, C> editor) {
 			theCellEditor = editor;
+		}
+
+		@Override
+		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+			Component rendered = super.renderCell(parent, cell, ctx);
+			if (theOwner != null && cell.isCellHovered())
+				theOwner.setCursor(rendered.getCursor());
+			return rendered;
 		}
 
 		void mutation(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation) {
@@ -739,6 +743,11 @@ class QuickSwingTablePopulation {
 		private final QuickSwingTableColumn<R, C> theEditor;
 		private final boolean isRenderer;
 
+		Color nonSelectionBG;
+		Color nonSelectionFG;
+		Color selectionBG;
+		Color selectionFG;
+
 		public SwingCellPopulator(QuickSwingRenderer<R, C> cell, boolean renderer) {
 			theRenderer = cell;
 			isRenderer = renderer;
@@ -748,6 +757,12 @@ class QuickSwingTablePopulation {
 				theEditor = (QuickSwingTableColumn<R, C>) cell;
 			} else
 				theEditor = null;
+
+			UIDefaults uiValues = UIManager.getDefaults();
+			nonSelectionBG = uiValues.getColor("Table.background");
+			nonSelectionFG = uiValues.getColor("Table.foreground");
+			selectionBG = uiValues.getColor("Table.selectionBackground");
+			selectionFG = uiValues.getColor("Table.selectionForeground");
 		}
 
 		SwingCellPopulator<R, C> unsupported(String message) {
@@ -910,6 +925,9 @@ class QuickSwingTablePopulation {
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+						label[0].setOpaque(true);
+						label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+						label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						label[0].setText(format.apply(field.get()));
 						editor.decorate(label[0]);
@@ -942,7 +960,11 @@ class QuickSwingTablePopulation {
 		public <F> SwingCellPopulator<R, C> addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
+				JLabel[] label = new JLabel[1];
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
+					label[0].setOpaque(true);
+					label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 					F fieldValue = field.get();
 					return format.apply(fieldValue);
@@ -950,6 +972,7 @@ class QuickSwingTablePopulation {
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
+				label[0] = editor.getEditor();
 				theRenderer.delegateTo(delegate);
 			} else
 				unsupported("Link");
@@ -960,7 +983,11 @@ class QuickSwingTablePopulation {
 		public SwingCellPopulator<R, C> addCheckField(String fieldName, SettableValue<Boolean> field,
 			Consumer<ButtonEditor<JCheckBox, ?>> modify) {
 			if (isRenderer) {
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(cell -> {
+				JCheckBox check = new JCheckBox();
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(check, cell -> {
+					check.setOpaque(true);
+					check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					return Boolean.TRUE.equals(field.get());
 				});
 				ButtonRenderEditor<JCheckBox, ?> editor = new ButtonRenderEditor<>(null, theRenderer);
@@ -974,7 +1001,11 @@ class QuickSwingTablePopulation {
 				else {
 					JCheckBox check = new JCheckBox();
 					ButtonRenderEditor<JCheckBox, ?> fieldEditor = new ButtonRenderEditor<>(null,
-						ObservableCellEditor.createCheckBoxEditor(check), check);
+						ObservableCellEditor.createCheckBoxEditor(check, cell -> {
+							check.setOpaque(true);
+							check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+							check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+						}), check);
 					if (modify != null)
 						modify.accept(fieldEditor);
 					theEditor.withEditor(fieldEditor.getCellEditor());
@@ -987,7 +1018,10 @@ class QuickSwingTablePopulation {
 		public SwingCellPopulator<R, C> addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			ButtonRenderEditor<JButton, ?>[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 			if (isRenderer) {
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(cell -> {
+				JButton button = new JButton();
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(button, cell -> {
+					button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					return editor[0].theButtonText == null ? null : editor[0].theButtonText.get();
 				});
 				editor[0] = new ButtonRenderEditor<>(buttonText, delegate);
@@ -1001,6 +1035,9 @@ class QuickSwingTablePopulation {
 					editor[0].decorateButton(button);
 					return editor[0].getButtonText().get();
 				}, button, cell -> {
+					button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+				}, cell -> {
 					action.act(null);
 					return cell.getCellValue();
 				}), button);

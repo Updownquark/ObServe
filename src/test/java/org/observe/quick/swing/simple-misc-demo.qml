@@ -27,6 +27,11 @@
 	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
 		<model>
 			<value name="intValue" type="Integer" init="10" />
+			<transform name="mapped" source="intValue">
+				<map-to source-as="i">
+					<map-with>i+1</map-with>
+				</map-to>
+			</transform>
 			<value name="boolValue" init="false" />
 			<value name="strValue" init="`ABC`" />
 			<list name="strValues" type="String">{"ABC", "DEF", "GHI"}</list>
@@ -53,12 +58,6 @@
 			</spinner>
 			<box field-label="`Slider:`" fill="true" layout="inline-layout" orientation="vertical" cross-align="justify">
 				<model>
-					<transform name="sliderValue" source="intValue">
-						<map-to source-as="intV">
-							<map-with>intV*1.0</map-with>
-							<map-reverse type="replace-source" target-as="dblV" inexact="true">(int) Math.round(dblV)"</map-reverse>
-						</map-to>
-					</transform>
 					<value name="min" init="0" />
 					<value name="max" init="100" />
 				</model>
@@ -80,13 +79,36 @@
 						<check-box />
 					</column-edit>
 				</column>
-				<column name="`Button`" value="row.getBoolean()">
-					<button action="row.setBoolean(true)" icon="`icons/`+(row.getBoolean() ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
-					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!row.getBoolean()">
-						<button action="row.setBoolean(true)" icon="`icons/`+(row.getBoolean() ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
+				<column name="`Icon`" value="row.getBoolean()" column-value-name="b">
+					<label icon="`/icons/`+(b ? &quot;green&quot; : &quot;red&quot;)+`Dot.png`" />
+				</column>
+				<column name="`Button`" value="row.getBoolean()" column-value-name="b">
+					<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
+						`Set`
+						<style attr="mouse-cursor">
+							<style if="b">HAND</style>
+							<style>WAIT</style>
+						</style>
+					</button>
+					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!b">
+						<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
 					</column-edit>
 				</column>
 			</table>
+			<combo field-label="`Combo With Renderer Cursor`" fill="true" value="myValue" values="strValues" active-value-name="comboValue">
+				<model>
+					<transform name="myValue" source="strValue">
+						<filter-accept source-as="str" test="`DEF`.equals(str) ? `Can't accept 'DEF'` : null" />
+					</transform>
+				</model>
+				<label value="comboValue" value-name="renderValue" tooltip="`Hovering `+comboValue">
+					<style attr="mouse-cursor">
+						<style if="`ABC`.equals(renderValue)">HAND</style>
+						<style if="`DEF`.equals(renderValue)">WAIT</style>
+						<style>CROSSHAIR</style>
+					</style>
+				</label>
+			</combo>
 		</field-panel>
 	</box>
 </quick>

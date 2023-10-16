@@ -191,10 +191,6 @@
 	</add-ons>
 
 	<elements>
-		<element-def name="ext-widget" extends="widget">
-			<attribute name="ref" type="string" specify="required" />
-		</element-def>
-
 		<?DOC An invisible space between components in a container?>
 		<element-def name="spacer" extends="widget">
 			<?DOC The width or height of the spacer, in pixels?>
@@ -368,9 +364,6 @@
 			<attribute name="selection" type="expression" specify="optional" />
 			<?DOC The values the the user has selected in the widget?>
 			<attribute name="multi-selection" type="expression" specify="optional" />
-		</element-def>
-		<element-def name="little-list" extends="multi-value-widget">
-			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<?DOC A column in a tabular widget?>
 		<element-def name="column" inherits="column-set,styled,rendering">

@@ -202,6 +202,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							// We can just do all this dynamically for renderers
 							adjustFont(pmDecorator.reset(), w.getStyle());
 							Color bg = color.get();
+							if (bg != null)
+								System.out.println("bg=" + bg);
 							for (ComponentPropertyManager<?> pm : propertyManagers) {
 								pm.setFont(pmDecorator::adjust);
 								pm.setForeground(pmDecorator.getForeground());

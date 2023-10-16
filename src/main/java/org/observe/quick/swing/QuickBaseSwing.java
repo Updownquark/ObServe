@@ -341,8 +341,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
-			}
+			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {}
 		};
 	}
 
@@ -829,15 +828,15 @@ public class QuickBaseSwing implements QuickInterpretation {
 				quick.toString());
 			quick.setContext(tableCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T> renderer = theRenderer == null ? null
-				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
-				quick.getValue().getType(), quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
-			if (renderer != null)
-				renderer.setEnabled(cell -> quick.getValue().isAcceptable(cell.getCellValue()));
+				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValue().getType(), quick.getValue(),
+					quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
 				component.accept(cf);
-				if (theRenderer != null)
+				if (theRenderer != null) {
 					cf.renderWith(renderer);
+					cf.withValueTooltip(v -> renderer.getTooltip(v, v));
+				}
 			});
 		}
 	}
@@ -848,7 +847,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 			throws ModelInstantiationException {
 			panel.addSlider(null, quick.getValue(), slider -> {
 				component.accept(slider);
-				System.out.println("min=" + quick.getMin().get() + ", max=" + quick.getMax().get());
 				slider.withBounds(quick.getMin(), quick.getMax());
 			});
 		}
@@ -1141,6 +1139,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 	static class SwingTree<T> extends QuickSwingPopulator.Abstract<QuickTree<T>> {
 		private QuickSwingPopulator<QuickWidget> theRenderer;
 		private QuickSwingPopulator<QuickWidget> theEditor;
+		private List<QuickSwingTableAction<BetterList<T>, ?>> interpretedActions;
 
 		SwingTree(QuickTree.Interpreted<T, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
@@ -1155,6 +1154,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 				else
 					theEditor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
 			}
+
+			interpretedActions = BetterList.<ValueAction.Interpreted<BetterList<T>, ?>, QuickSwingTableAction<BetterList<T>, ?>, ExpressoInterpretationException> of2(
+				interpreted.getActions().stream(),
+				a -> (QuickSwingTableAction<BetterList<T>, ?>) tx.transform(a, QuickSwingTableAction.class));
 		}
 
 		@Override
@@ -1232,6 +1235,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 					return quick.getModel().isLeaf(path);
 				});
 				tree.withRootVisible(quick.isRootVisible());
+				try {
+					for (int a = 0; a < interpretedActions.size(); a++)
+						((QuickSwingTableAction<BetterList<T>, ValueAction<BetterList<T>>>) interpretedActions.get(a)).addAction(tree,
+							quick.getActions().get(a));
+				} catch (ModelInstantiationException e) {
+					throw new CheckedExceptionWrapper(e);
+				}
 			});
 		}
 	}

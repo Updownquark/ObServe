@@ -55,7 +55,8 @@ public class ObservableValueTransformations {
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("disable", ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
-		interpreter.createWith("filter-accept", ValueTransform.class, ExElement.creator(FilterAcceptValueTransform::new));
+		interpreter.createWith(FilterAcceptValueTransform.FILTER_ACCEPT, ValueTransform.class,
+			ExElement.creator(FilterAcceptValueTransform::new));
 		interpreter.createWith("map-to", ValueTransform.class, ExElement.creator(MapValueTransform::new));
 		interpreter.createWith("refresh", ValueTransform.class, ExElement.creator(RefreshValueTransform::new));
 		interpreter.createWith("unmodifiable", ValueTransform.class, ExElement.creator(UnmodifiableValueTransform::new));
@@ -184,8 +185,13 @@ public class ObservableValueTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = FilterAcceptValueTransform.FILTER_ACCEPT,
+		interpretation = FilterAcceptValueTransform.Interpreted.class)
 	static class FilterAcceptValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
+		public static final String FILTER_ACCEPT = "filter-accept";
+
 		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
@@ -197,6 +203,7 @@ public class ObservableValueTransformations {
 			return theSourceVariable;
 		}
 
+		@QonfigAttributeGetter("test")
 		public CompiledExpression getTest() {
 			return theTest;
 		}
@@ -234,6 +241,10 @@ public class ObservableValueTransformations {
 				return theSourceType;
 			}
 
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTest() {
+				return theTest;
+			}
+
 			@Override
 			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
@@ -249,7 +260,8 @@ public class ObservableValueTransformations {
 
 			@Override
 			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
-				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate(),
+					getExpressoEnv().getModels().instantiate());
 			}
 
 			@Override
@@ -262,11 +274,14 @@ public class ObservableValueTransformations {
 			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
+			private final ModelInstantiator theLocalModel;
 
-			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
+			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test,
+				ModelInstantiator localModel) {
 				theSourceType = sourceType;
 				theSourceVariable = sourceVariable;
 				theTest = test;
+				theLocalModel = localModel;
 			}
 
 			@Override
@@ -277,14 +292,19 @@ public class ObservableValueTransformations {
 			@Override
 			public void instantiate() {
 				theTest.instantiate();
+				theLocalModel.instantiate();
 			}
 
 			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
+				models = theLocalModel.wrap(models);
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> test = theTest.get(models);
-				return new FilterEnabledValue<>(source, sourceV, test);
+				return new FilterEnabledValue<>(source.filterAccept(LambdaUtils.printableFn(v -> {
+					sourceV.set(v, null);
+					return test.get();
+				}, test::toString, null)), sourceV, test);
 			}
 
 			@Override

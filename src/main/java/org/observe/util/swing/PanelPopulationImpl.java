@@ -744,15 +744,23 @@ class PanelPopulationImpl {
 
 		@Override
 		public P renderWith(ObservableCellRenderer<F, F> renderer) {
+			JList<F> popupList = ObservableComboBoxModel.getPopupList(getEditor(), null);
 			getEditor().setRenderer(new ListCellRenderer<F>() {
 				@Override
 				public Component getListCellRendererComponent(JList<? extends F> list, F value, int index, boolean isSelected,
 					boolean cellHasFocus) {
 					boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
-					return renderer.getCellRendererComponent(list,
+					Component rendered = renderer.getCellRendererComponent(list,
 						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true) //
 						.setEnabled(theSelection.isAcceptable(value)),
 						CellRenderContext.DEFAULT);
+					if (hovered) {
+						if (index >= 0)
+							popupList.setCursor(rendered.getCursor());
+						else
+							getEditor().setCursor(rendered.getCursor());
+					}
+					return rendered;
 				}
 			});
 			return (P) this;

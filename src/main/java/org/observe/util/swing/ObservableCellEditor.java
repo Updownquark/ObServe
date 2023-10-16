@@ -209,16 +209,19 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	}
 
 	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor() {
-		return createCheckBoxEditor(new JCheckBox());
+		return createCheckBoxEditor(new JCheckBox(), null);
 	}
 
-	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor(JCheckBox check) {
+	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor(JCheckBox check,
+		Consumer<? super ModelCell<? extends M, Boolean>> render) {
 		Function<Boolean, String>[] filter = new Function[1];
 		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
 		Subscription[] editSub = new Subscription[1];
 		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
+			if (render != null)
+				render.accept((ModelCell<? extends M, Boolean>) e.getEditingCell());
 			return commit -> {
 				filter[0] = null;
 				if (editSub[0] != null) {
@@ -319,16 +322,18 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	public static <M, C> ObservableCellEditor<M, C> createButtonCellEditor(Function<? super C, String> renderer,
 		Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
-		return createButtonCellEditor(renderer, new JButton(), action);
+		return createButtonCellEditor(renderer, new JButton(), null, action);
 	}
 
 	public static <M, C> ObservableCellEditor<M, C> createButtonCellEditor(Function<? super C, String> renderer, JButton button,
-		Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
+		Consumer<? super ModelCell<? extends M, ? extends C>> render, Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		boolean[] editing = new boolean[1];
 		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
+			if (render != null)
+				render.accept((ModelCell<? extends M, ? extends C>) e.getEditingCell());
 			button.setText(renderer.apply(value.get()));
 			button.setToolTipText(tt);
 			editing[0] = true;
