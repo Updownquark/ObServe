@@ -311,6 +311,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="active" type="expression" default="true" />
 			<attribute name="frequency" type="expression" />
 			<attribute name="strict-timing" type="boolean" default="false" />
+			<attribute name="background" type="boolean" default="false" />
 			<?DOC Each time the timer executes and this value is not null, it is decremented.  When the value reaches zero, the timer will deactivate.?>
 			<attribute name="remaining-executions" type="expression" specify="optional" />
 			<?DOC If this instant is not null, the timer will deactivate after this time?>

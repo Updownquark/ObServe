@@ -248,14 +248,20 @@ public interface QuickTableColumn<R, C> {
 
 				super.update(env);
 				isEditable = ExpressoTransformations.parseFilter(getDefinition().isEditable(), env, true);
-				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), env, true);
+				return this;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+
+				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), expressoEnv, true);
 				if (getDefinition().getEditor() == null)
 					theEditor = null;
 				else if (theEditor == null || !theEditor.getDefinition().equals(getDefinition().getEditor()))
 					theEditor = getDefinition().getEditor().interpret(this);
 				if (theEditor != null)
-					theEditor.updateElement(env);
-				return this;
+					theEditor.updateElement(expressoEnv);
 			}
 
 			public ColumnEditing<R, C> create() {

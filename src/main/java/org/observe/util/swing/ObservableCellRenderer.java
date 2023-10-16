@@ -129,6 +129,7 @@ public interface ObservableCellRenderer<M, C> {
 				theRevert = null;
 			}
 			Component c = renderCell(parent, cell, ctx);
+			c.setEnabled(cell.isEnabled() == null);
 			Runnable revert = null;
 			if (theDecorator != null) {
 				if (theComponentDecorator == null)
@@ -152,7 +153,6 @@ public interface ObservableCellRenderer<M, C> {
 			}
 			theRevert = revert;
 			c = tryEmphasize(c, ctx);
-			c.setEnabled(cell.isEnabled() == null);
 			return c;
 		}
 

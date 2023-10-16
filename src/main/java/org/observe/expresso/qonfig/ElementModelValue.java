@@ -178,6 +178,20 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 			QonfigValueType identifierType;
 			QonfigAttributeDef typeAttr;
 			QonfigAttributeDef sourceAttr;
+
+			ElementModelData branch(QonfigElementOrAddOn type) {
+				ElementModelData branch = new ElementModelData();
+				branch.types.add(type);
+				branch.withElementModel = withElementModel;
+				branch.elementModel = elementModel;
+				branch.modelValue = modelValue;
+				branch.nameAttr = nameAttr;
+				branch.nameAttrAttr = nameAttrAttr;
+				branch.identifierType = identifierType;
+				branch.typeAttr = typeAttr;
+				branch.sourceAttr = sourceAttr;
+				return branch;
+			}
 		}
 
 		private ConcurrentHashMap<QonfigElementOrAddOn, Map<String, Identity>> theDynamicValues = new ConcurrentHashMap<>();
@@ -208,8 +222,9 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 				synchronized (Cache.class) {
 					found = theDynamicValues.get(type);
 					if (found == null) {
-						found = compileDynamicValues(expresso, modelData, type, reporting);
+						found = new LinkedHashMap<>();
 						theDynamicValues.put(type, found);
+						found = compileDynamicValues(expresso, modelData.branch(type), type, reporting, found);
 					}
 				}
 			}
@@ -220,8 +235,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		}
 
 		private Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
-			ErrorReporting reporting) throws QonfigInterpretationException {
-			Map<String, Identity> values = new LinkedHashMap<>();
+			ErrorReporting reporting, Map<String, Identity> values) throws QonfigInterpretationException {
 			if (type.getSuperElement() != null)
 				getDynamicValues(expresso, modelData, type.getSuperElement(), values, reporting);
 			for (QonfigAddOn inh : type.getInheritance())

@@ -2433,6 +2433,7 @@ public class ExpressoQonfigValues {
 		private CompiledExpression isActive;
 		private CompiledExpression theFrequency;
 		private boolean isStrictTiming;
+		private boolean isBackground;
 		private CompiledExpression theRemainingExecutions;
 		private CompiledExpression theUntil;
 		private CompiledExpression theRunNextIn;
@@ -2457,6 +2458,11 @@ public class ExpressoQonfigValues {
 		@QonfigAttributeGetter("strict-timing")
 		public boolean isStrictTiming() {
 			return isStrictTiming;
+		}
+
+		@QonfigAttributeGetter("background")
+		public boolean isBackground() {
+			return isBackground;
 		}
 
 		@QonfigAttributeGetter("remaining-executions")
@@ -2494,6 +2500,7 @@ public class ExpressoQonfigValues {
 			isActive = session.getAttributeExpression("active");
 			theFrequency = session.getAttributeExpression("frequency");
 			isStrictTiming = session.getAttribute("strict-timing", boolean.class);
+			isBackground = session.getAttribute("background", boolean.class);
 			theRemainingExecutions = session.getAttributeExpression("remaining-executions");
 			theUntil = session.getAttributeExpression("until");
 			theRunNextIn = session.getAttributeExpression("run-next-in");
@@ -2616,6 +2623,7 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<SettableValue<Boolean>> isActive;
 			private final ModelValueInstantiator<SettableValue<Duration>> theFrequency;
 			private final boolean isStrictTiming;
+			private final boolean isBackground;
 			private final ModelValueInstantiator<SettableValue<Integer>> theRemainingExecutions;
 			private final ModelValueInstantiator<SettableValue<Instant>> theUntil;
 			private final ModelValueInstantiator<SettableValue<Duration>> theRunNextIn;
@@ -2629,6 +2637,7 @@ public class ExpressoQonfigValues {
 				isActive = interpreted.isActive().instantiate();
 				theFrequency = interpreted.getFrequency().instantiate();
 				isStrictTiming = interpreted.getDefinition().isStrictTiming();
+				isBackground = interpreted.getDefinition().isBackground();
 				theRemainingExecutions = interpreted.getRemainingExecutions() == null ? null
 					: interpreted.getRemainingExecutions().instantiate();
 				theUntil = interpreted.getUntil() == null ? null : interpreted.getUntil().instantiate();
@@ -2673,8 +2682,8 @@ public class ExpressoQonfigValues {
 				SettableValue<Integer> executionCount = theExecutionCount == null ? null : theExecutionCount.get(models);
 				SettableValue<Boolean> executing = isExecuting == null ? null : isExecuting.get(models);
 				ObservableAction action = theAction == null ? null : theAction.get(models);
-				return new TimerInstance(active, frequency, isStrictTiming, remainingExecutions, until, runNextIn, nextExecution,
-					executionCount, executing, action, theActionReporting);
+				return new TimerInstance(active, frequency, isStrictTiming, isBackground, remainingExecutions, until, runNextIn,
+					nextExecution, executionCount, executing, action, theActionReporting);
 			}
 
 			@Override
@@ -2699,8 +2708,8 @@ public class ExpressoQonfigValues {
 				if (active != timer.isActive || frequency != timer.theFrequency || remainingExecutions != timer.theRemainingExecutions
 					|| until != timer.theUntil || runNextIn != timer.theRunNextIn || nextExecution != timer.theNextExecution
 					|| executionCount != timer.theExecutionCount || executing != timer.isExecuting || action != timer.theAction)
-					return new TimerInstance(active, frequency, isStrictTiming, remainingExecutions, until, runNextIn, nextExecution,
-						executionCount, executing, action, theActionReporting);
+					return new TimerInstance(active, frequency, isStrictTiming, isBackground, remainingExecutions, until, runNextIn,
+						nextExecution, executionCount, executing, action, theActionReporting);
 				else
 					return timer;
 			}
@@ -2710,6 +2719,7 @@ public class ExpressoQonfigValues {
 			final SettableValue<Boolean> isActive;
 			final SettableValue<Duration> theFrequency;
 			final boolean isStrictTiming;
+			final boolean isBackground;
 			final SettableValue<Integer> theRemainingExecutions;
 			final SettableValue<Instant> theUntil;
 			final SettableValue<Duration> theRunNextIn;
@@ -2724,7 +2734,7 @@ public class ExpressoQonfigValues {
 
 			private volatile boolean theCallbackLock;
 
-			TimerInstance(SettableValue<Boolean> active, SettableValue<Duration> frequency, boolean strictTiming,
+			TimerInstance(SettableValue<Boolean> active, SettableValue<Duration> frequency, boolean strictTiming, boolean background,
 				SettableValue<Integer> remainingExecutions, SettableValue<Instant> until, SettableValue<Duration> runNextIn,
 				SettableValue<Instant> nextExecution, SettableValue<Integer> executionCount, SettableValue<Boolean> executing,
 				ObservableAction action, ErrorReporting actionReporting) {
@@ -2732,6 +2742,7 @@ public class ExpressoQonfigValues {
 				isActive = active;
 				theFrequency = frequency;
 				isStrictTiming = strictTiming;
+				isBackground = background;
 				theRemainingExecutions = remainingExecutions;
 				theUntil = until;
 				theRunNextIn = runNextIn;
@@ -2743,6 +2754,8 @@ public class ExpressoQonfigValues {
 
 				QommonsTimer.TaskHandle task = QommonsTimer.getCommonInstance().build(this::executeIfAllowed, theFrequency.get(),
 					isStrictTiming);
+				if (!isBackground)
+					task.onEDT();
 				theHandle = task;
 				theExecuteFinish = Causable.key((cause, data) -> {}, (cause, data) -> {
 					if (isExecuting != null && isExecuting.isAcceptable(false) == null)

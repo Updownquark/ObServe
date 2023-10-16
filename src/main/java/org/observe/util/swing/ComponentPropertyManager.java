@@ -49,16 +49,21 @@ public class ComponentPropertyManager<C extends Component> {
 			theSourceValue = theGetter.apply(theComponent);
 			T adjusted = thePropertyAdjuster.apply(theSourceValue);
 			if (theSourceValue != adjusted) {
-				EventQueue.invokeLater(() -> {
-					if (theStamp == newStamp) {
-						theCallbackLock = true;
-						try {
-							theSetter.accept(theComponent, adjusted);
-						} finally {
-							theCallbackLock = false;
-						}
-					}
-				});
+				if (isImmediate)
+					setValue(newStamp, adjusted);
+				else
+					EventQueue.invokeLater(() -> setValue(newStamp, adjusted));
+			}
+		}
+
+		private void setValue(long newStamp, T adjusted) {
+			if (theStamp == newStamp) {
+				theCallbackLock = true;
+				try {
+					theSetter.accept(theComponent, adjusted);
+				} finally {
+					theCallbackLock = false;
+				}
 			}
 		}
 
@@ -83,11 +88,17 @@ public class ComponentPropertyManager<C extends Component> {
 	}
 
 	private final C theComponent;
+	private boolean isImmediate;
 	private final Map<String, ComponentProperty<?>> theProperties;
 
 	public ComponentPropertyManager(C component) {
 		theComponent = component;
 		theProperties = new LinkedHashMap<>();
+	}
+
+	public ComponentPropertyManager<C> setImmediate(boolean immediate) {
+		isImmediate = immediate;
+		return this;
 	}
 
 	public <T> ComponentPropertyManager<C> setProperty(String propertyName, Function<? super C, T> getter, BiConsumer<? super C, T> setter,
