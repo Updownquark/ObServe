@@ -55,7 +55,6 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.BgFontAdjuster;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
-import org.observe.util.swing.ObservableCellRenderer;
 import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.PanelPopulation;
@@ -829,8 +828,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.getValue().getType(),
 				quick.toString());
 			quick.setContext(tableCtx);
-			ObservableCellRenderer<T, T> renderer = theRenderer == null ? null : new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T> renderer = theRenderer == null ? null
+				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
 				quick.getValue().getType(), quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
+			if (renderer != null)
+				renderer.setEnabled(cell -> quick.getValue().isAcceptable(cell.getCellValue()));
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
 				component.accept(cf);

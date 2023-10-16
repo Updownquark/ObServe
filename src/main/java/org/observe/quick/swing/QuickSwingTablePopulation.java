@@ -188,6 +188,7 @@ class QuickSwingTablePopulation {
 
 		private JComponent theOwner;
 		private ObservableValue<String> theTooltip;
+		private Function<ModelCell<? extends R, ? extends C>, String> isEnabled;
 
 		QuickSwingRenderer(QuickWidget quickParent, TypeToken<C> valueType, Supplier<C> value, QuickWidget renderer,
 			TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
@@ -253,6 +254,10 @@ class QuickSwingTablePopulation {
 			theTooltip = tooltip;
 		}
 
+		public void setEnabled(Function<ModelCell<? extends R, ? extends C>, String> enabled) {
+			isEnabled = enabled;
+		}
+
 		@Override
 		public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
 			setCellContext(cell, theRenderTableContext, false);
@@ -288,7 +293,8 @@ class QuickSwingTablePopulation {
 			return render;
 		}
 
-		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx, boolean withValue) {
+		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx,
+			boolean withValue) {
 			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
 				if (withValue)
 					tableCtx.getActiveValue().set(cell.getModelValue(), null);
@@ -306,6 +312,9 @@ class QuickSwingTablePopulation {
 						theRendererContext.isRightPressed().set(false, cause);
 					}
 				}
+				String enabled = isEnabled == null ? null : isEnabled.apply(cell);
+				if (enabled != null)
+					cell.setEnabled(enabled);
 			}
 		}
 
@@ -374,6 +383,8 @@ class QuickSwingTablePopulation {
 						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
 				}
 			}
+			if (theColumn.getEditing() != null)
+				setEnabled(cell -> theColumn.getEditing().isEditable().get());
 		}
 
 		public QuickTableColumn<R, C> getColumn() {
@@ -1390,11 +1401,8 @@ class QuickSwingTablePopulation {
 							boolean cellHasFocus) {
 							boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
 							ModelCell<C, C> cell = new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered,
-								hovered, true, true, null);
-							String enabled = theEditor.isEditAcceptable(getCellEditor().getEditingCell(), value);
-							if (enabled != null)
-								cell = new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered,
-									true, true, enabled);
+								hovered, true, true);
+							cell.setEnabled(theEditor.isEditAcceptable(getCellEditor().getEditingCell(), value));
 							return renderer.getCellRendererComponent(list, cell, CellRenderContext.DEFAULT);
 						}
 					});

@@ -80,12 +80,12 @@
 						<check-box />
 					</column-edit>
 				</column>
-				<!--<column name="`Button`" value="row.getBoolean()">
-					<button action="row.setBoolean(true)" enabled="!row.getBoolean()">`Set`</button>
-					<column-edit type="modify-row-value" commit="row.setBoolean(true)" enabled="!row.getBoolean()">
+				<column name="`Button`" value="row.getBoolean()">
+					<button action="row.setBoolean(true)">`Set`</button>
+					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!row.getBoolean()">
 						<button action="row.setBoolean(true)" />
 					</column-edit>
-				</column>-->
+				</column>
 			</table>
 		</field-panel>
 	</box>

@@ -1,17 +1,6 @@
 package org.observe.util.swing;
 
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.EventQueue;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.Insets;
-import java.awt.LayoutManager;
-import java.awt.Point;
-import java.awt.Rectangle;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -27,17 +16,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.BorderFactory;
-import javax.swing.DefaultListSelectionModel;
-import javax.swing.Icon;
-import javax.swing.JComponent;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JViewport;
-import javax.swing.ListSelectionModel;
-import javax.swing.Scrollable;
+import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.event.CellEditorListener;
 import javax.swing.event.ChangeEvent;
@@ -599,7 +578,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				Component rendered = renderer
 					.getCellRendererComponent(LittleList.this,
 						new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, n, 0, //
-							theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), false, false, true, true, null),
+							theSelectionModel.isSelectedIndex(n), theSelectionModel.isSelectedIndex(n), false, false, true, true),
 						CellRenderContext.DEFAULT);
 				boolean newBounds;
 				if (n >= bounds.size()) {
@@ -637,8 +616,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			if (selected < theModel.getSize()) {
 				row = theModel.getElementAt(selected);
 				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
-					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true,
-					null);
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true);
 				String tt = theRenderStrategy.getTooltip(cell);
 				if (tt != null)
 					return tt;
@@ -646,8 +624,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			} else if (selected == theModel.getSize() && theRenderStrategy.getAddRow() != null) {
 				row = theRenderStrategy.getAddRow().getEditSeedRow().get();
 				cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, () -> String.valueOf(row), row), row, selected, 0, //
-					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true,
-					null);
+					theSelectionModel.isSelectedIndex(selected), theSelectionModel.isSelectedIndex(selected), false, false, true, true);
 				renderer = (ObservableCellRenderer<E, E>) theRenderStrategy.getAddRow().getRenderer();
 			} else
 				throw new IndexOutOfBoundsException(selected + " of " + getComponentCount());

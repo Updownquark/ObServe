@@ -416,7 +416,7 @@
 			<?DOC The number of clicks required to initiated editing on this column?>
 			<attribute name="clicks" type="int" specify="optional" />
 			<?DOC The widget that allows the user to create a new value for this column?>
-			<child-def name="editor" type="value-widget" inherits="cell-editor" />
+			<child-def name="editor" type="widget" />
 		</element-def>
 		<element-def name="columns-ref" inherits="column-set">
 			<attribute name="model-value" type="expression" />
@@ -631,6 +631,9 @@
 	<auto-inheritance>
 		<auto-inherit inherits="menu-container">
 			<target element="quick" />
+		</auto-inherit>
+		<auto-inherit inherits="cell-editor">
+			<target element="value-widget" role="column-edit.editor" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

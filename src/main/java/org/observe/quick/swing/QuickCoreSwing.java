@@ -52,6 +52,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentPropertyManager;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
@@ -66,6 +67,10 @@ import org.qommons.ex.CheckedExceptionWrapper;
 
 /** Quick interpretation of the core toolkit for Swing */
 public class QuickCoreSwing implements QuickInterpretation {
+	static {
+		ObservableSwingUtils.systemLandF();
+	}
+
 	private static class QuickSwingComponentData {
 		final QuickWidget widget;
 		final ComponentPropertyManager<Component> propertyMgr;

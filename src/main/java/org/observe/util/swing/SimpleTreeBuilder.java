@@ -327,7 +327,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 					F value = (F) path.getLastPathComponent();
 					ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
 						getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
-						getEditor().getModel().isLeaf(value), null);
+						getEditor().getModel().isLeaf(value));
 					String tooltip = theRenderer.getTooltip(cell);
 					getEditor().setToolTipText(tooltip);
 				}
@@ -445,7 +445,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			};
 			boolean hovered = theHoveredRowColumn[0] == row;
 			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus,
-				hovered, hovered, expanded, leaf, null);
+				hovered, hovered, expanded, leaf);
 			return theRenderer.getCellRendererComponent(tree, cell, null);
 		}
 	}

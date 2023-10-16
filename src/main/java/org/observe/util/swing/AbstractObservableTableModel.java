@@ -451,7 +451,7 @@ public abstract class AbstractObservableTableModel<R> {
 					boolean rowHovered = ml.getHoveredRow() == row;
 					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
 					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
-						rowHovered, cellHovered, isExpanded(row, table), isLeaf(row, () -> rowValue), null);
+						rowHovered, cellHovered, isExpanded(row, table), isLeaf(row, () -> rowValue));
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
@@ -544,7 +544,7 @@ public abstract class AbstractObservableTableModel<R> {
 				}
 			};
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowValue, (C) value, //
-				row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf, null);
+				row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 
@@ -842,7 +842,7 @@ public abstract class AbstractObservableTableModel<R> {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
 					null);
 			}
 			CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
@@ -850,7 +850,7 @@ public abstract class AbstractObservableTableModel<R> {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
 					null);
 			}
 
@@ -865,12 +865,12 @@ public abstract class AbstractObservableTableModel<R> {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
 					null);
 			}
 			boolean selected = isCellSelected(row, column);
 			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true, true,
-				true, null);
+				true);
 			return new MouseClickStruct<>(cell, cell, category);
 		}
 	}

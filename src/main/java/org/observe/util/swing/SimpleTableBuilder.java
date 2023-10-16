@@ -579,6 +579,7 @@ implements TableBuilder<R, T, P> {
 		private final JTable theTable;
 		private int theRowIndex = -1;
 		private R theRowValue;
+		private String isEnabled;
 
 		ModelRowImpl(JTable table) {
 			theTable = table;
@@ -627,7 +628,13 @@ implements TableBuilder<R, T, P> {
 
 		@Override
 		public String isEnabled() {
-			return null;
+			return isEnabled;
+		}
+
+		@Override
+		public ModelRow<R> setEnabled(String enabled) {
+			isEnabled = enabled;
+			return this;
 		}
 	}
 
@@ -903,7 +910,7 @@ implements TableBuilder<R, T, P> {
 				return false;
 			boolean selected = theTable.isRowSelected(rowIndex);
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, getColumns().indexOf(column), selected, selected,
-				false, false, false, true, null);
+				false, false, false, true);
 			if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 				return false;
 			BetterList<C> newColValue;

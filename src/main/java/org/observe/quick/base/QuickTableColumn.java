@@ -13,16 +13,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ExAddOn;
-import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElementTraceable;
-import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
-import org.observe.expresso.qonfig.ExMultiElementTraceable;
-import org.observe.expresso.qonfig.ExWithElementModel;
-import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.expresso.qonfig.*;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
@@ -256,10 +247,8 @@ public interface QuickTableColumn<R, C> {
 				theColumnType = columnType;
 
 				super.update(env);
-				isEditable = getDefinition().isEditable() == null ? null
-					: getDefinition().isEditable().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				isAcceptable = getDefinition().isAcceptable() == null ? null
-					: getDefinition().isAcceptable().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+				isEditable = ExpressoTransformations.parseFilter(getDefinition().isEditable(), env, true);
+				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), env, true);
 				if (getDefinition().getEditor() == null)
 					theEditor = null;
 				else if (theEditor == null || !theEditor.getDefinition().equals(getDefinition().getEditor()))
@@ -410,6 +399,8 @@ public interface QuickTableColumn<R, C> {
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, myModels,
 				SettableValue.flatten(theEditColumnValue));
+			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
+
 			ExElement owner = getParentElement().getParentElement();
 			ModelSetInstance editorModels = myModels.copy()//
 				.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
@@ -437,7 +428,6 @@ public interface QuickTableColumn<R, C> {
 					theEditor.instantiate(editorModels);
 				editing.instantiateEditor(editorModels);
 			}
-			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(editorModels), null);
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
 		}
 

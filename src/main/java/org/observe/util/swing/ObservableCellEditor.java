@@ -528,7 +528,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
 				ModelCell<E, E> cell = new ModelCell.Default<>(() -> modelValue, modelValue, rowIndex, 0, selected, selected, hovered,
-					hovered, true, true, null);
+					hovered, true, true);
 				if (category.getMutator().getEditorTooltip() != null)
 					tooltip = category.getMutator().getEditorTooltip().apply(cell);
 				else
@@ -536,10 +536,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			} else
 				tooltip = null;
 			valueTooltip = c -> theValueTooltip
-				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true, null));
+				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true));
 
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
-				true, true, null);
+				true, true);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
 			Runnable revert = null;
@@ -598,7 +598,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				};
 				if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
 					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected,
-						rowHovered, cellHovered, true, true, null);
+						rowHovered, cellHovered, true, true);
 					if (category.getMutator().getEditorTooltip() != null)
 						tooltip = category.getMutator().getEditorTooltip().apply(cell);
 					else
@@ -608,7 +608,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				if (theValueTooltip != null) {
 					valueTooltip = c -> theValueTooltip
 						.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, rowHovered, cellHovered,
-							true, true, null));
+							true, true));
 				} else
 					valueTooltip = null;
 			} else if (table instanceof JXTreeTable && ((JXTreeTable) table).getTreeTableModel() instanceof ObservableTreeTableModel) {
@@ -686,7 +686,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				};
 				if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
 					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected,
-						rowHovered, cellHovered, true, true, null);
+						rowHovered, cellHovered, true, true);
 					if (category.getMutator().getEditorTooltip() != null)
 						tooltip = category.getMutator().getEditorTooltip().apply(cell);
 					else
@@ -695,7 +695,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					tooltip = null;
 				if (theValueTooltip != null) {
 					valueTooltip = c -> theValueTooltip.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected,
-						isSelected, rowHovered, cellHovered, true, true, null));
+						isSelected, rowHovered, cellHovered, true, true));
 				} else
 					valueTooltip = null;
 			} else {
@@ -705,7 +705,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				valueTooltip = null;
 			}
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, rowHovered,
-				cellHovered, true, true, null);
+				cellHovered, true, true);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
 
@@ -747,7 +747,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			renderingValue(value, isSelected, hovered, hovered, expanded, leaf, row, 0);
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
-				leaf, null);
+				leaf);
 			theEditorValue.set((C) value, null);
 
 			Runnable revert = null;

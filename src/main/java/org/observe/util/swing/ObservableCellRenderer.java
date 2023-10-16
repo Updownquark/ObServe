@@ -153,8 +153,6 @@ public interface ObservableCellRenderer<M, C> {
 			theRevert = revert;
 			c = tryEmphasize(c, ctx);
 			c.setEnabled(cell.isEnabled() == null);
-			if (cell.isEnabled() != null)
-				c.setEnabled(false);
 			return c;
 		}
 
@@ -347,7 +345,6 @@ public interface ObservableCellRenderer<M, C> {
 		protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			JButton button = theButton;
 			button.setText(theText.apply(cell));
-			button.setEnabled(cell.isEnabled() == null);
 			return button;
 		}
 	}

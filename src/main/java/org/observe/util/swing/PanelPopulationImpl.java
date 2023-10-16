@@ -750,8 +750,8 @@ class PanelPopulationImpl {
 					boolean cellHasFocus) {
 					boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
 					return renderer.getCellRendererComponent(list,
-						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true, //
-							theSelection.isAcceptable(value)),
+						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true) //
+						.setEnabled(theSelection.isAcceptable(value)),
 						CellRenderContext.DEFAULT);
 				}
 			});

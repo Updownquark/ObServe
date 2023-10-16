@@ -315,6 +315,7 @@ implements TreeTableEditor<F, P> {
 		private final ObservableTreeTableModel<F> theModel;
 		private int theRowIndex = -1;
 		private BetterList<F> theRowValue;
+		private String isEnabled;
 
 		ModelRowImpl(JXTreeTable table, ObservableTreeTableModel<F> model) {
 			theTable = table;
@@ -364,7 +365,13 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		public String isEnabled() {
-			return null;
+			return isEnabled;
+		}
+
+		@Override
+		public ModelRow<BetterList<F>> setEnabled(String enabled) {
+			isEnabled = enabled;
+			return this;
 		}
 	}
 
@@ -597,7 +604,7 @@ implements TreeTableEditor<F, P> {
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
 					rowIndex, getColumns().indexOf(column) + 1, selected, selected, false, false, theTable.isExpanded(rowIndex),
-					theLeafTest.test(rowEl.get()), null);
+					theLeafTest.test(rowEl.get()));
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;
@@ -642,7 +649,7 @@ implements TreeTableEditor<F, P> {
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, getColumns().indexOf(column) + 1,
-					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()), null);
+					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;

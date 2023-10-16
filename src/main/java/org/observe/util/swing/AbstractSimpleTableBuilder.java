@@ -1063,7 +1063,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 					R row = change.newValue;
 					Object cellValue = column.getCategoryValue(row);
 					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, change.index, columnIndex,
-						getEditor().isRowSelected(change.index), false, false, false, false, true, null);
+						getEditor().isRowSelected(change.index), false, false, false, false, true);
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
@@ -1075,7 +1075,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 				forAllVisibleData(model, row -> {
 					Object cellValue = column.getCategoryValue(row.getModelValue());
 					ModelCell<R, Object> cell = new ModelCell.Default<>(row::getModelValue, cellValue, row.getRowIndex(), columnIndex,
-						row.isSelected(), row.hasFocus(), false, false, row.isExpanded(), row.isLeaf(), null);
+						row.isSelected(), row.hasFocus(), false, false, row.isExpanded(), row.isLeaf());
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
