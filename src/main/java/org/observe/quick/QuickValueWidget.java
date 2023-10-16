@@ -141,7 +141,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theValue = null;
 				super.doUpdate(env);
-				getOrInitValue(); // Initialize theValue
+				theValue = getOrInitValue(); // Initialize theValue
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueVariable().getName(), theValue);
 				theDisabled = getDefinition().getDisabled() == null ? null
 					: getDefinition().getDisabled().interpret(ModelTypes.Value.STRING, env);

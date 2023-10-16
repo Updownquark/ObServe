@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -568,7 +569,52 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theValues = getDefinition().getValues().interpret(ModelTypes.Collection.forType(double.class), env);
+			InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Number>> numberValues = getDefinition().getValues()
+				.interpret(ModelTypes.Collection.forType(Number.class), env);
+			Class<?> numberType = TypeTokens.get().unwrap(TypeTokens.getRawType(numberValues.getType().getType(0)));
+			Function<Double, Number> reverse;
+			boolean inexact;
+			if (numberType == double.class) {
+				reverse = Double::valueOf;
+				inexact = false;
+			} else {
+				inexact = true;
+				if (numberType == float.class) {
+					reverse = d -> Float.valueOf(d.floatValue());
+				} else if (numberType == long.class) {
+					reverse = d -> Long.valueOf(Math.round(d));
+				} else if (numberType == int.class) {
+					reverse = d -> Integer.valueOf(Math.round(d.floatValue()));
+				} else if (numberType == short.class) {
+					reverse = d -> {
+						int i = Math.round(d.floatValue());
+						if (i > Short.MAX_VALUE)
+							return Short.MAX_VALUE;
+						else if (i < Short.MIN_VALUE)
+							return Short.MIN_VALUE;
+						else
+							return Short.valueOf((short) i);
+					};
+				} else if (numberType == byte.class) {
+					reverse = d -> {
+						int i = Math.round(d.floatValue());
+						if (i > Short.MAX_VALUE)
+							return Short.MAX_VALUE;
+						else if (i < Short.MIN_VALUE)
+							return Short.MIN_VALUE;
+						else
+							return Short.valueOf((short) i);
+					};
+				} else
+					throw new ExpressoInterpretationException("Cannot create a multi-slider for number type " + numberType.getName(),
+						getDefinition().getElement().getPositionInFile(), 0);
+			}
+			theValues = numberValues.mapValue(ModelTypes.Collection.forType(double.class),
+				numberColl -> numberColl.flow().transform(double.class, tx -> tx//
+					.cache(false)//
+					.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact)))//
+				.collectPassive());
+
 			theMin = getDefinition().getMin().interpret(ModelTypes.Value.DOUBLE, env);
 			theMax = getDefinition().getMax().interpret(ModelTypes.Value.DOUBLE, env);
 

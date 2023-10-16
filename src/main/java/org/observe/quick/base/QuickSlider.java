@@ -1,10 +1,11 @@
 package org.observe.quick.base;
 
+import java.util.function.Function;
+
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -82,8 +83,50 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 		}
 
 		@Override
-		protected ModelInstanceType<SettableValue<?>, SettableValue<Double>> getTargetType() {
-			return ModelTypes.Value.DOUBLE;
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getOrInitValue() throws ExpressoInterpretationException {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Number>> numberValue = getDefinition().getValue()
+				.interpret(ModelTypes.Value.forType(Number.class), getExpressoEnv());
+			Class<?> numberType = TypeTokens.get().unwrap(TypeTokens.getRawType(numberValue.getType().getType(0)));
+			Function<Double, Number> reverse;
+			boolean inexact;
+			if (numberType == double.class) {
+				reverse = Double::valueOf;
+				inexact = false;
+			} else {
+				inexact = true;
+				if (numberType == float.class) {
+					reverse = d -> Float.valueOf(d.floatValue());
+				} else if (numberType == long.class) {
+					reverse = d -> Long.valueOf(Math.round(d));
+				} else if (numberType == int.class) {
+					reverse = d -> Integer.valueOf(Math.round(d.floatValue()));
+				} else if (numberType == short.class) {
+					reverse = d -> {
+						int i = Math.round(d.floatValue());
+						if (i > Short.MAX_VALUE)
+							return Short.MAX_VALUE;
+						else if (i < Short.MIN_VALUE)
+							return Short.MIN_VALUE;
+						else
+							return Short.valueOf((short) i);
+					};
+				} else if (numberType == byte.class) {
+					reverse = d -> {
+						int i = Math.round(d.floatValue());
+						if (i > Short.MAX_VALUE)
+							return Short.MAX_VALUE;
+						else if (i < Short.MIN_VALUE)
+							return Short.MIN_VALUE;
+						else
+							return Short.valueOf((short) i);
+					};
+				} else
+					throw new ExpressoInterpretationException("Cannot create a multi-slider for number type " + numberType.getName(),
+						getDefinition().getElement().getPositionInFile(), 0);
+			}
+			return numberValue.mapValue(ModelTypes.Value.DOUBLE, numberColl -> numberColl.transformReversible(double.class, tx -> tx//
+				.cache(false)//
+				.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact))));
 		}
 
 		@Override

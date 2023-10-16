@@ -69,7 +69,7 @@
 					<text-field region="east" value="max" />
 					<label region="east">Max:</label>
 				</box>
-				<slider value="sliderValue" min="min" max="max" />
+				<slider value="intValue" min="min" max="max" />
 			</box>
 			<toggle-button field-label="`Toggle Button`" value="boolValue" icon="`/icons/greenDot.png`">`A toggle button`</toggle-button>
 			<toggle-buttons field-label="`Toggle Buttons`" value="strValue" values="strValues" />
@@ -80,12 +80,12 @@
 						<check-box />
 					</column-edit>
 				</column>
-				<column name="`Button`" value="row.getBoolean()">
+				<!--<column name="`Button`" value="row.getBoolean()">
 					<button action="row.setBoolean(true)" enabled="!row.getBoolean()">`Set`</button>
 					<column-edit type="modify-row-value" commit="row.setBoolean(true)" enabled="!row.getBoolean()">
 						<button action="row.setBoolean(true)" />
 					</column-edit>
-				</column>
+				</column>-->
 			</table>
 		</field-panel>
 	</box>

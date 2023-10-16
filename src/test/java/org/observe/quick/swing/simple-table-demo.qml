@@ -49,13 +49,13 @@
 					<style attr="font-color">`orange`</style>
 				</style>
 			</titled-border>
-			<column name="`Value`" value="value">
+			<column name="`Value`" value="activeValue">
 				<label value="columnValue" />
-				<column-edit type="replace-row-value" replacement="columnEditValue">
+				<column-edit type="replace-row-value" column-edit-value-name="columnEditValue" replacement="columnEditValue">
 					<text-field />
 				</column-edit>
 			</column>
-			<column name="`Prime`" value="app.primes.factorize(value, 100_000).size()==1" column-value-name="prime"
+			<column name="`Prime`" value="app.primes.factorize(activeValue, 100_000).size()==1" column-value-name="prime"
 				header-tooltip="`Whether the value is prime`">
 				<check-box value="prime" tooltip="prime ? `Prime` : `Not Prime`">
 					<style attr="color">
@@ -66,7 +66,7 @@
 					<on-type>System.out.println("Typed "+typedChar)</on-type>
 				</check-box>
 			</column>
-			<column name="`Factorization`" value="Primes.formatFactorization(app.primes.factorize(value, 100_000))"
+			<column name="`Factorization`" value="Primes.formatFactorization(app.primes.factorize(activeValue, 100_000))"
 				header-tooltip="&quot;The prime factors of each of the &quot;+app.valueSize+&quot; values&quot;">
 				<label value="columnValue">
 					<style attr="color" if="hovered">`aqua`</style>
