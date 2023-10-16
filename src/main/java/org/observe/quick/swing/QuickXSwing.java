@@ -17,6 +17,7 @@ import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -25,6 +26,8 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.CollapsePane;
+import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.QuickComboButton;
 import org.observe.quick.base.QuickMultiSlider;
 import org.observe.quick.base.QuickMultiSlider.SliderBgRenderer;
 import org.observe.quick.base.QuickMultiSlider.SliderHandleRenderer;
@@ -60,6 +63,7 @@ public class QuickXSwing implements QuickInterpretation {
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 		tx.with(CollapsePane.Interpreted.class, QuickSwingContainerPopulator.class, SwingCollapsePane::new);
+		tx.with(QuickComboButton.Interpreted.class, QuickSwingPopulator.class, SwingComboButton::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
 	}
@@ -132,6 +136,67 @@ public class QuickXSwing implements QuickInterpretation {
 				else
 					panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
 			}
+		}
+	}
+
+	static class SwingComboButton<T> extends QuickSwingPopulator.Abstract<QuickComboButton<T>> {
+		private QuickSwingPopulator<QuickWidget> theRenderer;
+
+		SwingComboButton(QuickComboButton.Interpreted<T, QuickComboButton<T>> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			if (interpreted.getRenderer() != null)
+				theRenderer = tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickComboButton<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
+			MultiValueRenderable.MultiValueRenderContext<T> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>(
+				quick.getValues().getType());
+			quick.setContext(ctx);
+			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext<T>() {
+				private final SettableValue<Integer> theRowIndex = SettableValue.build(int.class).withValue(0).build();
+				private final SettableValue<Integer> theColumnIndex = SettableValue.build(int.class).withValue(0).build();
+
+				@Override
+				public SettableValue<T> getActiveValue() {
+					return ctx.getActiveValue();
+				}
+
+				@Override
+				public SettableValue<Boolean> isSelected() {
+					return ctx.isSelected();
+				}
+
+				@Override
+				public SettableValue<Integer> getRowIndex() {
+					return theRowIndex;
+				}
+
+				@Override
+				public SettableValue<Integer> getColumnIndex() {
+					return theColumnIndex;
+				}
+			};
+			quick.setContext(tableCtx);
+			SettableValue<T> selectedValue = SettableValue.build(quick.getValues().getType()).build();
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T> renderer = theRenderer == null ? null
+				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValues().getType(), selectedValue, quick.getRenderer(),
+					tableCtx, () -> combo[0], theRenderer);
+			panel.addComboButton(null, quick.getValues(), (value, cause) -> {
+				ctx.getActiveValue().set(value, cause);
+				quick.getAction().act(cause);
+			}, cb -> {
+				combo[0] = cb;
+				component.accept(cb);
+				cb.withText(quick.getText());
+				cb.withIcon(quick.getIcon());
+				if (theRenderer != null) {
+					cb.renderWith(renderer);
+					cb.withValueTooltip(v -> renderer.getTooltip(v, v));
+				}
+			});
 		}
 	}
 

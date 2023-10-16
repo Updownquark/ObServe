@@ -27,11 +27,6 @@
 	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
 		<model>
 			<value name="intValue" type="Integer" init="10" />
-			<transform name="mapped" source="intValue">
-				<map-to source-as="i">
-					<map-with>i+1</map-with>
-				</map-to>
-			</transform>
 			<value name="boolValue" init="false" />
 			<value name="strValue" init="`ABC`" />
 			<list name="strValues" type="String">{"ABC", "DEF", "GHI"}</list>
@@ -109,6 +104,16 @@
 					</style>
 				</label>
 			</combo>
+			<combo-button field-label="`Combo Button`" values="strValues" active-value-name="comboValue"
+				action="strValue=comboValue">`Select a value`
+				<label value="comboValue" value-name="renderValue" tooltip="`Hovering `+comboValue">
+					<style attr="mouse-cursor">
+						<style if="`ABC`.equals(renderValue)">HAND</style>
+						<style if="`DEF`.equals(renderValue)">WAIT</style>
+						<style>CROSSHAIR</style>
+					</style>
+				</label>
+			</combo-button>
 		</field-panel>
 	</box>
 </quick>

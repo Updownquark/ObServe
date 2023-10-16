@@ -25,6 +25,7 @@ import javax.swing.JList;
 import javax.swing.JSlider;
 import javax.swing.JTable;
 import javax.swing.JTree;
+import javax.swing.SwingConstants;
 import javax.swing.event.CellEditorListener;
 import javax.swing.event.ChangeEvent;
 import javax.swing.table.TableCellEditor;
@@ -217,6 +218,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		Function<Boolean, String>[] filter = new Function[1];
 		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
 		Subscription[] editSub = new Subscription[1];
+		check.setHorizontalAlignment(SwingConstants.CENTER);
 		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);

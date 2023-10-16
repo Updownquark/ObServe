@@ -10,6 +10,11 @@
 
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
 
+		<element-def name="combo-button" extends="button" inherits="rendering,multi-value-renderable">
+			<label role="default-renderer" value="{active-value-name}" />
+			<attribute name="values" type="expression" />
+		</element-def>
+
 		<element-def name="multi-slider" extends="widget">
 			<attribute name="values" type="expression" />
 			<attribute name="orientation" type="orientation" default="horizontal" />

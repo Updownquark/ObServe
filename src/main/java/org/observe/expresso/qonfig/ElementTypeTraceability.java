@@ -341,7 +341,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			if (targetTK != null && qonfigType == null)
 				reporting
 				.warn("For traceable class " + type.getName() + ": No such Qonfig type: " + targetTK + "." + traceable.qonfigType());
-			if (ExElement.Def.class.isAssignableFrom(type)) {
+			else if (ExElement.Def.class.isAssignableFrom(type)) {
 				Class<ExElement.Interpreted<E>> interpretation = traceable.interpretation() == void.class ? null
 					: (Class<Interpreted<E>>) traceable.interpretation();
 				Class<E> instance = traceable.instance() == void.class ? null : (Class<E>) traceable.instance();
