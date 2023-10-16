@@ -81,9 +81,9 @@
 					</column-edit>
 				</column>
 				<column name="`Button`" value="row.getBoolean()">
-					<button action="row.setBoolean(true)">`Set`</button>
+					<button action="row.setBoolean(true)" icon="`icons/`+(row.getBoolean() ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
 					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!row.getBoolean()">
-						<button action="row.setBoolean(true)" />
+						<button action="row.setBoolean(true)" icon="`icons/`+(row.getBoolean() ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
 					</column-edit>
 				</column>
 			</table>

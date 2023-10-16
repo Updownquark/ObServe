@@ -33,7 +33,6 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExceptionHandler;
-import org.qommons.ex.ExceptionHandler.Double;
 import org.qommons.ex.NeverThrown;
 
 /** {@link QonfigInterpretation} for the Quick-Core toolkit */
@@ -155,17 +154,19 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 					try {
 						relLoc = QommonsConfig.resolve(loc, sourceDocument);
 					} catch (IOException e) {
-						System.err.println("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
+						env.reporting().at(expression.getFilePosition())
+						.error("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
 						e.printStackTrace();
 						return null;
 					}
-					ImageIcon relIcon = new ImageIcon(relLoc);
-					if (relIcon.getImageLoadStatus() == MediaTracker.ERRORED)
-						return ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
-					else {
-						relIcon = new ImageIcon(relIcon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
-						return relIcon;
-					}
+					Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
+					if (icon == null)
+						icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
+					if (icon == null)
+						env.reporting().at(expression.getFilePosition()).error("Icon file not found: '" + loc);
+					else if (icon instanceof ImageIcon && ((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
+						env.reporting().at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
+					return icon;
 				}), __ -> "unsettable")));
 			}
 			env.reporting().warn("Cannot evaluate '" + expression + "' as an icon");

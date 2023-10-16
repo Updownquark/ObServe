@@ -998,6 +998,7 @@ class QuickSwingTablePopulation {
 			} else {
 				JButton button = new JButton();
 				editor[0] = new ButtonRenderEditor<>(buttonText, ObservableCellEditor.createButtonCellEditor(colValue -> {
+					editor[0].decorateButton(button);
 					return editor[0].getButtonText().get();
 				}, button, cell -> {
 					action.act(null);
