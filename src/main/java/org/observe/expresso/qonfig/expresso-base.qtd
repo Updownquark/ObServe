@@ -8,7 +8,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 -->
 <qonfig-def name="Expresso-Base" version="0.1" xmlns:core="Expresso-Core v0.1">
 	<value-types>
-		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
 
 		<one-of name="size-type">

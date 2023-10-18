@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?DOC The core of the Quick architecture.  Contains types for defining an application with models and a user interface. ?>
-<qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" xmlns:expresso="Expresso-Base v0.1" xmlns:style="Quick-Style v0.1">
+<qonfig-def name="Quick-Core" version="0.1" xmlns:expresso="Expresso-Base v0.1" xmlns:style="Quick-Style v0.1">
 	<value-types>
 		<one-of name="window-close-action">
 			<?DOC The window will remain visible when the user attempts to close it?>

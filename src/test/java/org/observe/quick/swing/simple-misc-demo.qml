@@ -1,23 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <quick xmlns:base="Quick-X v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Simple Miscellaneous Quick Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
+	title="`Simple Miscellaneous Quick Demo`" close-action="exit">
 	<head>
 		<imports>
 			<import>org.observe.quick.swing.SwingTestEntity</import>
 		</imports>
-		<models>
-			<model name="app">
-				<value name="text" type="String" init="`This is some text`" />
-				<value name="i1" type="int" />
-				<value name="i2" type="int" />
-				<value name="b" type="boolean" init="true" />
-				<value name="x" type="int" />
-				<value name="y" type="int" />
-				<value name="w" type="int" />
-				<value name="h" type="int" />
-			</model>
-		</models>
+		<models />
 		<style-sheet>
 			<style-set name="header">
 				<style element="with-text" attr="font-size">16</style>

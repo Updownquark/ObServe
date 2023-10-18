@@ -7,7 +7,7 @@ It includes the expression type definition as well as the basic structure of exp
 
 It does not include anything "useful" in the concrete, i.e. no values or transformations.  This file is an interface specification.
 -->
-<qonfig-def name="Expresso-Core" version="0.1" root="expresso">
+<qonfig-def name="Expresso-Core" version="0.1" xmlns:ref="Qonfig-Reference v0.1">
 	<value-types>
 		<?DOC A name for a variable?>
 		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
@@ -73,6 +73,19 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		<add-on name="with-required-models" abstract="true">
 			<child-def name="required" type="ext-model" min="0" />
 		</add-on>
+
+		<!-- To support external content -->
+		<add-on name="external-head-section" requires="expresso">
+			<child-mod child="expresso.models" inherits="external-content-model" />
+		</add-on>
+		<add-on name="external-content-model" requires="models" />
+		<add-on name="attr-backed-ext-model" requires="ext-model">
+			<child-mod child="ext-model.value" inherits="attr-backed-model-value" />
+			<child-mod child="ext-model.sub-model" inherits="attr-backed-ext-model" />
+		</add-on>
+		<add-on name="attr-backed-model-value" requires="model-value">
+			<attribute name="source-attr" type="identifier" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -128,5 +141,15 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<?DOC The model of the document, defining values and other structures that can be used to control the behavior of elements in the document?>
 			<child-def name="models" type="models" />
 		</element-def>
+
+		<element-def name="expresso-external-content" extends="external-content" inherits="named">
+			<child-def name="head" type="expresso" inherits="external-head-section" />
+		</element-def>
 	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="attr-backed-ext-model">
+			<target element="ext-model" role="external-content-model.model" />
+		</auto-inherit>
+	</auto-inheritance>
 </qonfig-def>
