@@ -109,6 +109,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		String test(T value, CharSequence text);
 	}
 
+	private QonfigToolkit theConfig;
+
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return Collections.singleton(ExpressoQIS.class);
@@ -126,7 +128,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
-		// Not needed
+		theConfig = toolkit;
 	}
 
 	@Override
@@ -162,8 +164,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			super.doUpdate(session.asElement("config-model-value"));
-			theDefaultValue = session.asElement("config-value").getAttributeExpression("default");
+			super.doUpdate(session.asElement(CONFIG, "config-model-value"));
+			theDefaultValue = session.asElement(CONFIG, "config-value").getAttributeExpression("default");
 		}
 
 		@Override
