@@ -87,7 +87,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			theReference = ref;
 			QonfigDocument ssDoc;
 			try (InputStream in = new BufferedInputStream(ref.openStream())) {
-				ssDoc = parser.parseDocument(ref.toString(), in);
+				ssDoc = parser.parseDocument(false, ref.toString(), in);
 			} catch (IOException e) {
 				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref,
 					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //

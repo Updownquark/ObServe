@@ -47,6 +47,7 @@ import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
+import org.qommons.config.QonfigPromiseFulfillment;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSessionImplementation;
 import org.qommons.io.BetterFile;
@@ -76,17 +77,17 @@ public class QuickApp extends QonfigApp {
 		List<QuickInterpretation> quickInterpretation = QonfigApp.create(//
 			qonfigApp.getDocument().getRoot().getChildrenInRole(quickAppTk, "quick-app", "quick-interpretation"),
 			QuickInterpretation.class);
-		return new QuickApp(qonfigApp.getDocument(), qonfigApp.getAppFile(), qonfigApp.getToolkits(), qonfigApp.getSessionTypes(),
-			qonfigApp.getInterpretations(), quickInterpretation, QommonsUtils.unmodifiableCopy(clArgs));
+		return new QuickApp(qonfigApp.getDocument(), qonfigApp.getAppFile(), qonfigApp.getToolkits(), qonfigApp.getPromiseFulfillment(),
+			qonfigApp.getSessionTypes(), qonfigApp.getInterpretations(), quickInterpretation, QommonsUtils.unmodifiableCopy(clArgs));
 	}
 
 	private final List<QuickInterpretation> theQuickInterpretations;
 	private final List<String> theCommandLineArgs;
 
 	protected QuickApp(QonfigDocument document, String appFile, Set<QonfigToolkit> toolkits,
-		List<SpecialSessionImplementation<?>> sessionTypes, List<QonfigInterpretation> interpretations,
-		List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs) {
-		super(document, appFile, toolkits, sessionTypes, interpretations);
+		List<QonfigPromiseFulfillment> promiseFulfillment, List<SpecialSessionImplementation<?>> sessionTypes,
+		List<QonfigInterpretation> interpretations, List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs) {
+		super(document, appFile, toolkits, promiseFulfillment, sessionTypes, interpretations);
 		theQuickInterpretations = quickInterpretations;
 		theCommandLineArgs = commandLineArgs;
 	}
@@ -413,8 +414,7 @@ public class QuickApp extends QonfigApp {
 				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(valueType)))
 					return;
 				collection = ObservableSortedCollection
-					.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
-					.build();
+					.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
 			} else if (modelType == ModelTypes.Set)
 				collection = ObservableSet.build((Class<Object>) valueType).build();
 			else if (modelType == ModelTypes.SortedSet) {
