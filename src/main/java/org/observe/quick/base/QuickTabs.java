@@ -87,9 +87,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			@Override
 			public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 				super.update(session, element);
-				theTabName = session.getAttributeExpression("tab-name");
-				theTabIcon = session.getAttributeExpression("tab-icon");
-				theOnSelect = session.getAttributeExpression("on-select");
+				theTabName = element.getAttributeExpression("tab-name", session);
+				theTabIcon = element.getAttributeExpression("tab-icon", session);
+				theOnSelect = element.getAttributeExpression("on-select", session);
 			}
 
 			@Override
@@ -270,7 +270,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			public void update(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
 				super.update(session, element);
 
-				theTabId = session.getAttributeExpression("tab-id");
+				theTabId = element.getAttributeExpression("tab-id", session);
 			}
 
 			@Override
@@ -387,7 +387,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 
-				theValues = session.getAttributeExpression("values");
+				theValues = getAttributeExpression("values", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theTabIdVariable = elModels.getElementValueModelId("tabId");
 				elModels.satisfyElementValueType(theTabIdVariable, ModelTypes.Value,
@@ -681,7 +681,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theSelectedTab = session.getAttributeExpression("selected");
+			theSelectedTab = getAttributeExpression("selected", session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSelectedTabVariable = elModels.getElementValueModelId("selectedTab");
 			elModels.satisfyElementValueType(theSelectedTabVariable, ModelTypes.Value, //

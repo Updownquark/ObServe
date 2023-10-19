@@ -40,7 +40,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theAction = session.getAttributeExpression("action");
+			theAction = getAttributeExpression("action", session);
 		}
 
 		@Override

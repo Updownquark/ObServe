@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 import javax.swing.JDialog;
 
@@ -112,8 +113,21 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
 			ExElement.syncDefs(getValueType(), theValues, valueSessions);
-			Boolean building = session.get(PREVENT_MODEL_BUILDING, Boolean.class);
-			if (!Boolean.FALSE.equals(building)) {
+
+			// Installing this control system because sometimes we want to control how the models are interpreted from above
+			Object building = session.get(PREVENT_MODEL_BUILDING);
+			boolean doBuild;
+			if (building == null)
+				doBuild = true;
+			else if (building instanceof Predicate)
+				doBuild = !((Predicate<Object>) building).test(this);
+			else if (building instanceof Boolean)
+				doBuild = Boolean.TRUE.equals(building);
+			else {
+				reporting().warn("Unrecognized " + PREVENT_MODEL_BUILDING + " type: " + building.getClass().getName());
+				doBuild = true;
+			}
+			if (doBuild) {
 				for (ModelValueElement.Def<?, ?> value : theValues)
 					value.populate((ObservableModelSet.Builder) session.getExpressoEnv().getModels());
 			}
@@ -702,7 +716,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			public void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				theConfigName = session.getAttributeText("config-name");
-				theConfigDir = session.getAttributeExpression("config-dir");
+				theConfigDir = getAttributeExpression("config-dir", session);
 
 				ExElement.syncDefs(OldConfigName.class, theOldConfigNames, session.forChildren("old-config-name"));
 
@@ -1050,7 +1064,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						} finally {
 							closingWithoutSave[0] = false;
 						}
-								dialog.getWindow().setVisible(false);
+						dialog.getWindow().setVisible(false);
 					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
 				}).run(null).getWindow();
 			}

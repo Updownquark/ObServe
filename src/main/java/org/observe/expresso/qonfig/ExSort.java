@@ -94,7 +94,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		String sortValueCompareName = session.getAttributeText("sort-compare-value-as");
 		theSortCompareValue = sortValueCompareName == null ? null : elModels.getElementValueModelId(sortValueCompareName);
 		LocatedPositionedContent sortCompareValueNamePosition = session.getAttributeValuePosition("sort-compare-value-as");
-		theSortWith = session.getAttributeExpression("sort-with");
+		theSortWith = getAttributeExpression("sort-with", session);
 		isAscending = session.getAttribute("ascending", boolean.class);
 		ExElement.syncDefs(ExSortBy.class, theSortBy, session.forChildren("sort-by"));
 
@@ -469,7 +469,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-			theAttribute = session.getValueExpression();
+			theAttribute = getValueExpression(session);
 		}
 
 		@Override

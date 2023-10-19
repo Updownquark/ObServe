@@ -53,13 +53,13 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			if (isVertical) {
-				theLeading = session.getAttributeExpression("top");
-				theCenter = session.getAttributeExpression("v-center");
-				theTrailing = session.getAttributeExpression("bottom");
+				theLeading = element.getAttributeExpression("top", session);
+				theCenter = element.getAttributeExpression("v-center", session);
+				theTrailing = element.getAttributeExpression("bottom", session);
 			} else {
-				theLeading = session.getAttributeExpression("left");
-				theCenter = session.getAttributeExpression("h-center");
-				theTrailing = session.getAttributeExpression("right");
+				theLeading = element.getAttributeExpression("left", session);
+				theCenter = element.getAttributeExpression("h-center", session);
+				theTrailing = element.getAttributeExpression("right", session);
 			}
 		}
 

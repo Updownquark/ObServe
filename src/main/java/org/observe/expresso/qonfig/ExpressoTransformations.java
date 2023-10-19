@@ -101,7 +101,7 @@ public class ExpressoTransformations {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theSource = session.getAttributeExpression("source");
+			theSource = getAttributeExpression("source", session);
 			isPrepared = false;
 		}
 
@@ -929,7 +929,7 @@ public class ExpressoTransformations {
 			isOneToMany = session.getAttribute("one-to-many", boolean.class);
 
 			theMapWith = ExElement.useOrReplace(MapWith.class, theMapWith, session, "map");
-			theEquivalence = session.getAttributeExpression("equivalence");
+			theEquivalence = getAttributeExpression("equivalence", session);
 			ExElement.syncDefs(CombineWith.class, theCombinedValues, session.forChildren("combined-value"));
 			theReverse = ExElement.useOrReplace(CompiledMapReverse.class, theReverse, session, "reverse");
 
@@ -1193,7 +1193,7 @@ public class ExpressoTransformations {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theMap = session.getValueExpression();
+			theMap = getValueExpression(session);
 		}
 
 		public <S, T> Interpreted<S, T, ? extends E> interpret(AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?> parent) {
@@ -1369,7 +1369,7 @@ public class ExpressoTransformations {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theValue = session.getValueExpression();
+			theValue = getValueExpression(session);
 			theValueVariable = getParentElement().getAddOn(ExWithElementModel.Def.class).getElementValueModelId(getName());
 		}
 
@@ -1537,11 +1537,11 @@ public class ExpressoTransformations {
 			theType = session.getAttribute("type", QonfigAddOn.class);
 			String targetName = session.getAttributeText("target-as");
 			theTargetVariable = getAddOn(ExWithElementModel.Def.class).getElementValueModelId(targetName);
-			theReverse = session.getValueExpression();
-			theEnabled = session.getAttributeExpression("enabled");
-			theAccept = session.getAttributeExpression("accept");
-			theAdd = session.getAttributeExpression("add");
-			theAddAccept = session.getAttributeExpression("add-accept");
+			theReverse = getValueExpression(session);
+			theEnabled = getAttributeExpression("enabled", session);
+			theAccept = getAttributeExpression("accept", session);
+			theAdd = getAttributeExpression("add", session);
+			theAddAccept = getAttributeExpression("add-accept", session);
 
 			if (theAdd == null && theAddAccept != null)
 				reporting().warn("add-accept specified without add.  add-accept will be ignored");

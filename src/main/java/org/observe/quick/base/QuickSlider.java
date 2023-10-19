@@ -51,8 +51,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theMin = session.getAttributeExpression("min");
-			theMax = session.getAttributeExpression("max");
+			theMin = getAttributeExpression("min", session);
+			theMax = getAttributeExpression("max", session);
 		}
 
 		@Override

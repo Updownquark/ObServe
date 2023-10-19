@@ -172,8 +172,8 @@ public interface QuickTableColumn<R, C> {
 				super.doUpdate(session);
 				theEditor = ExElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				String columnEditValueName = session.getAttributeText("column-edit-value-name");
-				isEditable = session.getAttributeExpression("editable-if");
-				isAcceptable = session.getAttributeExpression("accept");
+				isEditable = getAttributeExpression("editable-if", session);
+				isAcceptable = getAttributeExpression("accept", session);
 				theClicks = session.getAttribute("clicks", Integer.class);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theColumnEditValueVariable = elModels.getElementValueModelId(columnEditValueName);
@@ -536,7 +536,7 @@ public interface QuickTableColumn<R, C> {
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
 					super.update(session, element);
-					theCommit = session.getAttributeExpression("commit");
+					theCommit = element.getAttributeExpression("commit", session);
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
 				}
 
@@ -649,7 +649,7 @@ public interface QuickTableColumn<R, C> {
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
 					super.update(session, element);
-					theReplacement = session.getAttributeExpression("replacement");
+					theReplacement = element.getAttributeExpression("replacement", session);
 				}
 
 				@Override
@@ -824,12 +824,12 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
-				theName = session.getAttributeExpression("name");
+				theName = getAttributeExpression("name", session);
 				String columnValueName = session.getAttributeText("column-value-name");
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theColumnValueVariable = elModels.getElementValueModelId(columnValueName);
-				theValue = session.getAttributeExpression("value");
-				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
+				theValue = getAttributeExpression("value", session);
+				theHeaderTooltip = getAttributeExpression("header-tooltip", session);
 				String w = session.getAttributeText("min-width");
 				theMinWidth = w == null ? null : Integer.parseInt(w);
 				w = session.getAttributeText("pref-width");

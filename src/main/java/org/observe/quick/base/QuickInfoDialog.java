@@ -57,9 +57,9 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theType = session.getAttributeExpression("type");
-			theOnClose = session.getAttributeExpression("on-close");
-			theIcon = session.getAttributeExpression("icon");
+			theType = getAttributeExpression("type", session);
+			theOnClose = getAttributeExpression("on-close", session);
+			theIcon = getAttributeExpression("icon", session);
 		}
 
 		@Override

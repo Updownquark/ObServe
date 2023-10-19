@@ -51,7 +51,7 @@ public class CollapsePane extends QuickContainer.Abstract<QuickWidget> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			isCollapsed = session.getAttributeExpression("collapsed");
+			isCollapsed = getAttributeExpression("collapsed", session);
 			theHeader = ExElement.useOrReplace(QuickWidget.Def.class, theHeader, session, "header");
 		}
 

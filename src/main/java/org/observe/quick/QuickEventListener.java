@@ -95,7 +95,7 @@ public interface QuickEventListener extends ExElement {
 				theCtrlPressedValue = elModels.getElementValueModelId("ctrlPressed");
 				theShiftPressedValue = elModels.getElementValueModelId("shiftPressed");
 				ExElement.syncDefs(EventFilter.Def.class, theFilters, session.forChildren("filter"));
-				theAction = session.getValueExpression();
+				theAction = getValueExpression(session);
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("No action for event listener", session.getElement().getPositionInFile(), 0);
 			}
@@ -341,7 +341,7 @@ public interface QuickEventListener extends ExElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theCondition = session.getValueExpression();
+				theCondition = getValueExpression(session);
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {

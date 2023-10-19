@@ -183,8 +183,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
 				theName = session.getAttributeText("name");
-				theTooltip = session.getAttributeExpression("tooltip");
-				isVisible = session.getAttributeExpression("visible");
+				theTooltip = getAttributeExpression("tooltip", session);
+				isVisible = getAttributeExpression("visible", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theHoveredValue = elModels.getElementValueModelId("hovered");
 				theFocusedValue = elModels.getElementValueModelId("focused");

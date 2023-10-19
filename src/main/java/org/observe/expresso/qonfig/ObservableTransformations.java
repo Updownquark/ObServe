@@ -357,7 +357,7 @@ public class ObservableTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<Observable<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theUntil = session.getAttributeExpression("until");
+			theUntil = getAttributeExpression("until", session);
 		}
 
 		@Override
@@ -491,7 +491,7 @@ public class ObservableTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
-			theMap = session.getAttributeExpression("map");
+			theMap = getAttributeExpression("map", session);
 			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
@@ -672,7 +672,7 @@ public class ObservableTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
-			theTest = session.getAttributeExpression("test");
+			theTest = getAttributeExpression("test", session);
 			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}

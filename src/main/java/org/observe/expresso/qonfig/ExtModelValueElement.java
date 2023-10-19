@@ -61,7 +61,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			if (isExtValue)
-				theDefault = session.getAttributeExpression("default");
+				theDefault = getAttributeExpression("default", session);
 		}
 
 		@Override

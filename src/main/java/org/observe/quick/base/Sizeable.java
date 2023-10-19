@@ -71,22 +71,22 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			super.update(session, element);
 			switch (isVertical) {
 			case TRUE:
-				theSize = session.getAttributeExpression("height");
-				theMinimum = session.getAttributeExpression("min-height");
-				thePreferred = session.getAttributeExpression("pref-height");
-				theMaximum = session.getAttributeExpression("max-height");
+				theSize = element.getAttributeExpression("height", session);
+				theMinimum = element.getAttributeExpression("min-height", session);
+				thePreferred = element.getAttributeExpression("pref-height", session);
+				theMaximum = element.getAttributeExpression("max-height", session);
 				break;
 			case FALSE:
-				theSize = session.getAttributeExpression("width");
-				theMinimum = session.getAttributeExpression("min-width");
-				thePreferred = session.getAttributeExpression("pref-width");
-				theMaximum = session.getAttributeExpression("max-width");
+				theSize = element.getAttributeExpression("width", session);
+				theMinimum = element.getAttributeExpression("min-width", session);
+				thePreferred = element.getAttributeExpression("pref-width", session);
+				theMaximum = element.getAttributeExpression("max-width", session);
 				break;
 			default:
-				theSize = session.getAttributeExpression("size");
-				theMinimum = session.getAttributeExpression("min-size");
-				thePreferred = session.getAttributeExpression("pref-size");
-				theMaximum = session.getAttributeExpression("max-size");
+				theSize = element.getAttributeExpression("size", session);
+				theMinimum = element.getAttributeExpression("min-size", session);
+				thePreferred = element.getAttributeExpression("pref-size", session);
+				theMaximum = element.getAttributeExpression("max-size", session);
 				break;
 			}
 		}

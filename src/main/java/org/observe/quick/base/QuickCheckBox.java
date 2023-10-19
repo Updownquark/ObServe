@@ -42,7 +42,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-			theText = session.getValueExpression();
+			theText = getValueExpression(session);
 		}
 
 		@Override

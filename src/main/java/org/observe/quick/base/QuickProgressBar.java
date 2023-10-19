@@ -49,8 +49,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theMaximum = session.getAttributeExpression("max");
-			theText = session.getAttributeExpression("text");
+			theMaximum = getAttributeExpression("max", session);
+			theText = getAttributeExpression("text", session);
 		}
 
 		@Override

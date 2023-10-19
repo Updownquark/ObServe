@@ -202,10 +202,10 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
 
-				a = session.getAttributeExpression("a");
-				b = session.getAttributeExpression("b");
-				c = session.getAttributeExpression("c");
-				d = session.getAttributeExpression("d");
+				a = getAttributeExpression("a", session);
+				b = getAttributeExpression("b", session);
+				c = getAttributeExpression("c", session);
+				d = getAttributeExpression("d", session);
 			}
 
 			@Override
@@ -534,8 +534,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
 
-				e = session.getAttributeExpression("e");
-				f = session.getAttributeExpression("f");
+				e = getAttributeExpression("e", session);
+				f = getAttributeExpression("f", session);
 
 				ExElement.syncDefs(ModelValueElement.CompiledSynth.class, children, session.forChildren("a"));
 			}
@@ -807,7 +807,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 
-				g = session.getAttributeExpression("g");
+				g = getAttributeExpression("g", session);
 			}
 
 			@Override
@@ -990,7 +990,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 
-				h = session.getAttributeExpression("h");
+				h = getAttributeExpression("h", session);
 			}
 
 			@Override

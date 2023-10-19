@@ -57,9 +57,9 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theOnConfirm = session.getAttributeExpression("on-confirm");
-			theOnCancel = session.getAttributeExpression("on-cancel");
-			theIcon = session.getAttributeExpression("icon");
+			theOnConfirm = getAttributeExpression("on-confirm", session);
+			theOnCancel = getAttributeExpression("on-cancel", session);
+			theIcon = getAttributeExpression("icon", session);
 		}
 
 		@Override

@@ -78,7 +78,7 @@ public class ObservableValueTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theDisablement = session.getAttributeExpression("with");
+			theDisablement = getAttributeExpression("with", session);
 		}
 
 		@Override
@@ -214,7 +214,7 @@ public class ObservableValueTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
-			theTest = session.getAttributeExpression("test");
+			theTest = getAttributeExpression("test", session);
 			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
@@ -512,7 +512,7 @@ public class ObservableValueTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theRefresh = session.getAttributeExpression("on");
+			theRefresh = getAttributeExpression("on", session);
 		}
 
 		@Override
@@ -796,7 +796,7 @@ public class ObservableValueTransformations {
 				reverse.reporting().warn("reverse is not usable for value flattening");
 
 			theSorting = ExElement.useOrReplace(ExSort.ExRootSort.class, theSorting, session, "sort");
-			theEquivalence = session.getAttributeExpression("equivalence");
+			theEquivalence = getAttributeExpression("equivalence", session);
 			theEquivalencePosition = theEquivalence == null ? null : session.getAttributeValuePosition("equivalence");
 			LocatedPositionedContent targetModelType = session.getAttributeValuePosition("to");
 			theTargetType = (ModelType<M>) parseModelType(targetModelType);

@@ -97,7 +97,7 @@ public interface ExAddOn<E extends ExElement> {
 		/** @return The element interpretation that this add-on is added onto */
 		ExElement.Interpreted<? extends E> getElement();
 
-		default void preUpdate() {
+		default void preUpdate() throws ExpressoInterpretationException {
 		}
 
 		/**

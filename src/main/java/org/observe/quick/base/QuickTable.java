@@ -72,9 +72,9 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement("tabular-widget"));
-			theRows = session.getAttributeExpression("rows");
-			theSelection = session.getAttributeExpression("selection");
-			theMultiSelection = session.getAttributeExpression("multi-selection");
+			theRows = getAttributeExpression("rows", session);
+			theSelection = getAttributeExpression("selection", session);
+			theMultiSelection = getAttributeExpression("multi-selection", session);
 			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
 		}
 
@@ -212,7 +212,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			(a, i) -> a.getIdentity() == i.getIdentity())//
 		.simple(action -> action.create())//
 		.rightOrder()//
-			.onLeftX(element -> element.getLeftValue().destroy())//
+		.onLeftX(element -> element.getLeftValue().destroy())//
 		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();

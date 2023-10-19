@@ -91,7 +91,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 					theConfigPath = ObservableConfigPath.create(configPath);
 				else
 					theConfigPath = ObservableConfigPath.create(getAddOn(ExNamed.Def.class).getName());
-				theFormat = session.getAttributeExpression("format");
+				theFormat = getAttributeExpression("format", session);
 			}
 		}
 	}

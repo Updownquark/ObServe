@@ -96,11 +96,11 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			theX = session.getAttributeExpression("x");
-			theY = session.getAttributeExpression("y");
-			theWidth = session.getAttributeExpression("width");
-			theHeight = session.getAttributeExpression("height");
-			theWindowIcon = session.getAttributeExpression("window-icon");
+			theX = element.getAttributeExpression("x", session);
+			theY = element.getAttributeExpression("y", session);
+			theWidth = element.getAttributeExpression("width", session);
+			theHeight = element.getAttributeExpression("height", session);
+			theWindowIcon = element.getAttributeExpression("window-icon", session);
 			String closeAction = session.getAttributeText("close-action");
 			switch (closeAction) {
 			case "do-nothing":

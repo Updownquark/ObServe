@@ -92,8 +92,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				theFormat = session.getAttributeExpression("format");
-				isEditable = session.getAttributeExpression("editable");
+				theFormat = getAttributeExpression("format", session);
+				isEditable = getAttributeExpression("editable", session);
 			}
 		}
 	}

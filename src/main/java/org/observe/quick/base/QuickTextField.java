@@ -60,8 +60,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			String columnsStr = session.getAttributeText("columns");
 			theColumns = columnsStr == null ? null : Integer.parseInt(columnsStr);
-			isPassword = session.getAttributeExpression("password");
-			theEmptyText = session.getAttributeExpression("empty-text");
+			isPassword = getAttributeExpression("password", session);
+			theEmptyText = getAttributeExpression("empty-text", session);
 		}
 
 		@Override

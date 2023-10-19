@@ -82,9 +82,9 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 					sourceAttrX = new CompiledExpression(dv.getValue().getExpression(), dv.getValue().getElement(),
 						dv.getValue().getFilePosition(), session);
 				else if (dv.isSourceValue())
-					sourceAttrX = session.getValueExpression();
+					sourceAttrX = getElement().getValueExpression(session);
 				else if (dv.getSourceAttribute() != null)
-					sourceAttrX = session.getAttributeExpression(dv.getSourceAttribute());
+					sourceAttrX = getElement().getAttributeExpression(dv.getSourceAttribute(), session);
 				else
 					sourceAttrX = null;
 			} catch (QonfigInterpretationException e) {

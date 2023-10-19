@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -17,8 +18,11 @@ import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -30,9 +34,12 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
 import org.qommons.config.*;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExConsumer;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
 public interface ExElement extends Identifiable {
@@ -65,7 +72,7 @@ public interface ExElement extends Identifiable {
 
 		ErrorReporting reporting();
 
-		CompiledExpressoEnv getExpressoEnv();
+		CompiledExpressoEnv getExpressoEnv(String documentLocation);
 
 		void setExpressoEnv(CompiledExpressoEnv env);
 
@@ -210,6 +217,32 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
+		Def<?> getPromise();
+
+		QonfigExternalContent.Def<?> getExternalContent();
+
+		/**
+		 * @param attrName The name of the attribute to get
+		 * @return The observable expression at the given attribute
+		 * @throws QonfigInterpretationException If the attribute expression could not be parsed
+		 */
+		CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session) throws QonfigInterpretationException;
+
+		/**
+		 * @param attr The attribute to get
+		 * @param session
+		 * @return The observable expression at the given attribute
+		 * @throws QonfigInterpretationException If the attribute expression could not be parsed
+		 */
+		CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session) throws QonfigInterpretationException;
+
+		/**
+		 * @param session
+		 * @return The observable expression in this element's value
+		 * @throws QonfigInterpretationException If the value expression could not be parsed
+		 */
+		CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException;
+
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
 		 *
@@ -219,7 +252,8 @@ public interface ExElement extends Identifiable {
 		void update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		/**
-		 * An abstract implementation of {@link Def}
+		 * An abstract implementation of {@link Def}. {@link Def} is an interface to allow implementations to implement more than one type
+		 * of element, but all implementations should probably extend this.
 		 *
 		 * @param <E> The type of the element that this definition is for
 		 */
@@ -231,7 +265,11 @@ public interface ExElement extends Identifiable {
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
 			private Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
 			private CompiledExpressoEnv theExpressoEnv;
+			private CompiledExpressoEnv theAlternateEnv;
 			private ErrorReporting theReporting;
+
+			private Def<?> thePromise;
+			private QonfigExternalContent.Def<?> theExternalContent;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -289,8 +327,37 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public CompiledExpressoEnv getExpressoEnv() {
-				return theExpressoEnv;
+			public CompiledExpressoEnv getExpressoEnv(String documentLocation) {
+				if (theExpressoEnv == null)
+					return null;
+				else if (documentLocation == null
+					|| documentMatches(theExpressoEnv.reporting().getFileLocation().getFileLocation(), documentLocation))
+					return theExpressoEnv;
+				else if (theAlternateEnv != null
+					&& documentMatches(theAlternateEnv.reporting().getFileLocation().getFileLocation(), documentLocation))
+					return theAlternateEnv;
+				return null;
+			}
+
+			static boolean documentMatches(String location1, String location2) {
+				// This function handles null and also calls hashCode, which caches, to speed this up for multiple calls
+				if (location1 == null)
+					return location2 == null;
+				else if (location2 == null)
+					return false;
+				if (location1.hashCode() != location2.hashCode())
+					return false;
+				return location1.equals(location2);
+			}
+
+			@Override
+			public Def<?> getPromise() {
+				return thePromise;
+			}
+
+			@Override
+			public QonfigExternalContent.Def<?> getExternalContent() {
+				return theExternalContent;
 			}
 
 			@Override
@@ -384,6 +451,55 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
+			public CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session) throws QonfigInterpretationException {
+				QonfigAttributeDef attr = session.getAttributeDef(null, null, attrName);
+				return getExpression(attr, session);
+			}
+
+			CompiledExpression getExpression(QonfigValueDef type, ExpressoQIS session) throws QonfigInterpretationException {
+				if (type == null)
+					reporting().error("This element has no value definition");
+				else if (!(type.getType() instanceof QonfigValueType.Custom)
+					|| !(((QonfigValueType.Custom) type.getType()).getCustomType() instanceof ExpressionValueType))
+					reporting().error("Attribute " + type + " is not an expression");
+				QonfigValue value;
+				if (type instanceof QonfigAttributeDef)
+					value = getElement().getAttributes().get(type.getDeclared());
+				else
+					value = getElement().getValue();
+				if (value == null || value.value == null)
+					return null;
+
+				ObservableExpression expression;
+				try {
+					expression = session.getExpressoParser().parse(((QonfigExpression) value.value).text);
+				} catch (ExpressoParseException e) {
+					LocatedFilePosition position;
+					if (value.position instanceof LocatedPositionedContent)
+						position = ((LocatedPositionedContent) value.position).getPosition(e.getErrorOffset());
+					else
+						position = new LocatedFilePosition(getElement().getDocument().getLocation(),
+							value.position.getPosition(e.getErrorOffset()));
+					throw new QonfigInterpretationException("Could not parse attribute " + type + ": " + e.getMessage(), position,
+						e.getErrorLength(), e);
+				}
+				Supplier<CompiledExpressoEnv> env = () -> getExpressoEnv(value.fileLocation);
+				return new CompiledExpression(expression, getElement(),
+					LocatedPositionedContent.of(getElement().getDocument().getLocation(), value.position), env);
+			}
+
+			@Override
+			public CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session)
+				throws QonfigInterpretationException {
+				return getExpression(attr, session);
+			}
+
+			@Override
+			public CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException {
+				return getExpression(session.getValueDef(), session);
+			}
+
+			@Override
 			public final void update(ExpressoQIS session) throws QonfigInterpretationException {
 				if (session.getFocusType() != theQonfigType)
 					session = session.asElement(theQonfigType);
@@ -404,7 +520,42 @@ public interface ExElement extends Identifiable {
 					} else if (theParent.getElement() != theElement.getParent())
 						throw new IllegalArgumentException(theParent + " is not the parent of " + this);
 				}
-				setExpressoEnv(session.getExpressoEnv());
+
+				theExpressoEnv = null;
+				theAlternateEnv = null;
+				if (theParent != null)
+					setExpressoEnv(theParent.getExpressoEnv(null));
+
+				if (theElement.getPromise() == null)
+					thePromise = null;
+				else {
+					ExpressoQIS promiseSession = session.intepretRoot(theElement.getPromise());
+					if (thePromise == null || !typesEqual(thePromise.getElement(), theElement.getPromise())) {
+						if (promiseSession.getInterpretationSupport(ExElement.Def.class) != null)
+							thePromise = promiseSession.interpret(ExElement.Def.class);
+					}
+					if (thePromise != null) {
+						thePromise.update(promiseSession);
+						// setExpressoEnv(thePromise.getExpressoEnv(null)); //TODO Is this right/needed?
+					}
+				}
+				if (theElement.getExternalContent() == null)
+					theExternalContent = null;
+				else {
+					QonfigElement.Builder ecBuilder = QonfigElement.buildRoot(false, theReporting, theElement.getExternalContent(),
+						(QonfigElementDef) theElement.getExternalContent().getPartialRoot().getType(),
+						theElement.getExternalContent().getPartialRoot().getDescription());
+					if (theElement.getPromise() != null)
+						ecBuilder.fulfills(theElement.getPromise(), null);
+					theElement.getExternalContent().getPartialRoot().copy(ecBuilder);
+					QonfigElement ecElement = ecBuilder.buildFull();
+					ExpressoQIS ecSession = session.intepretRoot(ecElement);
+					if (theExternalContent == null
+						|| !typesEqual(theExternalContent.getElement(), theElement.getExternalContent().getPartialRoot()))
+						theExternalContent = ecSession.interpret(QonfigExternalContent.Def.class);
+					theExternalContent.update(ecSession, this);
+					setExpressoEnv(theExternalContent.getExpressoEnv(null));
+				}
 
 				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
@@ -436,7 +587,14 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public void setExpressoEnv(CompiledExpressoEnv env) {
-				theExpressoEnv = env;
+				if (documentMatches(env.reporting().getFileLocation().getFileLocation(), theElement.getDocument().getLocation()))
+					theExpressoEnv = env;
+				else if (theExternalContent != null && documentMatches(env.reporting().getFileLocation().getFileLocation(),
+					theExternalContent.getElement().getDocument().getLocation()))
+					theAlternateEnv = env;
+				else
+					throw new IllegalArgumentException("This element (" + this + ") does not touch any content from "
+						+ env.reporting().getFileLocation().getFileLocation());
 			}
 
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
@@ -513,6 +671,10 @@ public interface ExElement extends Identifiable {
 		/** @return The interpretation of the parent element */
 		Interpreted<?> getParentElement();
 
+		Interpreted<?> getPromise();
+
+		QonfigExternalContent.Interpreted<?> getExternalContent();
+
 		default ErrorReporting reporting() {
 			return getDefinition().reporting();
 		}
@@ -520,7 +682,7 @@ public interface ExElement extends Identifiable {
 		/** @return This element's models */
 		InterpretedModelSet getModels();
 
-		InterpretedExpressoEnv getExpressoEnv();
+		InterpretedExpressoEnv getExpressoEnv(String documentLocation);
 
 		void setExpressoEnv(InterpretedExpressoEnv env);
 
@@ -561,16 +723,21 @@ public interface ExElement extends Identifiable {
 		void destroy();
 
 		/**
-		 * An abstract implementation of {@link Interpreted}
+		 * An abstract implementation of {@link Interpreted}. {@link Interpreted} is an interface to allow implementations to implement more
+		 * than one type of element, but all implementations should probably extend this.
 		 *
 		 * @param <E> The type of element that this interpretation is for
 		 */
 		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
-			private final Def<? super E> theDefinition;
+			private final Def.Abstract<? super E> theDefinition;
 			private Interpreted<?> theParent;
+			private Interpreted<?> thePromise;
+			private QonfigExternalContent.Interpreted<?> theExternalContent;
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedExpressoEnv theExpressoEnv;
+			private InterpretedExpressoEnv theAlternateEnv;
+			private InterpretedModelSet theUnifiedModel;
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
 			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
@@ -580,7 +747,7 @@ public interface ExElement extends Identifiable {
 			 * @param parent The interpretation from the parent element
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
-				theDefinition = definition;
+				theDefinition = (Def.Abstract<? super E>) definition;
 				if (parent != null)
 					setParentElement(parent);
 				theAddOns = new ClassMap<>();
@@ -590,6 +757,16 @@ public interface ExElement extends Identifiable {
 						theAddOns.put(interp.getClass(), interp);
 				}
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+			}
+
+			@Override
+			public Interpreted<?> getPromise() {
+				return thePromise;
+			}
+
+			@Override
+			public QonfigExternalContent.Interpreted<?> getExternalContent() {
+				return theExternalContent;
 			}
 
 			@Override
@@ -625,8 +802,16 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public InterpretedExpressoEnv getExpressoEnv() {
-				return theExpressoEnv;
+			public InterpretedExpressoEnv getExpressoEnv(String documentLocation) {
+				if (theExpressoEnv == null)
+					return null;
+				else if (documentLocation == null
+					|| Def.Abstract.documentMatches(theExpressoEnv.reporting().getFileLocation().getFileLocation(), documentLocation))
+					return theExpressoEnv;
+				else if (theAlternateEnv != null
+					&& Def.Abstract.documentMatches(theAlternateEnv.reporting().getFileLocation().getFileLocation(), documentLocation))
+					return theAlternateEnv;
+				return null;
 			}
 
 			@Override
@@ -700,19 +885,64 @@ public interface ExElement extends Identifiable {
 			 *
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
-			protected final void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected final void update(InterpretedExpressoEnv parentEnv) throws ExpressoInterpretationException {
 				if (isInterpreting)
 					return;
 				isInterpreting = true;
 				try {
 					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 						addOn.preUpdate();
-					theExpressoEnv = env.forChild(theDefinition.getExpressoEnv());
+
+					if (theParent != null)
+						setExpressoEnv(theParent.getExpressoEnv(null)//
+							.forChild(//
+								theDefinition.getExpressoEnv(theParent.getDefinition().getElement().getDocument().getLocation())));
+					else
+						setExpressoEnv(parentEnv.at(theDefinition.getElement().getFilePosition()));
+					if (thePromise != null && (getDefinition().getPromise() == null
+						|| thePromise.getIdentity() != getDefinition().getPromise().getIdentity())) {
+						thePromise.destroy();
+						thePromise = null;
+					}
+					if (thePromise == null && getDefinition().getPromise() != null) {
+						// TODO Interpret the promise
+					}
+					if (thePromise != null) {
+						// TODO Update the promise
+					}
+					if (theExternalContent != null && (getDefinition().getExternalContent() == null
+						|| theExternalContent.getIdentity() != getDefinition().getExternalContent().getIdentity())) {
+						theExternalContent.destroy();
+						theExternalContent = null;
+					}
+					if (theExternalContent == null && getDefinition().getExternalContent() != null)
+						theExternalContent = getDefinition().getExternalContent().interpret();
+					if (theExternalContent != null) {
+						theExternalContent.update(this);
+						setExpressoEnv(theExternalContent.getExpressoEnv(null));
+					}
+
+					if (theExpressoEnv == null) {
+						ExElement.Interpreted<?> parent = theParent;
+						InterpretedExpressoEnv altEnvParent = null;
+						while (parent != null && altEnvParent == null) {
+							altEnvParent = parent.getExpressoEnv(theDefinition.getElement().getDocument().getLocation());
+							parent = parent.getParentElement();
+						}
+						if (altEnvParent == null)
+							reporting().error(
+								"No interpretation found parent in document " + theDefinition.getElement().getDocument().getLocation());
+						else
+							setExpressoEnv(altEnvParent.forChild(//
+								theDefinition.getExpressoEnv(null)));
+					}
+
 					doUpdate(theExpressoEnv);
 					// If our models are the same as the parent, then they're already interpreted or interpreting
 					// Can't always rely on having our parent correct, but we can tell from the definition
 					boolean hasUniqueModels = getDefinition().getParentElement() == null
-						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels();
+						|| getDefinition().getExpressoEnv(null).getModels() != getDefinition().getParentElement().getExpressoEnv(null)
+						.getModels();
 					if (hasUniqueModels)
 						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
 					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
@@ -732,6 +962,24 @@ public interface ExElement extends Identifiable {
 			}
 
 			protected void postUpdate() throws ExpressoInterpretationException {
+			}
+
+			InterpretedModelSet getUnifiedModel() {
+				if (theAlternateEnv == null)
+					return theExpressoEnv.getModels();
+				else if (theUnifiedModel == null) {
+					ObservableModelSet.Builder modelBuilder = ObservableModelSet.build(toString() + ".unified",
+						theExpressoEnv.getModels().getNameChecker());
+					modelBuilder.withAll(theExpressoEnv.getModels());
+					modelBuilder.withAll(theAlternateEnv.getModels());
+					try {
+						theUnifiedModel = modelBuilder.build().createInterpreted(theExpressoEnv);
+						theUnifiedModel.interpret(theExpressoEnv);
+					} catch (ExpressoInterpretationException e) {
+						throw new IllegalStateException("This should not happen--should have been 100% interpreted already", e);
+					}
+				}
+				return theUnifiedModel;
 			}
 
 			@Override
@@ -824,7 +1072,10 @@ public interface ExElement extends Identifiable {
 		return isDestroyed().noInitChanges().filter(evt -> evt.getNewValue()).take(1);
 	}
 
-	/** Abstract {@link ExElement} implementation */
+	/**
+	 * An abstract implementation of {@link ExElement}. {@link ExElement} is an interface to allow implementations to implement more than
+	 * one type of element, but all implementations should probably extend this.
+	 */
 	public abstract class Abstract implements ExElement, Cloneable {
 		private final Object theId;
 		private ExElement theParent;
@@ -933,9 +1184,10 @@ public interface ExElement extends Identifiable {
 				}
 			}, CollectionUtils.AdjustmentOrder.RightOrder);
 
-			if (interpreted.getParentElement() == null || interpreted.getExpressoEnv().getModels().getIdentity() != interpreted
-				.getParentElement().getExpressoEnv().getModels().getIdentity())
-				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+			Interpreted.Abstract<?> myInterpreted = (Interpreted.Abstract<?>) interpreted;
+			if (interpreted.getParentElement() == null || myInterpreted.getUnifiedModel().getIdentity() != interpreted.getParentElement()
+				.getExpressoEnv(null).getModels().getIdentity())
+				theLocalModel = myInterpreted.getUnifiedModel().instantiate();
 			else
 				theLocalModel = null;
 			isModelPersistent = interpreted.isModelInstancePersistent();
@@ -1047,7 +1299,7 @@ public interface ExElement extends Identifiable {
 	 * @param element2 The second element to compare
 	 * @return Whether the type information of both elements are the same
 	 */
-	public static boolean typesEqual(QonfigElement element1, QonfigElement element2) {
+	public static boolean typesEqual(PartialQonfigElement element1, PartialQonfigElement element2) {
 		return element1.getType() == element2.getType() && element1.getInheritance().equals(element2.getInheritance());
 	}
 

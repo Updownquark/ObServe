@@ -134,10 +134,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeVariable = elModels.getElementValueModelId(nodeName);
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theTreeColumn = ExElement.useOrReplace(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
-			thePathSelection = session.getAttributeExpression("selection");
-			thePathMultiSelection = session.getAttributeExpression("multi-selection");
-			theNodeSelection = session.getAttributeExpression("node-selection");
-			theNodeMultiSelection = session.getAttributeExpression("node-multi-selection");
+			thePathSelection = getAttributeExpression("selection", session);
+			thePathMultiSelection = getAttributeExpression("multi-selection", session);
+			theNodeSelection = getAttributeExpression("node-selection", session);
+			theNodeMultiSelection = getAttributeExpression("node-multi-selection", session);
 			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
 			isRootVisible = session.getAttribute("root-visible", boolean.class);

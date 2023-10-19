@@ -83,7 +83,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
 					session);
 			}
-			theIcon = session.getAttributeExpression("icon");
+			theIcon = getAttributeExpression("icon", session);
 		}
 
 		@Override

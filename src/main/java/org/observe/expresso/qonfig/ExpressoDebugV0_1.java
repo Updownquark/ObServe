@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 
+import org.observe.expresso.ExpressoInterpretationException;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
 import org.qommons.config.QonfigAddOn;
@@ -100,7 +101,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void preUpdate() {
+			public void preUpdate() throws ExpressoInterpretationException {
 				if (getDefinition().getBreakType() == BreakType.interpret)
 					BreakpointHere.breakpoint();
 				super.preUpdate();

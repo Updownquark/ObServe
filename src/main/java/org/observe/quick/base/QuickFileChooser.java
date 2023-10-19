@@ -100,9 +100,9 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 			if (!isFilesSelectable && !isDirectoriesSelectable)
 				reporting().error("Neither files nor directories are selectable");
 			isMultiSelectable = session.getAttribute("multi-selectable", boolean.class);
-			theDirectory = session.getAttributeExpression("directory");
-			theOnSelect = session.getAttributeExpression("on-select");
-			theOnCancel = session.getAttributeExpression("on-cancel");
+			theDirectory = getAttributeExpression("directory", session);
+			theOnSelect = getAttributeExpression("on-select", session);
+			theOnCancel = getAttributeExpression("on-cancel", session);
 		}
 
 		@Override

@@ -31,7 +31,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			theInit = session.getAttributeExpression("init");
+			theInit = element.getAttributeExpression("init", session);
 		}
 
 		@Override

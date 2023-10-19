@@ -72,10 +72,10 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				String valueName = session.getAttributeText("value-name");
-				theValue = session.getAttributeExpression("value");
+				theValue = getAttributeExpression("value", session);
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
 					theValue = null; // Value supplied by parent
-				theDisabled = session.getAttributeExpression("disable-with");
+				theDisabled = getAttributeExpression("disable-with", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theValueVariable = elModels.getElementValueModelId(valueName);
 				elModels.satisfyElementValueType(theValueVariable, ModelTypes.Value,

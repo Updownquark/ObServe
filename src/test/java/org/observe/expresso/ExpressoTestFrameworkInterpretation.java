@@ -91,7 +91,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theValue = session.getValueExpression();
+			theValue = getValueExpression(session);
 		}
 
 		@Override

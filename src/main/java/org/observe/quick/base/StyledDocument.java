@@ -78,10 +78,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theSelectionStartValue = session.getAttributeExpression("selection-start-value");
-			theSelectionStartOffset = session.getAttributeExpression("selection-start-offset");
-			theSelectionEndValue = session.getAttributeExpression("selection-end-value");
-			theSelectionEndOffset = session.getAttributeExpression("selection-end-offset");
+			theSelectionStartValue = getAttributeExpression("selection-start-value", session);
+			theSelectionStartOffset = getAttributeExpression("selection-start-offset", session);
+			theSelectionEndValue = getAttributeExpression("selection-end-value", session);
+			theSelectionEndOffset = getAttributeExpression("selection-end-offset", session);
 		}
 
 		public abstract Interpreted<?, ? extends D> interpret(ExElement.Interpreted<?> parent);

@@ -1588,8 +1588,8 @@ public class ExpressoQonfigValues {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theEvent = session.getAttributeExpression("on");
-			theAction = session.getValueExpression();
+			theEvent = getAttributeExpression("on", session);
+			theAction = getValueExpression(session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theEventVariable = elModels.getElementValueModelId("event");
 			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theEventVariable, ModelTypes.Value, (interp, env) -> {
@@ -1770,7 +1770,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theAction = session.getValueExpression();
+			theAction = getValueExpression(session);
 		}
 
 		@Override
@@ -2031,12 +2031,12 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theInit = session.getAttributeExpression("init");
-			theBefore = session.getAttributeExpression("before-while");
-			theWhile = session.getAttributeExpression("while");
-			theBeforeBody = session.getAttributeExpression("before-body");
-			theAfterBody = session.getAttributeExpression("after-body");
-			theFinally = session.getAttributeExpression("finally");
+			theInit = getAttributeExpression("init", session);
+			theBefore = getAttributeExpression("before-while", session);
+			theWhile = getAttributeExpression("while", session);
+			theBeforeBody = getAttributeExpression("before-body", session);
+			theAfterBody = getAttributeExpression("after-body", session);
+			theFinally = getAttributeExpression("finally", session);
 			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theBody, session.forChildren("body"));
 		}
 
@@ -2497,16 +2497,16 @@ public class ExpressoQonfigValues {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			isActive = session.getAttributeExpression("active");
-			theFrequency = session.getAttributeExpression("frequency");
+			isActive = getAttributeExpression("active", session);
+			theFrequency = getAttributeExpression("frequency", session);
 			isStrictTiming = session.getAttribute("strict-timing", boolean.class);
 			isBackground = session.getAttribute("background", boolean.class);
-			theRemainingExecutions = session.getAttributeExpression("remaining-executions");
-			theUntil = session.getAttributeExpression("until");
-			theRunNextIn = session.getAttributeExpression("run-next-in");
-			theNextExecution = session.getAttributeExpression("next-execution");
-			theExecutionCount = session.getAttributeExpression("execution-count");
-			isExecuting = session.getAttributeExpression("executing");
+			theRemainingExecutions = getAttributeExpression("remaining-executions", session);
+			theUntil = getAttributeExpression("until", session);
+			theRunNextIn = getAttributeExpression("run-next-in", session);
+			theNextExecution = getAttributeExpression("next-execution", session);
+			theExecutionCount = getAttributeExpression("execution-count", session);
+			isExecuting = getAttributeExpression("executing", session);
 		}
 
 		@Override

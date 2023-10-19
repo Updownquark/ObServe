@@ -72,7 +72,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-			theValues = session.getAttributeExpression("values");
+			theValues = getAttributeExpression("values", session);
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theActiveValueVariable = elModels.getElementValueModelId(session.getAttributeText("active-value-name"));

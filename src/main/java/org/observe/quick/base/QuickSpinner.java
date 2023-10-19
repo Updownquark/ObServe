@@ -48,8 +48,8 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			thePrevious = session.getAttributeExpression("previous");
-			theNext = session.getAttributeExpression("next");
+			thePrevious = getAttributeExpression("previous", session);
+			theNext = getAttributeExpression("next", session);
 		}
 
 		@Override

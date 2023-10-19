@@ -69,6 +69,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExAddOn.creator(ModelValueElement.Def.class, ExElementModelValue.Def::new));
 		interpreter.createWith("with-local-model", ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
 		interpreter.createWith("with-required-models", ExWithRequiredModels.Def.class, ExAddOn.creator(ExWithRequiredModels.Def::new));
+
+		// To support external content
+		interpreter.createWith(ExpressoExternalContent.EXPRESSO_EXTERNAL_CONTENT, ExpressoExternalContent.Def.class,
+			ExElement.creator(ExpressoExternalContent.Def::new));
+		interpreter.createWith(AttributeBackedModelValue.ATTR_BACKED_MODEL_VALUE, AttributeBackedModelValue.Def.class,
+			ExAddOn.creator(ExtModelValueElement.Def.class, AttributeBackedModelValue.Def::new));
+
 		interpreter.createWith("named", ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
 		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
 		interpreter.createWith("map-model-value", ExMapModelValue.Def.class, ExAddOn.creator(ExMapModelValue.Def::new));

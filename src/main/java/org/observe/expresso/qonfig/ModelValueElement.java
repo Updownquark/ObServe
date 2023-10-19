@@ -73,7 +73,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 					else
 						theModelPath += "." + name;
 				}
-				theValue = session.getValueExpression();
+				theValue = getValueExpression(session);
 			}
 
 			@Override

@@ -92,7 +92,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theHandleValueVariable = elModels.getElementValueModelId("handleValue");
 				theHandleIndexVariable = elModels.getElementValueModelId("handleIndex");
-				theTooltip = session.getAttributeExpression("tooltip");
+				theTooltip = getAttributeExpression("tooltip", session);
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -369,7 +369,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theMaxValue = session.getAttributeExpression("max-value");
+				theMaxValue = getAttributeExpression("max-value", session);
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -508,11 +508,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theValues = session.getAttributeExpression("values");
+			theValues = getAttributeExpression("values", session);
 			isVertical = session.getAttributeText("orientation").equals("vertical");
 			isOrderEnforced = session.getAttribute("enforce-order", boolean.class);
-			theMin = session.getAttributeExpression("min");
-			theMax = session.getAttributeExpression("max");
+			theMin = getAttributeExpression("min", session);
+			theMax = getAttributeExpression("max", session);
 			theHandleRenderer = ExElement.useOrReplace(SliderHandleRenderer.Def.class, theHandleRenderer, session, "handle-renderer");
 			ExElement.syncDefs(SliderBgRenderer.Def.class, theBgRenderers, session.forChildren("bg-renderer"));
 		}

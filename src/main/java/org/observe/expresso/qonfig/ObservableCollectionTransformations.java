@@ -227,7 +227,7 @@ public class ObservableCollectionTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
-			theTest = session.getAttributeExpression("test");
+			theTest = getAttributeExpression("test", session);
 			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
@@ -530,7 +530,7 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theRefresh = session.getAttributeExpression("on");
+			theRefresh = getAttributeExpression("on", session);
 		}
 
 		@Override
@@ -613,8 +613,8 @@ public class ObservableCollectionTransformations {
 			qonfigType = "refresh-each",
 			interpretation = RefreshEachCollectionTransform.Interpreted.class),
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-			qonfigType = "complex-operation",
-			interpretation = RefreshEachCollectionTransform.Interpreted.class) })
+		qonfigType = "complex-operation",
+		interpretation = RefreshEachCollectionTransform.Interpreted.class) })
 	static class RefreshEachCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
 		private ModelComponentId theSourceName;
@@ -640,7 +640,7 @@ public class ObservableCollectionTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceName = elModels.getElementValueModelId(sourceAs);
-			theRefresh = session.getAttributeExpression("on");
+			theRefresh = getAttributeExpression("on", session);
 			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
@@ -1545,7 +1545,7 @@ public class ObservableCollectionTransformations {
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
 			theSourceAs = session.getAttributeText("source-as");
-			theWith = session.getAttributeExpression("key");
+			theWith = getAttributeExpression("with", session);
 		}
 
 		@Override
@@ -1579,7 +1579,7 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theFilter = session.getAttributeExpression("filter");
+			theFilter = getAttributeExpression("filter", session);
 			isInclusive = session.getAttribute("inclusive", boolean.class);
 		}
 
@@ -1687,7 +1687,7 @@ public class ObservableCollectionTransformations {
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
 			theSourceAs = session.getAttributeText("source-as");
-			theKey = session.getAttributeExpression("key");
+			theKey = getAttributeExpression("key", session);
 		}
 
 		@Override

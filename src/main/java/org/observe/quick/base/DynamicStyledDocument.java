@@ -84,10 +84,10 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
-			theRoot = session.getAttributeExpression("root");
-			theChildren = session.getAttributeExpression("children");
-			theFormat = session.getAttributeExpression("format");
-			thePostText = session.getAttributeExpression("post-text");
+			theRoot = getAttributeExpression("root", session);
+			theChildren = getAttributeExpression("children", session);
+			theFormat = getAttributeExpression("format", session);
+			thePostText = getAttributeExpression("post-text", session);
 			theTextStyle = ExElement.useOrReplace(TextStyleElement.Def.class, theTextStyle, session, "text-style");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theNodeValue = elModels.getElementValueModelId("node");

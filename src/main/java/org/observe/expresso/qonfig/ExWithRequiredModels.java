@@ -44,7 +44,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 				theRequiredModelElement = null;
 				return;
 			}
-			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING, false);
+			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING, true);
 			ObservableModelSet.Builder builder = createBuilder(session);
 			theRequiredModelElement = ExElement.useOrReplace(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
 				session, "required");

@@ -51,7 +51,7 @@ public class ObservableActionTransformations {
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = sourceAs == null ? null : elModels.getElementValueModelId(sourceAs);
-			theDisablement = session.getAttributeExpression("with");
+			theDisablement = getAttributeExpression("with", session);
 			// Not useable for action--there's no value, but we still have to satisfy the type
 			if (theSourceVariable != null)
 				elModels.satisfyElementValueType(theSourceVariable, ModelTypes.Value.forType(TypeTokens.get().VOID));

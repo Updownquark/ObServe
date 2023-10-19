@@ -59,8 +59,8 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 
 			@Override
 			public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-				theTitle = session.getAttributeExpression("title");
-				theVisible = session.getAttributeExpression("visible");
+				theTitle = element.getAttributeExpression("title", session);
+				theVisible = element.getAttributeExpression("visible", session);
 			}
 
 			@Override

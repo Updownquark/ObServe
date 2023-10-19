@@ -84,8 +84,9 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-mod child="ext-model.sub-model" inherits="attr-backed-ext-model" />
 		</add-on>
 		<add-on name="attr-backed-model-value" requires="model-value">
-			<attribute name="source-attr" type="identifier" />
+			<attribute name="source-attr" type="qonfig-member" />
 		</add-on>
+		<add-on name="expresso-external-fulfillment" abstract="true" />
 	</add-ons>
 
 	<elements>
@@ -142,8 +143,9 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="models" type="models" />
 		</element-def>
 
-		<element-def name="expresso-external-content" extends="external-content" inherits="named">
+		<element-def name="expresso-external-content" extends="external-content">
 			<child-def name="head" type="expresso" inherits="external-head-section" />
+			<child-mod child="external-content.fulfillment" inherits="expresso-external-fulfillment" />
 		</element-def>
 	</elements>
 

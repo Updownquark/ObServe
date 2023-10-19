@@ -260,7 +260,7 @@ public class NameExpression implements ObservableExpression, Named {
 					reporting.at(theNames.get(nameIndex).length()), divisions, context, env, exHandler);
 			} else
 				throw new ExpressoInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value",
-					reporting.getPosition(), theNames.get(nameIndex).length());
+					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length());
 		} else if (mvType == ModelTypes.Value) {
 			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv;
 			ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> instType = imv.getType();
@@ -272,12 +272,12 @@ public class NameExpression implements ObservableExpression, Named {
 				field = ctxType.getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
 				exHandler.handle1(new ExpressoInterpretationException(
-					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName(), reporting.getPosition(),
-					theNames.get(nameIndex).length()));
+					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName(),
+					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length()));
 				return null;
 			} catch (SecurityException e) {
-				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed", reporting.getPosition(),
-					theNames.get(nameIndex).length(), e));
+				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed",
+					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length(), e));
 				return null;
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //

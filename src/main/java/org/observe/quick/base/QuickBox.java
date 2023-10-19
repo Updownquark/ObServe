@@ -53,7 +53,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 				throw new QonfigInterpretationException("No Quick interpretation for layout " + layout,
 					session.getAttributeValuePosition("layout", 0), layout.length());
 			}
-			theOpacity = session.getAttributeExpression("opacity");
+			theOpacity = getAttributeExpression("opacity", session);
 		}
 
 		@Override

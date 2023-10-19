@@ -1696,7 +1696,7 @@ public interface ObservableModelSet extends Identifiable {
 			theNameChecker.checkName(modelName);
 			Placeholder subModel = theComponents.get(modelName);
 			if (subModel == null)
-				throw new ModelException("No such sub-model declared: '" + pathTo(modelName) + "'");
+				throw new ModelException("No such external sub-model declared: '" + pathTo(modelName) + "'");
 			else if (subModel.type.getModelType() != ModelTypes.Model)
 				throw new ModelException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
 			if (dot < 0)

@@ -165,7 +165,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(CONFIG, "config-model-value"));
-			theDefaultValue = session.asElement(CONFIG, "config-value").getAttributeExpression("default");
+			theDefaultValue = getAttributeExpression("default", session.asElement(CONFIG, "config-value"));
 		}
 
 		@Override
@@ -304,7 +304,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 				super.update(session, element);
 
-				theKeyFormat = session.getAttributeExpression("key-format");
+				theKeyFormat = element.getAttributeExpression("key-format", session);
 			}
 
 			@Override
@@ -553,8 +553,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			theWrapped = session.getAttributeExpression("wrapped");
-			theMaxArchiveDepth = session.getAttributeExpression("max-archive-depth");
+			theWrapped = getAttributeExpression("wrapped", session);
+			theMaxArchiveDepth = getAttributeExpression("max-archive-depth", session);
 			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theArchiveMethods, session.forChildren("archive-method"));
 		}
 
@@ -1264,8 +1264,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doPrepare(session);
-			theFileSource = session.getAttributeExpression("file-source");
-			theWorkingDir = session.getAttributeExpression("working-dir");
+			theFileSource = getAttributeExpression("file-source", session);
+			theWorkingDir = getAttributeExpression("working-dir", session);
 		}
 
 		@Override
@@ -1456,7 +1456,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doPrepare(session);
-			theSignificantDigits = session.getAttributeExpression("sig-digs");
+			theSignificantDigits = getAttributeExpression("sig-digs", session);
 			theUnit = session.getAttributeText("unit");
 			isUnitRequired = session.getAttribute("unit-required", boolean.class);
 			isMetricPrefixed = session.getAttribute("metric-prefixes", boolean.class);
@@ -1716,7 +1716,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				theRelativeEvaluation = TimeUtils.RelativeInstantEvaluation.Closest;
 			}
 
-			theRelativeTo = session.getAttributeExpression("relative-to");
+			theRelativeTo = getAttributeExpression("relative-to", session);
 		}
 
 		@Override
@@ -2042,7 +2042,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				theFilterValueVariable = elModels.getElementValueModelId(session.getAttributeText("filter-value-name"));
 				elModels.satisfyElementValueType(theFilterValueVariable, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getValueType()));
-				theTest = session.getAttributeExpression("test");
+				theTest = getAttributeExpression("test", session);
 			}
 
 			@Override
@@ -2212,14 +2212,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			LocatedPositionedContent type = session.getAttributeValuePosition("type");
 			theType = type == null ? null : VariableType.parseType(type);
-			theTextFormat = session.getAttributeExpression("text-format");
+			theTextFormat = getAttributeExpression("text-format", session);
 			if (theType == null && theTextFormat == null)
 				throw new QonfigInterpretationException("Either 'type' or 'text-format' must be specified",
 					session.getElement().getPositionInFile(), 0);
 			else if (theType != null && theTextFormat != null)
 				throw new QonfigInterpretationException("Only one of 'type' or 'text-format' may be specified",
 					session.getElement().getPositionInFile(), 0);
-			theDefaultValue = session.getAttributeExpression("default");
+			theDefaultValue = getAttributeExpression("default", session);
 			theDefaultText = session.getAttributeText("default-text");
 			if (theDefaultValue != null && theDefaultText != null)
 				throw new QonfigInterpretationException("Only one of 'default' or 'default-text' may be specified",

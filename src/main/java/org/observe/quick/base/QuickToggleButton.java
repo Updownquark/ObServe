@@ -44,7 +44,7 @@ public class QuickToggleButton extends QuickCheckBox {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theIcon = session.getAttributeExpression("icon");
+			theIcon = getAttributeExpression("icon", session);
 		}
 
 		@Override

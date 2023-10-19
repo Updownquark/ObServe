@@ -211,7 +211,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			}
 
 			ElementModelValue.Cache emvCache = session.getElementValueCache();
-			theCondition = session.getAttributeExpression("if");
+			theCondition = getAttributeExpression("if", session);
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
 				theCondition = application.findModelValues(theCondition, new ArrayList<>(), session.getExpressoEnv().getModels(),
@@ -251,7 +251,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				theEffectiveAttribute = null;
 
 			theStyleValues.clear();
-			theValue = session.getValueExpression();
+			theValue = getValueExpression(session);
 			if (theValue != null && theValue.getExpression() != ObservableExpression.EMPTY) {
 				if (theEffectiveAttribute == null)
 					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",

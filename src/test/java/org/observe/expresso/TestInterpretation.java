@@ -107,7 +107,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theDerivedState = session.getAttributeExpression("derived-state");
+			theDerivedState = getAttributeExpression("derived-state", session);
 			theInternalStateVariable = getAddOn(ExWithElementModel.Def.class).getElementValueModelId("internalState");
 		}
 
@@ -257,8 +257,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theInternalState = session.getAttributeExpression("internal-state");
-			theDerivedState = session.getAttributeExpression("derived-state");
+			theInternalState = getAttributeExpression("internal-state", session);
+			theDerivedState = getAttributeExpression("derived-state", session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theInternalStateValue = elModels.getElementValueModelId("internalState");
 			elModels.satisfyElementValueType(theInternalStateValue, ModelTypes.Value,
@@ -424,8 +424,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-			theInternalState = session.getAttributeExpression("internal-state");
-			theDerivedState = session.getAttributeExpression("derived-state");
+			theInternalState = getAttributeExpression("internal-state", session);
+			theDerivedState = getAttributeExpression("derived-state", session);
 		}
 
 		@Override

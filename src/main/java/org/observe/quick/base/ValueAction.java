@@ -110,13 +110,13 @@ public interface ValueAction<T> extends ExElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theName = session.getAttributeExpression("name");
+				theName = getAttributeExpression("name", session);
 				isButton = session.getAttribute("as-button", boolean.class);
 				isPopup = session.getAttribute("as-popup", boolean.class);
-				theIcon = session.getAttributeExpression("icon");
-				isEnabled = session.getAttributeExpression("enabled");
-				theTooltip = session.getAttributeExpression("tooltip");
-				theAction = session.getValueExpression();
+				theIcon = getAttributeExpression("icon", session);
+				isEnabled = getAttributeExpression("enabled", session);
+				theTooltip = getAttributeExpression("tooltip", session);
+				theAction = getValueExpression(session);
 			}
 		}
 	}

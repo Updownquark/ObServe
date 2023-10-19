@@ -156,7 +156,7 @@ public interface QuickBorder extends QuickStyledElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				theTitle = session.getAttributeExpression("title");
+				theTitle = getAttributeExpression("title", session);
 			}
 
 			@Override

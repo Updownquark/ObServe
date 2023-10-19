@@ -63,7 +63,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
-			theRows = session.getAttributeExpression("rows");
+			theRows = getAttributeExpression("rows", session);
 			theDocument = ExElement.useOrReplace(StyledDocument.Def.class, theDocument, session, "document");
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);

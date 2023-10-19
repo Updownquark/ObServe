@@ -1,5 +1,7 @@
 package org.observe.expresso.qonfig;
 
+import java.util.function.Supplier;
+
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -18,21 +20,21 @@ public class CompiledExpression implements LocatedExpression {
 	private final ObservableExpression theExpression;
 	private final QonfigElement theElement;
 	private final LocatedPositionedContent thePosition;
-	private ExpressoQIS theSession;
+	private Supplier<CompiledExpressoEnv> theEnvSupplier;
 	private CompiledExpressoEnv theEnv;
 
 	/**
 	 * @param expression The expression to be evaluated
 	 * @param element The QonfigElement where the expression was defined
 	 * @param position The position in the Qonfig file of the start of the expression
-	 * @param session The Expresso session in which to evaluate the expression
+	 * @param env Provides an environment in which to evaluate the expression
 	 */
 	public CompiledExpression(ObservableExpression expression, QonfigElement element, LocatedPositionedContent position,
-		ExpressoQIS session) {
+		Supplier<CompiledExpressoEnv> env) {
 		theExpression = expression;
 		theElement = element;
 		thePosition = position;
-		theSession = session;
+		theEnvSupplier = env;
 	}
 
 	@Override
@@ -61,8 +63,8 @@ public class CompiledExpression implements LocatedExpression {
 	 */
 	public ModelType<?> getModelType() throws ExpressoCompilationException {
 		if (theEnv == null) {
-			theEnv = theSession.getExpressoEnv();
-			theSession = null; // Don't need it anymore--release it
+			theEnv = theEnvSupplier.get();
+			theEnvSupplier = null; // Don't need it anymore--release it
 		}
 		return theExpression.getModelType(theEnv);
 	}

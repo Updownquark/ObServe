@@ -65,7 +65,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theValue = session.getAttributeExpression("value");
+			theValue = getAttributeExpression("value", session);
 			ExElement.syncDefs(TreeModel.Def.class, theChildren, session.forChildren("child"));
 		}
 

@@ -78,9 +78,9 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theRoot = session.getAttributeExpression("value");
-			theChildren = session.getAttributeExpression("children");
-			isLeaf = session.getAttributeExpression("leaf");
+			theRoot = getAttributeExpression("value", session);
+			theChildren = getAttributeExpression("children", session);
+			isLeaf = getAttributeExpression("leaf", session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			String dynamicNodeName = session.getAttributeText("dynamic-node-name");
 			if (dynamicNodeName != null) {

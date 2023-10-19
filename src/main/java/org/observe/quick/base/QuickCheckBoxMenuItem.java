@@ -40,7 +40,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			isSelected = session.getAttributeExpression("selected");
+			isSelected = getAttributeExpression("selected", session);
 		}
 
 		@Override
