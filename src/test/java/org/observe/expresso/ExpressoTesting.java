@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.observe.ObservableAction;
 import org.observe.SimpleObservable;
@@ -23,6 +22,7 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -62,7 +62,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 				ExElement.syncDefs(TestAction.class, theActions, //
-					session.forChildren("test-action").stream().map(s -> s.asElement("test-action")).collect(Collectors.toList()));
+					BetterList.of2(session.forChildren("test-action").stream(), s -> s.asElement("test-action")));
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {

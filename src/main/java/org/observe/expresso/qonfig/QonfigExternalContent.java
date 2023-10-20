@@ -1,37 +1,89 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.qommons.config.QonfigElementDef;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface QonfigExternalContent extends ExElement {
+public abstract class QonfigExternalContent extends ExElement.Abstract {
 	@ExElementTraceable(toolkit = "Qonfig-Reference v0.1",
 		qonfigType = "external-content",
 		interpretation = Interpreted.class,
 		instance = ExpressoExternalContent.class)
-	public interface Def<C extends QonfigExternalContent> extends ExElement.Def<C> {
+	public static abstract class Def<C extends QonfigExternalContent> extends ExElement.Def.Abstract<C> {
+		private QonfigElementDef theFulfills;
+		private ExElement.Def<?> theContent;
+
+		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
 		@QonfigAttributeGetter("fulfills")
-		QonfigElementDef getFulfills();
+		public QonfigElementDef getFulfills() {
+			return theFulfills;
+		}
 
 		@QonfigChildGetter("fulfillment")
-		ExElement.Def<?> getContent();
+		public ExElement.Def<?> getContent() {
+			return theContent;
+		}
 
-		void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException;
+		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
+			theContent = content;
+			update(session);
+		}
 
-		Interpreted<? extends C> interpret();
-	}
-
-	public interface Interpreted<C extends QonfigExternalContent> extends ExElement.Interpreted<C> {
 		@Override
-		Def<? super C> getDefinition();
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
 
-		ExElement.Interpreted<?> getContent();
+			try {
+				theFulfills = session.getElement().getDocument().getDocToolkit().getElement(//
+					session.getAttributeText("fulfills"));
+			} catch (IllegalArgumentException e) {
+				reporting().error(e.getMessage(), e);
+			}
+		}
 
-		void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException;
+		public abstract Interpreted<? extends C> interpret();
 	}
 
-	ExElement getContent();
+	public static abstract class Interpreted<C extends QonfigExternalContent> extends ExElement.Interpreted.Abstract<C> {
+		private ExElement.Interpreted<?> theContent;
+
+		protected Interpreted(Def<? super C> definition, ExElement.Interpreted<?> parent) {
+			super(definition, parent);
+		}
+
+		@Override
+		public Def<? super C> getDefinition() {
+			return (Def<? super C>) super.getDefinition();
+		}
+
+		public ExElement.Interpreted<?> getContent() {
+			return theContent;
+		}
+
+		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
+			theContent = content;
+
+			super.update(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
+		}
+	}
+
+	private ExElement theContent;
+
+	protected QonfigExternalContent(Object id) {
+		super(id);
+	}
+
+	public ExElement getContent() {
+		return theContent;
+	}
 
 	@Override
-	QonfigExternalContent copy(ExElement parent);
+	public QonfigExternalContent copy(ExElement parent) {
+		return (QonfigExternalContent) super.copy(parent);
+	}
 }

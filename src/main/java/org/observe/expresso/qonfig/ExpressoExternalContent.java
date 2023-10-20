@@ -19,7 +19,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueType;
@@ -29,7 +28,7 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class ExpressoExternalContent extends ExElement.Abstract implements QonfigExternalContent {
+public class ExpressoExternalContent extends QonfigExternalContent {
 	public static final String EXPRESSO_EXTERNAL_CONTENT = "expresso-external-content";
 
 	public interface AttributeValueSatisfier {
@@ -65,10 +64,8 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 		qonfigType = EXPRESSO_EXTERNAL_CONTENT,
 		interpretation = Interpreted.class,
 		instance = ExpressoExternalContent.class)
-	public static class Def<C extends ExpressoExternalContent> extends ExElement.Def.Abstract<C> implements QonfigExternalContent.Def<C> {
-		private QonfigElementDef theFulfills;
+	public static class Def<C extends ExpressoExternalContent> extends QonfigExternalContent.Def<C> {
 		private Expresso.Def theHead;
-		private ExElement.Def<?> theContent;
 
 		private final Map<QonfigAttributeDef.Declared, AttributeValueSatisfier> theAttributeValues;
 
@@ -83,36 +80,13 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 		}
 
 		@Override
-		public QonfigElementDef getFulfills() {
-			return theFulfills;
-		}
-
-		@Override
-		public ExElement.Def<?> getContent() {
-			return theContent;
-		}
-
-		@Override
-		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
-			theContent = content;
-			super.update(session);
-		}
-
-		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			try {
-				theFulfills = session.getElement().getDocument().getDocToolkit().getElement(//
-					session.getAttributeText("fulfills"));
-			} catch (IllegalArgumentException e) {
-				reporting().error(e.getMessage(), e);
-			}
-
 			theAttributeValues.clear();
-			for (QonfigAttributeDef attr : theFulfills.getAllAttributes().values()) {
-				if (theContent.getPromise() != null) {
-					Object value = theContent.getPromise().getAttribute(attr);
+			for (QonfigAttributeDef attr : getFulfills().getAllAttributes().values()) {
+				if (getContent().getPromise() != null) {
+					Object value = getContent().getPromise().getAttribute(attr);
 					if (value instanceof AttributeValueSatisfier)
 						theAttributeValues.put(attr.getDeclared(), (AttributeValueSatisfier) value);
 					else if (value instanceof CompiledModelValue) {
@@ -148,12 +122,12 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 							TypeTokens.get().of((Class<Object>) value.getClass()), value, value.toString()));
 					} else
 						theAttributeValues.put(attr.getDeclared(), //
-							populateAttributeValue(attr, theContent.getElement().getPromise(),
-								theContent.getElement().getPromise().getAttributes().get(attr.getDeclared()), session));
+							populateAttributeValue(attr, getContent().getElement().getPromise(),
+								getContent().getElement().getPromise().getAttributes().get(attr.getDeclared()), session));
 				} else
 					theAttributeValues.put(attr.getDeclared(), //
-						populateAttributeValue(attr, theContent.getElement().getPromise(),
-							theContent.getElement().getPromise().getAttributes().get(attr.getDeclared()), session));
+						populateAttributeValue(attr, getContent().getElement().getPromise(),
+							getContent().getElement().getPromise().getAttributes().get(attr.getDeclared()), session));
 			}
 
 			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING,
@@ -168,7 +142,9 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 				if (model instanceof ObservableModelElement.ExtModelElement.Def)
 					populateExtModelValues((ObservableModelElement.ExtModelElement.Def<?>) model, builder, session);
 			}
-			setExpressoEnv(theHead.getExpressoEnv().with(builder));
+			theHead.getModelElement().setExpressoEnv(theHead.getModelElement().getExpressoEnv().with(builder.build()));
+			theHead.setExpressoEnv(theHead.getModelElement().getExpressoEnv());
+			setExpressoEnv(theHead.getExpressoEnv());
 		}
 
 		protected AttributeValueSatisfier populateAttributeValue(QonfigAttributeDef attr, QonfigElement element, QonfigValue value,
@@ -185,7 +161,7 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 						try {
 							expression = new CompiledExpression(//
 								session.getExpressoParser().parse(((QonfigExpression) value.value).text), element,
-								LocatedPositionedContent.of(value.fileLocation, value.position), session);
+								LocatedPositionedContent.of(value.fileLocation, value.position), getContent()::getExpressoEnv);
 						} catch (ExpressoParseException e) {
 							throw new QonfigInterpretationException(e.getMessage(),
 								LocatedFilePosition.of(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
@@ -223,7 +199,7 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 			for (ExtModelValueElement.Def<?> extValue : model.getValues()) {
 				QonfigAttributeDef attr = extValue.getAddOn(AttributeBackedModelValue.Def.class).getSourceAttribute();
 				String name = extValue.getAddOn(ExNamed.Def.class).getName();
-				QonfigValue value = theContent.getElement().getPromise().getAttributes().get(attr.getDeclared());
+				QonfigValue value = getContent().getElement().getPromise().getAttributes().get(attr.getDeclared());
 				LocatedFilePosition source;
 				if (value != null)
 					source = LocatedFilePosition.of(value.fileLocation, value.position.getPosition(0));
@@ -243,12 +219,10 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 		}
 	}
 
-	public static class Interpreted<C extends ExpressoExternalContent> extends ExElement.Interpreted.Abstract<C>
-	implements QonfigExternalContent.Interpreted<C> {
+	public static class Interpreted<C extends ExpressoExternalContent> extends QonfigExternalContent.Interpreted<C> {
 		private Expresso theHead;
-		private ExElement.Interpreted<?> theContent;
 
-		Interpreted(ExElement.Def<? super C> definition, ExElement.Interpreted<?> parent) {
+		Interpreted(Def<? super C> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -259,18 +233,6 @@ public class ExpressoExternalContent extends ExElement.Abstract implements Qonfi
 
 		public Expresso getHead() {
 			return theHead;
-		}
-
-		@Override
-		public ExElement.Interpreted<?> getContent() {
-			return theContent;
-		}
-
-		@Override
-		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
-			theContent = content;
-
-			super.update(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
 		}
 
 		@Override

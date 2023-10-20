@@ -58,7 +58,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 				break;
 			default:
 				isVertical = true;
-				session.reporting().at(session.getAttributeValuePosition("orientation"))
+				session.reporting().at(session.attributes().get("orientation").getLocatedContent())
 				.error("Unrecognized orientation: '" + session.getAttributeText("orientation"));
 			}
 			theSplitPosition = getAttributeExpression("split-position", session);

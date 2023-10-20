@@ -90,10 +90,10 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 		String sortValueName = session.getAttributeText("sort-value-as");
 		theSortValue = sortValueName == null ? null : elModels.getElementValueModelId(sortValueName);
-		LocatedPositionedContent sortValueNamePosition = session.getAttributeValuePosition("sort-value-as");
+		LocatedPositionedContent sortValueNamePosition = session.attributes().get("sort-value-as").getLocatedContent();
 		String sortValueCompareName = session.getAttributeText("sort-compare-value-as");
 		theSortCompareValue = sortValueCompareName == null ? null : elModels.getElementValueModelId(sortValueCompareName);
-		LocatedPositionedContent sortCompareValueNamePosition = session.getAttributeValuePosition("sort-compare-value-as");
+		LocatedPositionedContent sortCompareValueNamePosition = session.attributes().get("sort-compare-value-as").getLocatedContent();
 		theSortWith = getAttributeExpression("sort-with", session);
 		isAscending = session.getAttribute("ascending", boolean.class);
 		ExElement.syncDefs(ExSortBy.class, theSortBy, session.forChildren("sort-by"));

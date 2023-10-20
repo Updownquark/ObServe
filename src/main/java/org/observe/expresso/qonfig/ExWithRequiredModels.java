@@ -40,7 +40,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			if (session.getChildren("required").isEmpty()) { // Don't create a required model if there's no reason to
+			if (session.children().get("required").get().isEmpty()) { // Don't create a required model if there's no reason to
 				theRequiredModelElement = null;
 				return;
 			}
@@ -49,8 +49,8 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 			theRequiredModelElement = ExElement.useOrReplace(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
 				session, "required");
 			installModelValues(session, builder, theRequiredModelElement);
-			session.setModels(theRequiredModelElement.getExpressoEnv().getModels());
 			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theRequiredModelElement.getExpressoEnv().getModels()));
+			session.setExpressoEnv(getElement().getExpressoEnv());
 		}
 
 		private void installModelValues(ExpressoQIS session, ObservableModelSet.Builder builder,

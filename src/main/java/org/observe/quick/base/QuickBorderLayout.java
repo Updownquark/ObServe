@@ -106,7 +106,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 					break;
 				default:
 					throw new QonfigInterpretationException("Unrecognized region attribute: '" + regionStr,
-						session.getAttributeValuePosition("region", 0), regionStr.length());
+						session.attributes().get("region").getLocatedContent());
 				}
 			}
 

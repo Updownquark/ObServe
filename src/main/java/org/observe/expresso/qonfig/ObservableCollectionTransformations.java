@@ -330,7 +330,7 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			QonfigValue typeQV = session.getAttributeQV("type");
+			QonfigValue typeQV = session.attributes().get("type").get();
 			theType = typeQV == null ? null
 				: VariableType.parseType(new LocatedPositionedContent.Default(typeQV.fileLocation, typeQV.position));
 			if (theType instanceof VariableType.Parameterized)
@@ -1331,10 +1331,10 @@ public class ObservableCollectionTransformations {
 		public void update(ExpressoQIS session, ModelType<C1> sourceModelType) throws QonfigInterpretationException {
 			update(session);
 			if (!session.forChildren("reverse").isEmpty())
-				throw new QonfigInterpretationException("Reverse is not yet implemented", session.getAttributeValuePosition("reverse", 0),
-					0);
+				throw new QonfigInterpretationException("Reverse is not yet implemented",
+					session.attributes().get("reverse").getLocatedContent());
 			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
-			isPropagateToParent = session.getAttribute("propagate-to-parent", boolean.class, false);
+			isPropagateToParent = session.attributes().get("propagate-to-parent").getValue(boolean.class, false);
 
 			String targetModelTypeName = session.getAttributeText("to");
 			switch (targetModelTypeName.toLowerCase()) {
@@ -1365,10 +1365,10 @@ public class ObservableCollectionTransformations {
 			case "multi-map":
 			case "sorted-multi-map":
 				throw new QonfigInterpretationException("Unsupported collection flatten target: '" + targetModelTypeName + "'",
-					session.getAttributeValuePosition("to", 0), targetModelTypeName.length());
+					session.attributes().get("to").getLocatedContent());
 			default:
 				throw new QonfigInterpretationException("Unrecognized model type target: '" + targetModelTypeName + "'",
-					session.getAttributeValuePosition("to", 0), targetModelTypeName.length());
+					session.attributes().get("to").getLocatedContent());
 			}
 		}
 
@@ -1722,7 +1722,7 @@ public class ObservableCollectionTransformations {
 			theType = session.getAttribute("type", QonfigValueType.Literal.class);
 			if (!"value".equals(theType.getValue()))
 				throw new QonfigInterpretationException("Only 'value' type may be used for size of collections, not " + theType.getValue(),
-					session.getAttributeValuePosition("type", 0), 0);
+					session.attributes().get("type").getLocatedContent());
 		}
 
 		@Override

@@ -836,7 +836,7 @@ public class ObservableTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<Observable<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			QonfigValue typeQV = session.getAttributeQV("type");
+			QonfigValue typeQV = session.attributes().get("type").get();
 			theType = typeQV == null ? null
 				: VariableType.parseType(new LocatedPositionedContent.Default(typeQV.fileLocation, typeQV.position));
 			if (theType instanceof VariableType.Parameterized)

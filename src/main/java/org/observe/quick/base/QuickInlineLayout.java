@@ -68,7 +68,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 				return JustifiedBoxLayout.Alignment.JUSTIFIED;
 			default:
 				throw new QonfigInterpretationException("Unrecognized " + attributeName + ": '" + attributeText + "'",
-					session.getAttributeValuePosition(attributeName, 0), attributeText.length());
+					session.attributes().get(attributeName).getLocatedContent());
 			}
 		}
 

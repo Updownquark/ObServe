@@ -48,7 +48,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 
 			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 			if (renderer == null)
-				renderer = session.forMetadata("default-renderer").peekFirst();
+				renderer = session.metadata().get("default-renderer").get().peekFirst();
 			theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
 		}
 

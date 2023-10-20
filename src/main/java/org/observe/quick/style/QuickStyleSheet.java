@@ -74,7 +74,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			DefaultQonfigParser parser = new DefaultQonfigParser();
 			for (QonfigToolkit tk : session.getElement().getDocument().getDocToolkit().getDependencies().values())
 				parser.withToolkit(tk);
-			QonfigValue address = session.getAttributeQV("ref");
+			QonfigValue address = session.attributes().get("ref").get();
 			URL ref;
 			try {
 				String urlStr = QommonsConfig.resolve(address.text, session.getElement().getDocument().getLocation());
@@ -113,7 +113,8 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				session.putGlobal(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			}
 			importSession.as(ExpressoQIS.class)//
-			.setModels(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build())//
+				.setExpressoEnv(importSession.getExpressoEnv()
+					.with(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build()))//
 			.put(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			if (theTarget == null)
 				theTarget = importSession.interpret(QuickStyleSheet.class);

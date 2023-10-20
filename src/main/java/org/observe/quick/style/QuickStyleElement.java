@@ -150,7 +150,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
 			StyleApplicationDef application = parent == null ? StyleApplicationDef.ALL : parent.getApplication();
 			theRoles.clear();
-			QonfigValue rolePath = session.getAttributeQV("child");
+			QonfigValue rolePath = session.attributes().get("child").get();
 			if (rolePath != null && rolePath.value != null) { // Role path may be defaulted
 				if (application == null)
 					throw new QonfigInterpretationException("Cannot specify a style role without a type above it", //
@@ -183,7 +183,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				}
 			}
 
-			QonfigValue elName = session.getAttributeQV("element");
+			QonfigValue elName = session.attributes().get("element").get();
 			if (elName != null && elName.text != null) {
 				if (targetElement != null)
 					throw new QonfigInterpretationException("element may only be specified within a style-sheet",
@@ -214,14 +214,14 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theCondition = getAttributeExpression("if", session);
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
-				theCondition = application.findModelValues(theCondition, new ArrayList<>(), session.getExpressoEnv().getModels(),
+				theCondition = application.findModelValues(theCondition, new ArrayList<>(), getExpressoEnv().getModels(),
 					priorityAttr.getDeclarer(), styleSheet != null, emvCache, reporting());
-				application = application.forCondition(theCondition, session.getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
+				application = application.forCondition(theCondition, getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
 					emvCache, reporting());
 			}
 			theApplication = application;
 
-			QonfigValue attrName = session.getAttributeQV("attr");
+			QonfigValue attrName = session.attributes().get("attr").get();
 			if (attrName != null) {
 				if (parent != null && parent.getEffectiveAttribute() != null)
 					throw new QonfigInterpretationException(
@@ -258,10 +258,10 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 						theValue.getFilePosition().getPosition(0), theValue.length());
 				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
 				theValue = theApplication.findModelValues(theValue, new HashSet<>(),
-					session.getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache, reporting());
+					getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache, reporting());
 				theStyleValues.add(new QuickStyleValue(styleSheet, styleSet, theApplication, theEffectiveAttribute, theValue));
 			}
-			QonfigValue styleSetName = session.getAttributeQV("style-set");
+			QonfigValue styleSetName = session.attributes().get("style-set").get();
 			if (styleSetName != null) {
 				if (styleSheet == null)
 					throw new QonfigInterpretationException("No style-sheet available: Cannot refer to a style set", //

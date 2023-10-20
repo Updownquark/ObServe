@@ -15,6 +15,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.Identifiable;
+import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
@@ -46,13 +47,14 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 				// This can happen if the values are all attribute-sourced and the attributes are optional
 				ObservableModelSet.Builder builder = null;
 				for (ElementModelValue.Identity dv : dynamicValues.values()) {
-					ExpressoQIS dvSession = session.interpretChild(dv.getDeclaration(), dv.getDeclaration().getType());
+					ExpressoQIS dvSession = session.forChild(dv.getDeclaration(), dv.getDeclaration().getType(),
+						MultiInheritanceSet.empty());
 					// We need the parent of this element to be the structure that we are currently preparing to create
 					dvSession.setElementRepresentation(null);
 					ExtModelValueElement.Def<?> spec = dvSession.interpret(ExtModelValueElement.Def.class);
 					spec.update(dvSession);
 					if (dv.getSourceChild() != null) {
-						for (ExpressoQIS childSession : session.asElement(dv.getOwner()).forChildren(dv.getSourceChild()))
+						for (ExpressoQIS childSession : session.asElement(dv.getOwner()).children().get(dv.getSourceChild()).get())
 							builder = handleDynamicValue(dv, builder, childSession, spec);
 					} else
 						builder = handleDynamicValue(dv, builder, session.asElement(dv.getOwner()), spec);
@@ -80,7 +82,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			try {
 				if(dv.getValue()!=null)
 					sourceAttrX = new CompiledExpression(dv.getValue().getExpression(), dv.getValue().getElement(),
-						dv.getValue().getFilePosition(), session);
+						dv.getValue().getFilePosition(), getElement()::getExpressoEnv);
 				else if (dv.isSourceValue())
 					sourceAttrX = getElement().getValueExpression(session);
 				else if (dv.getSourceAttribute() != null)
@@ -105,7 +107,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, spec.getElement().getPositionInFile());
 			value.setModelId(modelNode.getIdentity());
 			if (dv.getNameAttribute() != null) {
-				CompiledExpressoEnv env = session.getExpressoEnv();
+				CompiledExpressoEnv env = getElement().getExpressoEnv();
 				env = env.withAttribute(dv.getNameAttribute().getName(), modelNode.getIdentity());
 				session.setExpressoEnv(env);
 				getElement().setExpressoEnv(env);

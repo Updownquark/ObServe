@@ -105,7 +105,7 @@ public interface QuickKeyListener extends QuickEventListener {
 					theCharFilter = 0;
 				else if (charFilterStr.length() > 1)
 					throw new QonfigInterpretationException("char attribute must be a single character",
-						session.getAttributeValuePosition("char", 1), charFilterStr.length() - 1);
+						session.attributes().get("char").getLocatedContent());
 				else
 					theCharFilter = charFilterStr.charAt(0);
 
@@ -234,8 +234,7 @@ public interface QuickKeyListener extends QuickEventListener {
 					try {
 						theKeyCode = KeyCode.parse(keyCodeStr);
 					} catch (IllegalArgumentException e) {
-						throw new QonfigInterpretationException(e.getMessage(), session.getAttributeValuePosition("key", 0),
-							keyCodeStr.length(), e);
+						throw new QonfigInterpretationException(e.getMessage(), session.attributes().get("key").getLocatedContent(), e);
 					}
 				}
 

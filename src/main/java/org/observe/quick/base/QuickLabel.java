@@ -71,17 +71,17 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			if (staticText != null) {
 				if (super.getValue().getExpression() != ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("Cannot specify both 'value' attribute and element value",
-						session.getValuePosition(0), 0);
+						session.getValue().getLocatedContent());
 				if (getFormat() != null)
 					throw new QonfigInterpretationException("Cannot specify format with an element value",
-						session.getAttributeValuePosition("format", 0), 0);
+						session.attributes().get("format").getLocatedContent());
 			}
 			theStaticText = staticText;
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(),
 					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
-					session);
+					this::getExpressoEnv);
 			}
 			theIcon = getAttributeExpression("icon", session);
 		}

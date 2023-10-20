@@ -47,15 +47,15 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 				theSourceAttribute = element.getElement().getDocument().getDocToolkit().getAttribute(elementName,
 					sourceAttr.getGroup("member"));
 				if (theSourceAttribute != null && !theSourceAttribute.getOwner().isAssignableFrom(fulfills))
-					session.reporting().at(session.getAttributeValuePosition("source-attr"))
+					session.reporting().at(session.attributes().get("source-attr").getContent())
 					.error("Attribute '" + sourceAttr.getWholeText() + "' does not apply to fulfillment " + fulfills);
 				if (theSourceAttribute == null)
-					session.reporting().at(session.getAttributeValuePosition("source-attr"))
+					session.reporting().at(session.attributes().get("source-attr").getContent())
 					.error("No such attribute found: " + sourceAttr.getWholeText());
 			} else {
 				theSourceAttribute = fulfills.getAttribute(sourceAttr.getWholeText());
 				if (theSourceAttribute == null)
-					session.reporting().at(session.getAttributeValuePosition("source-attr"))
+					session.reporting().at(session.attributes().get("source-attr").getContent())
 					.error("No such attribute found: " + fulfills + "." + sourceAttr.getWholeText());
 			}
 		}

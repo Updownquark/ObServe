@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoParser;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.SpecialSession;
@@ -30,6 +31,20 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 */
 	public ExpressoQIS setExpressoParser(ExpressoParser parser) {
 		theWrapped.put("EXPRESSO_PARSER", parser);
+		return this;
+	}
+
+	/** @return The expresso environment to use to evaluate expressions under this session */
+	public CompiledExpressoEnv getExpressoEnv() {
+		return theWrapped.get("EXPRESSO_ENV", CompiledExpressoEnv.class);
+	}
+
+	/**
+	 * @param env The expresso environment to use to evaluate expressions under this session
+	 * @return This session
+	 */
+	public ExpressoQIS setExpressoEnv(CompiledExpressoEnv env) {
+		theWrapped.put("EXPRESSO_ENV", env);
 		return this;
 	}
 

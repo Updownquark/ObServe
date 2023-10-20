@@ -788,7 +788,7 @@ public class ObservableValueTransformations {
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
 
-			QonfigValue pTP = session.getAttributeQV("propagate-to-parent"); // Defaulted to true, but warn if they specify it
+			QonfigValue pTP = session.attributes().get("propagate-to-parent").get(); // Defaulted to true, but warn if they specify it
 			if (pTP.position != null) // Not defaulted, but specified
 				reporting().at(pTP.position).warn("'propagate-update-to-parent' attribute not usable for value flattening");
 			ExpressoQIS reverse = session.forChildren("reverse").peekFirst();
@@ -797,8 +797,8 @@ public class ObservableValueTransformations {
 
 			theSorting = ExElement.useOrReplace(ExSort.ExRootSort.class, theSorting, session, "sort");
 			theEquivalence = getAttributeExpression("equivalence", session);
-			theEquivalencePosition = theEquivalence == null ? null : session.getAttributeValuePosition("equivalence");
-			LocatedPositionedContent targetModelType = session.getAttributeValuePosition("to");
+			theEquivalencePosition = theEquivalence == null ? null : session.attributes().get("equivalence").getLocatedContent();
+			LocatedPositionedContent targetModelType = session.attributes().get("to").getLocatedContent();
 			theTargetType = (ModelType<M>) parseModelType(targetModelType);
 			isCollection = ObservableCollection.class.isAssignableFrom(theTargetType.modelType);
 		}

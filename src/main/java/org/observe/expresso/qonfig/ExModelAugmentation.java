@@ -13,14 +13,14 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 		}
 
 		protected ObservableModelSet.Builder createBuilder(ExpressoQIS session) throws QonfigInterpretationException {
-			ObservableModelSet models = session.getExpressoEnv().getModels();
+			ObservableModelSet models = getElement().getExpressoEnv().getModels();
 			ObservableModelSet.Builder builder;
 			if (session.get(CREATED_LOCAL_MODEL_COPY) == null) {
 				session.putLocal(CREATED_LOCAL_MODEL_COPY, true);
 				builder = ObservableModelSet.build(getElement().toString() + ".local",
 					models == null ? ObservableModelSet.JAVA_NAME_CHECKER : models.getNameChecker());
-				if (session.getExpressoEnv().getModels() != null)
-					builder.withAll(session.getExpressoEnv().getModels());
+				if (getElement().getExpressoEnv().getModels() != null)
+					builder.withAll(getElement().getExpressoEnv().getModels());
 				getElement().setExpressoEnv(getElement().getExpressoEnv().with(builder));
 				session.setExpressoEnv(getElement().getExpressoEnv());
 			} else if (models != null)

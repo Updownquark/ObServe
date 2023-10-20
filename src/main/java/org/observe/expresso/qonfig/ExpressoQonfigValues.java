@@ -477,6 +477,7 @@ public class ExpressoQonfigValues {
 	public static abstract class AbstractCollectionDef<C extends ObservableCollection<?>>
 	extends ModelValueElement.Def.SingleTyped<C, ModelValueElement<C, C>>
 	implements ModelValueElement.CompiledSynth<C, ModelValueElement<C, C>> {
+		private QonfigElementOrAddOn theIntListType;
 		private final List<CollectionElement> theElements;
 
 		protected AbstractCollectionDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<C> modelType) {
@@ -497,7 +498,8 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			if (session.isInstance("int-list") != null) {
+			theIntListType = session.isInstance("int-list");
+			if (theIntListType != null) {
 				ExpressoQIS intListSession = session.asElement("int-list");
 				ExElement.syncDefs(CollectionElement.class, theElements, intListSession.forChildren("element"));
 			}
@@ -508,7 +510,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			if (!theElements.isEmpty()) {
-				List<ExpressoQIS> elementSessions = session.asElement("int-list").forChildren("element");
+				List<ExpressoQIS> elementSessions = session.asElement(theIntListType).forChildren("element");
 				int i = 0;
 				for (CollectionElement element : theElements)
 					element.prepareModelValue(elementSessions.get(i++));

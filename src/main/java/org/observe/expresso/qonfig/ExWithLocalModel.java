@@ -27,7 +27,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			if (session.getChildren("model").isEmpty()) { // Don't create a local model if there's no reason to
+			if (session.children().get("model").get().isEmpty()) { // Don't create a local model if there's no reason to
 				theLocalModelElement = null;
 				return;
 			}
@@ -35,8 +35,8 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 			createBuilder(session);
 			theLocalModelElement = ExElement.useOrReplace(ObservableModelElement.LocalModelElementDef.class, theLocalModelElement, session,
 				"model");
-			session.setModels(theLocalModelElement.getExpressoEnv().getModels());
 			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theLocalModelElement.getExpressoEnv().getModels()));
+			session.setExpressoEnv(getElement().getExpressoEnv());
 		}
 
 		@Override

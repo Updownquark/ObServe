@@ -69,7 +69,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElement.AttributeValue;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueDef;
@@ -850,7 +850,7 @@ public class Qwysiwyg {
 				elComponent.typeTooltip(roleDescrip);
 		} else if (typeDescrip != null)
 			elComponent.typeTooltip(typeDescrip);
-		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
+		for (Map.Entry<QonfigAttributeDef.Declared, AttributeValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
 				continue;
@@ -1035,7 +1035,7 @@ public class Qwysiwyg {
 		elComponent.element = element;
 		if (models != null && interpreted instanceof ModelValueElement.InterpretedSynth)
 			renderInstance(elComponent, (ModelValueElement.InterpretedSynth<?, ?, ?>) interpreted, env, models);
-		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
+		for (Map.Entry<QonfigAttributeDef.Declared, AttributeValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
 				continue;

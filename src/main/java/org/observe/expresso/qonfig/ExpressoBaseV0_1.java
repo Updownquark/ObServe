@@ -75,6 +75,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExElement.creator(ExpressoExternalContent.Def::new));
 		interpreter.createWith(AttributeBackedModelValue.ATTR_BACKED_MODEL_VALUE, AttributeBackedModelValue.Def.class,
 			ExAddOn.creator(ExtModelValueElement.Def.class, AttributeBackedModelValue.Def::new));
+		interpreter.createWith(ExpressoChildPlaceholder.CHILD_PLACEHOLDER, ExpressoChildPlaceholder.Def.class,
+			ExElement.creator(ExpressoChildPlaceholder.Def::new));
 
 		interpreter.createWith("named", ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
 		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
@@ -101,7 +103,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				if (session.get(KEY_TYPE_KEY) == null) {
-					QonfigValue typeV = session.getElement().getAttributes().get(session.getAttributeDef(null, null, "key-type"));
+					QonfigValue typeV = session.getElement().getAttributes().get(session.attributes().get("key-type").getDefinition());
 					if (typeV != null && !typeV.text.isEmpty()) {
 						session.put(KEY_TYPE_KEY,
 							VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position)));
@@ -184,25 +186,31 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExElement.creator(ObservableModelElement.DefaultModelElement.Def::new));
 		interpreter.createWith("model", ObservableModelElement.LocalModelElementDef.class,
 			ExElement.creator(ObservableModelElement.LocalModelElementDef::new));
-		interpreter.createWith("constant", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.ConstantValueDef::new));
+		interpreter.createWith("constant", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.ConstantValueDef::new));
 		interpreter.createWith("value", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.SimpleValueDef::new));
 		interpreter.createWith("action", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Action::new));
 		interpreter.createWith("event", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Event::new));
-		interpreter.createWith("action-group", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.ActionGroup::new));
+		interpreter.createWith("action-group", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.ActionGroup::new));
 		interpreter.createWith("loop", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Loop::new));
 		interpreter.createWith("timer", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Timer::new));
 		interpreter.createWith("value-set", CompiledModelValue.class, ExElement.creator(ExpressoQonfigValues.ValueSet::new));
 		interpreter.createWith("element", ExpressoQonfigValues.CollectionElement.class,
 			ExElement.creator(ExpressoQonfigValues.CollectionElement::new));
-		interpreter.createWith("list", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.PlainCollectionDef::new));
+		interpreter.createWith("list", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.PlainCollectionDef::new));
 		interpreter.createWith("set", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.SetDef::new));
 		interpreter.createWith("sorted-list", ModelValueElement.CompiledSynth.class,
 			ExElement.creator(ExpressoQonfigValues.SortedCollectionDef::new));
-		interpreter.createWith("sorted-set", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.SortedSetDef::new));
+		interpreter.createWith("sorted-set", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.SortedSetDef::new));
 		interpreter.createWith("entry", ExpressoQonfigValues.MapEntry.class, ExElement.creator(ExpressoQonfigValues.MapEntry::new));
 		interpreter.createWith("map", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.PlainMapDef::new));
-		interpreter.createWith("sorted-map", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.SortedMapDef::new));
-		interpreter.createWith("multi-map", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.PlainMultiMapDef::new));
+		interpreter.createWith("sorted-map", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.SortedMapDef::new));
+		interpreter.createWith("multi-map", ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExpressoQonfigValues.PlainMultiMapDef::new));
 		interpreter.createWith("sorted-multi-map", ModelValueElement.CompiledSynth.class,
 			ExElement.creator(ExpressoQonfigValues.SortedMultiMapDef::new));
 	}

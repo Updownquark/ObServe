@@ -401,7 +401,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				else {
 					theClickCount = Integer.parseInt(txt);
 					if (theClickCount < 1)
-						session.reporting().at(session.getAttributeValuePosition("click-count"))
+						session.reporting().at(session.attributes().get("click-count").getLocatedContent())
 						.error("click-count must be greater than zero");
 				}
 			}

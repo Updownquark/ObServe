@@ -117,13 +117,13 @@ public interface QuickStyledElement extends ExElement {
 				else {
 					declaredValues = new ArrayList<>();
 					for (QuickStyleElement.Def styleEl : theStyleElements)
-						styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, getElement(), session.getExpressoEnv(), null);
+						styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, getElement(), getExpressoEnv(), null);
 				}
 
 				QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
 				if (styleSheet != null) {
 					styleSheetValues = new ArrayList<>();
-					styleSheet.getStyleValues(styleSheetValues, getElement(), session.getExpressoEnv());
+					styleSheet.getStyleValues(styleSheetValues, getElement(), getExpressoEnv());
 				} else
 					styleSheetValues = Collections.emptyList();
 

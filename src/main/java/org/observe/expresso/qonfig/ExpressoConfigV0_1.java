@@ -1463,7 +1463,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			isMetricPrefixedP2 = session.getAttribute("metric-prefixes-p2", boolean.class);
 			if (isMetricPrefixed && isMetricPrefixedP2)
 				throw new QonfigInterpretationException("Only one of 'metrix-prefixes' and 'metric-prefixes-p2' may be specified",
-					session.getAttributeValuePosition("metric-prefixes-p2", 0), 0);
+					session.attributes().get("metric-prefixes-p2").getLocatedContent());
 			ExElement.syncDefs(Prefix.class, thePrefixes, session.forChildren("prefix"));
 			thePrefixMults.clear();
 			for (Prefix prefix : thePrefixes) {
@@ -1614,7 +1614,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			theName = session.getAttributeText("name");
 			String str = session.getAttributeText("exp");
 			if (str != null) {
-				LocatedPositionedContent mult = session.getAttributeValuePosition("multiplier");
+				LocatedPositionedContent mult = session.attributes().get("multiplier").getLocatedContent();
 				if (mult != null)
 					throw new QonfigInterpretationException("Only one of 'exp', 'multiplier' may be specified", mult.getPosition(0),
 						mult.length());
@@ -2210,7 +2210,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			LocatedPositionedContent type = session.getAttributeValuePosition("type");
+			LocatedPositionedContent type = session.attributes().get("type").getLocatedContent();
 			theType = type == null ? null : VariableType.parseType(type);
 			theTextFormat = getAttributeExpression("text-format", session);
 			if (theType == null && theTextFormat == null)

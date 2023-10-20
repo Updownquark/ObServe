@@ -30,7 +30,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			QonfigValue keyTypeV = session.getAttributeQV("key-type");
+			QonfigValue keyTypeV = session.attributes().get("key-type").get();
 			if (keyTypeV != null && !keyTypeV.text.isEmpty()) {
 				theKeyType = VariableType.parseType(new LocatedPositionedContent.Default(keyTypeV.fileLocation, keyTypeV.position));
 				session.put(ExpressoBaseV0_1.KEY_TYPE_KEY, theKeyType);

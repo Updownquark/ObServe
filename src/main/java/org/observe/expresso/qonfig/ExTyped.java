@@ -30,7 +30,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			QonfigValue typeV = session.getAttributeQV("type");
+			QonfigValue typeV = session.attributes().get("type").get();
 			if (typeV != null && !typeV.text.isEmpty()) {
 				theValueType = VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position));
 				session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, theValueType);

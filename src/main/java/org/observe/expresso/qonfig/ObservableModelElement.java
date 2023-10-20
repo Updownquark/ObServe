@@ -129,7 +129,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 			if (doBuild) {
 				for (ModelValueElement.Def<?, ?> value : theValues)
-					value.populate((ObservableModelSet.Builder) session.getExpressoEnv().getModels());
+					value.populate((ObservableModelSet.Builder) getExpressoEnv().getModels());
 			}
 			int i = 0;
 			for (ExpressoQIS vs : valueSessions)
@@ -293,17 +293,16 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				else {
 					builder = ObservableModelSet.build(getQonfigType().getName(), ObservableModelSet.JAVA_NAME_CHECKER);
 					if (nonTrivial(getExpressoEnv().getModels()))
-						builder.withAll(session.getExpressoEnv().getModels());
-					session.setModels(builder);
+						builder.withAll(getExpressoEnv().getModels());
 					setExpressoEnv(session.getExpressoEnv());
 				}
 				CollectionUtils
 				.synchronize(theSubModels, session.forChildren("model"),
 					(me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))//
 				.<QonfigInterpretationException> simpleE(ms -> {
-					ObservableModelSet.Builder subModel = builder.createSubModel(ms.getAttributeText("named", "name"),
+					ObservableModelSet.Builder subModel = builder.createSubModel(ms.attributes().get("named", "name").getText(),
 						ms.getElement().getPositionInFile());
-					return ms.setModels(subModel).interpret(ObservableModelElement.Def.class);
+					return ms.setExpressoEnv(ms.getExpressoEnv().with(subModel)).interpret(ObservableModelElement.Def.class);
 				})//
 				.rightOrder()//
 				.onRightX(el -> el.getLeftValue().update(el.getRightValue()))//

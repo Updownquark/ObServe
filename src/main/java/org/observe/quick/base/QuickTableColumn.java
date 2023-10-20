@@ -841,7 +841,7 @@ public interface QuickTableColumn<R, C> {
 
 				ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 				if (renderer == null)
-					renderer = session.forMetadata("default-renderer").peekFirst();
+					renderer = session.metadata().get("default-renderer").get().peekFirst();
 				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
 				theEditing = ExElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
 				elModels.satisfyElementValueType(theColumnValueVariable, ModelTypes.Value,

@@ -2485,8 +2485,6 @@ public interface ObservableModelSet extends Identifiable {
 					return theInterpreted;
 				if (getParent() != null)
 					throw new IllegalStateException("Can only call this method on a root model");
-				if (theInterpreted != null)
-					return theInterpreted;
 				// if (getParent() != null)
 				// getParent().createInterpreted()
 				return createInterpreted(null, null, env);

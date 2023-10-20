@@ -117,7 +117,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 				break;
 			default:
 				throw new QonfigInterpretationException("Unrecognized close action: " + closeAction,
-					session.getAttributeValuePosition("close-action", 0), closeAction.length());
+					session.attributes().get("close-action").getLocatedContent());
 			}
 		}
 
