@@ -135,6 +135,7 @@ public class ExpressoTransformations {
 				} else
 					next = null;
 				if (next == null) {
+					op = op.asElement(op.getElement().getType());
 					if (op.getInterpretationSupport(transformType) == null) {
 						throw new QonfigInterpretationException(
 							"No transform supported for operation type " + op.getFocusType().getName() + " for model type " + modelType,

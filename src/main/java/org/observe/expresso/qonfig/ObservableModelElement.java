@@ -132,8 +132,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					value.populate((ObservableModelSet.Builder) getExpressoEnv().getModels());
 			}
 			int i = 0;
-			for (ExpressoQIS vs : valueSessions)
-				theValues.get(i++).prepareModelValue(vs);
+			for (ExpressoQIS vs : valueSessions) {
+				V value = theValues.get(i);
+				value.prepareModelValue(vs.asElement(value.getQonfigType()));
+				i++;
+			}
 		}
 
 		public abstract Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
