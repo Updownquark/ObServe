@@ -1,9 +1,11 @@
 package org.observe.expresso.qonfig;
 
+import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -265,6 +267,10 @@ public interface ExElement extends Identifiable {
 			private CompiledExpressoEnv theExpressoEnv;
 			private ErrorReporting theReporting;
 
+			private PartialQonfigElement theDocumentElement;
+			private Def.Abstract<E> theParallelElement;
+			private boolean isParallelSource;
+
 			private QonfigPromise.Def<?> thePromise;
 			private QonfigExternalContent.Def<?> theExternalContent;
 
@@ -315,12 +321,18 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public <AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
-				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+				AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+				if (ao == null && theParallelElement != null)
+					ao = (AO) theParallelElement.getAddOn((Class<ExAddOn.Def<ExElement, ?>>) addOn);
+				return ao;
 			}
 
 			@Override
 			public Collection<ExAddOn.Def<? super E, ?>> getAddOns() {
-				return theAddOns.getAllValues();
+				if (isParallelSource)
+					return new JoinedCollection<>(theAddOns.getAllValues(), theParallelElement.getAddOns());
+				else
+					return theAddOns.getAllValues();
 			}
 
 			@Override
@@ -495,6 +507,8 @@ public interface ExElement extends Identifiable {
 
 				theElement = session.getElement();
 				theReporting = session.reporting();
+				if (theDocumentElement != null)
+					theReporting = theReporting.at(theDocumentElement.getFilePosition());
 				boolean firstTime = theTraceability == null;
 				if (firstTime) {
 					theTraceability = new LinkedHashMap<>(ElementTypeTraceability.SingleTypeTraceability.traceabilityFor(getClass(),
@@ -509,12 +523,31 @@ public interface ExElement extends Identifiable {
 						throw new IllegalArgumentException(theParent + " is not the parent of " + this);
 				}
 
-				theExpressoEnv = null;
+				setExpressoEnv(session.getExpressoEnv());
 
+				if (theElement.getExternalContent() == null)
+					theExternalContent = null;
+				else {
+					QonfigElement.Builder ecBuilder = QonfigElement.buildRoot(false, theReporting,
+						theElement.getExternalContent().getDocument(),
+						(QonfigElementDef) theElement.getExternalContent().getDocument().getPartialRoot().getType(),
+						theElement.getExternalContent().getDocument().getPartialRoot().getDescription());
+					if (theElement.getPromise() != null)
+						ecBuilder.fulfills(theElement.getPromise(), null);
+					theElement.getExternalContent().getDocument().getPartialRoot().copy(ecBuilder);
+					QonfigElement ecElement = ecBuilder.buildFull();
+					ExpressoQIS ecSession = session.interpretRoot(ecElement);
+					if (theExternalContent == null
+						|| !typesEqual(theExternalContent.getElement(), theElement.getExternalContent().getDocument().getPartialRoot()))
+						theExternalContent = ecSession.interpret(QonfigExternalContent.Def.class);
+					theExternalContent.update(ecSession, this);
+					setExpressoEnv(theParallelElement.getExpressoEnv());
+				}
 				if (theElement.getPromise() == null)
 					thePromise = null;
 				else {
-					ExpressoQIS promiseSession = session.intepretRoot(theElement.getPromise());
+					ExpressoQIS promiseSession = session.interpretRoot(theElement.getPromise())//
+						.setExpressoEnv(theExpressoEnv);
 					if (thePromise == null || !typesEqual(thePromise.getElement(), theElement.getPromise())) {
 						if (promiseSession.getInterpretationSupport(ExElement.Def.class) != null)
 							thePromise = promiseSession.interpret(QonfigPromise.Def.class);
@@ -522,39 +555,28 @@ public interface ExElement extends Identifiable {
 					if (thePromise != null)
 						thePromise.update(promiseSession, this);
 				}
-				if (theElement.getExternalContent() == null)
-					theExternalContent = null;
-				else {
-					QonfigElement.Builder ecBuilder = QonfigElement.buildRoot(false, theReporting, theElement.getExternalContent(),
-						(QonfigElementDef) theElement.getExternalContent().getPartialRoot().getType(),
-						theElement.getExternalContent().getPartialRoot().getDescription());
-					if (theElement.getPromise() != null)
-						ecBuilder.fulfills(theElement.getPromise(), null);
-					theElement.getExternalContent().getPartialRoot().copy(ecBuilder);
-					QonfigElement ecElement = ecBuilder.buildFull();
-					ExpressoQIS ecSession = session.intepretRoot(ecElement);
-					if (theExternalContent == null
-						|| !typesEqual(theExternalContent.getElement(), theElement.getExternalContent().getPartialRoot()))
-						theExternalContent = ecSession.interpret(QonfigExternalContent.Def.class);
-					theExternalContent.update(ecSession, this);
-				}
 
-				CompiledExpressoEnv sourceEnv = getSourceEnv(session.getExpressoEnv());
-				setExpressoEnv(sourceEnv);
-				// if(theParent!=null) {
-				// if(documentMatches(theElement.getDocument().getLocation(), theParent.getElement().getDocument().getLocation()))
-				// setExpressoEnv(theParent.getExpressoEnv());
-				// else if(theParent.getExternalContent()!=null && documentMatches(theElement.getDocument().getLocation(),
-				// theParent.getExternalContent().getElement().getDocument().getLocation()))
-				// setExpressoEnv(theParent.getExternalContent().getExpressoEnv());
-				// }
+				if (theExternalContent != null) {
+					isParallelSource = true;
+					theDocumentElement = theElement.getPromise();
+					ExpressoQIS parallelSession = session.interpretRoot(theElement);
+					parallelSession.setExpressoEnv(theExternalContent.getExpressoEnv());
+					theParallelElement = parallelSession.interpret(getClass());
+					theParallelElement.theDocumentElement = theElement.getExternalContent();
+					theParallelElement.theParallelElement = this;
+					theParallelElement.update(parallelSession);
+				}
 
 				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
-					for (QonfigAddOn addOn : session.getElement().getInheritance().values())
+					PartialQonfigElement addOnEl = theDocumentElement == null ? theElement : theDocumentElement;
+					for (QonfigAddOn addOn : addOnEl.getInheritance().values())
 						addAddOn(session, addOn, addOnsTested);
-					addAddOns(session, session.getElement().getType(), addOnsTested);
+					if (addOnEl.getType() instanceof QonfigElementDef)
+						addAddOns(session, (QonfigElementDef) addOnEl.getType(), addOnsTested);
+					else
+						addAddOn(session, (QonfigAddOn) addOnEl.getType(), addOnsTested);
 				}
 
 				try {
@@ -569,7 +591,7 @@ public interface ExElement extends Identifiable {
 					reporting().error(e.getMessage(), e);
 				}
 
-				if (firstTime) {
+				if (firstTime && theParallelElement == null || isParallelSource) {
 					// Ensure implementation added all traceability
 					checkTraceability(theElement.getType());
 					for (QonfigAddOn inh : theElement.getInheritance().values())
@@ -577,25 +599,9 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
-			protected CompiledExpressoEnv getSourceEnv(CompiledExpressoEnv parentEnv) {
-				if (theExternalContent != null)
-					return theExternalContent.getExpressoEnv();
-				else if (thePromise != null)
-					return thePromise.getExpressoEnv();
-				else
-					return parentEnv;
-			}
-
 			@Override
 			public void setExpressoEnv(CompiledExpressoEnv env) {
-				// if (documentMatches(env.reporting().getFileLocation().getFileLocation(), theElement.getDocument().getLocation()))
 				theExpressoEnv = env;
-				// else if (theExternalContent != null && documentMatches(env.reporting().getFileLocation().getFileLocation(),
-				// theExternalContent.getElement().getDocument().getLocation()))
-				// theExternalContent.setExpressoEnv(env);
-				// else
-				// throw new IllegalArgumentException("This element (" + theElement.getPositionInFile().toShortString()
-				// + ") does not touch any content from " + env.reporting().getFileLocation().getFileLocation());
 			}
 
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
@@ -650,6 +656,49 @@ public interface ExElement extends Identifiable {
 			@Override
 			public String toString() {
 				return theId.toString();
+			}
+
+			private static class JoinedCollection<E> extends AbstractCollection<E> {
+				private final Collection<? extends E> theSource1;
+				private final Collection<? extends E> theSource2;
+
+				JoinedCollection(Collection<? extends E> source1, Collection<? extends E> source2) {
+					theSource1 = source1;
+					theSource2 = source2;
+				}
+
+				@Override
+				public Iterator<E> iterator() {
+					return new JoinedIterator<>(theSource1.iterator(), theSource2.iterator());
+				}
+
+				@Override
+				public int size() {
+					return theSource1.size() + theSource2.size();
+				}
+
+				private static class JoinedIterator<E> implements Iterator<E> {
+					private final Iterator<? extends E> theSource1;
+					private final Iterator<? extends E> theSource2;
+
+					JoinedIterator(Iterator<? extends E> source1, Iterator<? extends E> source2) {
+						theSource1 = source1;
+						theSource2 = source2;
+					}
+
+					@Override
+					public boolean hasNext() {
+						return theSource1.hasNext() || theSource2.hasNext();
+					}
+
+					@Override
+					public E next() {
+						if (theSource1.hasNext())
+							return theSource1.next();
+						else
+							return theSource2.next();
+					}
+				}
 			}
 		}
 	}

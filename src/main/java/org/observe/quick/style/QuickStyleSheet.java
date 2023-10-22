@@ -106,7 +106,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 					"Style-sheet reference does not parse to a style-sheet (" + ssDoc.getRoot().getType() + "): " + ref, //
 					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)),
 						address.text.length());
-			ExpressoQIS importSession = session.intepretRoot(ssDoc.getRoot());
+			ExpressoQIS importSession = session.interpretRoot(ssDoc.getRoot());
 			QuickTypeStyle.TypeStyleSet styleTypeSet = session.get(QuickStyleElement.STYLE_TYPE_SET, QuickTypeStyle.TypeStyleSet.class);
 			if (styleTypeSet == null) {
 				styleTypeSet = new QuickTypeStyle.TypeStyleSet();
