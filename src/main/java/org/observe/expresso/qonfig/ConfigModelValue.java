@@ -175,11 +175,9 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 						reporting().getPosition(), 0, e);
 				}
 				theConfigPath = getDefinition().getConfigPath();
-				theFormat = getDefinition().getFormat() == null ? null : getDefinition().getFormat().interpret(//
-					ModelTypes.Value.forType(
-						TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())),
-					env);
-				theFormatSet = theFormat == null ? env.getProperty(FORMAT_SET_KEY, ObservableConfigFormatSet.class) : null;
+				theFormat = interpret(getDefinition().getFormat(), ModelTypes.Value.forType(
+					TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())));
+				theFormatSet = theFormat == null ? env.get(FORMAT_SET_KEY, ObservableConfigFormatSet.class) : null;
 			}
 		}
 	}

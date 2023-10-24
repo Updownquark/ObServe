@@ -64,7 +64,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			theRows = getAttributeExpression("rows", session);
-			theDocument = ExElement.useOrReplace(StyledDocument.Def.class, theDocument, session, "document");
+			theDocument = syncChild(StyledDocument.Def.class, theDocument, session, "document");
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theMousePositionVariable = elModels.getElementValueModelId("mousePosition");
@@ -91,11 +91,6 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public TypeToken<QuickTextArea<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickTextArea.class).parameterized(getValueType());
-		}
-
-		@Override
 		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			getOrInitValue();
 			if (theDocument != null)
@@ -117,17 +112,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.getOrInitValue();
 			if (isDocumentStale) {
 				isDocumentStale = false;
-				if (getDefinition().getDocument() == null) {
-					if (theDocument != null)
-						theDocument.destroy();
-					theDocument = null;
-				} else if (theDocument == null || theDocument.getIdentity() != getDefinition().getDocument().getIdentity()) {
-					if (theDocument != null)
-						theDocument.destroy();
-					theDocument = (StyledDocument.Interpreted<T, ?>) getDefinition().getDocument().interpret(this);
-				}
-				if (theDocument != null)
-					theDocument.updateDocument(getExpressoEnv());
+				theDocument = syncChild(getDefinition().getDocument(), theDocument,
+					def -> (StyledDocument.Interpreted<T, ?>) def.interpret(this), (d, dEnv) -> d.updateDocument(dEnv));
 			}
 			return getValue();
 		}
@@ -136,8 +122,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			isDocumentStale = true;
 			super.doUpdate(env);
-			theRows = getDefinition().getRows() == null ? null
-				: getDefinition().getRows().interpret(ModelTypes.Value.forType(Integer.class), getExpressoEnv());
+			theRows = interpret(getDefinition().getRows(), ModelTypes.Value.forType(Integer.class));
 		}
 
 		@Override

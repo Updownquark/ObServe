@@ -98,8 +98,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theValues = getDefinition().getValues() == null ? null
-				: getDefinition().getValues().interpret(ModelTypes.Collection.forType(getValueType()), env);
+			theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.forType(getValueType()));
 		}
 	}
 

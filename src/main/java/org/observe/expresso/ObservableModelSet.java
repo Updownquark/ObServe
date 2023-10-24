@@ -1887,6 +1887,11 @@ public interface ObservableModelSet extends Identifiable {
 			theComponents = components;
 			theComponentsByModelId = componentsByModelId;
 			theNameChecker = nameChecker;
+
+			ModelComponentId parentId = parent == null ? null : parent.getIdentity();
+			if (parentId != theId.getOwnerId())
+				throw new IllegalStateException(
+					"Given parent model (" + parentId + ") is incorrect for this model (" + theId + "). Should be " + theId.getOwnerId());
 		}
 
 		@Override
@@ -2271,12 +2276,6 @@ public interface ObservableModelSet extends Identifiable {
 				return (Map<String, ModelComponentNode<?>>) super.getComponents();
 			}
 
-			@Override
-			protected Map<Object, ModelComponentId> getIdentifiedComponents() {
-				// TODO Auto-generated method stub
-				return super.getIdentifiedComponents();
-			}
-
 			void assertNotBuilt() {
 				if (theBuilt != null)
 					throw new IllegalStateException("This model set has already been built and may not be added to");
@@ -2293,9 +2292,10 @@ public interface ObservableModelSet extends Identifiable {
 
 			private void checkNameForAdd(String name) {
 				assertNotBuilt();
-				if (theComponents.containsKey(name)) {
+				ModelComponentNode<?> existing = theComponents.get(name);
+				if (existing != null) {
 					throw new IllegalArgumentException(
-						"A value (" + theComponents.get(name).getThing() + ") has already been added as '" + name + "'");
+						"A value (" + existing.getThing() + ") has already been added as '" + name + "'");
 				}
 			}
 
@@ -2344,6 +2344,16 @@ public interface ObservableModelSet extends Identifiable {
 				if (((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).put(other.getIdentity().getRootId(),
 					other) != null)
 					return this;
+				if (getParent() == null) {
+					if (other.getParent() != null)
+						throw new IllegalStateException(
+							"A root model (" + getIdentity() + ") cannot inherit from a child model (" + other.getIdentity() + ")");
+				} else if (other.getParent() == null)
+					throw new IllegalStateException(
+						"A child model (" + getIdentity() + ") cannot inherit from a root model (" + other.getIdentity() + ")");
+				else if (!getParent().getInheritance().containsKey(other.getParent().getIdentity()))
+					throw new IllegalStateException("A child model (" + getIdentity() + ") cannot inherit from another child model ("
+						+ other.getIdentity() + ") whose parents are not related");
 				// For each model that other inherits, add an inheritance entry for that model ID mapped to other (if not present)
 				for (ModelComponentId subInh : other.getInheritance().keySet())
 					((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh, other);
@@ -2485,8 +2495,6 @@ public interface ObservableModelSet extends Identifiable {
 					return theInterpreted;
 				if (getParent() != null)
 					throw new IllegalStateException("Can only call this method on a root model");
-				// if (getParent() != null)
-				// getParent().createInterpreted()
 				return createInterpreted(null, null, env);
 			}
 
@@ -2500,16 +2508,19 @@ public interface ObservableModelSet extends Identifiable {
 				if (theInterpreted != null)
 					return theInterpreted;
 				Map<ModelComponentId, InterpretedModelSet> inheritance = new LinkedHashMap<>(super.getInheritance().size() * 3 / 2 + 1);
-				DefaultInterpreted model = createModel(root, parent, Collections.unmodifiableMap(inheritance), env);
 				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet.Built> inh : getInheritance().entrySet()) {
 					if (inh.getValue() instanceof InterpretedModelSet)
 						inheritance.put(inh.getKey(), (InterpretedModelSet) inh.getValue());
-					else if (inh.getValue() instanceof DefaultBuilt)
-						inheritance.put(inh.getKey(), ((DefaultBuilt) inh.getValue()).createInterpreted(root, model, env));
-					else
+					else if (inh.getValue() instanceof DefaultBuilt) {
+						DefaultInterpreted inhParent = parent == null ? null
+							: (DefaultInterpreted) parent.getInheritance().get(inh.getValue().getIdentity().getOwnerId());
+						DefaultInterpreted inhRoot = inhParent == null ? null : inhParent.getRoot();
+						inheritance.put(inh.getKey(), ((DefaultBuilt) inh.getValue()).createInterpreted(inhRoot, inhParent, env));
+					} else
 						throw new IllegalStateException(
 							"Unexpected model set type in inheritance: " + inh.getKey() + ": " + inh.getValue().getClass().getName());
 				}
+				DefaultInterpreted model = createModel(root, parent, Collections.unmodifiableMap(inheritance), env);
 				theInterpreted = model;
 				return model;
 			}
@@ -2663,7 +2674,10 @@ public interface ObservableModelSet extends Identifiable {
 				else if (isInterpreting)
 					return;
 				isInterpreting = true;
-				theExpressoEnv = env.with(this);
+				if (env.getModels().isRelated(getIdentity()))
+					theExpressoEnv = env;
+				else
+					theExpressoEnv = env.with(this);
 				for (String name : theSource.getComponentNames()) {
 					InterpretedModelComponentNode<?, ?> localNode = getComponents().get(name);
 					if (localNode == null)
@@ -2930,6 +2944,8 @@ public interface ObservableModelSet extends Identifiable {
 					if (!theInheritance.containsKey(inh)) {
 						if (error == null)
 							error = new StringBuilder();
+						else
+							error.append('\n');
 						error.append("Inherited model " + inh + " not satisfied");
 					}
 				}

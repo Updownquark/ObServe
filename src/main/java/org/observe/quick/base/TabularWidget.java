@@ -94,40 +94,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				theColumnIndexVariable = elModels.getElementValueModelId("columnIndex");
 				elModels.satisfyElementValueType(getActiveValueVariable(), ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(getRowType((TabularWidget.Interpreted<?, ?>) interp, env)));
-				CollectionUtils
-				.synchronize(theColumns, session.forChildren("columns"), (c, s) -> ExElement.typesEqual(c.getElement(), s.getElement()))//
-				.adjust(
-					new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
-						@Override
-						public boolean getOrder(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-							throws QonfigInterpretationException {
-							return true;
-						}
-
-						@Override
-						public ElementSyncAction leftOnly(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-							throws QonfigInterpretationException {
-							// TODO dispose the column set?
-							return element.remove();
-						}
-
-						@Override
-						public ElementSyncAction rightOnly(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-								throws QonfigInterpretationException {
-							TableColumnSet.Def<?> column = element.getRightValue()//
-								.interpret(QuickTableColumn.TableColumnSet.Def.class);
-							column.update(element.getRightValue());
-							return element.useValue(column);
-						}
-
-						@Override
-						public ElementSyncAction common(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-							throws QonfigInterpretationException {
-							element.getLeftValue().update(element.getRightValue());
-							return element.useValue(element.getLeftValue());
-						}
-					}, CollectionUtils.AdjustmentOrder.RightOrder);
+				syncChildren(QuickTableColumn.TableColumnSet.Def.class, theColumns, session.forChildren("columns"));
 			}
 
 			protected abstract TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
@@ -159,7 +126,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 
 			@Override
-			public TypeToken<R> getValueType() {
+			public TypeToken<R> getValueType() throws ExpressoInterpretationException {
 				return theRowType;
 			}
 
@@ -170,50 +137,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theRowType = (TypeToken<R>) env.getModels().getComponent(getDefinition().getActiveValueVariable()).interpreted().getType()
-					.getType(0);
+				super.doUpdate(env);
+				theRowType = (TypeToken<R>) getAddOn(ExWithElementModel.Interpreted.class).getElement().getExpressoEnv().getModels()
+					.getComponent(getDefinition().getActiveValueVariable()).interpreted().getType().getType(0);
 				if (theColumns == null)
 					theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
 						QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> parameterized(
 							getValueType(), TypeTokens.get().WILDCARD))//
 					.build();
-				super.doUpdate(env);
-				CollectionUtils.synchronize(theColumns, getDefinition().getColumns(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.adjust(
-					new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>, ExpressoInterpretationException>() {
-						@Override
-						public boolean getOrder(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>> element)
-								throws ExpressoInterpretationException {
-							return true;
-						}
-
-						@Override
-						public ElementSyncAction leftOnly(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>> element)
-								throws ExpressoInterpretationException {
-							element.getLeftValue().destroy();
-							return element.remove();
-						}
-
-						@Override
-						public ElementSyncAction rightOnly(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>> element)
-								throws ExpressoInterpretationException {
-							TableColumnSet.Interpreted<R, ?> interpreted = element.getRightValue()//
-								.interpret(Interpreted.Abstract.this);
-							interpreted.updateColumns(env);
-							return element.useValue(interpreted);
-						}
-
-						@Override
-						public ElementSyncAction common(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>> element)
-								throws ExpressoInterpretationException {
-							element.getLeftValue().updateColumns(env);
-							return element.useValue(element.getLeftValue());
-						}
-					}, CollectionUtils.AdjustmentOrder.RightOrder);
+				syncChildren(getDefinition().getColumns(), theColumns, def -> def.interpret(this),
+					TableColumnSet.Interpreted::updateColumns);
 			}
 
 			@Override

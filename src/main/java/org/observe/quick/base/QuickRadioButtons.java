@@ -37,11 +37,6 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		}
 
 		@Override
-		public TypeToken<QuickRadioButtons<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickRadioButtons.class).<QuickRadioButtons<T>> parameterized(getValueType());
-		}
-
-		@Override
 		public QuickRadioButtons<T> create() {
 			return new QuickRadioButtons<>(getIdentity());
 		}

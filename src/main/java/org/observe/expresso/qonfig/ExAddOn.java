@@ -3,7 +3,6 @@ package org.observe.expresso.qonfig;
 import java.util.function.BiFunction;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
@@ -27,9 +26,9 @@ public interface ExAddOn<E extends ExElement> {
 		QonfigAddOn getType();
 
 		/** @return The element definition that this add-on is added onto */
-		ExElement.Def<? extends E> getElement();
+		ExElement.Def<?> getElement();
 
-		default void preUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+		default void preUpdate(ExpressoQIS session, ExElement.Def<? extends E> element) throws QonfigInterpretationException {
 		}
 
 		/**
@@ -41,14 +40,14 @@ public interface ExAddOn<E extends ExElement> {
 		 */
 		void update(ExpressoQIS session, ExElement.Def<? extends E> element) throws QonfigInterpretationException;
 
-		default void postUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+		default void postUpdate(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 		}
 
 		/**
 		 * @param element The element interpretation
 		 * @return An interpretation of this element definition for the given element interpretation
 		 */
-		Interpreted<? extends E, ? extends AO> interpret(ExElement.Interpreted<? extends E> element);
+		Interpreted<? extends E, ? extends AO> interpret(ExElement.Interpreted<?> element);
 
 		/**
 		 * An abstract {@link Def} implementation
@@ -58,13 +57,13 @@ public interface ExAddOn<E extends ExElement> {
 		 */
 		public abstract class Abstract<E extends ExElement, AO extends ExAddOn<? super E>> implements Def<E, AO> {
 			private final QonfigAddOn theType;
-			private final ExElement.Def<? extends E> theElement;
+			private final ExElement.Def<?> theElement;
 
 			/**
 			 * @param type The add-on that the Qonfig toolkit uses to represent this type
 			 * @param element The element definition that this add-on is added onto
 			 */
-			protected Abstract(QonfigAddOn type, ExElement.Def<? extends E> element) {
+			protected Abstract(QonfigAddOn type, ExElement.Def<?> element) {
 				theType = type;
 				theElement = element;
 			}
@@ -75,7 +74,7 @@ public interface ExAddOn<E extends ExElement> {
 			}
 
 			@Override
-			public ExElement.Def<? extends E> getElement() {
+			public ExElement.Def<?> getElement() {
 				return theElement;
 			}
 
@@ -95,9 +94,9 @@ public interface ExAddOn<E extends ExElement> {
 		Def<? super E, ? super AO> getDefinition();
 
 		/** @return The element interpretation that this add-on is added onto */
-		ExElement.Interpreted<? extends E> getElement();
+		ExElement.Interpreted<?> getElement();
 
-		default void preUpdate() throws ExpressoInterpretationException {
+		default void preUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
 
 		/**
@@ -107,9 +106,9 @@ public interface ExAddOn<E extends ExElement> {
 		 * @param session The session to support this add-on
 		 * @throws ExpressoInterpretationException If any models in this add on could not be interpreted
 		 */
-		void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void update(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException;
 
-		default void postUpdate() throws ExpressoInterpretationException {
+		default void postUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
 
 		public Class<AO> getInstanceType();
@@ -131,13 +130,13 @@ public interface ExAddOn<E extends ExElement> {
 		 */
 		public abstract class Abstract<E extends ExElement, AO extends ExAddOn<? super E>> implements Interpreted<E, AO> {
 			private final Def<? super E, ? super AO> theDefinition;
-			private final ExElement.Interpreted<? extends E> theElement;
+			private final ExElement.Interpreted<?> theElement;
 
 			/**
 			 * @param definition The definition producing this interpretation
 			 * @param element The element interpretation that this add-on is added onto
 			 */
-			protected Abstract(Def<? super E, ? super AO> definition, ExElement.Interpreted<? extends E> element) {
+			protected Abstract(Def<? super E, ? super AO> definition, ExElement.Interpreted<?> element) {
 				theDefinition = definition;
 				theElement = element;
 			}
@@ -148,12 +147,12 @@ public interface ExAddOn<E extends ExElement> {
 			}
 
 			@Override
-			public ExElement.Interpreted<? extends E> getElement() {
+			public ExElement.Interpreted<?> getElement() {
 				return theElement;
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void update(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 			}
 
 			@Override
@@ -165,9 +164,9 @@ public interface ExAddOn<E extends ExElement> {
 	Class<? extends Interpreted<?, ?>> getInterpretationType();
 
 	/** @return The element that this add-on is added onto */
-	E getElement();
+	ExElement getElement();
 
-	default void preUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
+	default void preUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
 
 	/**
@@ -175,9 +174,9 @@ public interface ExAddOn<E extends ExElement> {
 	 *
 	 * @param interpreted The interpretation producing this add-on
 	 */
-	void update(ExAddOn.Interpreted<?, ?> interpreted);
+	void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element);
 
-	default void postUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
+	default void postUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
 
 	void instantiated();
@@ -218,7 +217,7 @@ public interface ExAddOn<E extends ExElement> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		public void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 		}
 
 		@Override

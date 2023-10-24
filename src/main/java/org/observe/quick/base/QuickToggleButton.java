@@ -19,8 +19,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickToggleButton extends QuickCheckBox {
 	public static final String TOGGLE_BUTTON = "toggle-button";
 
@@ -70,15 +68,10 @@ public class QuickToggleButton extends QuickCheckBox {
 		}
 
 		@Override
-		public TypeToken<QuickToggleButton> getWidgetType() {
-			return TypeTokens.get().of(QuickToggleButton.class);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
 				getDefinition().getElement().getDocument().getLocation());
 		}
 

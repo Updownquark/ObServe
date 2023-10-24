@@ -128,14 +128,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theSelectionStartValue = getDefinition().getSelectionStartValue() == null ? null
-				: getDefinition().getSelectionStartValue().interpret(ModelTypes.Value.forType(getValueType()), getExpressoEnv());
-			theSelectionStartOffset = getDefinition().getSelectionStartOffset() == null ? null
-				: getDefinition().getSelectionStartOffset().interpret(ModelTypes.Value.forType(int.class), getExpressoEnv());
-			theSelectionEndValue = getDefinition().getSelectionEndValue() == null ? null
-				: getDefinition().getSelectionEndValue().interpret(ModelTypes.Value.forType(getValueType()), getExpressoEnv());
-			theSelectionEndOffset = getDefinition().getSelectionEndOffset() == null ? null
-				: getDefinition().getSelectionEndOffset().interpret(ModelTypes.Value.forType(int.class), getExpressoEnv());
+			theSelectionStartValue = interpret(getDefinition().getSelectionStartValue(), ModelTypes.Value.forType(getValueType()));
+			theSelectionStartOffset = interpret(getDefinition().getSelectionStartOffset(), ModelTypes.Value.forType(int.class));
+			theSelectionEndValue = interpret(getDefinition().getSelectionEndValue(), ModelTypes.Value.forType(getValueType()));
+			theSelectionEndOffset = interpret(getDefinition().getSelectionEndOffset(), ModelTypes.Value.forType(int.class));
 		}
 
 		public abstract StyledDocument<T> create();

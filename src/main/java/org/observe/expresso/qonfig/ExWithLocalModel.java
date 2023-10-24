@@ -1,7 +1,6 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
@@ -25,7 +24,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			if (session.children().get("model").get().isEmpty()) { // Don't create a local model if there's no reason to
 				theLocalModelElement = null;
@@ -33,7 +32,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 			}
 			// Don't need to use the local model builder, just create it. The local model parsing below will populate it.
 			createBuilder(session);
-			theLocalModelElement = ExElement.useOrReplace(ObservableModelElement.LocalModelElementDef.class, theLocalModelElement, session,
+			theLocalModelElement = getElement().syncChild(ObservableModelElement.LocalModelElementDef.class, theLocalModelElement, session,
 				"model");
 			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theLocalModelElement.getExpressoEnv().getModels()));
 			session.setExpressoEnv(getElement().getExpressoEnv());
@@ -62,18 +61,12 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
-			if (theLocalModelElement == null || theLocalModelElement.getDefinition() != getDefinition().getLocalModelElement()) {
-				if (theLocalModelElement != null)
-					theLocalModelElement.destroy();
-				theLocalModelElement = getDefinition().getLocalModelElement() == null ? null
-					: getDefinition().getLocalModelElement().interpret(getElement());
-			}
-			if (theLocalModelElement != null) {
-				theLocalModelElement.update(env);
-				getElement().setExpressoEnv(env.with(theLocalModelElement.getExpressoEnv().getModels()));
-			}
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
+			theLocalModelElement = getElement().syncChild(getDefinition().getLocalModelElement(), theLocalModelElement,
+				def -> def.interpret(getElement()), (el, elEnv) -> el.update(elEnv));
+			if (theLocalModelElement != null)
+				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theLocalModelElement.getExpressoEnv().getModels()));
 		}
 
 		@Override
@@ -103,8 +96,8 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		if (myInterpreted.getLocalModelElement() == null)

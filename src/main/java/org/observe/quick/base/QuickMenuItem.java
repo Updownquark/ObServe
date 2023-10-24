@@ -69,7 +69,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), env);
+			theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 		}
 
 		@Override

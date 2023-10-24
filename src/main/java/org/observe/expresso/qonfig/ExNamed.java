@@ -72,8 +72,8 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		theName = myInterpreted.getDefinition().getName();
 	}

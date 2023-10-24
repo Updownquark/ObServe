@@ -55,7 +55,6 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -501,7 +500,7 @@ public class ExpressoQonfigValues {
 			theIntListType = session.isInstance("int-list");
 			if (theIntListType != null) {
 				ExpressoQIS intListSession = session.asElement("int-list");
-				ExElement.syncDefs(CollectionElement.class, theElements, intListSession.forChildren("element"));
+				syncChildren(CollectionElement.class, theElements, intListSession.forChildren("element"));
 			}
 			if ((getElementValue() != null && getElementValue().getExpression() != ObservableExpression.EMPTY) && !theElements.isEmpty())
 				reporting().error("Both a list value and elements specified");
@@ -557,12 +556,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theElements, getDefinition().getElements(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(d -> (CollectionElement.Interpreted<T>) d.interpret(getExpressoEnv()))//
-				.onLeft(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().update(getExpressoEnv()))//
-				.onCommonX(el -> el.getLeftValue().update(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getElements(), theElements,
+					(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
 			}
 
 			protected TypeToken<T> getValueType() {
@@ -684,7 +679,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			if (getElementValue() != null && theSort != null)
 				reporting().warn("Sorting will not be used if the value of the collection is specified");
 		}
@@ -710,16 +705,10 @@ public class ExpressoQonfigValues {
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				if (getElementValue() != null) { // No sorting needed
-				} else if (getDefinition().getSort() == null) {
-					if (theSort != null)
-						theSort.destroy();
-					theSort = null;
-				} else if (theSort == null || theSort.getDefinition() != getDefinition().getSort())
-					theSort = (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSort().interpret(this);
-				if (theSort != null) {
-					TypeToken<T> valueType = (TypeToken<T>) getType().getType(0);
-					theSort.update(valueType, getExpressoEnv());
-				} else {
+				} else
+					theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<T>) def.interpret(this),
+						(s, sEnv) -> s.update((TypeToken<T>) getType().getType(0), sEnv));
+				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getValueType()));
 					if (theDefaultSorting == null)
 						throw new ExpressoInterpretationException(
@@ -927,8 +916,8 @@ public class ExpressoQonfigValues {
 			public void update(InterpretedExpressoEnv env, TypeToken<K> keyType, TypeToken<V> valueType)
 				throws ExpressoInterpretationException {
 				super.update(env);
-				theKey = getDefinition().getKey().interpret(ModelTypes.Value.forType(keyType), env);
-				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.forType(valueType), env);
+				theKey = interpret(getDefinition().getKey(), ModelTypes.Value.forType(keyType));
+				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.forType(valueType));
 			}
 
 			public MapPopulator<K, V> populator() {
@@ -1025,7 +1014,7 @@ public class ExpressoQonfigValues {
 			super.doUpdate(session);
 			if (session.isInstance("int-map") != null) {
 				ExpressoQIS intMapSession = session.asElement("int-map");
-				ExElement.syncDefs(MapEntry.class, theEntries, intMapSession.forChildren("entry"));
+				syncChildren(MapEntry.class, theEntries, intMapSession.forChildren("entry"));
 			}
 		}
 
@@ -1083,12 +1072,8 @@ public class ExpressoQonfigValues {
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
-				CollectionUtils.synchronize(theEntries, getDefinition().getEntries(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(d -> (MapEntry.Interpreted<K, V>) d.interpret(this))//
-				.onLeft(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().update(getExpressoEnv(), keyType, valueType))//
-				.onCommonX(el -> el.getLeftValue().update(getExpressoEnv(), keyType, valueType))//
-				.adjust();
+				syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
+					(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
 			}
 
 			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
@@ -1193,7 +1178,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 		}
 
 		@Override
@@ -1217,16 +1202,9 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (getDefinition().getSort() == null) {
-					if (theSort != null)
-						theSort.destroy();
-					theSort = null;
-				} else if (theSort == null || theSort.getDefinition() != getDefinition().getSort())
-					theSort = (ExSort.ExRootSort.Interpreted<K>) getDefinition().getSort().interpret(this);
-				if (theSort != null) {
-					TypeToken<K> keyType = (TypeToken<K>) getType().getType(0);
-					theSort.update(keyType, getExpressoEnv());
-				} else {
+				theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<K>) def.interpret(this),
+					(s, sEnv) -> s.update((TypeToken<K>) getType().getType(0), sEnv));
+				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
 					if (theDefaultSorting == null)
 						throw new ExpressoInterpretationException(
@@ -1295,7 +1273,7 @@ public class ExpressoQonfigValues {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			if (session.isInstance("int-map") != null)
-				ExElement.syncDefs(MapEntry.class, theEntries, session.asElement("int-map").forChildren("entry"));
+				syncChildren(MapEntry.class, theEntries, session.asElement("int-map").forChildren("entry"));
 		}
 
 		@Override
@@ -1345,12 +1323,8 @@ public class ExpressoQonfigValues {
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
-				CollectionUtils.synchronize(theEntries, getDefinition().getEntries(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(d -> (MapEntry.Interpreted<K, V>) d.interpret(this))//
-				.onLeft(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().update(getExpressoEnv(), keyType, valueType))//
-				.onCommonX(el -> el.getLeftValue().update(getExpressoEnv(), keyType, valueType))//
-				.adjust();
+				syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
+					(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
 			}
 
 			protected TypeToken<K> getKeyType() {
@@ -1463,7 +1437,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 		}
 
 		@Override
@@ -1487,16 +1461,9 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (getDefinition().getSort() == null) {
-					if (theSort != null)
-						theSort.destroy();
-					theSort = null;
-				} else if (theSort == null || theSort.getDefinition() != getDefinition().getSort())
-					theSort = (ExSort.ExRootSort.Interpreted<K>) getDefinition().getSort().interpret(this);
-				if (theSort != null) {
-					TypeToken<K> keyType = (TypeToken<K>) getType().getType(0);
-					theSort.update(keyType, getExpressoEnv());
-				} else {
+				theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<K>) def.interpret(this),
+					(s, sEnv) -> s.update((TypeToken<K>) getType().getType(0), sEnv));
+				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
 					if (theDefaultSorting == null)
 						throw new ExpressoInterpretationException(
@@ -1637,10 +1604,9 @@ public class ExpressoQonfigValues {
 					VariableType defType = getDefinition().getEventType();
 					if (defType != null) {
 						theEventType = (TypeToken<T>) defType.getType(getExpressoEnv());
-						theEvent = getDefinition().getEvent() == null ? null
-							: getDefinition().getEvent().interpret(ModelTypes.Event.forType(theEventType), getExpressoEnv());
+						theEvent = interpret(getDefinition().getEvent(), ModelTypes.Event.forType(theEventType));
 					} else if (getDefinition().getEvent() != null) {
-						theEvent = getDefinition().getEvent().interpret(ModelTypes.Event.<Observable<T>> anyAs(), getExpressoEnv());
+						theEvent = interpret(getDefinition().getEvent(), ModelTypes.Event.<Observable<T>> anyAs());
 						theEventType = (TypeToken<T>) theEvent.getType().getType(0);
 					} else {
 						theEventType = (TypeToken<T>) TypeTokens.get().VOID;
@@ -1669,7 +1635,7 @@ public class ExpressoQonfigValues {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				getOrEvalEventType(getExpressoEnv());
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
+				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 			}
 
 			@Override
@@ -1838,7 +1804,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theActions, session.forChildren("action"));
+			syncChildren(ModelValueElement.CompiledSynth.class, theActions, session.forChildren("action"));
 		}
 
 		@Override
@@ -1888,11 +1854,8 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theActions, getDefinition().getActions(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.simpleE(d -> (Action.Interpreted) d.interpret(getExpressoEnv()))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.onCommonX(el -> el.getLeftValue().setParentElement(this).update(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
+					(i, aEnv) -> i.setParentElement(this).update(aEnv));
 			}
 
 			@Override
@@ -2039,7 +2002,7 @@ public class ExpressoQonfigValues {
 			theBeforeBody = getAttributeExpression("before-body", session);
 			theAfterBody = getAttributeExpression("after-body", session);
 			theFinally = getAttributeExpression("finally", session);
-			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theBody, session.forChildren("body"));
+			syncChildren(ModelValueElement.CompiledSynth.class, theBody, session.forChildren("body"));
 		}
 
 		@Override
@@ -2067,7 +2030,7 @@ public class ExpressoQonfigValues {
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theBeforeBody;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theAfterBody;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theFinally;
-			private final List<InterpretedValueSynth<ObservableAction, ?>> theBody;
+			private final List<ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>> theBody;
 
 			Interpreted(Loop definition) {
 				super(definition, null);
@@ -2097,20 +2060,17 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theInit = getDefinition().getInit() == null ? null
-					: getDefinition().getInit().interpret(ModelTypes.Action.instance(), getExpressoEnv());
-				theBefore = getDefinition().getBefore() == null ? null
-					: getDefinition().getBefore().interpret(ModelTypes.Action.instance(), getExpressoEnv());
-				theWhile = getDefinition().getWhile().interpret(ModelTypes.Value.forType(boolean.class), getExpressoEnv());
-				theBeforeBody = getDefinition().getBeforeBody() == null ? null
-					: getDefinition().getBeforeBody().interpret(ModelTypes.Action.instance(), getExpressoEnv());
-				theAfterBody = getDefinition().getAfterBody() == null ? null
-					: getDefinition().getAfterBody().interpret(ModelTypes.Action.instance(), getExpressoEnv());
-				theFinally = getDefinition().getFinally() == null ? null
-					: getDefinition().getFinally().interpret(ModelTypes.Action.instance(), getExpressoEnv());
-				theBody.clear();
-				for (ModelValueElement.CompiledSynth<ObservableAction, ?> body : getDefinition().getBody())
-					theBody.add(body.interpret(getExpressoEnv()));
+				theInit = interpret(getDefinition().getInit(), ModelTypes.Action.instance());
+				theBefore = interpret(getDefinition().getBefore(), ModelTypes.Action.instance());
+				theWhile = interpret(getDefinition().getWhile(), ModelTypes.Value.forType(boolean.class));
+				theBeforeBody = interpret(getDefinition().getBeforeBody() == null ? null : getDefinition().getBeforeBody(),
+					ModelTypes.Action.instance());
+				theAfterBody = interpret(getDefinition().getAfterBody() == null ? null : getDefinition().getAfterBody(),
+					ModelTypes.Action.instance());
+				theFinally = interpret(getDefinition().getFinally() == null ? null : getDefinition().getFinally(),
+					ModelTypes.Action.instance());
+				this.syncChildren(getDefinition().getBody(), theBody,
+					(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv), null);
 			}
 
 			@Override
@@ -2593,20 +2553,14 @@ public class ExpressoQonfigValues {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				isActive = getDefinition().isActive().interpret(ModelTypes.Value.BOOLEAN, env);
-				theFrequency = getDefinition().getFrequency().interpret(ModelTypes.Value.forType(Duration.class), env);
-				theRemainingExecutions = getDefinition().getRemainingExecutions() == null ? null
-					: getDefinition().getRemainingExecutions().interpret(ModelTypes.Value.INT, env);
-				theUntil = getDefinition().getUntil() == null ? null
-					: getDefinition().getUntil().interpret(ModelTypes.Value.forType(Instant.class), env);
-				theRunNextIn = getDefinition().getRunNextIn() == null ? null
-					: getDefinition().getRunNextIn().interpret(ModelTypes.Value.forType(Duration.class), env);
-				theNextExecution = getDefinition().getNextExecution() == null ? null
-					: getDefinition().getNextExecution().interpret(ModelTypes.Value.forType(Instant.class), env);
-				theExecutionCount = getDefinition().getExecutionCount() == null ? null
-					: getDefinition().getExecutionCount().interpret(ModelTypes.Value.INT, env);
-				isExecuting = getDefinition().isExecuting() == null ? null
-					: getDefinition().isExecuting().interpret(ModelTypes.Value.BOOLEAN, env);
+				isActive = interpret(getDefinition().isActive(), ModelTypes.Value.BOOLEAN);
+				theFrequency = interpret(getDefinition().getFrequency(), ModelTypes.Value.forType(Duration.class));
+				theRemainingExecutions = interpret(getDefinition().getRemainingExecutions(), ModelTypes.Value.INT);
+				theUntil = interpret(getDefinition().getUntil(), ModelTypes.Value.forType(Instant.class));
+				theRunNextIn = interpret(getDefinition().getRunNextIn(), ModelTypes.Value.forType(Duration.class));
+				theNextExecution = interpret(getDefinition().getNextExecution(), ModelTypes.Value.forType(Instant.class));
+				theExecutionCount = interpret(getDefinition().getExecutionCount(), ModelTypes.Value.INT);
+				isExecuting = interpret(getDefinition().isExecuting(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override

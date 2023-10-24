@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -49,7 +48,7 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 		}
 	}
@@ -76,9 +75,9 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			theName = getDefinition().getFieldLabel() == null ? null
-				: getDefinition().getFieldLabel().interpret(ModelTypes.Value.STRING, env);
+		public void update(ExElement.Interpreted<? extends QuickWidget> element) throws ExpressoInterpretationException {
+			super.update(element);
+			theName = getElement().interpret(getDefinition().getFieldLabel(), ModelTypes.Value.STRING);
 		}
 
 		@Override
@@ -109,8 +108,8 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+		super.update(interpreted, element);
 		QuickField.Interpreted myInterpreted = (QuickField.Interpreted) interpreted;
 		theFieldLabelInstantiator = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().instantiate();
 	}

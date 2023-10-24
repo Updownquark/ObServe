@@ -125,7 +125,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException {
 				if (theValue == null) {
 					if (getDefinition().getValue() != null)
-						theValue = getDefinition().getValue().interpret(getTargetType(), getExpressoEnv());
+						theValue = interpret(getDefinition().getValue(), getTargetType());
 					else
 						theValue = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
 				}
@@ -143,8 +143,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				super.doUpdate(env);
 				theValue = getOrInitValue(); // Initialize theValue
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueVariable().getName(), theValue);
-				theDisabled = getDefinition().getDisabled() == null ? null
-					: getDefinition().getDisabled().interpret(ModelTypes.Value.STRING, env);
+				theDisabled = interpret(getDefinition().getDisabled(), ModelTypes.Value.STRING);
 			}
 
 			@Override

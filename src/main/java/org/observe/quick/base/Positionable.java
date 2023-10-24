@@ -4,7 +4,6 @@ import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -157,11 +156,12 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
 			ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> sizeType = ModelTypes.Value.forType(QuickSize.class);
-			theLeading = getDefinition().getLeading() == null ? null : getDefinition().getLeading().interpret(sizeType, env);
-			theCenter = getDefinition().getCenter() == null ? null : getDefinition().getCenter().interpret(sizeType, env);
-			theTrailing = getDefinition().getTrailing() == null ? null : getDefinition().getTrailing().interpret(sizeType, env);
+			theLeading = getElement().interpret(getDefinition().getLeading(), sizeType);
+			theCenter = getElement().interpret(getDefinition().getCenter(), sizeType);
+			theTrailing = getElement().interpret(getDefinition().getTrailing(), sizeType);
 		}
 
 		public static class Vertical extends Interpreted<Positionable.Vertical> {
@@ -236,8 +236,8 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
 		theLeadingInstantiator = myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate();
 		theCenterInstantiator = myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().instantiate();

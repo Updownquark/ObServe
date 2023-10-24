@@ -88,7 +88,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			theChildren = getAttributeExpression("children", session);
 			theFormat = getAttributeExpression("format", session);
 			thePostText = getAttributeExpression("post-text", session);
-			theTextStyle = ExElement.useOrReplace(TextStyleElement.Def.class, theTextStyle, session, "text-style");
+			theTextStyle = syncChild(TextStyleElement.Def.class, theTextStyle, session, "text-style");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theNodeValue = elModels.getElementValueModelId("node");
 			elModels.satisfyElementValueType(theNodeValue, ModelTypes.Value,
@@ -127,7 +127,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitRoot() throws ExpressoInterpretationException {
 			if (theRoot == null) {
 				if (getDefinition().getRoot() != null)
-					theRoot = getDefinition().getRoot().interpret(ModelTypes.Value.<T> anyAsV(), getExpressoEnv());
+					theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.<T> anyAsV());
 				else
 					theRoot = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
 			}
@@ -160,24 +160,15 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			super.doUpdate(env);
 
 			getOrInitRoot(); // Initialize theRoot
-			theChildren = getDefinition().getChildren().interpret(ModelTypes.Collection.forType(getValueType()), getExpressoEnv());
+			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(getValueType()));
 			if (getDefinition().getFormat() != null)
-				theFormat = getDefinition().getFormat()
-				.interpret(ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(getValueType())), env);
+				theFormat = interpret(getDefinition().getFormat(),
+					ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(getValueType())));
 			else
 				theFormat = QuickTextWidget.getDefaultFormat(getValueType(), false, reporting().getPosition());
-			thePostText = getDefinition().getPostText() == null ? null
-				: getDefinition().getPostText().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-			if (getDefinition().getTextStyle() == null) {
-				if (theTextStyle != null)
-					theTextStyle.destroy();
-			} else if (theTextStyle == null || theTextStyle.getDefinition() != getDefinition().getTextStyle()) {
-				if (theTextStyle != null)
-					theTextStyle.destroy();
-				theTextStyle = getDefinition().getTextStyle().interpret(this);
-			}
-			if (theTextStyle != null)
-				theTextStyle.updateElement(getExpressoEnv());
+			thePostText = interpret(getDefinition().getPostText(), ModelTypes.Value.STRING);
+			theTextStyle = syncChild(getDefinition().getTextStyle(), theTextStyle, def -> def.interpret(this),
+				(s, sEnv) -> s.updateElement(sEnv));
 		}
 
 		@Override

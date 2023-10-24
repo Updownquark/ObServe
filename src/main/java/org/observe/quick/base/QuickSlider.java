@@ -84,8 +84,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 
 		@Override
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getOrInitValue() throws ExpressoInterpretationException {
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Number>> numberValue = getDefinition().getValue()
-				.interpret(ModelTypes.Value.forType(Number.class), getExpressoEnv());
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Number>> numberValue = interpret(getDefinition().getValue(),
+				ModelTypes.Value.forType(Number.class));
 			Class<?> numberType = TypeTokens.get().unwrap(TypeTokens.getRawType(numberValue.getType().getType(0)));
 			Function<Double, Number> reverse;
 			boolean inexact;
@@ -130,16 +130,11 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 		}
 
 		@Override
-		public TypeToken<QuickSlider> getWidgetType() {
-			return TypeTokens.get().of(QuickSlider.class);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theMin = getDefinition().getMin().interpret(ModelTypes.Value.DOUBLE, env);
-			theMax = getDefinition().getMax().interpret(ModelTypes.Value.DOUBLE, env);
+			theMin = interpret(getDefinition().getMin(), ModelTypes.Value.DOUBLE);
+			theMax = interpret(getDefinition().getMax(), ModelTypes.Value.DOUBLE);
 		}
 
 		@Override

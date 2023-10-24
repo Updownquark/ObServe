@@ -31,8 +31,8 @@ public class Expresso extends ExElement.Interpreted.Abstract<ExElement> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theClassView = ExElement.useOrReplace(ClassViewElement.class, theClassView, session, "imports");
-			theModels = ExElement.useOrReplace(ObservableModelElement.ModelSetElement.Def.class, theModels, session, "models");
+			theClassView = syncChild(ClassViewElement.class, theClassView, session, "imports");
+			theModels = syncChild(ObservableModelElement.ModelSetElement.Def.class, theModels, session, "models");
 			if (theModels != null) {
 				setExpressoEnv(theModels.getExpressoEnv());
 				session.setExpressoEnv(getExpressoEnv());
@@ -84,8 +84,7 @@ public class Expresso extends ExElement.Interpreted.Abstract<ExElement> {
 				theModels.destroy();
 			theModels = null;
 		} else {
-			theModels = getDefinition().getModelElement().interpret(this);
-			theModels.update(getExpressoEnv());
+			theModels = syncChild(getDefinition().getModelElement(), theModels, def -> def.interpret(this), (m, mEnv) -> m.update(mEnv));
 			setExpressoEnv(getExpressoEnv().with(theModels.getModels()));
 		}
 	}

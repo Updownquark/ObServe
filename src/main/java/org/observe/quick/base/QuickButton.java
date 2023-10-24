@@ -18,11 +18,8 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static final String BUTTON = "button";
@@ -83,11 +80,6 @@ public class QuickButton extends QuickWidget.Abstract {
 			return (Def<? super B>) super.getDefinition();
 		}
 
-		@Override
-		public TypeToken<B> getWidgetType() {
-			return (TypeToken<B>) TypeTokens.get().of(QuickButton.class);
-		}
-
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
 			return theText;
 		}
@@ -103,10 +95,10 @@ public class QuickButton extends QuickWidget.Abstract {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
-			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
+			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
 				getDefinition().getElement().getDocument().getLocation());
-			theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), env);
+			theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 		}
 
 		@Override

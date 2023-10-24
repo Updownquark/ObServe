@@ -20,8 +20,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class CollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	public static final String COLLAPSE_PANE = "collapse-pane";
 
@@ -52,7 +50,7 @@ public class CollapsePane extends QuickContainer.Abstract<QuickWidget> {
 			super.doUpdate(session);
 
 			isCollapsed = getAttributeExpression("collapsed", session);
-			theHeader = ExElement.useOrReplace(QuickWidget.Def.class, theHeader, session, "header");
+			theHeader = syncChild(QuickWidget.Def.class, theHeader, session, "header");
 		}
 
 		@Override
@@ -83,25 +81,11 @@ public class CollapsePane extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public TypeToken<? extends CollapsePane> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().of(CollapsePane.class);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			isCollapsed = getDefinition().isCollapsed() == null ? null
-				: getDefinition().isCollapsed().interpret(ModelTypes.Value.BOOLEAN, env);
-			if (theHeader != null
-				&& (getDefinition().getHeader() == null || theHeader.getIdentity() != getDefinition().getHeader().getIdentity())) {
-				theHeader.destroy();
-				theHeader = null;
-			}
-			if (theHeader == null && getDefinition().getHeader() != null)
-				theHeader = getDefinition().getHeader().interpret(this);
-			if (theHeader != null)
-				theHeader.updateElement(env);
+			isCollapsed = interpret(getDefinition().isCollapsed(), ModelTypes.Value.BOOLEAN);
+			theHeader = syncChild(getDefinition().getHeader(), theHeader, def -> def.interpret(this), (h, hEnv) -> h.updateElement(hEnv));
 		}
 
 		@Override

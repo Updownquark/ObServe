@@ -4,7 +4,6 @@ import javax.swing.Icon;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -174,14 +173,14 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
-			theX = getDefinition().getX() == null ? null : getDefinition().getX().interpret(ModelTypes.Value.INT, env);
-			theY = getDefinition().getY() == null ? null : getDefinition().getY().interpret(ModelTypes.Value.INT, env);
-			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().interpret(ModelTypes.Value.INT, env);
-			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().interpret(ModelTypes.Value.INT, env);
-			theWindowIcon = getDefinition().getWindowIcon() == null ? null : QuickCoreInterpretation
-				.evaluateIcon(getDefinition().getWindowIcon(), env, getDefinition().getElement().getElement().getDocument().getLocation());
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
+			theX = getElement().interpret(getDefinition().getX(), ModelTypes.Value.INT);
+			theY = getElement().interpret(getDefinition().getY(), ModelTypes.Value.INT);
+			theWidth = getElement().interpret(getDefinition().getWidth(), ModelTypes.Value.INT);
+			theHeight = getElement().interpret(getDefinition().getHeight(), ModelTypes.Value.INT);
+			theWindowIcon = getDefinition().getWindowIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(
+				getDefinition().getWindowIcon(), getElement(), getDefinition().getElement().getElement().getDocument().getLocation());
 		}
 
 		@Override
@@ -248,8 +247,8 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();
 		theXInstantiator = myInterpreted.getX() == null ? null : myInterpreted.getX().instantiate();

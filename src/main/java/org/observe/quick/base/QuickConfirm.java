@@ -98,10 +98,9 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			theOnConfirm = getDefinition().getOnConfirm().interpret(ModelTypes.Action.instance(), expressoEnv);
-			theOnCancel = getDefinition().getOnCancel() == null ? null
-				: getDefinition().getOnCancel().interpret(ModelTypes.Action.instance(), expressoEnv);
-			theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), expressoEnv,
+			theOnConfirm = interpret(getDefinition().getOnConfirm(), ModelTypes.Action.instance());
+			theOnCancel = interpret(getDefinition().getOnCancel(), ModelTypes.Action.instance());
+			theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
 				getDefinition().getElement().getDocument().getLocation());
 		}
 

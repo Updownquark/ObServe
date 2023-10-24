@@ -42,7 +42,7 @@ public class QuickMenuBar extends ExElement.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			ExElement.syncDefs(QuickMenu.Def.class, theMenus, session.forChildren("menu"));
+			syncChildren(QuickMenu.Def.class, theMenus, session.forChildren("menu"));
 		}
 
 		public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -75,13 +75,7 @@ public class QuickMenuBar extends ExElement.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			CollectionUtils.synchronize(theMenus, getDefinition().getMenus(), (interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(Interpreted.this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateElement(expressoEnv))//
-			.onCommonX(el -> el.getLeftValue().updateElement(expressoEnv))//
-			.rightOrder()//
-			.adjust();
+			syncChildren(getDefinition().getMenus(), theMenus, def -> def.interpret(this), QuickMenu.Interpreted::updateElement);
 		}
 
 		public QuickMenuBar create() {

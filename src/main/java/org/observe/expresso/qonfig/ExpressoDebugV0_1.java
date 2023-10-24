@@ -67,10 +67,10 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void preUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			public void preUpdate(ExpressoQIS session, ExElement.Def<?> addOnElement) throws QonfigInterpretationException {
 				if (theBreakType == BreakType.compile)
 					BreakpointHere.breakpoint();
-				super.preUpdate(session);
+				super.preUpdate(session, addOnElement);
 			}
 
 			@Override
@@ -101,10 +101,10 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void preUpdate() throws ExpressoInterpretationException {
+			public void preUpdate(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 				if (getDefinition().getBreakType() == BreakType.interpret)
 					BreakpointHere.breakpoint();
-				super.preUpdate();
+				super.preUpdate(element);
 			}
 
 			@Override

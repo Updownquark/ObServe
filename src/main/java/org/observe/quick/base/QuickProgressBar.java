@@ -81,11 +81,6 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		}
 
 		@Override
-		public TypeToken<? extends QuickProgressBar> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().of(QuickProgressBar.class);
-		}
-
-		@Override
 		protected ModelInstanceType<SettableValue<?>, SettableValue<Integer>> getTargetType() {
 			return ModelTypes.Value.INT;
 		}
@@ -93,8 +88,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theMaximum = getDefinition().getMaximum().interpret(ModelTypes.Value.INT, env);
-			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
+			theMaximum = interpret(getDefinition().getMaximum(), ModelTypes.Value.INT);
+			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
 		}
 
 		@Override

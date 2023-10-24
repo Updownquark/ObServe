@@ -195,7 +195,7 @@ public interface QuickBorder extends QuickStyledElement {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theTitle = getDefinition().getTitle().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+				theTitle = interpret(getDefinition().getTitle(), ModelTypes.Value.STRING);
 			}
 
 			@Override

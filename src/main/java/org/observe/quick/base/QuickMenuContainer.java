@@ -31,7 +31,7 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 		}
 
@@ -39,9 +39,9 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 		 * update(IEE) method called on this add-on does not know of the model data in the head section.
 		 * So we need to do our work in the postUpdate() method. */
 		@Override
-		public void postUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			super.postUpdate(session);
-			theMenuBar = ExElement.useOrReplace(QuickMenuBar.Def.class, theMenuBar, session, "menu-bar");
+		public void postUpdate(ExpressoQIS session, ExElement.Def<?> addOnElement) throws QonfigInterpretationException {
+			super.postUpdate(session, addOnElement);
+			theMenuBar = addOnElement.syncChild(QuickMenuBar.Def.class, theMenuBar, session, "menu-bar");
 		}
 
 		@Override
@@ -67,18 +67,11 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void postUpdate() throws ExpressoInterpretationException {
-			super.postUpdate();
+		public void postUpdate(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.postUpdate(element);
 
-			if (theMenuBar != null
-				&& (getDefinition().getMenuBar() == null || theMenuBar.getIdentity() != getDefinition().getMenuBar().getIdentity())) {
-				theMenuBar.destroy();
-				theMenuBar = null;
-			}
-			if (theMenuBar == null && getDefinition().getMenuBar() != null)
-				theMenuBar = getDefinition().getMenuBar().interpret(getElement());
-			if (theMenuBar != null)
-				theMenuBar.updateMenuBar(getElement().getExpressoEnv());
+			theMenuBar = getElement().syncChild(getDefinition().getMenuBar(), theMenuBar, def -> def.interpret(getElement()),
+				(b, bEnv) -> b.updateMenuBar(bEnv));
 		}
 
 		@Override
@@ -108,8 +101,8 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
 

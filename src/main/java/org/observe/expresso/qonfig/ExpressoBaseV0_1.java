@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -9,6 +10,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.VariableType;
 import org.qommons.Version;
 import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -77,6 +79,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExAddOn.creator(ExtModelValueElement.Def.class, AttributeBackedModelValue.Def::new));
 		interpreter.createWith(ExpressoChildPlaceholder.CHILD_PLACEHOLDER, ExpressoChildPlaceholder.Def.class,
 			ExElement.creator(ExpressoChildPlaceholder.Def::new));
+		// We have to explicitly support any external reference types
+		QonfigElementDef extReference = interpreter.getToolkit()
+			.getElement(ExpressoExternalReference.QONFIG_REFERENCE_TK + ":" + ExpressoExternalReference.EXT_REFERENCE);
+
+		Set<QonfigToolkit> supported = new HashSet<>();
+		for (QonfigToolkit toolkit : interpreter.getKnownToolkits())
+			supportExternalReferences(toolkit, interpreter, extReference, supported);
 
 		interpreter.createWith("named", ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
 		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
@@ -91,6 +100,18 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("hook", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Hook::new));
 		ExpressoTransformations.configureTransformation(interpreter);
 		return interpreter;
+	}
+
+	private void supportExternalReferences(QonfigToolkit toolkit, QonfigInterpreterCore.Builder interpreter, QonfigElementDef extReference,
+		Set<QonfigToolkit> supported) {
+		if (!supported.add(toolkit))
+			return;
+		for (QonfigElementDef type : toolkit.getDeclaredElements().values()) {
+			if (extReference.isAssignableFrom(type))
+				interpreter.createWith(type, ExpressoExternalReference.Def.class, ExElement.creator(ExpressoExternalReference.Def::new));
+		}
+		for (QonfigToolkit dep : toolkit.getDependencies().values())
+			supportExternalReferences(dep, interpreter, extReference, supported);
 	}
 
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {

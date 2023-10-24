@@ -21,7 +21,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
 		}
 	}
@@ -111,7 +111,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 			}
 		}
@@ -153,8 +153,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-			super.update(interpreted);
+		public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+			super.update(interpreted, element);
 			Child.Interpreted myInterpreted = (Child.Interpreted) interpreted;
 			theRegion = myInterpreted.getDefinition().getRegion();
 		}

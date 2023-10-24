@@ -41,14 +41,14 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
-		public Interpreted<AO> interpret(ExElement.Interpreted<? extends ExtModelValueElement<?, ?>> element) {
+		public Interpreted<AO> interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
 
 	protected static class Interpreted<AO extends ExElementModelValue>
 	extends ExAddOn.Interpreted.Abstract<ExtModelValueElement<?, ?>, AO> {
-		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExtModelValueElement<?, ?>> element) {
+		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 

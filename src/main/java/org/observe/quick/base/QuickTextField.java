@@ -83,11 +83,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return (Def<? super F>) super.getDefinition();
 		}
 
-		@Override
-		public TypeToken<F> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickTextField.class).parameterized(getValueType());
-		}
-
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword() {
 			return isPassword;
 		}
@@ -99,9 +94,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			isPassword = getDefinition().isPassword().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
-			theEmptyText = getDefinition().getEmptyText() == null ? null
-				: getDefinition().getEmptyText().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+			isPassword = interpret(getDefinition().isPassword(), ModelTypes.Value.BOOLEAN);
+			theEmptyText = interpret(getDefinition().getEmptyText(), ModelTypes.Value.STRING);
 		}
 
 		@Override

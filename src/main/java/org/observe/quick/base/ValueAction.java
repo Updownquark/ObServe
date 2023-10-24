@@ -197,15 +197,12 @@ public interface ValueAction<T> extends ExElement {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theName = getDefinition().getName() == null ? null
-					: getDefinition().getName().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(),
-					getExpressoEnv(), getDefinition().getElement().getDocument().getLocation());
-				isEnabled = getDefinition().isEnabled() == null ? null
-					: getDefinition().isEnabled().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theTooltip = getDefinition().getTooltip() == null ? null
-					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
+				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
+				theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
+					getDefinition().getElement().getDocument().getLocation());
+				isEnabled = interpret(getDefinition().isEnabled(), ModelTypes.Value.STRING);
+				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
+				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 			}
 		}
 	}

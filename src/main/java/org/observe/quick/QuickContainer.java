@@ -69,7 +69,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
+				syncChildren(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}
 		}
 	}
@@ -119,14 +119,9 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
-					(widget, child) -> widget.getIdentity() == child.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(
-					child -> (QuickWidget.Interpreted<? extends C>) child.interpret(Interpreted.Abstract.this))//
-				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().updateElement(getExpressoEnv()))//
-				.onCommonX(element -> element.getLeftValue().updateElement(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getContents(), theContents,
+					def -> (QuickWidget.Interpreted<? extends C>) def.interpret(Interpreted.Abstract.this),
+					QuickWidget.Interpreted::updateElement);
 			}
 
 			@Override

@@ -147,11 +147,9 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			theDirectory = getDefinition().getDirectory() == null ? null
-				: getDefinition().getDirectory().interpret(ModelTypes.Value.forType(File.class), expressoEnv);
-			theOnSelect = getDefinition().getOnSelect().interpret(ModelTypes.Action.instance(), expressoEnv);
-			theOnCancel = getDefinition().getOnCancel() == null ? null
-				: getDefinition().getOnCancel().interpret(ModelTypes.Action.instance(), expressoEnv);
+			theDirectory = interpret(getDefinition().getDirectory(), ModelTypes.Value.forType(File.class));
+			theOnSelect = interpret(getDefinition().getOnSelect(), ModelTypes.Action.instance());
+			theOnCancel = interpret(getDefinition().getOnCancel(), ModelTypes.Action.instance());
 		}
 
 		@Override

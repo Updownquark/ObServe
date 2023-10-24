@@ -1,7 +1,6 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.VariableType;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -61,13 +60,13 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
 
 			if (getDefinition().getValueType() == null)
 				theValueType = null;
 			else
-				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(env);
+				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(getElement().getExpressoEnv());
 		}
 
 		@Override
@@ -97,8 +96,8 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theValueType = myInterpreted.getValueType();
 	}

@@ -285,7 +285,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			} else
 				theStyleSet = null;
 
-			ExElement.syncDefs(QuickStyleElement.Def.class, theChildren, session.forChildren("sub-style"));
+			syncChildren(QuickStyleElement.Def.class, theChildren, session.forChildren("sub-style"));
 		}
 
 		private QuickStyleAttributeDef getAttribute(QonfigValue attrName, MultiInheritanceSet<QonfigElementOrAddOn> types,
@@ -525,22 +525,12 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theDeclaredAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getDeclaredAttribute(), env);
 			theEffectiveAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getEffectiveAttribute(), env);
 
-			theCondition = getDefinition().getCondition() == null ? null
-				: getDefinition().getCondition().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
+			theCondition = interpret(getDefinition().getCondition(), ModelTypes.Value.BOOLEAN);
 			if (getDefinition().getValue() != null && getDefinition().getValue().getExpression() != ObservableExpression.EMPTY)
-				theValue = getDefinition().getValue().interpret(ModelTypes.Value.forType(getEffectiveAttribute().getType()),
-					getExpressoEnv());
+				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.forType(getEffectiveAttribute().getType()));
 			else
 				theValue = null;
-			CollectionUtils
-			.synchronize(theChildren, getDefinition().getChildren(), (interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-			.commonUses(true, false)//
-			.rightOrder()//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().update(getExpressoEnv()))//
-			.onCommonX(el -> el.getLeftValue().update(getExpressoEnv()))//
-			.adjust();
+			syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), (i, sEnv) -> i.updateStyle(sEnv));
 		}
 
 		public QuickStyleElement<T> create() {

@@ -170,7 +170,7 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theEditor = ExElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
+				theEditor = syncChild(QuickWidget.Def.class, theEditor, session, "editor");
 				String columnEditValueName = session.getAttributeText("column-edit-value-name");
 				isEditable = getAttributeExpression("editable-if", session);
 				isAcceptable = getAttributeExpression("accept", session);
@@ -247,7 +247,7 @@ public interface QuickTableColumn<R, C> {
 				theColumnType = columnType;
 
 				super.update(env);
-				isEditable = ExpressoTransformations.parseFilter(getDefinition().isEditable(), env, true);
+				isEditable = ExpressoTransformations.parseFilter(getDefinition().isEditable(), this, true);
 				return this;
 			}
 
@@ -255,13 +255,9 @@ public interface QuickTableColumn<R, C> {
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
 
-				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), expressoEnv, true);
-				if (getDefinition().getEditor() == null)
-					theEditor = null;
-				else if (theEditor == null || !theEditor.getDefinition().equals(getDefinition().getEditor()))
-					theEditor = getDefinition().getEditor().interpret(this);
-				if (theEditor != null)
-					theEditor.updateElement(expressoEnv);
+				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), this, true);
+				theEditor = syncChild(getDefinition().getEditor(), theEditor, def -> def.interpret(this),
+					(e, eEnv) -> e.updateElement(eEnv));
 			}
 
 			public ColumnEditing<R, C> create() {
@@ -476,23 +472,18 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public abstract Interpreted<?, ?, ? extends CET> interpret(ExElement.Interpreted<? extends ColumnEditing<?, ?>> element);
+			public abstract Interpreted<?, ?, ? extends CET> interpret(ExElement.Interpreted<?> element);
 		}
 
 		public static abstract class Interpreted<R, C, CET extends ColumnEditType<R, C>>
 		extends ExAddOn.Interpreted.Abstract<ColumnEditing<R, C>, CET> {
-			protected Interpreted(Def<? super CET> definition, ColumnEditing.Interpreted<R, C> element) {
+			protected Interpreted(Def<? super CET> definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
 			@Override
 			public Def<? super CET> getDefinition() {
 				return (Def<? super CET>) super.getDefinition();
-			}
-
-			@Override
-			public ColumnEditing.Interpreted<R, C> getElement() {
-				return (ColumnEditing.Interpreted<R, C>) super.getElement();
 			}
 		}
 
@@ -541,15 +532,15 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<?, ?> interpret(ExElement.Interpreted<? extends ColumnEditing<?, ?>> element) {
-					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
+				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
+					return new Interpreted<>(this, element);
 				}
 			}
 
 			public static class Interpreted<R, C> extends ColumnEditType.Interpreted<R, C, RowModifyEditType<R, C>> {
 				private InterpretedValueSynth<ObservableAction, ObservableAction> theCommit;
 
-				public Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
+				public Interpreted(Def definition, ExElement.Interpreted<?> element) {
 					super(definition, element);
 				}
 
@@ -563,10 +554,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-					super.update(env);
-					theCommit = getDefinition().getCommit() == null ? null
-						: getDefinition().getCommit().interpret(ModelTypes.Action.instance(), env);
+				public void update(ExElement.Interpreted<? extends ColumnEditing<R, C>> element) throws ExpressoInterpretationException {
+					super.update(element);
+					theCommit = getElement().interpret(getDefinition().getCommit(), ModelTypes.Action.instance());
 				}
 
 				@Override
@@ -603,8 +593,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-				super.update(interpreted);
+			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element) {
+				super.update(interpreted, element);
 				RowModifyEditType.Interpreted<R, C> myInterpreted = (RowModifyEditType.Interpreted<R, C>) interpreted;
 				isRowUpdate = myInterpreted.getDefinition().isRowUpdate();
 				theCommitInstantiator = myInterpreted.getCommit() == null ? null : myInterpreted.getCommit().instantiate();
@@ -653,15 +643,15 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<?, ?> interpret(ExElement.Interpreted<? extends ColumnEditing<?, ?>> element) {
-					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
+				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
+					return new Interpreted<>(this, element);
 				}
 			}
 
 			public static class Interpreted<R, C> extends ColumnEditType.Interpreted<R, C, RowReplaceEditType<R, C>> {
 				private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theReplacement;
 
-				public Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
+				public Interpreted(Def definition, ExElement.Interpreted<?> element) {
 					super(definition, element);
 				}
 
@@ -675,10 +665,10 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-					super.update(env);
-					theReplacement = getDefinition().getReplacement() == null ? null : getDefinition().getReplacement()
-						.interpret(ModelTypes.Value.forType(getElement().getParentElement().getValueType()), env);
+				public void update(ExElement.Interpreted<? extends ColumnEditing<R, C>> element) throws ExpressoInterpretationException {
+					super.update(element);
+					theReplacement = getElement().interpret(getDefinition().getReplacement(),
+						ModelTypes.Value.forType(((ColumnEditing.Interpreted<R, C>) element).getParentElement().getValueType()));
 				}
 
 				@Override
@@ -712,8 +702,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-				super.update(interpreted);
+			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element) {
+				super.update(interpreted, element);
 				RowReplaceEditType.Interpreted<R, C> myInterpreted = (RowReplaceEditType.Interpreted<R, C>) interpreted;
 				theReplacementInstantiator = myInterpreted.getReplacement() == null ? null : myInterpreted.getReplacement().instantiate();
 			}
@@ -842,8 +832,8 @@ public interface QuickTableColumn<R, C> {
 				ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 				if (renderer == null)
 					renderer = session.metadata().get("default-renderer").get().peekFirst();
-				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
-				theEditing = ExElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
+				theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
+				theEditing = syncChild(ColumnEditing.Def.class, theEditing, session, "edit");
 				elModels.satisfyElementValueType(theColumnValueVariable, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getType()));
 			}
@@ -921,35 +911,15 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theValue = getDefinition().getValue().interpret(ModelTypes.Value.<C> anyAsV(), env);
+				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.<C> anyAsV());
 				super.doUpdate(env);
-				theName = getDefinition().getName().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theHeaderTooltip = getDefinition().getHeaderTooltip() == null ? null
-					: getDefinition().getHeaderTooltip().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
+				theHeaderTooltip = interpret(getDefinition().getHeaderTooltip(), ModelTypes.Value.STRING);
 
-				if (getDefinition().getRenderer() == null) {
-					if (theRenderer != null)
-						theRenderer.destroy();
-					theRenderer = null;
-				} else if (theRenderer == null || theRenderer.getIdentity() != getDefinition().getRenderer().getIdentity()) {
-					if (theRenderer != null)
-						theRenderer.destroy();
-					theRenderer = getDefinition().getRenderer().interpret(this);
-				}
-				if (theRenderer != null)
-					theRenderer.updateElement(env);
-
-				if (getDefinition().getEditing() == null) {
-					if (theEditing != null)
-						theEditing.destroy();
-					theEditing = null;
-				} else if (theEditing == null || theEditing.getIdentity() != getDefinition().getEditing().getIdentity()) {
-					if (theEditing != null)
-						theEditing.destroy();
-					theEditing = (ColumnEditing.Interpreted<R, C>) getDefinition().getEditing().interpret(this);
-				}
-				if (theEditing != null)
-					theEditing.update(getType(), getExpressoEnv());
+				theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+					(r, rEnv) -> r.updateElement(rEnv));
+				theEditing = syncChild(getDefinition().getEditing(), theEditing,
+					def -> (ColumnEditing.Interpreted<R, C>) def.interpret(this), (e, eEnv) -> e.update(getType(), eEnv));
 			}
 
 			@Override
@@ -1191,8 +1161,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update() {
-			}
+			public void update() {}
 
 			@Override
 			public String toString() {

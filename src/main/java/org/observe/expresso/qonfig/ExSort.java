@@ -25,7 +25,6 @@ import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -96,7 +95,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		LocatedPositionedContent sortCompareValueNamePosition = session.attributes().get("sort-compare-value-as").getLocatedContent();
 		theSortWith = getAttributeExpression("sort-with", session);
 		isAscending = session.getAttribute("ascending", boolean.class);
-		ExElement.syncDefs(ExSortBy.class, theSortBy, session.forChildren("sort-by"));
+		syncChildren(ExSortBy.class, theSortBy, session.forChildren("sort-by"));
 
 		if (theSortWith != null) {
 			if (!theSortBy.isEmpty())
@@ -171,14 +170,9 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		protected void updateInternal(TypeToken<IT> internalType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			theSortType = internalType;
 			super.update(env);
-			theSortWith = getDefinition().getSortWith() == null ? null
-				: getDefinition().getSortWith().interpret(ModelTypes.Value.INT, getExpressoEnv());
-			CollectionUtils.synchronize(theSortBy, getDefinition().getSortBy(), (i, d) -> i.getDefinition() == d)//
-			.<ExpressoInterpretationException> simpleE(d -> (ExSortBy.Interpreted<IT, ?>) d.interpret(this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().update(internalType, getExpressoEnv()))//
-			.onCommonX(el -> el.getLeftValue().update(internalType, getExpressoEnv()))//
-			.adjust();
+			theSortWith = interpret(getDefinition().getSortWith(), ModelTypes.Value.INT);
+			syncChildren(getDefinition().getSortBy(), theSortBy, def -> (ExSortBy.Interpreted<IT, ?>) def.interpret(this),
+				(i, sEnv) -> i.update(internalType, sEnv));
 			if (theSortWith == null && theSortBy.isEmpty()) {
 				Class<IT> raw = TypeTokens.getRawType(internalType);
 				theDefaultSorting = ExSort.getDefaultSorting(raw);
@@ -506,7 +500,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			public void update(TypeToken<OT> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				env = env.with(getParentElement().getModels());
-				theAttribute = getDefinition().getAttribute().interpret(ModelTypes.Value.<SettableValue<IT>> anyAs(), env);
+				theAttribute = interpret(getDefinition().getAttribute(), ModelTypes.Value.<SettableValue<IT>> anyAs());
 				updateInternal((TypeToken<IT>) theAttribute.getType().getType(0), env);
 			}
 

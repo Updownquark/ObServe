@@ -15,11 +15,8 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
@@ -74,11 +71,6 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 			return (Def<? super W>) super.getDefinition();
 		}
 
-		@Override
-		public TypeToken<W> getWidgetType() {
-			return (TypeToken<W>) TypeTokens.get().of(QuickBox.class);
-		}
-
 		public QuickLayout.Interpreted<?> getLayout() {
 			return getAddOn(QuickLayout.Interpreted.class);
 		}
@@ -90,7 +82,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theOpacity = getDefinition().getOpacity() == null ? null : getDefinition().getOpacity().interpret(ModelTypes.Value.DOUBLE, env);
+			theOpacity = interpret(getDefinition().getOpacity(), ModelTypes.Value.DOUBLE);
 		}
 
 		@Override

@@ -17,7 +17,7 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 		}
 	}

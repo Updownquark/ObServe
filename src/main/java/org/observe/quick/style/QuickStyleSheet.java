@@ -113,8 +113,8 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				session.putGlobal(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			}
 			importSession.as(ExpressoQIS.class)//
-				.setExpressoEnv(importSession.getExpressoEnv()
-					.with(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build()))//
+			.setExpressoEnv(importSession.getExpressoEnv()
+				.with(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build()))//
 			.put(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			if (theTarget == null)
 				theTarget = importSession.interpret(QuickStyleSheet.class);
@@ -205,7 +205,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 		session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, this);
 
-		ExElement.syncDefs(StyleSheetRef.class, theStyleSheetRefs, session.forChildren("style-sheet-ref"));
+		syncChildren(StyleSheetRef.class, theStyleSheetRefs, session.forChildren("style-sheet-ref"));
 		theImportedStyleSheets.clear();
 		for (StyleSheetRef ref : theStyleSheetRefs) {
 			if (theImportedStyleSheets.put(ref.getName(), ref.getTarget()) != null)
@@ -214,7 +214,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 
 		// Parse style-sheets and style-sets first so they can be referred to
-		ExElement.syncDefs(QuickStyleSet.class, theStyleSetList, session.forChildren("style-set"));
+		syncChildren(QuickStyleSet.class, theStyleSetList, session.forChildren("style-set"));
 		theStyleSets.clear();
 		for (QuickStyleSet styleSet : theStyleSetList) {
 			if (theStyleSets.put(styleSet.getName(), styleSet) != null)
@@ -222,7 +222,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 					styleSet.reporting().getPosition(), 0);
 		}
 
-		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
+		syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 	}
 
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -302,15 +302,8 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			CollectionUtils
-			.synchronize(theStyleElements, getDefinition().getStyleElements(),
-				(interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateStyle(expressoEnv))//
-			.onCommonX(el -> el.getLeftValue().updateStyle(expressoEnv))//
-			.rightOrder()//
-			.adjust();
+			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
+				(i, sEnv) -> i.updateStyle(sEnv));
 
 			List<QuickStyleSheet.Interpreted> importedStyleSheets = new ArrayList<>(theImportedStyleSheets.values());
 			theImportedStyleSheets.clear();

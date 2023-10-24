@@ -75,7 +75,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			theRows = getAttributeExpression("rows", session);
 			theSelection = getAttributeExpression("selection", session);
 			theMultiSelection = getAttributeExpression("multi-selection", session);
-			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
+			syncChildren(ValueAction.Def.class, theActions, session.forChildren("action"));
 		}
 
 		@Override
@@ -107,7 +107,9 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public TypeToken<R> getValueType() {
+		public TypeToken<R> getValueType() throws ExpressoInterpretationException {
+			if (theRows == null)
+				theRows = interpret(getDefinition().getRows(), ModelTypes.Collection.<R> anyAsV());
 			return (TypeToken<R>) theRows.getType().getType(0);
 		}
 
@@ -130,28 +132,13 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public TypeToken<QuickTable<R>> getWidgetType() {
-			return TypeTokens.get().keyFor(QuickTable.class).parameterized(getValueType());
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			// Do this first so we have the row type
-			theRows = getDefinition().getRows().interpret(ModelTypes.Collection.<R> anyAsV(), env);
 			super.doUpdate(env);
-			theSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(getValueType()), env);
-			theMultiSelection = getDefinition().getMultiSelection() == null ? null
-				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(getValueType()), env);
-			CollectionUtils.synchronize(theActions, getDefinition().getActions(), //
-				(a, d) -> a.getIdentity() == d.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(
-				child -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) child).interpret(this, getValueType()))//
-			.rightOrder()//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
-			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
-			.adjust();
+			theSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(getValueType()));
+			theMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(getValueType()));
+			syncChildren(getDefinition().getActions(), theActions,
+				def -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) def).interpret(this, getValueType()),
+				ValueAction.Interpreted::updateAction);
 		}
 
 		@Override

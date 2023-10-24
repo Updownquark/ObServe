@@ -56,10 +56,10 @@ public class QuickInterpretedStyleCache {
 	}
 
 	public static QuickInterpretedStyleCache get(InterpretedExpressoEnv env) {
-		QuickInterpretedStyleCache cache = env.getProperty(ENV_KEY, QuickInterpretedStyleCache.class);
+		QuickInterpretedStyleCache cache = env.get(ENV_KEY, QuickInterpretedStyleCache.class);
 		if (cache == null) {
 			cache = new QuickInterpretedStyleCache();
-			env.setProperty(ENV_KEY, cache);
+			env.put(ENV_KEY, cache);
 		}
 		return cache;
 	}

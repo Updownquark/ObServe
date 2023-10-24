@@ -69,7 +69,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			isSelected = getDefinition().isSelected().interpret(ModelTypes.Value.BOOLEAN, env);
+			isSelected = interpret(getDefinition().isSelected(), ModelTypes.Value.BOOLEAN);
 		}
 
 		@Override

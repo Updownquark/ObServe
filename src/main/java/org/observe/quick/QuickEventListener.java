@@ -94,7 +94,7 @@ public interface QuickEventListener extends ExElement {
 				theAltPressedValue = elModels.getElementValueModelId("altPressed");
 				theCtrlPressedValue = elModels.getElementValueModelId("ctrlPressed");
 				theShiftPressedValue = elModels.getElementValueModelId("shiftPressed");
-				ExElement.syncDefs(EventFilter.Def.class, theFilters, session.forChildren("filter"));
+				syncChildren(EventFilter.Def.class, theFilters, session.forChildren("filter"));
 				theAction = getValueExpression(session);
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("No action for event listener", session.getElement().getPositionInFile(), 0);
@@ -146,13 +146,8 @@ public interface QuickEventListener extends ExElement {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theFilters, getDefinition().getFilters(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(f -> f.interpret(this))//
-				.onLeft(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
-				.onCommonX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
-				.addLast();
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
+				syncChildren(getDefinition().getFilters(), theFilters, def -> def.interpret(this), EventFilter.Interpreted::updateFilter);
+				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 			}
 		}
 	}
@@ -372,7 +367,7 @@ public interface QuickEventListener extends ExElement {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theCondition = getDefinition().getCondition().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
+				theCondition = interpret(getDefinition().getCondition(), ModelTypes.Value.BOOLEAN);
 			}
 
 			public EventFilter create(ExElement parent) {

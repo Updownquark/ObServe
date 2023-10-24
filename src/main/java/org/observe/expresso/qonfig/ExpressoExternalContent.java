@@ -4,18 +4,31 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Predicate;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
+import org.observe.expresso.ClassView;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
+import org.qommons.Transaction;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -30,6 +43,7 @@ import com.google.common.reflect.TypeToken;
 
 public class ExpressoExternalContent extends QonfigExternalContent {
 	public static final String EXPRESSO_EXTERNAL_CONTENT = "expresso-external-content";
+	private static final String CONTENT_ENV_PROPERTY = "Expresso$Content";
 
 	public interface AttributeValueSatisfier {
 		<M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
@@ -66,6 +80,8 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 		instance = ExpressoExternalContent.class)
 	public static class Def<C extends ExpressoExternalContent> extends QonfigExternalContent.Def<C> {
 		private Expresso.Def theHead;
+		private ObservableModelSet.Built theContentModelModel;
+		private ModelComponentId theContentModelVariable;
 
 		private final Map<QonfigAttributeDef.Declared, AttributeValueSatisfier> theAttributeValues;
 
@@ -79,9 +95,24 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return theHead;
 		}
 
+		public ObservableModelSet.Built getContentModelModel() {
+			return theContentModelModel;
+		}
+
+		public ModelComponentId getContentModelVariable() {
+			return theContentModelVariable;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
+
+			theContentModelModel = ObservableModelSet.build(CONTENT_ENV_PROPERTY, ObservableModelSet.JAVA_NAME_CHECKER)//
+				.with(CONTENT_ENV_PROPERTY, ModelTypes.Value.forType(ModelSetInstance.class),
+					ModelValueInstantiator.of(msi -> new ContentModelHolder()), null)//
+				.withAll(CompiledExpressoEnv.STANDARD_JAVA.getModels())//
+				.build();
+			theContentModelVariable = theContentModelModel.getLocalComponent(CONTENT_ENV_PROPERTY).getIdentity();
 
 			theAttributeValues.clear();
 			for (QonfigAttributeDef attr : getFulfills().getAllAttributes().values()) {
@@ -114,7 +145,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 							@Override
 							public <M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 								throws QonfigInterpretationException {
-								return new PlaceholderExtValue<>(extValue, expression);
+								return new PlaceholderExtValue<>(extValue, expression, theContentModelVariable);
 							}
 						});
 					} else if (value != null) {
@@ -130,21 +161,25 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 							getContent().getElement().getPromise().getAttributes().get(attr.getDeclared()), session));
 			}
 
+			session.setExpressoEnv(session.getExpressoEnv().with(theContentModelModel));
 			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING,
 				(Predicate<ObservableModelElement.Def<?, ?>>) model -> model instanceof ObservableModelElement.ExtModelElement.Def);
-			theHead = ExElement.useOrReplace(Expresso.Def.class, theHead, session, "head");
+			theHead = syncChild(Expresso.Def.class, theHead, session, "head");
+
 			ObservableModelSet.Builder builder;
 			if (theHead.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
 				builder = (ObservableModelSet.Builder) theHead.getExpressoEnv().getModels();
 			else
 				builder = theHead.getExpressoEnv().getModels().wrap(getElement().getType().getName() + ".local");
+			builder.withAll(theContentModelModel);
 			for (ObservableModelElement.Def<?, ?> model : theHead.getModelElement().getSubModels()) {
 				if (model instanceof ObservableModelElement.ExtModelElement.Def)
 					populateExtModelValues((ObservableModelElement.ExtModelElement.Def<?>) model, builder, session);
 			}
-			theHead.getModelElement().setExpressoEnv(theHead.getModelElement().getExpressoEnv().with(builder.build()));
-			theHead.setExpressoEnv(theHead.getModelElement().getExpressoEnv());
-			setExpressoEnv(theHead.getExpressoEnv());
+			CompiledExpressoEnv env = theHead.getModelElement().getExpressoEnv().with(builder.build());
+			theHead.getModelElement().setExpressoEnv(env);
+			theHead.setExpressoEnv(env);
+			setExpressoEnv(env);
 		}
 
 		protected AttributeValueSatisfier populateAttributeValue(QonfigAttributeDef attr, QonfigElement element, QonfigValue value,
@@ -171,7 +206,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 							@Override
 							public <M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 								throws QonfigInterpretationException {
-								return new PlaceholderExtValue<>(extValue, expression);
+								return new PlaceholderExtValue<>(extValue, expression, theContentModelVariable);
 							}
 						};
 					} else {
@@ -221,6 +256,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 
 	public static class Interpreted<C extends ExpressoExternalContent> extends QonfigExternalContent.Interpreted<C> {
 		private Expresso theHead;
+		private InterpretedModelSet theContentModelModel;
 
 		Interpreted(Def<? super C> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -235,6 +271,10 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return theHead;
 		}
 
+		public InterpretedModelSet getContentModelModel() {
+			return theContentModelModel;
+		}
+
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theHead != null && getDefinition().getHead().getIdentity() != theHead.getIdentity()) {
@@ -244,12 +284,24 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			if (theHead == null)
 				theHead = getDefinition().getHead().interpret(this);
 
+			theContentModelModel = getDefinition().getContentModelModel().createInterpreted(env);
+			theContentModelModel.interpret(env);
+
+			env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(ClassView.build()).build());
+			env.put(CONTENT_ENV_PROPERTY, getContent().getExpressoEnv());
 			theHead.updateExpresso(env);
-			setExpressoEnv(theHead.getExpressoEnv());
+		}
+
+		public ExpressoExternalContent create(ExElement content) {
+			return new ExpressoExternalContent(getIdentity(), content);
 		}
 	}
 
-	private final ExElement theContent;
+	private ExElement theContent;
+	private ModelInstantiator theContentModelModel;
+	private ModelComponentId theContentModelVariable;
+	private ModelInstantiator theExtModels;
+	private ModelInstantiator theHeadModels;
 
 	ExpressoExternalContent(Object id, ExElement content) {
 		super(id);
@@ -262,17 +314,57 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	}
 
 	@Override
-	public ExpressoExternalContent copy(ExElement parent) {
-		return (ExpressoExternalContent) super.copy(parent);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
+
+		ExpressoExternalContent.Interpreted<?> myInterpreted = (ExpressoExternalContent.Interpreted<?>) interpreted;
+		theContentModelModel = myInterpreted.getContentModelModel().instantiate();
+		theContentModelVariable = myInterpreted.getDefinition().getContentModelVariable();
+		theExtModels = myInterpreted.getExpressoEnv().getModels().instantiate();
+		if (myInterpreted.getExpressoEnv().getModels() != myInterpreted.getHead().getExpressoEnv().getModels())
+			theHeadModels = myInterpreted.getHead().getExpressoEnv().getModels().instantiate();
+		else
+			theHeadModels = null;
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theExtModels.instantiate();
+	}
+
+	public ModelSetInstance getExternalModels(ModelSetInstance contentModels, Observable<?> until) throws ModelInstantiationException {
+		ModelSetInstance standardJava = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getModels().createInstance(until).build();
+		ModelSetInstance contentModelModel = theContentModelModel.createInstance(until)//
+			.withAll(standardJava)//
+			.build();
+		((ContentModelHolder) contentModelModel.get(theContentModelVariable)).setContentModels(contentModels);
+
+		ObservableModelSet.ModelSetInstanceBuilder builder = theExtModels.createInstance(until);
+		builder.withAll(contentModelModel);
+		if (theHeadModels != null)
+			builder.withAll(theHeadModels.createInstance(until)//
+				.withAll(contentModelModel)//
+				.build());
+		return builder.build();
+	}
+
+	@Override
+	public ExpressoExternalContent copy(ExElement content) {
+		ExpressoExternalContent copy = (ExpressoExternalContent) super.copy(null);
+		copy.theContent = content;
+		return copy;
 	}
 
 	static class PlaceholderExtValue<M> implements CompiledModelValue<M> {
 		private final ExtModelValueElement.Def<M> theSpec;
 		private final CompiledExpression theExpression;
+		private final ModelComponentId theContentModelVariable;
 
-		PlaceholderExtValue(ExtModelValueElement.Def<M> spec, CompiledExpression expression) {
+		PlaceholderExtValue(ExtModelValueElement.Def<M> spec, CompiledExpression expression, ModelComponentId contentModelVariable) {
 			theSpec = spec;
 			theExpression = expression;
+			theContentModelVariable = contentModelVariable;
 		}
 
 		@Override
@@ -282,12 +374,111 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 
 		@Override
 		public InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			return theExpression.interpret(theSpec.getType(env), env);
+			InterpretedExpressoEnv contentEnv = env.get(CONTENT_ENV_PROPERTY, InterpretedExpressoEnv.class);
+			if (contentEnv == null)
+				throw new IllegalStateException("No " + CONTENT_ENV_PROPERTY + " found");
+			InterpretedValueSynth<M, ?> attrValueSynth = theExpression.interpret(theSpec.getType(env), contentEnv);
+			InterpretedValueSynth<?, ContentModelHolder> contentModel = (InterpretedValueSynth<?, ContentModelHolder>) env.getModels()
+				.getComponent(theContentModelVariable);
+			return of(attrValueSynth, contentModel);
+		}
+
+		private <M, MV extends M> InterpretedValueSynth<M, MV> of(InterpretedValueSynth<M, MV> attrValueSynth,
+			InterpretedValueSynth<?, ContentModelHolder> contentModel) {
+			return InterpretedValueSynth.of(attrValueSynth.getType(),
+				() -> instantiate(attrValueSynth.instantiate(), contentModel.instantiate()), attrValueSynth, contentModel);
+		}
+
+		private <MV> ModelValueInstantiator<MV> instantiate(ModelValueInstantiator<MV> attrValue,
+			ModelValueInstantiator<ContentModelHolder> contentModel) {
+			return new ModelValueInstantiator<MV>() {
+				@Override
+				public void instantiate() {
+					attrValue.instantiate();
+					contentModel.instantiate();
+				}
+
+				@Override
+				public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					ModelSetInstance contentModelInstance = contentModel.get(models).get();
+					return attrValue.get(contentModelInstance);
+				}
+
+				@Override
+				public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+					throws ModelInstantiationException {
+					return get(newModels);
+				}
+			};
 		}
 
 		@Override
 		public String toString() {
 			return theExpression.toString();
+		}
+	}
+
+	static class ContentModelHolder implements SettableValue<ModelSetInstance> {
+		private ModelSetInstance theContentModels;
+
+		void setContentModels(ModelSetInstance contentModels) {
+			theContentModels = contentModels;
+		}
+
+		@Override
+		public ModelSetInstance get() {
+			return theContentModels;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<ModelSetInstance>> noInitChanges() {
+			return Observable.empty();
+		}
+
+		@Override
+		public long getStamp() {
+			return 0;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.baseId(CONTENT_ENV_PROPERTY, this);
+		}
+
+		@Override
+		public TypeToken<ModelSetInstance> getType() {
+			return TypeTokens.get().of(ModelSetInstance.class);
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public <V extends ModelSetInstance> ModelSetInstance set(V value, Object cause)
+			throws IllegalArgumentException, UnsupportedOperationException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public <V extends ModelSetInstance> String isAcceptable(V value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return SettableValue.ALWAYS_DISABLED;
 		}
 	}
 }

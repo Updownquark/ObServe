@@ -54,11 +54,6 @@ public class QuickSpacer extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public TypeToken<? extends QuickSpacer> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().of(QuickSpacer.class);
-		}
-
-		@Override
 		public QuickSpacer create() {
 			return new QuickSpacer(getIdentity());
 		}

@@ -30,7 +30,7 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		super.doUpdate(session);
-		ExElement.syncDefs(ImportElement.class, theImports, session.forChildren("import"));
+		syncChildren(ImportElement.class, theImports, session.forChildren("import"));
 	}
 
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "import")

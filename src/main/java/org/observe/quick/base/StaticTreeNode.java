@@ -66,7 +66,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theValue = getAttributeExpression("value", session);
-			ExElement.syncDefs(TreeModel.Def.class, theChildren, session.forChildren("child"));
+			syncChildren(TreeModel.Def.class, theChildren, session.forChildren("child"));
 		}
 
 		@Override
@@ -103,13 +103,9 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
-				CollectionUtils.synchronize(theChildren, getDefinition().getChildren(), (i, d) -> i.getIdentity() == d.getIdentity())
-				.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.rightOrder()//
-				.adjust();
+				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), (i, nEnv) -> i.updateModel(nEnv));
 				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
-				theValue = getDefinition().getValue().interpret(ModelTypes.Value.anyAs(), env);
+				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
 				types.add((TypeToken<? extends N>) theValue.getType().getType(0));
 				for (TreeModel.Interpreted<? extends N, ?> child : theChildren)
 					types.add(child.getNodeType(env));
@@ -127,8 +123,8 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 			getNodeType(expressoEnv); // Init value
-			for (int c = 0; c < theChildren.size(); c++)
-				theChildren.get(c).updateModel(expressoEnv);
+			// for (int c = 0; c < theChildren.size(); c++)
+			// theChildren.get(c).updateModel(expressoEnv);
 		}
 
 		@Override

@@ -158,7 +158,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.INT, getExpressoEnv());
+				theDerivedState = interpret(getDefinition().getDerivedState(), ModelTypes.Value.INT);
 			}
 
 			@Override
@@ -307,8 +307,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			protected InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInternalState() throws ExpressoInterpretationException {
 				if (theInternalState == null)
-					theInternalState = getDefinition().getInternalState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(),
-						getExpressoEnv());
+					theInternalState = interpret(getDefinition().getInternalState(), ModelTypes.Value.<SettableValue<T>> anyAs());
 				return theInternalState;
 			}
 
@@ -324,8 +323,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				System.out.println("Interpret " + getDefinition().getModelPath());
 				// Satisfy the internalState value with the internalState container
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", getInternalState());
-				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(),
-					getExpressoEnv());
+				theDerivedState = interpret(getDefinition().getDerivedState(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
 			@Override
@@ -482,8 +480,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				} catch (ModelException | TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation().getPosition(0), 0, e);
 				}
-				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(),
-					getExpressoEnv());
+				theDerivedState = interpret(getDefinition().getDerivedState(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
 			@Override

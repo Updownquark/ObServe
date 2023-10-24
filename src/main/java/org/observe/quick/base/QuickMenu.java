@@ -42,7 +42,7 @@ public class QuickMenu<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			ExElement.syncDefs(QuickAbstractMenuItem.Def.class, theMenuItems, session.forChildren("menu-item"));
+			syncChildren(QuickAbstractMenuItem.Def.class, theMenuItems, session.forChildren("menu-item"));
 		}
 
 		@Override
@@ -72,14 +72,8 @@ public class QuickMenu<T> extends QuickAbstractMenuItem<T> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			CollectionUtils
-			.synchronize(theMenuItems, getDefinition().getMenuItems(), (interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(Interpreted.this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateElement(env))//
-			.onCommonX(el -> el.getLeftValue().updateElement(env))//
-			.rightOrder()//
-			.adjust();
+			syncChildren(getDefinition().getMenuItems(), theMenuItems, def -> def.interpret(this),
+				QuickAbstractMenuItem.Interpreted::updateElement);
 		}
 
 		@Override

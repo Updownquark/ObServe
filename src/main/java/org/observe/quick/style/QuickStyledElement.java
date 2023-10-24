@@ -109,7 +109,7 @@ public interface QuickStyledElement extends ExElement {
 					session.setExpressoEnv(getExpressoEnv());
 				}
 
-				ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
+				syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 				List<QuickStyleValue> declaredValues;
 				List<QuickStyleValue> styleSheetValues;
 				if (theStyleElements.isEmpty())
@@ -242,13 +242,8 @@ public interface QuickStyledElement extends ExElement {
 				}
 				theStyle.update(getExpressoEnv(), styleSheet, new QuickInterpretedStyleCache.Applications());
 
-				CollectionUtils
-				.synchronize(theStyleElements, getDefinition().getStyleElements(), (i, d) -> i.getIdentity() == d.getIdentity())
-				.<ExpressoInterpretationException> simpleE(d -> d.interpret(this))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().updateStyle(getExpressoEnv()))//
-				.onCommonX(el -> el.getLeftValue().updateStyle(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
+					QuickStyleElement.Interpreted::updateStyle);
 			}
 		}
 	}

@@ -85,7 +85,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 				super.update(session, element);
 				theTabName = element.getAttributeExpression("tab-name", session);
 				theTabIcon = element.getAttributeExpression("tab-icon", session);
@@ -93,8 +93,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public void postUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				super.postUpdate(session);
+			public void postUpdate(ExpressoQIS session, ExElement.Def<?> addOnElement) throws QonfigInterpretationException {
+				super.postUpdate(session, addOnElement);
 				isTabSelectedVariable = getElement().getAddOn(ExWithElementModel.Def.class).getElementValueModelId("tabSelected");
 			}
 
@@ -136,15 +136,13 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(env);
+			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+				super.update(element);
 
-				theTabName = getDefinition().getTabName() == null ? null
-					: getDefinition().getTabName().interpret(ModelTypes.Value.STRING, env);
-				theTabIcon = getDefinition().getTabIcon() == null ? null : QuickCoreInterpretation
-					.evaluateIcon(getDefinition().getTabIcon(), env, getDefinition().getElement().getElement().getDocument().getLocation());
-				theOnSelect = getDefinition().getOnSelect() == null ? null
-					: getDefinition().getOnSelect().interpret(ModelTypes.Action.instance(), env);
+				theTabName = getElement().interpret(getDefinition().getTabName(), ModelTypes.Value.STRING);
+				theTabIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getTabIcon(), getElement(),
+					getDefinition().getElement().getElement().getDocument().getLocation());
+				theOnSelect = getElement().interpret(getDefinition().getOnSelect(), ModelTypes.Action.instance());
 			}
 
 			@Override
@@ -205,8 +203,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-			super.update(interpreted);
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+			super.update(interpreted, element);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theTabNameInstantiator = myInterpreted.getTabName() == null ? null : myInterpreted.getTabName().instantiate();
 			theTabIconInstantiator = myInterpreted.getTabIcon() == null ? null : myInterpreted.getTabIcon().instantiate();
@@ -274,7 +272,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public Interpreted<?> interpret(ExElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted<?> interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted<>(this, element);
 			}
 		}
@@ -282,7 +280,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<QuickWidget, Tab<T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theTabId;
 
-			public Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted(Def definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -296,9 +294,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(env);
-				theTabId = getDefinition().getTabId().interpret(ModelTypes.Value.anyAs(), env);
+			public void update(ExElement.Interpreted<? extends QuickWidget> element) throws ExpressoInterpretationException {
+				super.update(element);
+				theTabId = getElement().interpret(getDefinition().getTabId(), ModelTypes.Value.anyAs());
 			}
 
 			@Override
@@ -329,8 +327,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-			super.update(interpreted);
+		public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+			super.update(interpreted, element);
 			Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 			theTabIdInstantiator = myInterpreted.getTabId().instantiate();
 		}
@@ -393,7 +391,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				elModels.satisfyElementValueType(theTabIdVariable, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getTabIdType()));
 
-				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, session, "renderer");
+				theRenderer = syncChild(QuickWidget.Def.class, theRenderer, session, "renderer");
 			}
 
 			public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
@@ -429,13 +427,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
-				theValues = getDefinition().getValues().interpret(ModelTypes.Collection.<T> anyAsV(), getExpressoEnv());
-				if (theRenderer == null || theRenderer.getIdentity() != getDefinition().getRenderer().getIdentity()) {
-					if (theRenderer != null)
-						theRenderer.destroy();
-					theRenderer = getDefinition().getRenderer().interpret(this);
-				}
-				theRenderer.updateElement(getExpressoEnv());
+				theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.<T> anyAsV());
+				theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+					(r, rEnv) -> r.updateElement(rEnv));
 			}
 
 			public TypeToken<T> getTabIdType() {
@@ -687,7 +681,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			elModels.satisfyElementValueType(theSelectedTabVariable, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getTabIdType()));
 
-			ExElement.syncDefs(TabSet.Def.class, theTabSets, session.forChildren("tab-set"));
+			syncChildren(TabSet.Def.class, theTabSets, session.forChildren("tab-set"));
 		}
 
 		@Override
@@ -727,12 +721,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			CollectionUtils.synchronize(theTabSets, getDefinition().getTabSets(), (i, d) -> i.getIdentity() == d.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(d -> (TabSet.Interpreted<? extends T>) d.interpret(this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateTabSet(getExpressoEnv()))//
-			.onCommonX(el -> el.getLeftValue().updateTabSet(getExpressoEnv()))//
-			.adjust();
+			syncChildren(getDefinition().getTabSets(), theTabSets, def -> (TabSet.Interpreted<? extends T>) def.interpret(this),
+				TabSet.Interpreted::updateTabSet);
 
 			List<TypeToken<? extends T>> types = new ArrayList<>();
 			theTabSets.stream().map(ts -> ts.getTabIdType()).forEach(types::add);
@@ -741,13 +731,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 			theTabIdType = TypeTokens.get().getCommonType(types);
 
-			theSelectedTab = getDefinition().getSelectedTab() == null ? null
-				: getDefinition().getSelectedTab().interpret(ModelTypes.Value.forType(theTabIdType), env);
-		}
-
-		@Override
-		public TypeToken<? extends QuickTabs<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickTabs.class).<QuickTabs<T>> parameterized(theTabIdType);
+			theSelectedTab = interpret(getDefinition().getSelectedTab(), ModelTypes.Value.forType(theTabIdType));
 		}
 
 		@Override

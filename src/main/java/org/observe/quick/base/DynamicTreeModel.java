@@ -133,7 +133,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		@Override
 		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
-				theRoot = getDefinition().getRoot().interpret(ModelTypes.Value.anyAs(), env);
+				theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
 				theNodeType = (TypeToken<N>) theRoot.getType().getType(0);
 			}
 			return theNodeType;
@@ -153,7 +153,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 			super.doUpdate(env);
 
 			getNodeType(env); // Initialize root
-			theChildren = getDefinition().getChildren().interpret(ModelTypes.Collection.forType(getNodeType(env)), env);
+			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(getNodeType(env)));
 			TypeToken<?> childType = theChildren.getType().getType(0);
 			if (!TypeTokens.get().isAssignable(theNodeType, childType)) {
 				throw new ExpressoInterpretationException(
@@ -162,7 +162,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 						getDefinition().getChildren().getFilePosition().getPosition(0),
 						getDefinition().getChildren().getExpression().getExpressionLength());
 			}
-			isLeaf = getDefinition().isLeaf() == null ? null : getDefinition().isLeaf().interpret(ModelTypes.Value.BOOLEAN, env);
+			isLeaf = interpret(getDefinition().isLeaf(), ModelTypes.Value.BOOLEAN);
 		}
 
 		@Override

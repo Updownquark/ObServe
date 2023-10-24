@@ -52,7 +52,6 @@ import org.qommons.TimeUtils;
 import org.qommons.Transaction;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -197,8 +196,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theDefaultValue = getDefinition().getDefaultValue() == null ? null
-					: getDefinition().getDefaultValue().interpret(ModelTypes.Value.forType(getValueType()), env);
+				theDefaultValue = interpret(getDefinition().getDefaultValue(), ModelTypes.Value.forType(getValueType()));
 			}
 
 			@Override
@@ -335,14 +333,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(env);
+			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+				super.update(element);
 
-				theKeyFormat = getDefinition().getKeyFormat() == null ? null
-					: getDefinition().getKeyFormat()
-					.interpret(ModelTypes.Value.forType(
-						TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<K>> parameterized(getKeyType())),
-						env);
+				theKeyFormat = getElement().interpret(getDefinition().getKeyFormat(), ModelTypes.Value.forType(
+					TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<K>> parameterized(getKeyType())));
 			}
 
 			@Override
@@ -362,8 +357,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-			super.update(interpreted);
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+			super.update(interpreted, element);
 
 			Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
 			theKeyFormat = myInterpreted.getKeyFormat() == null ? null : myInterpreted.getKeyFormat().instantiate();
@@ -555,7 +550,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			theWrapped = getAttributeExpression("wrapped", session);
 			theMaxArchiveDepth = getAttributeExpression("max-archive-depth", session);
-			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theArchiveMethods, session.forChildren("archive-method"));
+			syncChildren(ModelValueElement.CompiledSynth.class, theArchiveMethods, session.forChildren("archive-method"));
 		}
 
 		@Override
@@ -607,20 +602,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theWrapped = getDefinition().getWrapped() == null ? null
-					: getDefinition().getWrapped().interpret(ModelTypes.Value.forType(FileDataSource.class), env);
-				theMaxArchiveDepth = getDefinition().getMaxArchiveDepth().interpret(ModelTypes.Value.INT, env);
-				CollectionUtils
-				.synchronize(theArchiveMethods, getDefinition().getArchiveMethods(),
-					(interp, def) -> interp.getIdentity() == def.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(
-					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>) def
-					.interpret(env))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().updateValue(env))//
-				.onCommonX(el -> el.getLeftValue().updateValue(env))//
-				.rightOrder()//
-				.adjust();
+				theWrapped = interpret(getDefinition().getWrapped(), ModelTypes.Value.forType(FileDataSource.class));
+				theMaxArchiveDepth = interpret(getDefinition().getMaxArchiveDepth(), ModelTypes.Value.INT);
+				syncChildren(getDefinition().getArchiveMethods(), theArchiveMethods, (def,
+					vEnv) -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>) def
+					.interpret(vEnv),
+					(i, vEnv) -> i.updateValue(vEnv));
 			}
 
 			@Override
@@ -716,8 +703,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-		}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
 
 		@Override
 		public Interpreted interpret() {
@@ -783,8 +769,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-		}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
 
 		@Override
 		public Interpreted interpret() {
@@ -850,8 +835,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-		}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
 
 		@Override
 		public Interpreted interpret() {
@@ -926,7 +910,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.syncDefs(FormatValidation.Def.class, theValidation, session.forChildren("validate"));
+			syncChildren(FormatValidation.Def.class, theValidation, session.forChildren("validate"));
 		}
 
 		@Override
@@ -971,15 +955,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 				if (!theValidation.isEmpty()) {
 					TypeToken<T> valueType = getValueType();
-					CollectionUtils
-					.synchronize(theValidation, getDefinition().getValidation(),
-						(interp, def) -> interp.getIdentity() == def.getIdentity())//
-					.<ExpressoInterpretationException> simpleE(def -> (FormatValidation.Interpreted<T, ?>) def.interpret(this))//
-					.onLeftX(el -> el.getLeftValue().destroy())//
-					.onRightX(el -> el.getLeftValue().updateFormat(env, valueType))//
-					.onCommonX(el -> el.getLeftValue().updateFormat(env, valueType))//
-					.rightOrder()//
-					.adjust();
+					syncChildren(getDefinition().getValidation(), theValidation,
+						def -> (FormatValidation.Interpreted<T, ?>) def.interpret(this), (i, vEnv) -> i.updateFormat(vEnv, valueType));
 				}
 			}
 
@@ -1308,10 +1285,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theFileSource = getDefinition().getFileSource() == null ? null
-					: getDefinition().getFileSource().interpret(ModelTypes.Value.forType(FileDataSource.class), env);
-				theWorkingDir = getDefinition().getWorkingDir() == null ? null
-					: getDefinition().getWorkingDir().interpret(ModelTypes.Value.forType(BetterFile.class), env);
+				theFileSource = interpret(getDefinition().getFileSource(), ModelTypes.Value.forType(FileDataSource.class));
+				theWorkingDir = interpret(getDefinition().getWorkingDir(), ModelTypes.Value.forType(BetterFile.class));
 
 			}
 
@@ -1464,7 +1439,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			if (isMetricPrefixed && isMetricPrefixedP2)
 				throw new QonfigInterpretationException("Only one of 'metrix-prefixes' and 'metric-prefixes-p2' may be specified",
 					session.attributes().get("metric-prefixes-p2").getLocatedContent());
-			ExElement.syncDefs(Prefix.class, thePrefixes, session.forChildren("prefix"));
+			syncChildren(Prefix.class, thePrefixes, session.forChildren("prefix"));
 			thePrefixMults.clear();
 			for (Prefix prefix : thePrefixes) {
 				if (thePrefixMults.containsKey(prefix.getName()))
@@ -1511,7 +1486,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theSignificantDigits = getDefinition().getSignificantDigits().interpret(ModelTypes.Value.INT, env);
+				theSignificantDigits = interpret(getDefinition().getSignificantDigits(), ModelTypes.Value.INT);
 			}
 
 			@Override
@@ -1754,8 +1729,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theRelativeTo = getDefinition().getRelativeTo() == null ? null
-					: getDefinition().getRelativeTo().interpret(ModelTypes.Value.forType(Instant.class), env);
+				theRelativeTo = interpret(getDefinition().getRelativeTo(), ModelTypes.Value.forType(Instant.class));
 			}
 
 			@Override
@@ -2082,7 +2056,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
-				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), expressoEnv, true);
+				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), this, true);
 			}
 
 			@Override
@@ -2292,7 +2266,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(theType));
 				else
 					formatType = ModelTypes.Value.anyAsV();
-				theTextFormat = getDefinition().getTextFormat() == null ? null : getDefinition().getTextFormat().interpret(formatType, env);
+				theTextFormat = interpret(getDefinition().getTextFormat(), formatType);
 
 				if (theTextFormat == null) {
 					if (theType == null)
@@ -2312,9 +2286,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 				}
 
-
-				theDefaultValue = getDefinition().getDefaultValue() == null ? null
-					: getDefinition().getDefaultValue().interpret(ModelTypes.Value.forType(getValueType()), env);
+				theDefaultValue = interpret(getDefinition().getDefaultValue(), ModelTypes.Value.forType(getValueType()));
 			}
 
 			@Override

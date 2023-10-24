@@ -36,11 +36,6 @@ public class QuickRadioButton extends QuickCheckBox {
 		}
 
 		@Override
-		public TypeToken<QuickRadioButton> getWidgetType() {
-			return TypeTokens.get().of(QuickRadioButton.class);
-		}
-
-		@Override
 		public QuickRadioButton create() {
 			return new QuickRadioButton(getIdentity());
 		}

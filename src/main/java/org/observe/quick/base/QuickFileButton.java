@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import java.io.File;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.qonfig.ExElement;
@@ -11,11 +10,8 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 	public static final String FILE_BUTTON = "file-button";
@@ -61,11 +57,6 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		@Override
 		protected ModelInstanceType<SettableValue<?>, SettableValue<File>> getTargetType() {
 			return ModelTypes.Value.forType(File.class);
-		}
-
-		@Override
-		public TypeToken<? extends QuickFileButton> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().of(QuickFileButton.class);
 		}
 
 		@Override

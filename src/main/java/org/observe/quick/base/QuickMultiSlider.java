@@ -128,8 +128,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theTooltip = getDefinition().getTooltip() == null ? null
-					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, env);
+				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 			}
 
 			public SliderHandleRenderer create() {
@@ -401,8 +400,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				theMaxValue = getDefinition().getMaxValue() == null ? null
-					: getDefinition().getMaxValue().interpret(ModelTypes.Value.DOUBLE, env);
+				theMaxValue = interpret(getDefinition().getMaxValue(), ModelTypes.Value.DOUBLE);
 			}
 
 			public SliderBgRenderer create() {
@@ -513,8 +511,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			isOrderEnforced = session.getAttribute("enforce-order", boolean.class);
 			theMin = getAttributeExpression("min", session);
 			theMax = getAttributeExpression("max", session);
-			theHandleRenderer = ExElement.useOrReplace(SliderHandleRenderer.Def.class, theHandleRenderer, session, "handle-renderer");
-			ExElement.syncDefs(SliderBgRenderer.Def.class, theBgRenderers, session.forChildren("bg-renderer"));
+			theHandleRenderer = syncChild(SliderHandleRenderer.Def.class, theHandleRenderer, session, "handle-renderer");
+			syncChildren(SliderBgRenderer.Def.class, theBgRenderers, session.forChildren("bg-renderer"));
 		}
 
 		@Override
@@ -561,16 +559,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public TypeToken<? extends QuickMultiSlider> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().of(QuickMultiSlider.class);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Number>> numberValues = getDefinition().getValues()
-				.interpret(ModelTypes.Collection.forType(Number.class), env);
+			InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Number>> numberValues = interpret(
+				getDefinition().getValues(), ModelTypes.Collection.forType(Number.class));
 			Class<?> numberType = TypeTokens.get().unwrap(TypeTokens.getRawType(numberValues.getType().getType(0)));
 			Function<Double, Number> reverse;
 			boolean inexact;
@@ -615,27 +608,14 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 					.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact)))//
 				.collectPassive());
 
-			theMin = getDefinition().getMin().interpret(ModelTypes.Value.DOUBLE, env);
-			theMax = getDefinition().getMax().interpret(ModelTypes.Value.DOUBLE, env);
+			theMin = interpret(getDefinition().getMin(), ModelTypes.Value.DOUBLE);
+			theMax = interpret(getDefinition().getMax(), ModelTypes.Value.DOUBLE);
 
-			if (theHandleRenderer != null && (getDefinition().getHandleRenderer() == null
-				|| theHandleRenderer.getIdentity() != getDefinition().getHandleRenderer().getIdentity())) {
-				theHandleRenderer.destroy();
-				theHandleRenderer = null;
-			}
-			if (theHandleRenderer == null && getDefinition().getHandleRenderer() != null)
-				theHandleRenderer = getDefinition().getHandleRenderer().interpret(this);
-			if (theHandleRenderer != null)
-				theHandleRenderer.updateElement(env);
+			theHandleRenderer = syncChild(getDefinition().getHandleRenderer(), theHandleRenderer, def -> def.interpret(this),
+				(r, rEnv) -> r.updateElement(rEnv));
 
-			CollectionUtils
-			.synchronize(theBgRenderers, getDefinition().getBgRenderers(), (interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-			.onLeft(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateRenderer(env))//
-			.onCommonX(el -> el.getLeftValue().updateRenderer(env))//
-			.rightOrder()//
-			.adjust();
+			syncChildren(getDefinition().getBgRenderers(), theBgRenderers, def -> def.interpret(this),
+				SliderBgRenderer.Interpreted::updateRenderer);
 		}
 
 		@Override

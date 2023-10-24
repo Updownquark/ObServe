@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
 import javax.swing.JDialog;
@@ -112,7 +113,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			session.put(ExpressoBaseV0_1.PATH_KEY, theModelPath);
 
 			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
-			ExElement.syncDefs(getValueType(), theValues, valueSessions);
+			syncChildren(getValueType(), theValues, valueSessions);
 
 			// Installing this control system because sometimes we want to control how the models are interpreted from above
 			Object building = session.get(PREVENT_MODEL_BUILDING);
@@ -299,22 +300,39 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						builder.withAll(getExpressoEnv().getModels());
 					setExpressoEnv(session.getExpressoEnv());
 				}
+				BiConsumer<ObservableModelElement.Def<?, ?>, ExpressoQIS> sessionUpdater = (m, s) -> {
+					Object building = s.get(PREVENT_MODEL_BUILDING);
+					boolean doBuild;
+					if (building == null)
+						doBuild = true;
+					else if (building instanceof Predicate)
+						doBuild = !((Predicate<Object>) building).test(m);
+					else if (building instanceof Boolean)
+						doBuild = Boolean.TRUE.equals(building);
+					else {
+						reporting().warn("Unrecognized " + PREVENT_MODEL_BUILDING + " type: " + building.getClass().getName());
+						doBuild = true;
+					}
+					if (doBuild) {
+						s.setExpressoEnv(s.getExpressoEnv().with(//
+							builder.createSubModel(s.attributes().get("named", "name").getText(), s.getElement().getPositionInFile())));
+					}
+				};
 				CollectionUtils
 				.synchronize(theSubModels, session.forChildren("model"),
 					(me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))//
 				.<QonfigInterpretationException> simpleE(ms -> {
-					ObservableModelSet.Builder subModel = builder.createSubModel(ms.attributes().get("named", "name").getText(),
-						ms.getElement().getPositionInFile());
-					return ms.setExpressoEnv(ms.getExpressoEnv().with(subModel)).interpret(ObservableModelElement.Def.class);
+					ObservableModelElement.Def<?, ?> subModelEl = ms.interpret(ObservableModelElement.Def.class);
+					sessionUpdater.accept(subModelEl, ms);
+					subModelEl.update(ms);
+					return subModelEl;
 				})//
 				.rightOrder()//
-				.onRightX(el -> el.getLeftValue().update(el.getRightValue()))//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue()))//
+				.onCommonX(el -> {
+					sessionUpdater.accept(el.getLeftValue(), el.getRightValue());
+					el.getLeftValue().update(el.getRightValue());
+				})//
 				.adjust();
-				//
-				// ObservableModelSet.Built built = builder.build();
-				// session.setModels(built);
-				// setExpressoEnv(getExpressoEnv().with(built));
 			}
 
 			private static boolean nonTrivial(ObservableModelSet models) {
@@ -354,13 +372,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
-					(widget, child) -> widget.getIdentity() == child.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
-				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 		}
 
@@ -445,7 +457,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				ExElement.syncDefs(DefaultModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
+				syncChildren(DefaultModelElement.Def.class, theSubModels, session.forChildren("sub-model"), (sub, subS) -> {
+					String name = ((ExNamed.Def) sub.getAddOn(ExNamed.Def.class)).getName();
+					ObservableModelSet subModel = subS.getExpressoEnv().getModels().getSubModelIfExists(name);
+					if (subModel != null)
+						subS = subS.setExpressoEnv(subS.getExpressoEnv().with(subModel));
+					sub.update(subS);
+				});
 			}
 
 			@Override
@@ -475,13 +493,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
-					(widget, child) -> widget.getDefinition() == child)//
-				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
-				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 
 			@Override
@@ -577,7 +589,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				ExElement.syncDefs(ExtModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
+				syncChildren(ExtModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
 
 			@Override
@@ -612,13 +624,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
-					(widget, child) -> widget.getDefinition() == child)//
-				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
-				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 
 			@Override
@@ -720,7 +726,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				theConfigName = session.getAttributeText("config-name");
 				theConfigDir = getAttributeExpression("config-dir", session);
 
-				ExElement.syncDefs(OldConfigName.class, theOldConfigNames, session.forChildren("old-config-name"));
+				syncChildren(OldConfigName.class, theOldConfigNames, session.forChildren("old-config-name"));
 
 				isBackup = session.getAttribute("backup", boolean.class);
 				theApplicationEnvironment = session.get(APP_ENVIRONMENT_KEY, AppEnvironment.class);
@@ -1098,8 +1104,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				if (env.getProperty(ConfigModelValue.FORMAT_SET_KEY, ObservableConfigFormatSet.class) == null)
-					env.setProperty(ConfigModelValue.FORMAT_SET_KEY, new ObservableConfigFormatSet());
+				if (env.get(ConfigModelValue.FORMAT_SET_KEY, ObservableConfigFormatSet.class) == null)
+					env.put(ConfigModelValue.FORMAT_SET_KEY, new ObservableConfigFormatSet());
 				super.doUpdate(env);
 			}
 

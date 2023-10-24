@@ -2,7 +2,6 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -107,10 +106,10 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().interpret(ModelTypes.Value.STRING, env);
-				theVisible = getDefinition().isVisible() == null ? null
-					: getDefinition().isVisible().interpret(ModelTypes.Value.BOOLEAN, env);
+			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+				super.update(element);
+				theTitle = getElement().interpret(getDefinition().getTitle(), ModelTypes.Value.STRING);
+				theVisible = getElement().interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override
@@ -158,8 +157,8 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-			super.update(interpreted);
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+			super.update(interpreted, element);
 			QuickAbstractWindow.Interpreted<?> myInterpreted = (QuickAbstractWindow.Interpreted<?>) interpreted;
 			theTitleInstantiator = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate();
 			theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();

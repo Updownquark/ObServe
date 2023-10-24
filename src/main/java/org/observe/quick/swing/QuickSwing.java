@@ -4,7 +4,6 @@ import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -35,12 +34,12 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 	}
 
 	@Override
-	public Interpreted interpret(ExElement.Interpreted<? extends QuickDocument> element) {
+	public Interpreted interpret(ExElement.Interpreted<?> element) {
 		return new Interpreted(this, element);
 	}
 
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickDocument, ExAddOn.Void<QuickDocument>> {
-		public Interpreted(QuickSwing definition, ExElement.Interpreted<? extends QuickDocument> element) {
+		public Interpreted(QuickSwing definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -50,8 +49,8 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
+		public void update(ExElement.Interpreted<? extends QuickDocument> element) throws ExpressoInterpretationException {
+			super.update(element);
 
 			String lAndFClass;
 			switch (getDefinition().getLookAndFeel()) {

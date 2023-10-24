@@ -2,7 +2,6 @@ package org.observe.expresso.qonfig;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -57,16 +56,16 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
 
 			ExTyped.Interpreted<T> typed = getElement().getAddOn(ExTyped.Interpreted.class);
 			if (getDefinition().getInit() == null)
 				theInit = null;
 			else if (typed != null && typed.getValueType() != null)
-				theInit = getDefinition().getInit().interpret(ModelTypes.Value.forType(typed.getValueType()), env);
+				theInit = getElement().interpret(getDefinition().getInit(), ModelTypes.Value.forType(typed.getValueType()));
 			else
-				theInit = getDefinition().getInit().interpret(ModelTypes.Value.anyAsV(), env);
+				theInit = getElement().interpret(getDefinition().getInit(), ModelTypes.Value.anyAsV());
 		}
 
 		@Override
@@ -97,8 +96,8 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theInitInstantiator = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate();
 	}

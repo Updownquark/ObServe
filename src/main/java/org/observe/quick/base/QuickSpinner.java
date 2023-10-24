@@ -13,11 +13,8 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickSpinner<T> extends QuickTextField<T> {
 	public static final String SPINNER = "spinner";
@@ -80,18 +77,11 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 		}
 
 		@Override
-		public TypeToken<QuickSpinner<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickSpinner.class).<QuickSpinner<T>> parameterized(getValueType());
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			thePrevious = getDefinition().getPrevious() == null ? null
-				: getDefinition().getPrevious().interpret(ModelTypes.Value.forType(getValueType()), env);
-			theNext = getDefinition().getPrevious() == null ? null
-				: getDefinition().getNext().interpret(ModelTypes.Value.forType(getValueType()), env);
+			thePrevious = interpret(getDefinition().getPrevious(), ModelTypes.Value.forType(getValueType()));
+			theNext = interpret(getDefinition().getNext(), ModelTypes.Value.forType(getValueType()));
 		}
 
 		@Override

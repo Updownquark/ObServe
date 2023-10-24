@@ -219,12 +219,14 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
+			InterpretedExpressoEnv env = getElement().getExpressoEnv();
 			ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> sizeType = ModelTypes.Value.forType(QuickSize.class);
-			theSize = getDefinition().getSize() == null ? null : getDefinition().getSize().interpret(sizeType, env);
-			theMinimum = getDefinition().getMinimum() == null ? null : getDefinition().getMinimum().interpret(sizeType, env);
-			thePreferred = getDefinition().getPreferred() == null ? null : getDefinition().getPreferred().interpret(sizeType, env);
-			theMaximum = getDefinition().getMaximum() == null ? null : getDefinition().getMaximum().interpret(sizeType, env);
+			theSize = getElement().interpret(getDefinition().getSize(), sizeType);
+			theMinimum = getElement().interpret(getDefinition().getMinimum(), sizeType);
+			thePreferred = getElement().interpret(getDefinition().getPreferred(), sizeType);
+			theMaximum = getElement().interpret(getDefinition().getMaximum(), sizeType);
 		}
 
 		public static class Vertical extends Interpreted<Sizeable.Vertical> {
@@ -327,8 +329,8 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
 		theSizeInstantiator = myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate();
 		theMinimumInstantiator = myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().instantiate();

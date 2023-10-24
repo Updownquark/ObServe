@@ -39,7 +39,7 @@ public interface QuickContentDialog extends QuickDialog {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 
-				theContent = ExElement.useOrReplace(QuickWidget.Def.class, theContent, session, "content");
+				theContent = syncChild(QuickWidget.Def.class, theContent, session, "content");
 			}
 		}
 	}
@@ -80,13 +80,8 @@ public interface QuickContentDialog extends QuickDialog {
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
 
-				if (theContent != null && theContent.getIdentity() != getDefinition().getContent().getIdentity()) {
-					theContent.destroy();
-					theContent = null;
-				}
-				if (theContent == null)
-					theContent = getDefinition().getContent().interpret(this);
-				theContent.updateElement(expressoEnv);
+				theContent = syncChild(getDefinition().getContent(), theContent, def -> def.interpret(this),
+					(c, cEnv) -> c.updateElement(cEnv));
 			}
 		}
 	}

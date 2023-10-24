@@ -68,7 +68,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 	public static abstract class Def<E extends ExElement, AO extends ExFlexibleElementModelAddOn<? super E>>
 	extends ExModelAugmentation.Def<E, AO> {
 		private Map<String, CompiledModelValue<?>> theElementValues;
-		private volatile Interpreted<? extends E, ? extends AO> theCurrentInterpreting;
+		private volatile ExElement.Interpreted<? extends E> theCurrentInterpreting;
 
 		protected Def(QonfigAddOn type, ExElement.Def<? extends E> element) {
 			super(type, element);
@@ -139,13 +139,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 
 		@Override
-		public abstract Interpreted<? extends E, ? extends AO> interpret(ExElement.Interpreted<? extends E> element);
+		public abstract Interpreted<? extends E, ? extends AO> interpret(ExElement.Interpreted<?> element);
 
-		void setCurrentInterpreting(Interpreted<? extends E, ? extends AO> interpreting) {
+		void setCurrentInterpreting(ExElement.Interpreted<? extends E> interpreting) {
 			theCurrentInterpreting = interpreting;
 		}
 
-		Interpreted<? extends E, ? extends AO> getCurrentInterpreting() {
+		ExElement.Interpreted<? extends E> getCurrentInterpreting() {
 			return theCurrentInterpreting;
 		}
 	}
@@ -172,12 +172,12 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 
 		@Override
-		public void preUpdate() {
-			getDefinition().setCurrentInterpreting(this);
+		public void preUpdate(ExElement.Interpreted<? extends E> element) {
+			getDefinition().setCurrentInterpreting(element);
 		}
 
 		@Override
-		public void postUpdate() throws ExpressoInterpretationException {
+		public void postUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 			for (Map.Entry<String, ? extends CompiledModelValue<?>> elementValue : getDefinition().getElementValues().entrySet()) {
 				if (theElementValues.containsKey(elementValue.getKey()))
 					continue;
@@ -256,7 +256,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 
 	protected static abstract class PlaceholderModelValue<M> implements CompiledModelValue<M> {
 		private final String theName;
-		private Supplier<ExFlexibleElementModelAddOn.Interpreted<?, ?>> theInterpreting;
+		private Supplier<ExElement.Interpreted<?>> theInterpreting;
 		private ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> theType;
 
 		protected PlaceholderModelValue(String name) {
@@ -270,7 +270,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return getModelType();
 		}
 
-		void satisfyType(Supplier<ExFlexibleElementModelAddOn.Interpreted<?, ?>> interpreting,
+		void satisfyType(Supplier<ExElement.Interpreted<?>> interpreting,
 			ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type) {
 			theInterpreting = interpreting;
 			theType = type;
@@ -280,7 +280,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			throws ExpressoInterpretationException {
 			ModelInstanceType<M, MV> type;
 			if (theType != null) {
-				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get().getElement(), env);
+				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get(), env);
 				for (int t = 0; t < getModelType().getTypeCount(); t++) {
 					TypeToken<?> pt = targetType.getType(t);
 					if (!TypeTokens.get().isAssignable(defaultType.getType(t), pt))

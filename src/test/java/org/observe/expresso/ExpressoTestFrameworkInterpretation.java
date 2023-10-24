@@ -140,7 +140,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
 			@Override

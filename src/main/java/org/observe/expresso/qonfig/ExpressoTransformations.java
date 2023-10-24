@@ -43,7 +43,6 @@ import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -228,8 +227,8 @@ public class ExpressoTransformations {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				try {
-					theSource = getDefinition().getSource()
-						.interpret(((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs(), getExpressoEnv());
+					theSource = interpret(getDefinition().getSource(),
+						((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs());
 				} catch (ExpressoCompilationException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 				}
@@ -697,26 +696,26 @@ public class ExpressoTransformations {
 	}
 
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<String>> parseFilter(CompiledExpression testX,
-		InterpretedExpressoEnv env, boolean preferMessage) throws ExpressoInterpretationException {
+		ExElement.Interpreted<?> element, boolean preferMessage) throws ExpressoInterpretationException {
 		if (testX == null)
 			return null;
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> test;
 		try {
 			if (preferMessage)
-				test = testX.interpret(ModelTypes.Value.forType(String.class), env);
+				test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			else {
-				test = testX.interpret(ModelTypes.Value.forType(boolean.class), env)//
+				test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 					.mapValue(ModelTypes.Value.forType(String.class),
 						bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
 			}
 		} catch (ExpressoInterpretationException e) {
 			try {
 				if (preferMessage) {
-					test = testX.interpret(ModelTypes.Value.forType(boolean.class), env)//
+					test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 						.mapValue(ModelTypes.Value.forType(String.class),
 							bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
 				} else
-					test = testX.interpret(ModelTypes.Value.forType(String.class), env);
+					test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			} catch (ExpressoInterpretationException e2) {
 				throw new ExpressoInterpretationException("Could not interpret '" + testX + "' as a String or a boolean", e.getPosition(),
 					e.getErrorLength(), e);
@@ -929,14 +928,14 @@ public class ExpressoTransformations {
 			isManyToOne = session.getAttribute("many-to-one", boolean.class);
 			isOneToMany = session.getAttribute("one-to-many", boolean.class);
 
-			theMapWith = ExElement.useOrReplace(MapWith.class, theMapWith, session, "map");
+			theMapWith = syncChild(MapWith.class, theMapWith, session, "map");
 			theEquivalence = getAttributeExpression("equivalence", session);
-			ExElement.syncDefs(CombineWith.class, theCombinedValues, session.forChildren("combined-value"));
-			theReverse = ExElement.useOrReplace(CompiledMapReverse.class, theReverse, session, "reverse");
+			syncChildren(CombineWith.class, theCombinedValues, session.forChildren("combined-value"));
+			theReverse = syncChild(CompiledMapReverse.class, theReverse, session, "reverse");
 
 			for (CombineWith<?> combine : theCombinedValues)
 				withElModel.satisfyElementValueType(combine.getValueVariable(), ModelTypes.Value, //
-					(interp, env) -> combine.getElementValue().interpret(ModelTypes.Value.any(), env).getType());
+					(interp, env) -> interp.interpret(combine.getElementValue(), ModelTypes.Value.any()).getType());
 			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceName, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
@@ -997,36 +996,19 @@ public class ExpressoTransformations {
 				super.update(env);
 				// ??? We need to do the combined values first, because the map-with may (and most likely does) use the combined value
 				// variables
-				CollectionUtils
-				.synchronize(theCombinedValues, getDefinition().getCombinedValues(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.simpleE(d -> d.interpret(this))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().update(getExpressoEnv()))//
-				.onCommonX(el -> el.getLeftValue().update(getExpressoEnv()))//
-				.adjust();
-				if (theMapWith == null || theMapWith.getIdentity() != getDefinition().getMapWith().getIdentity())
-					theMapWith = getDefinition().getMapWith().interpret(this);
-				theMapWith.update(theSourceType, getExpressoEnv());
+				syncChildren(getDefinition().getCombinedValues(), theCombinedValues, def -> def.interpret(this),
+					(i, vEnv) -> i.update(vEnv));
+				theMapWith = syncChild(getDefinition().getMapWith(), theMapWith, def -> def.interpret(this),
+					(m, mEnv) -> m.update(theSourceType, mEnv));
 				if (getDefinition().getEquivalence() == null)
 					theEquivalence = null;
 				else {
-					theEquivalence = getDefinition().getEquivalence()
-						.interpret(ModelTypes.Value.forType(TypeTokens.get().keyFor(Equivalence.class)
-							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theMapWith.getTargetType()))),
-							getExpressoEnv());
+					theEquivalence = interpret(getDefinition().getEquivalence(),
+						ModelTypes.Value.forType(TypeTokens.get().keyFor(Equivalence.class)
+							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theMapWith.getTargetType()))));
 				}
-				if (getDefinition().getReverse() == null) {
-					if (theReverse != null)
-						theReverse.destroy();
-					theReverse = null;
-				} else if (theReverse == null || theReverse.getIdentity() != getDefinition().getReverse().getIdentity()) {
-					if (theReverse != null)
-						theReverse.destroy();
-					theReverse = getDefinition().getReverse().interpret(this);
-				}
-				if (theReverse != null)
-					theReverse.update(getDefinition().getSourceName(), theMapWith.getSourceType(), theMapWith.getTargetType(),
-						getExpressoEnv());
+				theReverse = syncChild(getDefinition().getReverse(), theReverse, def -> def.interpret(this),
+					(r, rEnv) -> r.update(getDefinition().getSourceName(), theMapWith.getSourceType(), theMapWith.getTargetType(), rEnv));
 			}
 
 			@Override
@@ -1236,13 +1218,9 @@ public class ExpressoTransformations {
 				theSourceType = sourceType;
 				super.update(env);
 				if (getParentElement().getEvaluatedTargetType() != null)
-					theMap = getDefinition().getMap()//
-					.interpret(//
-						ModelTypes.Value.forType(getParentElement().getEvaluatedTargetType()), getExpressoEnv());
+					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.forType(getParentElement().getEvaluatedTargetType()));
 				else
-					theMap = getDefinition().getMap()//
-					.interpret(//
-						ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.<SettableValue<T>> anyAs());
 				isTesting = env.isTesting();
 			}
 
@@ -1392,7 +1370,7 @@ public class ExpressoTransformations {
 			}
 
 			void getValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
 			@Override
@@ -1606,13 +1584,10 @@ public class ExpressoTransformations {
 				theTargetType = targetType;
 				super.update(env);
 				ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceModelType = ModelTypes.Value.forType(sourceType);
-				theEnabled = getDefinition().getEnabled() == null ? null
-					: getDefinition().getEnabled().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theAccept = getDefinition().getAccept() == null ? null
-					: getDefinition().getAccept().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theAdd = getDefinition().getAdd() == null ? null : getDefinition().getAdd().interpret(sourceModelType, getExpressoEnv());
-				theAddAccept = getDefinition().getAddAccept() == null ? null
-					: getDefinition().getAddAccept().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+				theEnabled = interpret(getDefinition().getEnabled(), ModelTypes.Value.STRING);
+				theAccept = interpret(getDefinition().getAccept(), ModelTypes.Value.STRING);
+				theAdd = interpret(getDefinition().getAdd(), sourceModelType);
+				theAddAccept = interpret(getDefinition().getAddAccept(), ModelTypes.Value.STRING);
 			}
 
 			@Override
@@ -1862,7 +1837,7 @@ public class ExpressoTransformations {
 			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceName, sourceType, targetType, env);
-				theReverse = getDefinition().getReverse().interpret(ModelTypes.Value.forType(sourceType), getExpressoEnv());
+				theReverse = interpret(getDefinition().getReverse(), ModelTypes.Value.forType(sourceType));
 			}
 
 			@Override
@@ -1945,7 +1920,7 @@ public class ExpressoTransformations {
 			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceName, sourceType, targetType, env);
-				theReverse = getDefinition().getReverse().interpret(ModelTypes.Action.instance(), getExpressoEnv());
+				theReverse = interpret(getDefinition().getReverse(), ModelTypes.Action.instance());
 			}
 
 			@Override

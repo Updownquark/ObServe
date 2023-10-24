@@ -5,11 +5,8 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 	public static final String FIELD_PANEL = "field-panel";
@@ -37,11 +34,6 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 	public static class Interpreted extends QuickContainer.Interpreted.Abstract<QuickFieldPanel, QuickWidget> {
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
-		}
-
-		@Override
-		public TypeToken<QuickFieldPanel> getWidgetType() {
-			return TypeTokens.get().of(QuickFieldPanel.class);
 		}
 
 		@Override

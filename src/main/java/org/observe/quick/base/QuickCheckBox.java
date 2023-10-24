@@ -18,8 +18,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static final String CHECK_BOX = "check-box";
 
@@ -68,14 +66,9 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public TypeToken<W> getWidgetType() {
-			return (TypeToken<W>) TypeTokens.get().of(QuickCheckBox.class);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
+			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
 		}
 
 		@Override

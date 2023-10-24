@@ -73,13 +73,13 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, element);
 		}
 	}
 
 	public static class Interpreted extends QuickLayout.Interpreted<QuickInlineLayout> {
-		public Interpreted(Def definition, ExElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -130,8 +130,8 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<? extends QuickBox, ?> interpreted, QuickBox element) {
+		super.update(interpreted, element);
 		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
 		theMainAlign = myInterpreted.getDefinition().getMainAlign();

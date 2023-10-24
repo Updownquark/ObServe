@@ -98,10 +98,9 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			theType = getDefinition().getType().interpret(ModelTypes.Value.forType(String.class), expressoEnv);
-			theOnClose = getDefinition().getOnClose() == null ? null
-				: getDefinition().getOnClose().interpret(ModelTypes.Action.instance(), expressoEnv);
-			theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), expressoEnv,
+			theType = interpret(getDefinition().getType(), ModelTypes.Value.forType(String.class));
+			theOnClose = interpret(getDefinition().getOnClose(), ModelTypes.Action.instance());
+			theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
 				getDefinition().getElement().getDocument().getLocation());
 		}
 

@@ -37,11 +37,6 @@ public class QuickToggleButtons<T> extends CollectionSelectorWidget<T> {
 		}
 
 		@Override
-		public TypeToken<QuickToggleButtons<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickToggleButtons.class).<QuickToggleButtons<T>> parameterized(getValueType());
-		}
-
-		@Override
 		public QuickToggleButtons<T> create() {
 			return new QuickToggleButtons<>(getIdentity());
 		}

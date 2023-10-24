@@ -135,10 +135,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 				super.doUpdate(env);
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
-				if (getDefinition().getFormat() != null)
-					theFormat = getDefinition().getFormat().interpret(ModelTypes.Value.forType(formatType), getExpressoEnv());
-				isEditable = getDefinition().isEditable() == null ? null
-					: getDefinition().isEditable().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
+				theFormat = interpret(getDefinition().getFormat(), ModelTypes.Value.forType(formatType));
+				isEditable = interpret(getDefinition().isEditable(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override

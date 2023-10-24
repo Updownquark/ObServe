@@ -6,11 +6,11 @@ import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
@@ -26,20 +26,22 @@ import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.config.SessionValues;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
 /** An environment to support some operations on {@link ObservableModelSet.CompiledModelValue compiled model values} */
-public class CompiledExpressoEnv {
+public class CompiledExpressoEnv implements SessionValues {
 	/**
 	 * A compiled environment with standard java operators (and some {@link #withDefaultNonStructuredParsing() default}
 	 * {@link NonStructuredParser}s
 	 */
 	public static final CompiledExpressoEnv STANDARD_JAVA = new CompiledExpressoEnv(//
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(), //
-		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(LocatedPositionedContent.EMPTY))//
+		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(LocatedPositionedContent.EMPTY),
+		SessionValues.EMPTY)//
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
@@ -48,16 +50,18 @@ public class CompiledExpressoEnv {
 	private final BinaryOperatorSet theBinaryOperators;
 	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
 	private final ErrorReporting theErrorReporting;
+	private SessionValues theProperties;
 
 	/**
 	 * @param models The model set containing all values and sub-models available to expressions
 	 * @param unaryOperators The set of unary operators available for expressions
 	 * @param binaryOperators The set of binary operators available for expressions
 	 * @param reporting The error reporting for the environment
+	 * @param properties
 	 */
 	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting) {
-		this(models, Collections.emptyMap(), null, unaryOperators, binaryOperators, reporting);
+		ErrorReporting reporting, SessionValues properties) {
+		this(models, Collections.emptyMap(), null, unaryOperators, binaryOperators, reporting, properties);
 	}
 
 	/**
@@ -67,10 +71,11 @@ public class CompiledExpressoEnv {
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 * @param reporting The error reporting for the environment
+	 * @param properties
 	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting) {
+		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting, SessionValues properties) {
 		theModels = models;
 		theAttributes = attributes;
 		theUnaryOperators = unaryOperators;
@@ -79,6 +84,7 @@ public class CompiledExpressoEnv {
 		if (nonStructuredParsers != null)
 			theNonStructuredParsers.putAll(nonStructuredParsers);
 		theErrorReporting = reporting;
+		theProperties = properties;
 	}
 
 	/**
@@ -87,12 +93,13 @@ public class CompiledExpressoEnv {
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
+	 * @param properties
 	 * @return A copy of this environment with the given information
 	 */
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting) {
-		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting);
+		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting, SessionValues properties) {
+		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, properties);
 	}
 
 	/** @return The model set containing all values and sub-models available to expressions */
@@ -113,6 +120,17 @@ public class CompiledExpressoEnv {
 	/** @return All this environment's {@link NonStructuredParser}s */
 	protected ClassMap<Set<NonStructuredParser>> getNonStructuredParsers() {
 		return theNonStructuredParsers;
+	}
+
+	protected SessionValues getProperties() {
+		return theProperties;
+	}
+
+	protected SessionValues createChildProperties() {
+		if (theProperties instanceof SessionValues.Default)
+			return ((SessionValues.Default) theProperties).createChild();
+		else
+			return SessionValues.newRoot();
 	}
 
 	/** @return The set of unary operators available for expressions */
@@ -151,7 +169,7 @@ public class CompiledExpressoEnv {
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 
 		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, Collections.emptyMap(),
-			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), reporting(), new HashMap<>(), false);
+			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), reporting(), createChildProperties(), false);
 
 		InterpretedModelSet interpretedModels = getBuiltModels().createInterpreted(interpreted);
 		return interpreted.with(interpretedModels);
@@ -165,7 +183,8 @@ public class CompiledExpressoEnv {
 		if (models == theModels)
 			return this;
 		else
-			return copy(models, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
+			return copy(models, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting,
+				createChildProperties());
 	}
 
 	/**
@@ -178,7 +197,7 @@ public class CompiledExpressoEnv {
 			return this;
 		return copy(theModels, theAttributes, theNonStructuredParsers, //
 			unaryOps == null ? theUnaryOperators : unaryOps, //
-			binaryOps == null ? theBinaryOperators : binaryOps, theErrorReporting);
+				binaryOps == null ? theBinaryOperators : binaryOps, theErrorReporting, getProperties());
 	}
 
 	/**
@@ -192,7 +211,7 @@ public class CompiledExpressoEnv {
 			return this;
 		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
 		nspCopy.computeIfAbsent(type, () -> new LinkedHashSet<>()).add(parser);
-		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting, getProperties());
 	}
 
 	ClassMap<Set<NonStructuredParser>> nspCopy() {
@@ -216,7 +235,7 @@ public class CompiledExpressoEnv {
 			return this;
 		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
 		nspCopy.get(type, ClassMap.TypeMatch.EXACT).remove(parser);
-		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting, getProperties());
 	}
 
 	/**
@@ -253,7 +272,7 @@ public class CompiledExpressoEnv {
 		}
 		if (nspCopy == null)
 			return this;
-		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theErrorReporting, getProperties());
 	}
 
 	/**
@@ -347,7 +366,7 @@ public class CompiledExpressoEnv {
 		ErrorReporting reporting = reporting().at(position);
 		if (reporting == reporting())
 			return this;
-		return copy(theModels, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting);
+		return copy(theModels, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting, getProperties());
 	}
 
 	/**
@@ -358,7 +377,7 @@ public class CompiledExpressoEnv {
 		ErrorReporting reporting = reporting().at(positionOffset);
 		if (reporting == reporting())
 			return this;
-		return copy(theModels, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting);
+		return copy(theModels, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting, getProperties());
 	}
 
 	/**
@@ -372,7 +391,8 @@ public class CompiledExpressoEnv {
 	public CompiledExpressoEnv withAttribute(String attributeName, ModelComponentId value) {
 		CompiledExpressoEnv env;
 		if (theAttributes.isEmpty())
-			env = copy(theModels, new LinkedHashMap<>(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
+			env = copy(theModels, new LinkedHashMap<>(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting,
+				getProperties());
 		else
 			env = this;
 		env.theAttributes.put(attributeName, value);
@@ -391,20 +411,74 @@ public class CompiledExpressoEnv {
 	public CompiledExpressoEnv clearModels() {
 		if (theModels == null && theAttributes == Collections.EMPTY_MAP)
 			return this;
-		return copy(null, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
+		return copy(null, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting,
+			getProperties());
 	}
 
 	/** @return A (possible) copy of this environment with its attribute mappings cleared */
 	public CompiledExpressoEnv clearAttributes() {
 		if (theAttributes == Collections.EMPTY_MAP)
 			return this;
-		return copy(theModels, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
+		return copy(theModels, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting,
+			getProperties());
 	}
 
 	/** @return A copy of this environment */
 	public CompiledExpressoEnv copy() {
 		return copy(theModels, new LinkedHashMap<>(theAttributes), theNonStructuredParsers.copy(), theUnaryOperators, theBinaryOperators,
-			theErrorReporting);
+			theErrorReporting, getProperties());
+	}
+
+	@Override
+	public Object get(String sessionKey, boolean localOnly) {
+		return theProperties.get(sessionKey, localOnly);
+	}
+
+	@Override
+	public <T> T get(String sessionKey, Class<? super T> type) {
+		return theProperties.get(sessionKey, type);
+	}
+
+	private SessionValues initProperties() {
+		if (theProperties == Collections.EMPTY_MAP) {
+			if (this == STANDARD_JAVA || this == InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA)
+				throw new IllegalStateException("Cannot set a property on a static environment constant");
+			theProperties = SessionValues.newRoot();
+		}
+		return theProperties;
+	}
+
+	@Override
+	public CompiledExpressoEnv put(String sessionKey, Object value) {
+		initProperties().put(sessionKey, value);
+		return this;
+	}
+
+	@Override
+	public CompiledExpressoEnv putLocal(String sessionKey, Object value) {
+		initProperties().putLocal(sessionKey, value);
+		return this;
+	}
+
+	@Override
+	public CompiledExpressoEnv putGlobal(String sessionKey, Object value) {
+		initProperties().putGlobal(sessionKey, value);
+		return this;
+	}
+
+	@Override
+	public <T> T computeIfAbsent(String sessionKey, Supplier<T> creator) {
+		return initProperties().computeIfAbsent(sessionKey, creator);
+	}
+
+	@Override
+	public Set<String> keySet() {
+		return theProperties.keySet();
+	}
+
+	@Override
+	public ValueSource getSource(String sessionKey) {
+		return theProperties.getSource(sessionKey);
 	}
 
 	@Override

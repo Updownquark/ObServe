@@ -381,7 +381,7 @@ public class ObservableTransformations {
 			public void update(ModelInstanceType<Observable<?>, Observable<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theUntil = getDefinition().getUntil().interpret(ModelTypes.Event.any(), getExpressoEnv());
+				theUntil = interpret(getDefinition().getUntil(), ModelTypes.Event.any());
 			}
 
 			@Override
@@ -526,7 +526,7 @@ public class ObservableTransformations {
 				throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<S>) sourceType.getType(0);
 				super.update(env);
-				theMap = getDefinition().getMap().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				theMap = interpret(getDefinition().getMap(), ModelTypes.Value.<SettableValue<T>> anyAs());
 				theType = ModelTypes.Event.forType((TypeToken<T>) theMap.getType().getType(0));
 			}
 
@@ -704,7 +704,7 @@ public class ObservableTransformations {
 				throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
 				super.update(sourceType, env);
-				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), getExpressoEnv(), false);
+				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), this, false);
 			}
 
 			@Override

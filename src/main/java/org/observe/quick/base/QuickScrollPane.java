@@ -44,8 +44,8 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement().getSuperElement())); // Skip singleton-container
-			theRowHeader = ExElement.useOrReplace(QuickWidget.Def.class, theRowHeader, session, "row-header");
-			theColumnHeader = ExElement.useOrReplace(QuickWidget.Def.class, theColumnHeader, session, "column-header");
+			theRowHeader = syncChild(QuickWidget.Def.class, theRowHeader, session, "row-header");
+			theColumnHeader = syncChild(QuickWidget.Def.class, theColumnHeader, session, "column-header");
 		}
 
 		@Override
@@ -67,11 +67,6 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 			return (Def) super.getDefinition();
 		}
 
-		@Override
-		public TypeToken<? extends QuickScrollPane> getWidgetType() {
-			return TypeTokens.get().of(QuickScrollPane.class);
-		}
-
 		public QuickWidget.Interpreted<?> getRowHeader() {
 			return theRowHeader;
 		}
@@ -84,25 +79,10 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			if (theRowHeader != null && theRowHeader.getDefinition() != getDefinition().getRowHeader()) {
-				theRowHeader.destroy();
-				theRowHeader = null;
-			}
-			if (getDefinition().getRowHeader() != null) {
-				if (theRowHeader == null)
-					theRowHeader = getDefinition().getRowHeader().interpret(this);
-				theRowHeader.updateElement(env);
-			}
-
-			if (theColumnHeader != null && theColumnHeader.getDefinition() != getDefinition().getColumnHeader()) {
-				theColumnHeader.destroy();
-				theColumnHeader = null;
-			}
-			if (getDefinition().getColumnHeader() != null) {
-				if (theColumnHeader == null)
-					theColumnHeader = getDefinition().getColumnHeader().interpret(this);
-				theColumnHeader.updateElement(env);
-			}
+			theRowHeader = syncChild(getDefinition().getRowHeader(), theRowHeader, def -> def.interpret(this),
+				(r, rEnv) -> r.updateElement(rEnv));
+			theColumnHeader = syncChild(getDefinition().getColumnHeader(), theColumnHeader, def -> def.interpret(this),
+				(r, rEnv) -> r.updateElement(rEnv));
 		}
 
 		@Override

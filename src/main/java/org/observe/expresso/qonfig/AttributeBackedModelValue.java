@@ -16,7 +16,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 	public static class Def extends ExAddOn.Def.Abstract<ModelValueElement<?, ?>, AttributeBackedModelValue> {
 		private QonfigAttributeDef theSourceAttribute;
 
-		public Def(QonfigAddOn type, ExElement.Def<? extends ModelValueElement<?, ?>> element) {
+		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
 
@@ -61,13 +61,13 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ModelValueElement<?, ?>> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, element);
 		}
 	}
 
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ModelValueElement<?, ?>, AttributeBackedModelValue> {
-		Interpreted(Def definition, ExElement.Interpreted<? extends ModelValueElement<?, ?>> element) {
+		Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 

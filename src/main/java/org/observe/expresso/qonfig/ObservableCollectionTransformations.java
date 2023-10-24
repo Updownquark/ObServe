@@ -258,7 +258,7 @@ public class ObservableCollectionTransformations {
 			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
 				super.update(sourceType, env);
-				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), getExpressoEnv(), true);
+				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), this, true);
 			}
 
 			@Override
@@ -557,7 +557,7 @@ public class ObservableCollectionTransformations {
 			@Override
 			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theRefresh = getDefinition().getRefresh().interpret(ModelTypes.Event.any(), getExpressoEnv());
+				theRefresh = interpret(getDefinition().getRefresh(), ModelTypes.Event.any());
 			}
 
 			@Override
@@ -675,8 +675,8 @@ public class ObservableCollectionTransformations {
 			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
 				super.update(sourceType, env);
-				theRefresh = getDefinition().getRefresh()
-					.interpret(ModelTypes.Value.forType(TypeTokens.get().keyFor(Observable.class).wildCard()), getExpressoEnv());
+				theRefresh = interpret(getDefinition().getRefresh(),
+					ModelTypes.Value.forType(TypeTokens.get().keyFor(Observable.class).wildCard()));
 			}
 
 			@Override
@@ -779,7 +779,7 @@ public class ObservableCollectionTransformations {
 			theSourceType = sourceModelType;
 			isUseFirst = session.getAttribute("use-first", boolean.class);
 			isPreservingSourceOrder = session.getAttribute("preserve-source-order", boolean.class);
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			if (isPreservingSourceOrder && theSort != null)
 				reporting().warn("'preserve-source-order' is not used when sorting is specified");
 		}
@@ -1143,7 +1143,7 @@ public class ObservableCollectionTransformations {
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			theSourceType = sourceModelType;
 			super.update(session, sourceModelType);
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			if (theSourceType == ModelTypes.Collection)
 				throw new QonfigInterpretationException("map-equivalent is not valid for a simple collection",
 					session.reporting().getPosition(), 0);
@@ -1333,7 +1333,7 @@ public class ObservableCollectionTransformations {
 			if (!session.forChildren("reverse").isEmpty())
 				throw new QonfigInterpretationException("Reverse is not yet implemented",
 					session.attributes().get("reverse").getLocatedContent());
-			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			isPropagateToParent = session.attributes().get("propagate-to-parent").getValue(boolean.class, false);
 
 			String targetModelTypeName = session.getAttributeText("to");
@@ -1607,7 +1607,7 @@ public class ObservableCollectionTransformations {
 			@Override
 			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theFilter = getDefinition().getFilter().interpret(ModelTypes.Collection.any(), getExpressoEnv());
+				theFilter = interpret(getDefinition().getFilter(), ModelTypes.Collection.any());
 			}
 
 			@Override

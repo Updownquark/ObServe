@@ -11,11 +11,11 @@ public interface QuickLayout extends ExAddOn<QuickBox> {
 		}
 
 		@Override
-		public abstract Interpreted<L> interpret(ExElement.Interpreted<? extends QuickBox> element);
+		public abstract Interpreted<L> interpret(ExElement.Interpreted<?> element);
 	}
 
 	public abstract class Interpreted<L extends QuickLayout> extends ExAddOn.Interpreted.Abstract<QuickBox, L> {
-		protected Interpreted(Def<L> definition, ExElement.Interpreted<? extends QuickBox> element) {
+		protected Interpreted(Def<L> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 

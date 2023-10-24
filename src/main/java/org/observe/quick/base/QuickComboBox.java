@@ -11,11 +11,8 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	public static final String COMBO_BOX = "combo";
@@ -49,7 +46,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 			if (renderer == null)
 				renderer = session.metadata().get("default-renderer").get().peekFirst();
-			theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
+			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
 		}
 
 		@Override
@@ -75,22 +72,10 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 
 		@Override
-		public TypeToken<QuickComboBox<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickComboBox.class).<QuickComboBox<T>> parameterized(getValueType());
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			if (theRenderer != null
-				&& (getDefinition().getRenderer() == null || theRenderer.getIdentity() != getDefinition().getRenderer().getIdentity())) {
-				theRenderer.destroy();
-				theRenderer = null;
-			}
-			if (theRenderer == null && getDefinition().getRenderer() != null)
-				theRenderer = getDefinition().getRenderer().interpret(this);
-			if (theRenderer != null)
-				theRenderer.updateElement(env);
+			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+				(r, rEnv) -> r.updateElement(rEnv));
 		}
 
 		@Override

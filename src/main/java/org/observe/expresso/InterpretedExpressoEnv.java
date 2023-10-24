@@ -6,11 +6,11 @@ import java.util.Set;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.qommons.ClassMap;
+import org.qommons.config.SessionValues;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -39,28 +39,26 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 
 	private final ExternalModelSet theExtModels;
 	private final ClassView theClassView;
-	private final Map<Object, Object> theProperties;
 	private final boolean isTesting;
 
 	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
 		Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting, Map<Object, Object> properties, boolean testing) {
-		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting);
+		ErrorReporting reporting, SessionValues properties, boolean testing) {
+		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, properties);
 		theExtModels = extModels;
 		theClassView = classView;
-		theProperties = properties;
 		isTesting = testing;
 	}
 
 	@Override
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting) {
+		ErrorReporting reporting, SessionValues properties) {
 		if (models != null && !(models instanceof InterpretedModelSet))
-			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting);
+			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, getProperties());
 		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, attributes, nonStructuredParsers,
-			unaryOperators, binaryOperators, reporting, theProperties, isTesting);
+			unaryOperators, binaryOperators, reporting, properties, isTesting);
 	}
 
 	/**
@@ -78,6 +76,15 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 				env = env.with(child.getBuiltModels().createInterpreted(env));
 		} else if (child.getModels() != null)
 			env = env.with(child.getBuiltModels().createInterpreted(env));
+		if (env == this && !child.keySet().isEmpty()) {
+			env = (InterpretedExpressoEnv) copy();
+			for (String key : child.keySet()) {
+				if (child.getSource(key) == SessionValues.ValueSource.Local)
+					env.putLocal(key, child.get(key));
+				else
+					env.put(key, child.get(key));
+			}
+		}
 		return env;
 	}
 
@@ -102,29 +109,13 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 */
 	public InterpretedExpressoEnv withErrorReporting(ErrorReporting reporting) {
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
+			getUnaryOperators(), getBinaryOperators(), reporting, getProperties(), isTesting);
 	}
 
 	/** @return Whether this environment is to be used for testing */
 	public boolean isTesting() {
 		return isTesting;
 	}
-
-	/**
-	 * All {@link ObservableModelSet.InterpretedValueSynth}s for expressions parsed under this session should be
-	 * {@link ObservableModelSet.InterpretedValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this
-	 * element extends with-local-models.
-	 *
-	 * @param models The model instance
-	 * @return The wrapped model instance containing data for this element's local models
-	 * @throws ModelInstantiationException If the local model instantiation fails
-	 */
-	// public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
-	// if (getModels().getIdentity() != models.getModel().getIdentity())
-	// return getModels().createInstance(models.getUntil()).withAll(models).build();
-	// else
-	// return models;
-	// }
 
 	@Override
 	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView) {
@@ -139,7 +130,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (models == getModels())
 			return this;
 		return new InterpretedExpressoEnv(models, theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
+			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
 	}
 
 	/**
@@ -150,7 +141,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (classView == theClassView)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, classView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
+			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
 	}
 
 	@Override
@@ -208,7 +199,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (extModels == theExtModels)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), extModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
+			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
 	}
 
 	@Override
@@ -229,29 +220,24 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (isTesting == testing)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, testing);
+			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), testing);
 	}
 
-	/**
-	 * @param <T> The type of the property
-	 * @param key The key for the property
-	 * @param type The type of the property
-	 * @return The value of the property in this environment
-	 */
-	public <T> T getProperty(Object key, Class<T> type) {
-		Object value = theProperties.get(key);
-		if (value == null || type == null)
-			return (T) value;
-		return type.cast(value);
+	@Override
+	public InterpretedExpressoEnv put(String sessionKey, Object value) {
+		super.put(sessionKey, value);
+		return this;
 	}
 
-	/**
-	 * @param key The key for the property
-	 * @param value The value for the given property for this environment
-	 * @return This environment
-	 */
-	public InterpretedExpressoEnv setProperty(Object key, Object value) {
-		theProperties.put(key, value);
+	@Override
+	public InterpretedExpressoEnv putLocal(String sessionKey, Object value) {
+		super.putLocal(sessionKey, value);
+		return this;
+	}
+
+	@Override
+	public InterpretedExpressoEnv putGlobal(String sessionKey, Object value) {
+		super.putGlobal(sessionKey, value);
 		return this;
 	}
 

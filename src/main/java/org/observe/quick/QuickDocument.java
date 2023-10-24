@@ -72,13 +72,13 @@ public class QuickDocument extends ExElement.Abstract {
 			theModelLoadValue = elModels.getElementValueModelId("onModelLoad");
 			theBodyLoadValue = elModels.getElementValueModelId("onBodyLoad");
 
-			theHead = ExElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
+			theHead = syncChild(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {
 				setExpressoEnv(theHead.getExpressoEnv());
 				session.setExpressoEnv(theHead.getExpressoEnv());
 				session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, theHead.getStyleSheet());
 			}
-			theBody = ExElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
+			theBody = syncChild(QuickWidget.Def.class, theBody, session, "body");
 		}
 
 		/**
@@ -139,9 +139,8 @@ public class QuickDocument extends ExElement.Abstract {
 				setExpressoEnv(theHead.getExpressoEnv());
 			}
 
-			if (theBody == null || theBody.getDefinition() != getDefinition().getBody())
-				theBody = getDefinition().getBody().interpret(this);
-			theBody.updateElement(theHead.getExpressoEnv());
+			theBody = syncChild(getDefinition().getBody(), theBody, def -> def.interpret(this),
+				(b, bEnv) -> b.updateElement(theHead.getExpressoEnv()));
 		}
 
 		/** @return The new document */

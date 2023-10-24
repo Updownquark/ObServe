@@ -126,14 +126,14 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModel = ExElement.useOrReplace(TreeModel.Def.class, theModel, session, "tree-model");
+			theModel = syncChild(TreeModel.Def.class, theModel, session, "tree-model");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			String valueName = session.getAttributeText("active-value-name");
 			theActiveValueVariable = elModels.getElementValueModelId(valueName);
 			String nodeName = session.getAttributeText("active-node-name");
 			theNodeVariable = elModels.getElementValueModelId(nodeName);
 			theSelectedVariable = elModels.getElementValueModelId("selected");
-			theTreeColumn = ExElement.useOrReplace(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
+			theTreeColumn = syncChild(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
 			thePathSelection = getAttributeExpression("selection", session);
 			thePathMultiSelection = getAttributeExpression("multi-selection", session);
 			theNodeSelection = getAttributeExpression("node-selection", session);
@@ -142,7 +142,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
 			isRootVisible = session.getAttribute("root-visible", boolean.class);
 
-			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
+			syncChildren(ValueAction.Def.class, theActions, session.forChildren("action"));
 		}
 
 		@Override
@@ -219,11 +219,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		@Override
-		public TypeToken<? extends T> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickTree.class).<T> parameterized(getNodeType());
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theModel != null && theModel.getIdentity() != getDefinition().getModel().getIdentity()) {
 				theModel.destroy();
@@ -235,39 +230,22 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			super.doUpdate(env);
 
 			getNodeType(); // Initialize root
-			theModel.updateModel(env);
-			if (theTreeColumn != null && (getDefinition().getTreeColumn() == null
-				|| theTreeColumn.getIdentity() != getDefinition().getTreeColumn().getIdentity())) {
-				theTreeColumn.destroy();
-				theTreeColumn = null;
-			}
-			if (getDefinition().getTreeColumn() != null) {
-				if (theTreeColumn == null)
-					theTreeColumn = (QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N>) getDefinition().getTreeColumn()
-					.<BetterList<N>> interpret(this);
-				theTreeColumn.updateColumns(env);
-			}
+			// Even though we already instantiated the model above, we need this call to delegate to the appropriate environment
+			theModel = syncChild(getDefinition().getModel(), theModel, def -> def.interpret(this), (m, mEnv) -> m.updateModel(env));
+			theTreeColumn = syncChild(getDefinition().getTreeColumn(), theTreeColumn,
+				def -> (QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N>) def.<BetterList<N>> interpret(this),
+				(c, cEnv) -> c.updateColumns(cEnv));
 			TypeToken<N> nodeType = getNodeType();
 			TypeToken<BetterList<N>> pathType = TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(nodeType);
-			thePathSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(pathType), env);
-			thePathMultiSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(pathType), env);
-			theNodeSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(nodeType), env);
-			theNodeMultiSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(nodeType), env);
+			thePathSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(pathType));
+			thePathMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(pathType));
+			theNodeSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(nodeType));
+			theNodeMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(nodeType));
 
-			CollectionUtils.synchronize(theActions, getDefinition().getActions(), //
-				(a, d) -> a.getIdentity() == d.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(
-				child -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<BetterList<N>, ?>) child).interpret(this,
-					getValueType()))//
-			.rightOrder()//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
-			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
-			.adjust();
+			syncChildren(getDefinition().getActions(), theActions,
+				def -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<BetterList<N>, ?>) def).interpret(this,
+					getValueType()),
+				ValueAction.Interpreted::updateAction);
 		}
 
 		@Override

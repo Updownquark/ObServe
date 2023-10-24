@@ -82,7 +82,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 			if (renderer == null)
 				renderer = session.metadata().get("default-renderer").get().peekFirst();
-			theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
+			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
 		}
 
 		@Override
@@ -109,12 +109,6 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			return theValues;
 		}
 
-		@Override
-		public TypeToken<B> getWidgetType() {
-			return (TypeToken<B>) TypeTokens.get().keyFor(QuickComboButton.class)
-				.<QuickComboButton<T>> parameterized(getValues().getType().getType(0));
-		}
-
 		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			return (TypeToken<T>) getOrInitValues().getType().getType(0);
 		}
@@ -122,8 +116,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		protected InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getOrInitValues()
 			throws ExpressoInterpretationException {
 			if (theValues == null)
-				theValues = getDefinition().getValues() == null ? null
-					: getDefinition().getValues().interpret(ModelTypes.Collection.anyAsV(), getExpressoEnv());
+				theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.anyAsV());
 			return theValues;
 		}
 
@@ -136,15 +129,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			super.doUpdate(env);
 			getOrInitValues();
 
-			if (theRenderer != null
-				&& (getDefinition().getRenderer() == null || theRenderer.getIdentity() != getDefinition().getRenderer().getIdentity())) {
-				theRenderer.destroy();
-				theRenderer = null;
-			}
-			if (theRenderer == null && getDefinition().getRenderer() != null)
-				theRenderer = getDefinition().getRenderer().interpret(this);
-			if (theRenderer != null)
-				theRenderer.updateElement(env);
+			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+				(r, rEnv) -> r.updateElement(rEnv));
 		}
 
 		@Override

@@ -17,7 +17,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
 		}
 	}
@@ -64,7 +64,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 			}
 		}

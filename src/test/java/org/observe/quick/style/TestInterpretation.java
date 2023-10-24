@@ -244,10 +244,10 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				a = getDefinition().getA().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
-				b = getDefinition().getB().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
-				c = getDefinition().getC().interpret(ModelTypes.Value.INT, getExpressoEnv());
-				d = getDefinition().getD().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
+				a = interpret(getDefinition().getA(), ModelTypes.Value.BOOLEAN);
+				b = interpret(getDefinition().getB(), ModelTypes.Value.BOOLEAN);
+				c = interpret(getDefinition().getC(), ModelTypes.Value.INT);
+				d = interpret(getDefinition().getD(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override
@@ -537,7 +537,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				e = getAttributeExpression("e", session);
 				f = getAttributeExpression("f", session);
 
-				ExElement.syncDefs(ModelValueElement.CompiledSynth.class, children, session.forChildren("a"));
+				syncChildren(ModelValueElement.CompiledSynth.class, children, session.forChildren("a"));
 			}
 
 			@Override
@@ -570,17 +570,14 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				e = getDefinition().getE().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
-				f = getDefinition().getF().interpret(ModelTypes.Value.INT, getExpressoEnv());
+				e = interpret(getDefinition().getE(), ModelTypes.Value.BOOLEAN);
+				f = interpret(getDefinition().getF(), ModelTypes.Value.INT);
 
-				theChildren.clear();
-				for (ModelValueElement.CompiledSynth<SettableValue<?>, ?> synth : getDefinition().getChildren()) {
-					ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?> child;
-					child = (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) synth.interpret();
-					child.setParentElement(this);
-					child.updateValue(getExpressoEnv());
-					theChildren.add(child);
-				}
+				syncChildren(getDefinition().getChildren(), theChildren,
+					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) def.interpret(), (v, vEnv) -> {
+						v.setParentElement(this);
+						v.updateValue(vEnv);
+					});
 			}
 
 			@Override
@@ -837,7 +834,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				g = getDefinition().getG().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
+				g = interpret(getDefinition().getG(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override
@@ -1020,7 +1017,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				h = getDefinition().getH().interpret(ModelTypes.Value.INT, getExpressoEnv());
+				h = interpret(getDefinition().getH(), ModelTypes.Value.INT);
 			}
 
 			@Override

@@ -1,48 +1,42 @@
 package org.observe.expresso.qonfig;
 
+import org.observe.Observable;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.qommons.config.QonfigElementOrAddOn;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigInterpretationException;
 
-public abstract class QonfigPromise extends ExElement.Abstract {
-	public static abstract class Def<P extends QonfigPromise> extends ExElement.Def.Abstract<P> {
-		private ExElement.Def<?> theContent;
+public interface QonfigPromise extends ExElement {
+	public interface Def<P extends QonfigPromise> extends ExElement.Def<P> {
+		ExElement.Def<?> getFulfilledContent();
 
-		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
-		}
+		void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException;
 
-		public ExElement.Def<?> getContent() {
-			return theContent;
-		}
+		CompiledExpressoEnv getExternalExpressoEnv();
 
-		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
-			theContent = content;
-			update(session);
-		}
+		void setExternalExpressoEnv(CompiledExpressoEnv env);
 
-		protected abstract Interpreted<? extends P> interpret();
+		Interpreted<? extends P> interpret();
 	}
 
-	public static abstract class Interpreted<P extends QonfigPromise> extends ExElement.Interpreted.Abstract<P> {
-		private ExElement.Interpreted<?> theContent;
+	public interface Interpreted<P extends QonfigPromise> extends ExElement.Interpreted<P> {
+		ExElement.Interpreted<?> getFulfilledContent();
 
-		protected Interpreted(Def<? super P> definition, ExElement.Interpreted<?> parent) {
-			super(definition, parent);
-		}
+		InterpretedExpressoEnv getExternalExpressoEnv();
 
-		public ExElement.Interpreted<?> getContent() {
-			return theContent;
-		}
+		void setExternalExpressoEnv(InterpretedExpressoEnv env);
 
-		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
-			theContent = content;
-			update(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
-		}
+		void update(InterpretedExpressoEnv env, ExElement.Interpreted<?> content) throws ExpressoInterpretationException;
+
+		QonfigPromise create(ExElement content);
 	}
 
-	protected QonfigPromise(Object id) {
-		super(id);
-	}
+	void update(Interpreted<?> interpreted);
+
+	ModelSetInstance getExternalModels(ModelSetInstance contentModels, Observable<?> until) throws ModelInstantiationException;
+
+	@Override
+	QonfigPromise copy(ExElement parent);
 }

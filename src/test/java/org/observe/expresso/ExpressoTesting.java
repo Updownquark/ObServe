@@ -61,7 +61,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				ExElement.syncDefs(TestAction.class, theActions, //
+				syncChildren(TestAction.class, theActions, //
 					BetterList.of2(session.forChildren("test-action").stream(), s -> s.asElement("test-action")));
 			}
 
@@ -99,12 +99,8 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				CollectionUtils.synchronize(theActions, getDefinition().getActions(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.<ExpressoInterpretationException> simpleE(d -> d.interpret().setParentElement(this))//
-				.onLeftX(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().updateValue(getExpressoEnv()))//
-				.onCommonX(el -> el.getLeftValue().updateValue(getExpressoEnv()))//
-				.adjust();
+				syncChildren(getDefinition().getActions(), theActions, d -> d.interpret().setParentElement(this),
+					TestAction.Interpreted::updateValue);
 			}
 
 			public ExpressoTest create(ExElement parent) {
@@ -335,10 +331,10 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		super.doUpdate(session);
-		theHead = ExElement.useOrReplace(Expresso.Def.class, theHead, session, "head");
+		theHead = syncChild(Expresso.Def.class, theHead, session, "head");
 		setExpressoEnv(theHead.getExpressoEnv()); // Inherit all the models and imports from the head section
 		session.setExpressoEnv(getExpressoEnv());
-		ExElement.syncDefs(ExpressoTest.Def.class, theTests, session.forChildren("test"));
+		syncChildren(ExpressoTest.Def.class, theTests, session.forChildren("test"));
 		for (ExpressoTest.Def test : theTests) {
 			if (theTestsByName.putIfAbsent(test.getName(), test) != null)
 				throw new QonfigInterpretationException("Multiple tests named '" + test.getName() + "'",

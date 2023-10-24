@@ -1,7 +1,6 @@
 package org.observe.quick.style;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExAddOn.Interpreted;
 import org.observe.expresso.qonfig.ExAddOn.Void;
@@ -35,7 +34,7 @@ public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Vo
 	public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 		super.update(session, element);
 
-		theStyleSheet = ExElement.useOrReplace(QuickStyleSheet.class, theStyleSheet, session, "style-sheet");
+		theStyleSheet = element.syncChild(QuickStyleSheet.class, theStyleSheet, session, "style-sheet");
 		session.put(QUICK_STYLE_SHEET, theStyleSheet);
 	}
 
@@ -66,8 +65,8 @@ public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Vo
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
 
 			if (theStyleSheet != null && (getDefinition().getStyleSheet() == null
 				|| theStyleSheet.getIdentity() != getDefinition().getStyleSheet().getIdentity())) {
@@ -77,7 +76,7 @@ public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Vo
 			if (theStyleSheet == null && getDefinition().getStyleSheet() != null)
 				theStyleSheet = getDefinition().getStyleSheet().interpret(getElement());
 			if (theStyleSheet != null)
-				theStyleSheet.updateStyleSheet(env);
+				theStyleSheet.updateStyleSheet(getElement().getExpressoEnv());
 		}
 
 		@Override

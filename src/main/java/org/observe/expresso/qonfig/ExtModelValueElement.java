@@ -223,7 +223,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theDefault = getDefinition().getDefault() == null ? null : getDefinition().getDefault().interpret(getType(), getExpressoEnv());
+			theDefault = interpret(getDefinition().getDefault(), getType());
 		}
 	}
 

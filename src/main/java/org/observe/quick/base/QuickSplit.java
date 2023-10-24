@@ -84,11 +84,6 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 			return (Def<? super S>) super.getDefinition();
 		}
 
-		@Override
-		public TypeToken<S> getWidgetType() {
-			return (TypeToken<S>) TypeTokens.get().of(QuickSplit.class);
-		}
-
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> getSplitPosition() {
 			return theSplitPosition;
 		}
@@ -96,8 +91,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theSplitPosition = getDefinition().getSplitPosition() == null ? null
-				: getDefinition().getSplitPosition().interpret(ModelTypes.Value.forType(QuickSize.class), env);
+			theSplitPosition = interpret(getDefinition().getSplitPosition(), ModelTypes.Value.forType(QuickSize.class));
 		}
 
 		@Override

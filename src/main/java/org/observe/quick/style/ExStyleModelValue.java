@@ -31,13 +31,13 @@ public class ExStyleModelValue extends ExElementModelValue {
 		}
 
 		@Override
-		public Interpreted<AO> interpret(ExElement.Interpreted<? extends ExtModelValueElement<?, ?>> element) {
+		public Interpreted<AO> interpret(ExElement.Interpreted<?> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
 
 	protected static class Interpreted<AO extends ExStyleModelValue> extends ExElementModelValue.Interpreted<AO> {
-		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExtModelValueElement<?, ?>> element) {
+		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 

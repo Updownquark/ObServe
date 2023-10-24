@@ -82,7 +82,7 @@ public class ObservableActionTransformations {
 			public void update(ModelInstanceType<ObservableAction, ObservableAction> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), getExpressoEnv(), true);
+				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), this, true);
 			}
 
 			@Override

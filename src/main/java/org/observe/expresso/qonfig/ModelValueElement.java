@@ -285,7 +285,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 					|| getDefinition().getElementValue().getExpression() == ObservableExpression.EMPTY)
 					theValue = null;
 				else
-					theValue = getDefinition().getElementValue().interpret(getTargetType(), getExpressoEnv());
+					theValue = interpret(getDefinition().getElementValue(), getTargetType());
 			}
 
 			@Override

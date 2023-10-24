@@ -38,7 +38,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			if (session.children().get("required").get().isEmpty()) { // Don't create a required model if there's no reason to
 				theRequiredModelElement = null;
@@ -46,7 +46,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 			}
 			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING, true);
 			ObservableModelSet.Builder builder = createBuilder(session);
-			theRequiredModelElement = ExElement.useOrReplace(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
+			theRequiredModelElement = getElement().syncChild(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
 				session, "required");
 			installModelValues(session, builder, theRequiredModelElement);
 			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theRequiredModelElement.getExpressoEnv().getModels()));
@@ -113,16 +113,10 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.update(env);
-			if (theRequiredModelElement == null || theRequiredModelElement.getDefinition() != getDefinition().getRequiredModelElement()) {
-				if (theRequiredModelElement != null)
-					theRequiredModelElement.destroy();
-				theRequiredModelElement = getDefinition().getRequiredModelElement() == null ? null
-					: getDefinition().getRequiredModelElement().interpret(getElement());
-			}
-			if (theRequiredModelElement != null)
-				theRequiredModelElement.update(env);
+		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
+			super.update(element);
+			theRequiredModelElement = getElement().syncChild(getDefinition().getRequiredModelElement(), theRequiredModelElement,
+				def -> def.interpret(getElement()), (el, elEnv) -> el.update(elEnv));
 		}
 
 		@Override
@@ -175,8 +169,8 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
-		super.update(interpreted);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		if (myInterpreted.getLocalModelElement() == null)

@@ -39,8 +39,6 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 /** The base class for widgets in Quick */
 public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	public static final String WIDGET = "widget";
@@ -191,23 +189,9 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				thePressedValue = elModels.getElementValueModelId("pressed");
 				theRightPressedValue = elModels.getElementValueModelId("rightPressed");
 
-				theBorder = ExElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
-				CollectionUtils.synchronize(theEventListeners, session.forChildren("event-listener"),
-					(l, s) -> ExElement.typesEqual(l.getElement(), s.getElement())).simpleE(s -> {
-						QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
-						listener.update(s);
-						return listener;
-					})//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
-
-				CollectionUtils
-				.synchronize(theDialogs, session.forChildren("dialog"), (l, s) -> ExElement.typesEqual(l.getElement(), s.getElement()))
-				.simpleE(s -> {
-					QuickDialog.Def<?> listener = s.interpret(QuickDialog.Def.class);
-					listener.update(s);
-					return listener;
-				})//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
+				theBorder = syncChild(QuickBorder.Def.class, theBorder, session, "border");
+				syncChildren(QuickEventListener.Def.class, theEventListeners, session.forChildren("event-listener"));
+				syncChildren(QuickDialog.Def.class, theDialogs, session.forChildren("dialog"));
 			}
 
 			@Override
@@ -238,9 +222,6 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 		/** @return This widget's border */
 		QuickBorder.Interpreted<?> getBorder();
-
-		/** @return The type of the widget produced by this interpretation */
-		TypeToken<? extends W> getWidgetType() throws ExpressoInterpretationException;
 
 		/** @return The tool tip to display when the user hovers over this widget */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
@@ -325,35 +306,14 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (getDefinition().getBorder() == null)
-					theBorder = null;
-				else if (theBorder == null || theBorder.getDefinition() != getDefinition().getBorder())
-					theBorder = getDefinition().getBorder().interpret(this);
-				if (theBorder != null)
-					theBorder.updateBorder(env);
-				theTooltip = getDefinition().getTooltip() == null ? null
-					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, env);
-				isVisible = getDefinition().isVisible() == null ? null
-					: getDefinition().isVisible().interpret(ModelTypes.Value.BOOLEAN, env);
+				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
+				isVisible = interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
 
-				CollectionUtils
-				.synchronize(theEventListeners, getDefinition().getEventListeners(), (l, d) -> l.getIdentity() == d.getIdentity())//
-				.simpleE(l -> {
-					QuickEventListener.Interpreted<?> listener = l.interpret(this);
-					listener.updateListener(env);
-					return listener;
-				})//
-				.onCommonX(el -> el.getLeftValue().updateListener(env))//
-				.adjust();
-
-				CollectionUtils.synchronize(theDialogs, getDefinition().getDialogs(), (l, d) -> l.getIdentity() == d.getIdentity())//
-				.simpleE(l -> {
-					QuickDialog.Interpreted<?> listener = l.interpret(this);
-					listener.updateDialog(env);
-					return listener;
-				})//
-				.onCommonX(el -> el.getLeftValue().updateDialog(env))//
-				.adjust();
+				theBorder = syncChild(getDefinition().getBorder(), theBorder, def -> def.interpret(this),
+					(b, bEnv) -> b.updateBorder(bEnv));
+				syncChildren(getDefinition().getEventListeners(), theEventListeners, def -> def.interpret(this),
+					QuickEventListener.Interpreted::updateListener);
+				syncChildren(getDefinition().getDialogs(), theDialogs, def -> def.interpret(this), QuickDialog.Interpreted::updateDialog);
 			}
 
 			@Override

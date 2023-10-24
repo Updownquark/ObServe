@@ -102,7 +102,7 @@ public class ObservableValueTransformations {
 			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), getExpressoEnv(), true);
+				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), this, true);
 			}
 
 			@Override
@@ -250,7 +250,7 @@ public class ObservableValueTransformations {
 				throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
 				super.update(sourceType, env);
-				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), getExpressoEnv(), true);
+				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), this, true);
 			}
 
 			@Override
@@ -540,7 +540,7 @@ public class ObservableValueTransformations {
 			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
-				theRefresh = getDefinition().getRefresh().interpret(ModelTypes.Event.any(), getExpressoEnv());
+				theRefresh = interpret(getDefinition().getRefresh(), ModelTypes.Event.any());
 			}
 
 			@Override
@@ -795,7 +795,7 @@ public class ObservableValueTransformations {
 			if (reverse != null)
 				reverse.reporting().warn("reverse is not usable for value flattening");
 
-			theSorting = ExElement.useOrReplace(ExSort.ExRootSort.class, theSorting, session, "sort");
+			theSorting = syncChild(ExSort.ExRootSort.class, theSorting, session, "sort");
 			theEquivalence = getAttributeExpression("equivalence", session);
 			theEquivalencePosition = theEquivalence == null ? null : session.attributes().get("equivalence").getLocatedContent();
 			LocatedPositionedContent targetModelType = session.attributes().get("to").getLocatedContent();
@@ -1065,10 +1065,9 @@ public class ObservableValueTransformations {
 				theValueType = (TypeToken<T>) valueType.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 				theModelType = (ModelInstanceType<C, CV>) modelType.forTypes(theValueType);
 				if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set) {//
-					theEquivalence = getDefinition().getEquivalence() == null ? null : getDefinition().getEquivalence().interpret(//
+					theEquivalence = interpret(getDefinition().getEquivalence(), //
 						ModelTypes.Value.forType(TypeTokens.get().keyFor(Equivalence.class)
-							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theValueType))),
-						getExpressoEnv());
+							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theValueType))));
 					isSorted = false;
 					if (theSorting != null)
 						theSorting.destroy();
@@ -1076,8 +1075,8 @@ public class ObservableValueTransformations {
 				} else if (modelType == ModelTypes.SortedCollection || modelType == ModelTypes.SortedSet) {//
 					isSorted = true;
 					theEquivalence = null;
-					theSorting = getDefinition().getSorting() == null ? null
-						: (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSorting().interpret(this);
+					theSorting = syncChild(getDefinition().getSorting(), theSorting,
+						def -> (ExSort.ExRootSort.Interpreted<T>) def.interpret(this), (s, sEnv) -> s.update(theValueType, sEnv));
 					if (theSorting == null) {
 						theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(theValueType));
 						if (theDefaultSorting == null)

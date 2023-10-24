@@ -15,7 +15,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.Named;
-import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -69,7 +68,7 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		}
 
 		theName = session.getAttributeText("name");
-		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
+		syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 	}
 
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -101,15 +100,8 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 
-			CollectionUtils
-			.synchronize(theStyleElements, getDefinition().getStyleElements(),
-				(interp, def) -> interp.getIdentity() == def.getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().updateStyle(expressoEnv))//
-			.onCommonX(el -> el.getLeftValue().updateStyle(expressoEnv))//
-			.rightOrder()//
-			.adjust();
+			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
+				(i, sEnv) -> i.updateStyle(sEnv));
 		}
 	}
 }
