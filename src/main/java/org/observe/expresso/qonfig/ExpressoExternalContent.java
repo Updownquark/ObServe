@@ -8,7 +8,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
-import org.observe.expresso.ClassView;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -287,9 +286,10 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			theContentModelModel = getDefinition().getContentModelModel().createInterpreted(env);
 			theContentModelModel.interpret(env);
 
-			env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(ClassView.build()).build());
+			env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
 			env.put(CONTENT_ENV_PROPERTY, getContent().getExpressoEnv());
 			theHead.updateExpresso(env);
+			setExpressoEnv(theHead.getExpressoEnv());
 		}
 
 		public ExpressoExternalContent create(ExElement content) {

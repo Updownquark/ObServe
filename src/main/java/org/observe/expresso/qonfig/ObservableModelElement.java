@@ -129,8 +129,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				doBuild = true;
 			}
 			if (doBuild) {
+				ObservableModelSet.Builder builder;
+				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
+					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
+				else {
+					builder = getExpressoEnv().getModels().wrap(name);
+					setExpressoEnv(getExpressoEnv().with(builder));
+				}
 				for (ModelValueElement.Def<?, ?> value : theValues)
-					value.populate((ObservableModelSet.Builder) getExpressoEnv().getModels());
+					value.populate(builder);
 			}
 			int i = 0;
 			for (ExpressoQIS vs : valueSessions) {
@@ -298,6 +305,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					builder = ObservableModelSet.build(getQonfigType().getName(), ObservableModelSet.JAVA_NAME_CHECKER);
 					if (nonTrivial(getExpressoEnv().getModels()))
 						builder.withAll(getExpressoEnv().getModels());
+					session.setExpressoEnv(session.getExpressoEnv().with(builder));
 					setExpressoEnv(session.getExpressoEnv());
 				}
 				BiConsumer<ObservableModelElement.Def<?, ?>, ExpressoQIS> sessionUpdater = (m, s) -> {

@@ -33,6 +33,7 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Identifiable.AbstractIdentifiable;
@@ -791,11 +792,12 @@ public class ModelTypes {
 					ModelInstanceType<ObservableCollection<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
+							dest);
 					} else {
-						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class).parameterized(source.getType(0));
+						TypeToken<?> oceType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);

@@ -123,7 +123,6 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		@Override
 		public void update(InterpretedExpressoEnv env, ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
 			theFulfilledContent = content;
-			super.update(env);
 
 			if (theExternalContent == null || theExternalContent.getIdentity() != getDefinition().getExternalContent().getIdentity()) {
 				if (theExternalContent != null)
@@ -131,6 +130,8 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 				theExternalContent = getDefinition().getExternalContent().interpret();
 			}
 			theExternalContent.update(content);
+
+			super.update(env);
 		}
 
 		@Override

@@ -1493,10 +1493,15 @@ public class QuickBaseSwing implements QuickInterpretation {
 						JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, icon);
 					else
 						JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType);
-					EventQueue.invokeLater(() -> {
-						if (window.isVisible().isAcceptable(false) == null)
-							window.isVisible().set(false, null);
-					});
+					Runnable[] resetVisible = new Runnable[1];
+					resetVisible[0] = () -> {
+						if (window.isVisible().isAcceptable(false) == null) {
+							if (window.isVisible().isEventing())
+								EventQueue.invokeLater(resetVisible[0]);
+							else
+								window.isVisible().set(false, null);
+						}
+					};
 					theOnClose.act(null);
 				});
 			}
@@ -1532,10 +1537,16 @@ public class QuickBaseSwing implements QuickInterpretation {
 							JOptionPane.QUESTION_MESSAGE, icon);
 					else
 						result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
-					EventQueue.invokeLater(() -> {
-						if (window.isVisible().isAcceptable(false) == null)
-							window.isVisible().set(false, null);
-					});
+					Runnable[] resetVisible = new Runnable[1];
+					resetVisible[0] = () -> {
+						if (window.isVisible().isAcceptable(false) == null) {
+							if (window.isVisible().isEventing())
+								EventQueue.invokeLater(resetVisible[0]);
+							else
+								window.isVisible().set(false, null);
+						}
+					};
+					EventQueue.invokeLater(resetVisible[0]);
 					if (result == JOptionPane.OK_OPTION)
 						theOnConfirm.act(null);
 					else if (theOnCancel.isEnabled() == null)
@@ -1611,10 +1622,15 @@ public class QuickBaseSwing implements QuickInterpretation {
 					if (!satisfied)
 						JOptionPane.showMessageDialog(parent, enabled, title, JOptionPane.ERROR_MESSAGE);
 				}
-				EventQueue.invokeLater(() -> {
-					if (window.isVisible().isAcceptable(false) == null)
-						window.isVisible().set(false, null);
-				});
+				Runnable[] resetVisible = new Runnable[1];
+				resetVisible[0] = () -> {
+					if (window.isVisible().isAcceptable(false) == null) {
+						if (window.isVisible().isEventing())
+							EventQueue.invokeLater(resetVisible[0]);
+						else
+							window.isVisible().set(false, null);
+					}
+				};
 			}
 		};
 	}

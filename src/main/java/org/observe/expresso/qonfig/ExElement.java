@@ -628,7 +628,7 @@ public interface ExElement extends Identifiable {
 					}
 				}
 
-				if (firstTime) {
+				if (firstTime && thePromise == null) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					PartialQonfigElement element = thePromise == null ? theElement : thePromise.getElement();
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
@@ -643,15 +643,19 @@ public interface ExElement extends Identifiable {
 				try {
 					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.preUpdate(session.asElement(addOn.getType()), this);
-					if (theExternalView != null)
+					if (theExternalView != null) {
 						theExternalView.preUpdateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
+						session.setExpressoEnv(theExpressoEnv);
+					}
 
 					doUpdate(session);
 
 					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.postUpdate(session.asElement(addOn.getType()), this);
-					if (theExternalView != null)
+					if (theExternalView != null) {
 						theExternalView.postUpdateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
+						session.setExpressoEnv(theExpressoEnv);
+					}
 				} catch (RuntimeException | Error e) {
 					reporting().error(e.getMessage(), e);
 				}

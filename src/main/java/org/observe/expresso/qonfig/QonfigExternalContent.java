@@ -41,6 +41,9 @@ public abstract class QonfigExternalContent extends ExElement.Abstract {
 			try {
 				theFulfills = session.getElement().getDocument().getDocToolkit().getElement(//
 					session.getAttributeText("fulfills"));
+				if (theFulfills == null)
+					reporting().at(session.attributes().get("fulfills").getName())
+					.error("Fulfillment type '" + session.getAttributeText("fulfills") + "' not found");
 			} catch (IllegalArgumentException e) {
 				reporting().error(e.getMessage(), e);
 			}
