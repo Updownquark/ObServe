@@ -18,9 +18,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.assoc.ObservableMap;
-import org.observe.assoc.ObservableMapEvent;
 import org.observe.assoc.ObservableMultiMap;
-import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.assoc.ObservableSortedMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
@@ -1402,12 +1400,11 @@ public class ModelTypes {
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
 						return ModelType.converter(
-							LambdaUtils.printableFn(src -> src.getValues().changes().map(__ -> null), "changes", null), dest);
+							LambdaUtils.printableFn(src -> src.getValues().simpleChanges().map(__ -> null), "changes", null), dest);
 					} else {
-						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
-							.parameterized(source.getType(0));
+						TypeToken<?> oceType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.getValues().changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.getValues().simpleChanges(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1508,12 +1505,12 @@ public class ModelTypes {
 				public ModelInstanceConverter<ObservableMap<?, ?>, Observable<?>> convert(ModelInstanceType<ObservableMap<?, ?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest, InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
+							dest);
 					} else {
-						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
-							source.getType(1));
+						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1621,13 +1618,12 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
 							dest);
 					} else {
-						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
-							source.getType(1));
+						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1740,13 +1736,14 @@ public class ModelTypes {
 					ModelInstanceType<ObservableMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
+							dest);
 					} else {
-						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
-							source.getType(1));
+						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
 							return ModelType.converter(
-								LambdaUtils.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
+								LambdaUtils.printableFn(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null), "changes",
+									null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1863,13 +1860,13 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
 							dest);
 					} else {
-						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
-							source.getType(1));
+						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils
+								.printableFn(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
