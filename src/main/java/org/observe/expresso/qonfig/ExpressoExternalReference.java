@@ -5,6 +5,7 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.PartialQonfigElement;
 import org.qommons.config.QonfigChildDef;
@@ -169,6 +170,11 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 	public void instantiated() {
 		super.instantiated();
 		theExternalContent.instantiated();
+	}
+
+	@Override
+	public ModelInstantiator getExtModels() {
+		return theExternalContent.getExtModels();
 	}
 
 	@Override

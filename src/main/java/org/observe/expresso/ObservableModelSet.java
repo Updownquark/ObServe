@@ -1586,8 +1586,11 @@ public interface ObservableModelSet extends Identifiable {
 		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
 		/**
+		 * Satisfies inherited models in this instance builder.
+		 *
 		 * @param other The model instance set created for one of the {@link ObservableModelSet#getInheritance() inherited} models of the
-		 *        model that this instance set is being built for
+		 *        model that this instance set is being built for, or an instance of a model that may inherit models also inherited by this
+		 *        model.
 		 * @return This builder
 		 * @throws ModelInstantiationException If any of <code>other</code>'s components could not be instantiated
 		 */
@@ -2922,13 +2925,26 @@ public interface ObservableModelSet extends Identifiable {
 					addAll(theMSI.getModel(), other);
 					for (ModelComponentId inh : theMSI.getModel().getInheritance())
 						theInheritance.put(inh, other);
-				} else if (!theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
-					throw new IllegalArgumentException("Model " + other.getModel().getIdentity() + " is not related to this model ("
-						+ theMSI.getModel().getIdentity() + ")");
+				} else if (theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
+					theInheritance.put(other.getModel().getIdentity().getRootId(), other);
+					for (ModelComponentId modelId : other.getModel().getInheritance())
+						theInheritance.put(modelId, other.getInherited(modelId));
+				} else { // The other model is not known to us, but it may inherit from the same models
+					boolean hasCommon = false;
+					for (ModelComponentId inh : other.getModel().getInheritance()) {
+						if (inh.equals(theMSI.getModel().getIdentity())) {
+							hasCommon = true;
+							withAll(other.getInherited(inh));
+							break;
+						} else if (theMSI.getModel().getInheritance().contains(inh)) {
+							hasCommon = true;
+							withAll(other.getInherited(inh));
+						}
+					}
+					if (!hasCommon) // Don't need to throw an exception, I guess, but this probably represents an error
+						System.err.println("This model instance (" + theMSI.getModel().getIdentity() + ") is not related to "
+							+ other.getModel().getIdentity());
 				}
-				theInheritance.put(other.getModel().getIdentity().getRootId(), other);
-				for (ModelComponentId modelId : other.getModel().getInheritance())
-					theInheritance.put(modelId, other.getInherited(modelId));
 				return this;
 			}
 

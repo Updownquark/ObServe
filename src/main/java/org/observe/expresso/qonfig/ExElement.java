@@ -28,8 +28,10 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def.Abstract.JoinedCollection;
@@ -1617,6 +1619,7 @@ public interface ExElement extends Identifiable {
 		private final Object theId;
 		private ExElement theParent;
 		private ModelInstantiator theLocalModel;
+		private ModelInstantiator theUnifiedModel;
 		private boolean isModelPersistent;
 		private ClassMap<ExAddOn<?>> theAddOns;
 		private ErrorReporting theReporting;
@@ -1669,7 +1672,14 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public ModelInstantiator getModels() {
-			return theLocalModel;
+			if (theUnifiedModel != null)
+				return theUnifiedModel;
+			else if (theLocalModel != null)
+				return theLocalModel;
+			else if (theParent != null)
+				return theParent.getModels();
+			else
+				return null;
 		}
 
 		@Override
@@ -1743,14 +1753,15 @@ public interface ExElement extends Identifiable {
 			}
 
 			if (interpreted.getParentElement() == null//
-				|| myInterpreted.getUnifiedModel().getIdentity() != interpreted.getParentElement().getExpressoEnv().getModels()
+				|| interpreted.getExpressoEnv().getModels().getIdentity() != interpreted.getParentElement().getExpressoEnv().getModels()
 				.getIdentity())
-				// || interpreted.getExpressoEnv().getModels().getIdentity() != interpreted.getParentElement().getExpressoEnv().getModels()
-				// .getIdentity())
-				theLocalModel = myInterpreted.getUnifiedModel().instantiate();
-			// theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
 			else
 				theLocalModel = null;
+			if (interpreted.getPromise() != null)
+				theUnifiedModel = myInterpreted.getUnifiedModel().instantiate();
+			else
+				theUnifiedModel = null;
 			isModelPersistent = interpreted.isModelInstancePersistent();
 			try {
 				for (ExAddOn<?> addOn : theAddOns.getAllValues())
@@ -1783,6 +1794,8 @@ public interface ExElement extends Identifiable {
 		public void instantiated() {
 			if (theLocalModel != null)
 				theLocalModel.instantiate();
+			if (theUnifiedModel != null)
+				theUnifiedModel.instantiate();
 			for (ExAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.instantiated();
 			if (theExternalView != null)
@@ -1817,16 +1830,37 @@ public interface ExElement extends Identifiable {
 		}
 
 		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
-			if (theLocalModel != null) {
-				Observable<?> modelUntil = Observable.or(parentModels.getUntil(), onDestroy());
-				ObservableModelSet.ModelSetInstanceBuilder builder = theLocalModel.createInstance(modelUntil);
-				builder.withAll(parentModels);
-				if (thePromise != null)
-					builder.withAll(thePromise.getExternalModels(parentModels, modelUntil));
-				theUpdatingModels = builder.build();
-			}
-			else
+			if (theLocalModel == null && theUnifiedModel == null) {
 				theUpdatingModels = parentModels;
+				return theUpdatingModels;
+			}
+
+			ModelSetInstance localModels;
+			Observable<?> modelUntil = Observable.or(parentModels.getUntil(), onDestroy());
+			if (theLocalModel != null) {
+				ObservableModelSet.ModelSetInstanceBuilder builder = theLocalModel.createInstance(modelUntil);
+				if (theLocalModel.getInheritance().contains(parentModels.getModel().getIdentity())) {
+					builder.withAll(parentModels);
+				} else {
+					// The parent models are unified, which is an instantiation construct.
+					// The above statement would fail because this element's models were not constructed with unification in mind.
+					// Therefore we have to dissect it and take what we need.
+					for (ModelComponentId inh : theLocalModel.getInheritance()) {
+						if (parentModels.getModel().getInheritance().contains(inh))
+							builder.withAll(parentModels.getInherited(inh));
+					}
+				}
+				localModels = builder.build();
+			} else
+				localModels = parentModels;
+
+			if (theUnifiedModel != null) {
+				ModelSetInstanceBuilder builder = theUnifiedModel.createInstance(modelUntil);
+				builder.withAll(localModels);
+				builder.withAll(thePromise.getExternalModels(parentModels, modelUntil));
+				theUpdatingModels = builder.build();
+			} else
+				theUpdatingModels = localModels;
 			return theUpdatingModels;
 		}
 
@@ -1928,7 +1962,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public ModelInstantiator getModels() {
-				return Abstract.this.getModels();
+				return thePromise.getExtModels();
 			}
 
 			@Override

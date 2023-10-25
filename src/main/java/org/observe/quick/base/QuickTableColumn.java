@@ -10,7 +10,9 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.*;
@@ -21,6 +23,7 @@ import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.util.TypeTokens;
+import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -404,9 +407,9 @@ public interface QuickTableColumn<R, C> {
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
 
 			ExElement owner = getParentElement().getParentElement();
-			ModelSetInstance editorModels = myModels.copy()//
-				.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
-				.build();
+			ModelSetInstanceBuilder editorModelBuilder = myModels.copy();
+			populateEditorModels(editorModelBuilder, myModels, owner.getModels());
+			ModelSetInstance editorModels = editorModelBuilder.build();
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
 			if (editing != null && owner instanceof MultiValueRenderable) {
 				// Not enough to copy the editor models, because I also need to replace values table models
@@ -431,6 +434,25 @@ public interface QuickTableColumn<R, C> {
 				editing.instantiateEditor(editorModels);
 			}
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
+		}
+
+		private void populateEditorModels(ModelSetInstanceBuilder builder, ModelSetInstance myModels, ModelInstantiator ownerModels)
+			throws ModelInstantiationException, IllegalArgumentException {
+			if (myModels.getModel().getInheritance().contains(ownerModels.getIdentity()))
+				builder.withAll(myModels.getInherited(ownerModels.getIdentity()).copy(myModels.getUntil()).build());
+			else {
+				// We don't directly extend our owner's model
+				// This is likely because the owner element is the result of a Qonfig promise, so its model instance is a unified model
+				// composed of the loading content models and the external content models
+				MultiInheritanceSet<ModelInstantiator> inheritance = MultiInheritanceSet
+					.create((m1, m2) -> m1.getInheritance().contains(m2.getIdentity()));
+				for (ModelComponentId inh : ownerModels.getInheritance()) {
+					if (myModels.getModel().getInheritance().contains(inh))
+						inheritance.add(myModels.getModel().getInheritance(inh));
+				}
+				for (ModelInstantiator inh : inheritance.values())
+					builder.withAll(myModels.getInherited(inh.getIdentity()).copy(myModels.getUntil()).build());
+			}
 		}
 
 		@Override

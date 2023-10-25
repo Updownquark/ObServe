@@ -333,6 +333,10 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 		theExtModels.instantiate();
 	}
 
+	public ModelInstantiator getExtModels() {
+		return theExtModels;
+	}
+
 	public ModelSetInstance getExternalModels(ModelSetInstance contentModels, Observable<?> until) throws ModelInstantiationException {
 		ModelSetInstance standardJava = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getModels().createInstance(until).build();
 		ModelSetInstance contentModelModel = theContentModelModel.createInstance(until)//
