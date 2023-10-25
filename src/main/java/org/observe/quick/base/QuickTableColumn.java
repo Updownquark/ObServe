@@ -23,7 +23,6 @@ import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.util.TypeTokens;
-import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -444,14 +443,17 @@ public interface QuickTableColumn<R, C> {
 				// We don't directly extend our owner's model
 				// This is likely because the owner element is the result of a Qonfig promise, so its model instance is a unified model
 				// composed of the loading content models and the external content models
-				MultiInheritanceSet<ModelInstantiator> inheritance = MultiInheritanceSet
-					.create((m1, m2) -> m1.getInheritance().contains(m2.getIdentity()));
+				// So we need to find the most specific component of the owner models that we recognize and copy that instead
+				ModelInstantiator target = null;
 				for (ModelComponentId inh : ownerModels.getInheritance()) {
-					if (myModels.getModel().getInheritance().contains(inh))
-						inheritance.add(myModels.getModel().getInheritance(inh));
+					if (myModels.getModel().getInheritance().contains(inh)) {
+						ModelInstantiator myInh = myModels.getModel().getInheritance(inh);
+						if (target == null || myInh.getInheritance().contains(target.getIdentity()))
+							target = myInh;
+					}
 				}
-				for (ModelInstantiator inh : inheritance.values())
-					builder.withAll(myModels.getInherited(inh.getIdentity()).copy(myModels.getUntil()).build());
+				if (target != null)
+					builder.withAll(myModels.getInherited(target.getIdentity()).copy(myModels.getUntil()).build());
 			}
 		}
 
@@ -477,6 +479,8 @@ public interface QuickTableColumn<R, C> {
 			copy.isSelected = SettableValue.build(isSelected.getType()).build();
 			copy.theRowIndex = SettableValue.build(theRowIndex.getType()).build();
 			copy.theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+
+			copy.theEditor = theEditor.copy(copy);
 
 			return copy;
 		}

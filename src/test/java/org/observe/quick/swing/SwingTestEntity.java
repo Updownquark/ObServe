@@ -31,4 +31,12 @@ public class SwingTestEntity implements Nameable {
 		theBoolean = b;
 		return this;
 	}
+
+	@Override
+	public String toString() {
+		if (theName == null)
+			return String.valueOf(theBoolean);
+		else
+			return theName + "=" + theBoolean;
+	}
 }

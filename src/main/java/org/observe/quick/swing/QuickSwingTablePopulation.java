@@ -930,7 +930,8 @@ class QuickSwingTablePopulation {
 						label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 						label[0].setEnabled(cell.isEnabled() == null);
 						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
-						label[0].setText(format.apply(field.get()));
+						F fieldV = field.get();
+						label[0].setText(format.apply(fieldV));
 						editor.decorate(label[0]);
 						cell.setEnabled(null); // Don't let the super class muck with our style
 						return label[0];

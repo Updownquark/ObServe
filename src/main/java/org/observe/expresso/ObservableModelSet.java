@@ -2347,10 +2347,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).put(other.getIdentity().getRootId(),
 					other) != null)
 					return this;
-				if (getParent() == null) {
-					if (other.getParent() != null)
-						throw new IllegalStateException(
-							"A root model (" + getIdentity() + ") cannot inherit from a child model (" + other.getIdentity() + ")");
+				if (getParent() == null) { //
 				} else if (other.getParent() == null)
 					throw new IllegalStateException(
 						"A child model (" + getIdentity() + ") cannot inherit from a root model (" + other.getIdentity() + ")");
@@ -2358,8 +2355,8 @@ public interface ObservableModelSet extends Identifiable {
 					throw new IllegalStateException("A child model (" + getIdentity() + ") cannot inherit from another child model ("
 						+ other.getIdentity() + ") whose parents are not related");
 				// For each model that other inherits, add an inheritance entry for that model ID mapped to other (if not present)
-				for (ModelComponentId subInh : other.getInheritance().keySet())
-					((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh, other);
+				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> subInh : other.getInheritance().entrySet())
+					((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh.getKey(), subInh.getValue());
 				// For any sub-models with the same name, this model's sub-model should inherit that of the other
 				for (String name : other.getComponentNames()) {
 					ModelComponentNode<?> component = other.getLocalComponent(name);
@@ -2924,7 +2921,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())) {
 					addAll(theMSI.getModel(), other);
 					for (ModelComponentId inh : theMSI.getModel().getInheritance())
-						theInheritance.put(inh, other);
+						theInheritance.put(inh, other.getInherited(inh));
 				} else if (theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
 					theInheritance.put(other.getModel().getIdentity().getRootId(), other);
 					for (ModelComponentId modelId : other.getModel().getInheritance())

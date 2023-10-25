@@ -1106,8 +1106,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				})//
 				.filter(column -> column == null ? "Column failed to create" : null)//
 				.catchUpdates(ThreadConstraint.ANY)//
-				// TODO collectActive(onWhat?)
-				.collect();
+				.collectActive(Observable.or(panel.getUntil(), quick.onDestroy()));
 			Subscription columnsSub = columns.subscribe(evt -> {
 				if (evt.getNewValue() != null)
 					evt.getNewValue().init(columns, evt.getElementId());
