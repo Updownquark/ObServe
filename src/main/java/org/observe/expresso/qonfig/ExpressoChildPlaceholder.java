@@ -43,7 +43,8 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 			String targetDoc = content.getElement().getDocument().getLocation();
 			content = content.getParentElement();
 			while (content != null
-				&& !ExElement.documentsMatch(content.getElement().getDocument().getLocation(), targetDoc))
+				&& (content.getPromise() == null
+					|| !ExElement.documentsMatch(content.getPromise().getElement().getDocument().getLocation(), targetDoc)))
 				content = content.getParentElement();
 			if (content != null) {
 				theDocumentParent = content;

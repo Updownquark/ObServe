@@ -18,5 +18,11 @@
 				<text-field />
 			</column-edit>
 		</column>
+		<column name="`Boolean`" value="entity.getBoolean()" column-value-name="b">
+			<check-box value="b" />
+			<column-edit type="modify-row-value" column-edit-value-name="newB" commit="entity.setBoolean(newB)">
+				<check-box />
+			</column-edit>
+		</column>
 	</table>
 </expresso-external-content>

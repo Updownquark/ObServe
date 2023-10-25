@@ -624,6 +624,7 @@ public interface ExElement extends Identifiable {
 					if (thePromise != null) {
 						thePromise.update(promiseSession, this);
 						setExpressoEnv(thePromise.getExpressoEnv());
+						session.setExpressoEnv(theExpressoEnv);
 					}
 				}
 
@@ -671,12 +672,16 @@ public interface ExElement extends Identifiable {
 			}
 
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				if (thePromise != null)
+				if (thePromise != null) {
 					theExternalView.update(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
+					session.setExpressoEnv(theExpressoEnv);
+				}
 				for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 					addOn.update(session.asElement(addOn.getType()), this);
-				if (theExternalView != null)
+				if (theExternalView != null) {
 					theExternalView.updateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
+					session.setExpressoEnv(theExpressoEnv);
+				}
 			}
 
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested,
@@ -1364,13 +1369,14 @@ public interface ExElement extends Identifiable {
 
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				theExpressoEnv = expressoEnv;
-				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
-					addOn.update(this);
 				if (thePromise != null) {
-					theExternalView.updateAddOns();
 					thePromise.update(theExpressoEnv, this);
 					theExpressoEnv = thePromise.getExpressoEnv();
 				}
+				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
+					addOn.update(this);
+				if (theExternalView != null)
+					theExternalView.updateAddOns();
 			}
 
 			protected void postUpdate() throws ExpressoInterpretationException {}

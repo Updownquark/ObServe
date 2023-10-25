@@ -133,7 +133,10 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		@Override
 		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
-				theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
+				if (getExpressoEnv() != null)
+					theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
+				else
+					theRoot = getDefinition().getRoot().interpret(ModelTypes.Value.anyAsV(), env);
 				theNodeType = (TypeToken<N>) theRoot.getType().getType(0);
 			}
 			return theNodeType;

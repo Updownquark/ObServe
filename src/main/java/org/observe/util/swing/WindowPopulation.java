@@ -226,7 +226,7 @@ public class WindowPopulation {
 			SettableValue<Integer> y = theY;
 			SettableValue<Integer> w = theWidth;
 			SettableValue<Integer> h = theHeight;
-			boolean sizeSet = false;
+			boolean positionSet = false;
 			if (x != null || y != null || w != null || h != null) {
 				class BoundsListener extends ComponentAdapter {
 					boolean callbackLock;
@@ -280,12 +280,13 @@ public class WindowPopulation {
 				BoundsListener boundsListener = new BoundsListener();
 				List<Observable<?>> boundsObs = new ArrayList<>(4);
 				{
+					boolean sizeSet = false;
 					Rectangle bounds = new Rectangle(theWindow.getBounds());
 					if (x != null && x.get() != null) {
 						boundsObs.add(x.noInitChanges());
 						int xv = x.get();
 						if (xv != -1) {
-							sizeSet = true;
+							positionSet = true;
 							bounds.x = xv;
 						}
 					}
@@ -293,23 +294,27 @@ public class WindowPopulation {
 						boundsObs.add(y.noInitChanges());
 						int yv = y.get();
 						if (yv != -1) {
-							sizeSet = true;
+							positionSet = true;
 							bounds.y = yv;
 						}
 					}
 					if (w != null && w.get() != null) {
 						boundsObs.add(w.noInitChanges());
 						int wv = w.get();
-						if (wv > 0)
+						if (wv > 0) {
+							sizeSet = true;
 							bounds.width = wv;
+						}
 					}
 					if (h != null && h.get() != null) {
 						boundsObs.add(h.noInitChanges());
 						int hv = h.get();
-						if (hv > 0)
+						if (hv > 0) {
+							sizeSet = true;
 							bounds.height = hv;
+						}
 					}
-					if (sizeSet) {
+					if (positionSet) {
 						bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
 							ObservableSwingUtils.getGraphicsBounds());
 						try {
@@ -319,6 +324,12 @@ public class WindowPopulation {
 							if (y != null && y.get() != null && y.get() != bounds.y) {
 								y.set(bounds.y, null);
 							}
+						} catch (RuntimeException e) {
+							e.printStackTrace();
+						}
+					}
+					if (sizeSet) {
+						try {
 							if (w != null && w.get() != null && w.get() != bounds.width) {
 								w.set(bounds.width, null);
 							}
@@ -328,8 +339,9 @@ public class WindowPopulation {
 						} catch (RuntimeException e) {
 							e.printStackTrace();
 						}
-						theWindow.setBounds(bounds);
 					}
+					if (positionSet || sizeSet)
+						theWindow.setBounds(bounds);
 				}
 				Observable.or(boundsObs.toArray(new Observable[boundsObs.size()])).takeUntil(theUntil).act(evt -> {
 					if (boundsListener.callbackLock)
@@ -401,7 +413,7 @@ public class WindowPopulation {
 				theWindow.dispose();
 			});
 			if (visible != null) {
-				boolean[] reposition = new boolean[] { !sizeSet };
+				boolean[] reposition = new boolean[] { !positionSet };
 				visible.changes().takeUntil(theUntil).act(evt -> {
 					EventQueue.invokeLater(() -> {
 						if (evt.getNewValue() && reposition[0]) {
@@ -415,7 +427,7 @@ public class WindowPopulation {
 					});
 				});
 			} else {
-				if (!sizeSet)
+				if (!positionSet)
 					theWindow.setLocationRelativeTo(relativeTo);
 				theWindow.setVisible(true);
 			}

@@ -103,9 +103,13 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
-				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), (i, nEnv) -> i.updateModel(nEnv));
+				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this),
+					(i, nEnv) -> i.updateModel(nEnv == null ? env : nEnv));
 				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
-				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
+				if (getExpressoEnv() != null)
+					theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
+				else
+					theValue = getDefinition().getValue().interpret(ModelTypes.Value.anyAsV(), env);
 				types.add((TypeToken<? extends N>) theValue.getType().getType(0));
 				for (TreeModel.Interpreted<? extends N, ?> child : theChildren)
 					types.add(child.getNodeType(env));

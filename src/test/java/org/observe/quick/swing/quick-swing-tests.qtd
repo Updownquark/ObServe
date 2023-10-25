@@ -2,7 +2,7 @@
 
 <qonfig-def name="Quick-Swing-Tests" version="0.1" xmlns:quick="Quick-Core v0.1">
 	<elements>
-		<element-def name="entity-table" extends="external-reference">
+		<element-def name="entity-table" extends="external-reference" inherits="with-local-model">
 			<attr-mod name="external-reference.ref" specify="forbidden" default="entity-table-body.qml" />
 			<attribute name="entities" type="expression" />
 			<child-def name="border" type="border" min="0" />

@@ -517,7 +517,7 @@
 			<attribute name="leaf" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="tree-node" inherits="tree-model">
-			<child-def name="child" type="tree-model" />
+			<child-def name="child" type="tree-model" min="0" max="inf" />
 		</element-def>
 
 		<!-- Containers -->

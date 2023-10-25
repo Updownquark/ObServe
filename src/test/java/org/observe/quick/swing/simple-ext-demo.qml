@@ -22,16 +22,23 @@
 		</models>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
+		
 		<entity-table entities="app.entities1">
-			<titled-border title="`Entity Set 1`" />
+			<titled-border title="`Entity Set 1 (`+size+`)`">
+				<model>
+					<transform name="size" source="app.entities2">
+						<size />
+					</transform>
+				</model>
+			</titled-border>
 		</entity-table>
-		<entity-table entities="app.entities2" with-extension="with-local-model">
-			<!--<model>
+		<entity-table entities="app.entities2">
+			<model>
 				<transform name="size" source="app.entities2">
 					<size />
 				</transform>
-			</model>-->
-			<titled-border title="`Entity Set 2`" />
+			</model>
+			<titled-border title="`Entity Set 2 (`+size+`)`" />
 		</entity-table>
 	</box>
 </quick>

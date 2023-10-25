@@ -64,7 +64,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 			super.update(element);
 			theLocalModelElement = getElement().syncChild(getDefinition().getLocalModelElement(), theLocalModelElement,
-				def -> def.interpret(getElement()), (el, elEnv) -> el.update(elEnv));
+				def -> def.interpret(element), (el, elEnv) -> el.update(elEnv));
 			if (theLocalModelElement != null)
 				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theLocalModelElement.getExpressoEnv().getModels()));
 		}

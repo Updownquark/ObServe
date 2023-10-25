@@ -32,8 +32,8 @@
 		<label field-label="`First Selected:`" value="app.isFirstSelected" />
 		<label field-label="`Second Selected:`" value="app.isSecondSelected" />
 		<button action="app.selectedTab=`First`">`Select First`</button>
-		<table fill="true" rows="app.tabSet2">
-			<column name="`Value`" value="value" />
+		<table fill="true" rows="app.tabSet2" active-value-name="row">
+			<column name="`Value`" value="row" />
 		</table>
 		<tabs fill="true" selected="app.selectedTab">
 			<box tab-id="&quot;First&quot;" tab-name="`First`" layout="inline-layout" orientation="vertical" cross-align="leading">

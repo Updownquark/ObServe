@@ -45,7 +45,6 @@
 					<value name="min" init="0" />
 					<value name="max" init="100" />
 				</model>
-				<style attr="color">`blue`</style>
 				<box layout="border-layout">
 					<label region="west">Min:</label>
 					<text-field region="west" value="min" />

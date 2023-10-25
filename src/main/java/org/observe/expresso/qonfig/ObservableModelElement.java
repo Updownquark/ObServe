@@ -123,7 +123,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			else if (building instanceof Predicate)
 				doBuild = !((Predicate<Object>) building).test(this);
 			else if (building instanceof Boolean)
-				doBuild = Boolean.TRUE.equals(building);
+				doBuild = !Boolean.TRUE.equals(building);
 			else {
 				reporting().warn("Unrecognized " + PREVENT_MODEL_BUILDING + " type: " + building.getClass().getName());
 				doBuild = true;

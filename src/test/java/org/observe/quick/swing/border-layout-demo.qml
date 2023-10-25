@@ -11,8 +11,8 @@
 				<value name="west" type="int" init="-180" />
 			</model>
 			<model name="window">
-				<value name="width" init="200" />
-				<value name="height" init="150" />
+				<value name="width" init="400" />
+				<value name="height" init="300" />
 			</model>
 		</models>
 		<style-sheet>

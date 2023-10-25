@@ -196,11 +196,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 							return;
 
 						component[0] = c;
+						c.setCursor(cursor.get());
 						if (propertyManagers.isEmpty() || propertyManagers.get(0) != scd.propertyMgr)
 							propertyManagers.add(0, scd.propertyMgr);
+						adjustFont(pmDecorator.reset(), w.getStyle());
 						if (renderer) {
 							// We can just do all this dynamically for renderers
-							adjustFont(pmDecorator.reset(), w.getStyle());
 							Color bg = color.get();
 							for (ComponentPropertyManager<?> pm : propertyManagers) {
 								pm.setImmediate(true);
@@ -212,9 +213,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 								pm.setBackground(bg);
 								pm.setOpaque(bg == null ? null : true);
 							}
-							c.setCursor(cursor.get());
 						} else {
+							scd.propertyMgr.setFont(pmDecorator::adjust);
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
+							scd.propertyMgr.setBackground(color.get());
 							try {
 								w.setContext(new QuickWidget.BackgroundContext.Default(//
 									new MouseValueSupport(c, "hovered", null), //
@@ -241,6 +243,9 @@ public class QuickCoreSwing implements QuickInterpretation {
 						propertyManagers.add(pm);
 						pm.setForeground(pmDecorator.getForeground());
 						c.setCursor(cursor.get());
+						Color bg = color.get();
+						pm.setBackground(bg);
+						pm.setOpaque(bg == null ? null : true);
 					});
 					if (w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
