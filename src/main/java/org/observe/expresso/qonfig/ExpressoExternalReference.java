@@ -59,9 +59,11 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 
 		private void buildExtContent(Builder builder, PartialQonfigElement element, QonfigChildDef fulfillmentRole) {
-			if (element.getParentRoles().contains(fulfillmentRole))
-				theFulfilledContent.getElement().copy(builder);
-			else {
+			if (element.getParentRoles().contains(fulfillmentRole)) {
+				// The content may contain attributes specific to add-ons inherited by roles it fulfills
+				// The content as the fulfillment of the external content won't know of these roles
+				theFulfilledContent.getElement().copy(builder.ignoreExtraAttributes(true));
+			} else {
 				element.copyAttributes(builder);
 				for (PartialQonfigElement child : element.getChildren()) {
 					builder.withChild2(child.getParentRoles(), child.getType(), cb -> {

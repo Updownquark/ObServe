@@ -287,9 +287,10 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			theContentModelModel.interpret(env);
 
 			env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
+			env = env.forChild(getDefinition().getHead().getExpressoEnv());
 			env.put(CONTENT_ENV_PROPERTY, getContent().getExpressoEnv());
 			theHead.updateExpresso(env);
-			setExpressoEnv(theHead.getExpressoEnv());
+			setExpressoEnv(env);
 		}
 
 		public ExpressoExternalContent create(ExElement content) {

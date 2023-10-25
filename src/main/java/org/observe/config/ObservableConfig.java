@@ -1544,7 +1544,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 		}
 		ConfigParser handler = new ConfigParser();
-		new SimpleXMLParser().parseXml(in, handler);
+		new SimpleXMLParser().parseXml(null, in, handler);
 		try (Transaction t = config.lock(true, null)) {
 			handler.theRoot.pushTo(config);
 		}

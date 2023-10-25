@@ -514,7 +514,7 @@ public class Qwysiwyg {
 				theDocumentContent.setLength(0);
 				URL appFile = quickApp.resolveAppFile();
 				try (InputStream in = appFile.openStream()) {
-					Reader reader = new SimpleXMLParser().readXmlFile(in);
+					Reader reader = new SimpleXMLParser().readXmlFile(appFile.toString(), in);
 					CircularCharBuffer buffer = new CircularCharBuffer(-1);
 					FileUtils.copy(reader, buffer.asWriter(), null, null);
 					theDocumentContent.append(buffer);
@@ -746,7 +746,7 @@ public class Qwysiwyg {
 		DequeList<DocumentComponent> stack = new CircularArrayList<>();
 		stack.add(document.get().getRoot());
 		try (InputStream in = quickFile.openStream()) {
-			new SimpleXMLParser().parseXml(in, new SimpleXMLParser.ParseHandler() {
+			new SimpleXMLParser().parseXml(quickFile.toString(), in, new SimpleXMLParser.ParseHandler() {
 				@Override
 				public void handleDeclaration(XmlDeclaration declaration) {
 					DocumentComponent elementComp = stack.getLast().addChild(declaration.getContent().getPosition(0)).color(ELEMENT_COLOR);
