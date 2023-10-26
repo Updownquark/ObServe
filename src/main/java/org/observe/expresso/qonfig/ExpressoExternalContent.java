@@ -1,6 +1,8 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -29,6 +31,7 @@ import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -45,6 +48,8 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	private static final String CONTENT_ENV_PROPERTY = "Expresso$Content";
 
 	public interface AttributeValueSatisfier {
+		Object getValue();
+
 		<M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 			throws QonfigInterpretationException;
 
@@ -55,6 +60,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			public Literal(String valueType, TypeToken<T> type, T value, String text) {
 				theValueType = valueType;
 				theModelValue = CompiledModelValue.literal(type, value, text);
+			}
+
+			@Override
+			public Object getValue() {
+				return theModelValue;
 			}
 
 			@Override
@@ -102,6 +112,10 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return theContentModelVariable;
 		}
 
+		public Map<QonfigAttributeDef.Declared, AttributeValueSatisfier> getAttributeValues() {
+			return Collections.unmodifiableMap(theAttributeValues);
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
@@ -123,6 +137,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 						CompiledModelValue<?> cmv = (CompiledModelValue<?>) value;
 						theAttributeValues.put(attr.getDeclared(), new AttributeValueSatisfier() {
 							@Override
+							public Object getValue() {
+								return cmv;
+							}
+
+							@Override
 							public <M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 								throws QonfigInterpretationException {
 								ModelType<?> cmvMT;
@@ -141,6 +160,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 					} else if (value instanceof CompiledExpression) {
 						CompiledExpression expression = (CompiledExpression) value;
 						theAttributeValues.put(attr.getDeclared(), new AttributeValueSatisfier() {
+							@Override
+							public Object getValue() {
+								return expression;
+							}
+
 							@Override
 							public <M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 								throws QonfigInterpretationException {
@@ -202,6 +226,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 								e.getErrorLength());
 						}
 						return new AttributeValueSatisfier() {
+							@Override
+							public Object getValue() {
+								return expression;
+							}
+
 							@Override
 							public <M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 								throws QonfigInterpretationException {
@@ -274,6 +303,16 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return theContentModelModel;
 		}
 
+		public Object getExternalAttribute(QonfigAttributeDef.Declared attribute) {
+			// TODO
+			return null;
+		}
+
+		public List<ExpressoChildPlaceholder.Interpreted<?>> getChildren(QonfigChildDef.Declared child) {
+			// TODO
+			return Collections.emptyList();
+		}
+
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theHead != null && getDefinition().getHead().getIdentity() != theHead.getIdentity()) {
@@ -287,7 +326,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			theContentModelModel.interpret(env);
 
 			env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
-			env = env.forChild(getDefinition().getHead().getExpressoEnv());
+			env = env.forChild(getDefinition().getExpressoEnv());
 			env.put(CONTENT_ENV_PROPERTY, getContent().getExpressoEnv());
 			theHead.updateExpresso(env);
 			setExpressoEnv(env);
@@ -312,6 +351,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	@Override
 	public ExElement getContent() {
 		return theContent;
+	}
+
+	public List<ExpressoChildPlaceholder> getChildren(QonfigChildDef.Declared child) {
+		// TODO
+		return Collections.emptyList();
 	}
 
 	@Override

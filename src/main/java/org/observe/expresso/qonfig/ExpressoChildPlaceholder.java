@@ -8,6 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -22,6 +23,8 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		private ExElement.Def<?> theDocumentParent;
 		private ExElement.Def<?> theFulfilledContent;
 		private CompiledExpressoEnv theExtExpressoEnv;
+		private String theRefRoleName;
+		private QonfigChildDef theRefRole;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -29,6 +32,19 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 
 		public ExElement.Def<?> getDocumentParent() {
 			return theDocumentParent;
+		}
+
+		public String getRefRoleName() {
+			return theRefRoleName;
+		}
+
+		@QonfigAttributeGetter("ref-role")
+		public QonfigChildDef getRefRole() {
+			return theRefRole;
+		}
+
+		public void setRefRole(QonfigChildDef refRole) {
+			theRefRole = refRole;
 		}
 
 		@Override
@@ -40,11 +56,13 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
 			theFulfilledContent = content;
 
+			theRefRoleName = session.getAttributeText("ref-role");
+
 			String targetDoc = content.getElement().getDocument().getLocation();
 			content = content.getParentElement();
 			while (content != null
 				&& (content.getPromise() == null
-					|| !ExElement.documentsMatch(content.getPromise().getElement().getDocument().getLocation(), targetDoc)))
+				|| !ExElement.documentsMatch(content.getPromise().getElement().getDocument().getLocation(), targetDoc)))
 				content = content.getParentElement();
 			if (content != null) {
 				theDocumentParent = content;

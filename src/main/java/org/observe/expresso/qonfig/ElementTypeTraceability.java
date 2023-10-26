@@ -4,6 +4,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.text.ParseException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +22,7 @@ import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -546,6 +548,15 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			return getter == null ? Collections.emptyList() : getter.getChildrenFromElement(element);
 		}
 
+		public SingleTypeTraceabilityBuilder<E, I, D> copy() {
+			SingleTypeTraceabilityBuilder<E, I, D> builder = new SingleTypeTraceabilityBuilder<>(theToolkitName, theToolkitVersion,
+				theTypeName);
+			builder.theAttributes.putAll(theAttributes);
+			builder.theValue = theValue;
+			builder.theChildren.putAll(theChildren);
+			return builder;
+		}
+
 		@Override
 		public String toString() {
 			return theToolkitName + " " + theToolkitVersion + " " + theTypeName;
@@ -597,6 +608,12 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 		return buildAddOn(toolkitName, toolkitVersion.major, toolkitVersion.minor, typeName, defType, interpType, addOnType);
 	}
 
+	enum ChildGetterReturn {
+		Singleton, //
+		Collection, //
+		Map;
+	}
+
 	public static class SingleTypeTraceabilityBuilder<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
 		private final String theToolkitName;
 		private final QonfigToolkit.ToolkitDefVersion theToolkitVersion;
@@ -642,24 +659,19 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 					child = null;
 				}
 				if (child != null) {
-					Boolean listReturn = checkReturnType(defMethod, ExElement.Def.class);
-					if (listReturn != null) {
+					ChildGetterReturn childGetterType = checkReturnType(defMethod, ExElement.Def.class);
+					if (childGetterType != null) {
 						Method interpMethod;
 						try {
 							if (interpClass != null) {
 								interpMethod = interpClass.getDeclaredMethod(defMethod.getName());
-								Boolean interpListReturn = checkReturnType(interpMethod, ExElement.Interpreted.class);
-								if (interpListReturn == null)
+								ChildGetterReturn interpGetterType = checkReturnType(interpMethod, ExElement.Interpreted.class);
+								if (interpGetterType == null)
 									interpMethod = null;
-								else if (interpListReturn.booleanValue() != listReturn.booleanValue()) {
-									if (listReturn.booleanValue())
-										System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
-										+ "()) returns a list, the interpreted method (" + interpClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a list");
-									else
-										System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
-										+ "()) returns a singleton element, the interpreted method (" + interpClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a singleton element" + "");
+								else if (interpGetterType != childGetterType) {
+									System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
+									+ "()) returns a " + childGetterType + ", the interpreted method (" + interpClass.getName() + "."
+									+ defMethod.getName() + "()) must also return a " + childGetterType);
 									interpMethod = null;
 								}
 							} else
@@ -667,23 +679,17 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 						} catch (NoSuchMethodException | SecurityException e) {
 							interpMethod = null;
 						}
-
 						Method elementMethod;
 						try {
 							if (elementClass != null) {
 								elementMethod = elementClass.getDeclaredMethod(defMethod.getName());
-								Boolean elementListReturn = checkReturnType(elementMethod, ExElement.class);
+								ChildGetterReturn elementListReturn = checkReturnType(elementMethod, ExElement.class);
 								if (elementListReturn == null)
 									elementMethod = null;
-								else if (elementListReturn.booleanValue() != listReturn.booleanValue()) {
-									if (listReturn.booleanValue())
-										System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
-										+ "()) returns a list, the element method (" + elementClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a list");
-									else
-										System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
-										+ "()) returns a singleton element, the element method (" + elementClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a singleton element" + "");
+								else if (elementListReturn != childGetterType) {
+									System.err.println("If the definition method (" + defClass.getName() + "." + defMethod.getName()
+									+ "()) returns a " + childGetterType + ", the element method (" + elementClass.getName() + "."
+									+ defMethod.getName() + "()) must also return a " + childGetterType);
 									elementMethod = null;
 								}
 							} else
@@ -692,7 +698,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 							elementMethod = null;
 						}
 
-						withChild(child.value(), new ReflectedChildGetter<>(defMethod, interpMethod, elementMethod, listReturn));
+						withChild(child.value(), new ReflectedChildGetter<>(defMethod, interpMethod, elementMethod, childGetterType));
 					}
 				}
 				TraceabilityConfiguration config = defMethod.getDeclaredAnnotation(TraceabilityConfiguration.class);
@@ -736,32 +742,39 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			return true;
 		}
 
-		static Boolean checkReturnType(Method method, Class<?> targetClass) {
+		private static final String CHILD_GETTER_ERROR_MSG = " cannot be a " + QonfigChildGetter.class.getSimpleName() + "\n"//
+			+ "Return type is incompatible with all of:\n" + " * " + ExElement.class.getSimpleName() + ".Def\n" + " * Collection<? extends "
+			+ ExElement.class.getSimpleName() + ".Def>\n" + " * Map<?, ? extends " + ExElement.class.getSimpleName() + ".Def>";
+
+		static ChildGetterReturn checkReturnType(Method method, Class<?> targetClass) {
 			TypeToken<?> retType = TypeTokens.get().of(method.getGenericReturnType());
 			TypeToken<?> targetType;
 			if (targetClass.getTypeParameters().length > 0)
 				targetType = TypeTokens.get().keyFor(targetClass).wildCard();
 			else
 				targetType = TypeTokens.get().of(targetClass);
-			if (TypeTokens.get().keyFor(List.class).wildCard().isSupertypeOf(retType)) {
-				TypeToken<?> elementType = retType.resolveType(List.class.getTypeParameters()[0]);
+			if (targetType.isSupertypeOf(retType))
+				return ChildGetterReturn.Singleton;
+			else if (TypeTokens.get().keyFor(Collection.class).wildCard().isSupertypeOf(retType)) {
+				TypeToken<?> elementType = retType.resolveType(Collection.class.getTypeParameters()[0]);
 				if (!targetType.isSupertypeOf(elementType)) {
-					System.err.println("Method " + method.getDeclaringClass().getName() + "." + method.getName() + "() cannot be a "
-						+ QonfigChildGetter.class.getSimpleName() + ": return type " + retType
-						+ " is incompatible with both List<? extends " + ExElement.class.getSimpleName() + ".Def> and "
-						+ ExElement.class.getSimpleName() + ".Def");
+					System.err.println("Method " + method.getDeclaringClass().getName() + "." + method.getName() + "() with return type "
+						+ retType + CHILD_GETTER_ERROR_MSG);
 					return null;
 				}
-				return true;
+				return ChildGetterReturn.Collection;
+			} else if (TypeTokens.get().keyFor(Map.class).wildCard().isSupertypeOf(retType)) {
+				TypeToken<?> elementType = retType.resolveType(Map.class.getTypeParameters()[1]);
+				if (!targetType.isSupertypeOf(elementType)) {
+					System.err.println("Method " + method.getDeclaringClass().getName() + "." + method.getName() + "() with return type "
+						+ retType + CHILD_GETTER_ERROR_MSG);
+					return null;
+				}
+				return ChildGetterReturn.Map;
 			} else {
-				if (!targetType.isSupertypeOf(retType)) {
-					System.err.println("Method " + method.getDeclaringClass().getName() + "." + method.getName() + "() cannot be a "
-						+ QonfigChildGetter.class.getSimpleName() + ": return type " + retType
-						+ " is incompatible with both List<? extends " + ExElement.class.getSimpleName() + ".Def> and "
-						+ ExElement.class.getSimpleName() + ".Def");
-					return null;
-				}
-				return false;
+				System.err
+				.println("Method " + method.getDeclaringClass().getName() + "." + method.getName() + "() with return type " + retType);
+				return null;
 			}
 		}
 
@@ -838,27 +851,23 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 							new ReflectedAddOnAttributeGetter<>(theDefClass, defMethod, theInterpretedClass, interpMethod));
 				}
 				QonfigChildGetter child = defMethod.getAnnotation(QonfigChildGetter.class);
-				if (child != null && !checkAsType(defMethod, child.asType()))
+				if (child != null && !checkAsType(defMethod, child.asType())) {
 					child = null;
+				}
 				if (child != null) {
-					Boolean listReturn = checkReturnType(defMethod, ExElement.Def.class);
-					if (listReturn != null) {
+					ChildGetterReturn childGetterType = checkReturnType(defMethod, ExElement.Def.class);
+					if (childGetterType != null) {
 						Method interpMethod;
 						try {
 							if (theInterpretedClass != null) {
 								interpMethod = theInterpretedClass.getDeclaredMethod(defMethod.getName());
-								Boolean interpListReturn = checkReturnType(interpMethod, ExElement.Interpreted.class);
-								if (interpListReturn == null)
+								ChildGetterReturn interpGetterType = checkReturnType(interpMethod, ExElement.Interpreted.class);
+								if (interpGetterType == null)
 									interpMethod = null;
-								else if (interpListReturn.booleanValue() != listReturn.booleanValue()) {
-									if (listReturn.booleanValue())
-										System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
-										+ "()) returns a list, the interpreted method (" + theInterpretedClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a list");
-									else
-										System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
-										+ "()) returns a singleton element, the interpreted method (" + theInterpretedClass.getName()
-										+ "." + defMethod.getName() + "()) must also return a singleton element" + "");
+								else if (interpGetterType != childGetterType) {
+									System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
+									+ "()) returns a " + childGetterType + ", the interpreted method (" + theInterpretedClass.getName()
+									+ "." + defMethod.getName() + "()) must also return a " + childGetterType);
 									interpMethod = null;
 								}
 							} else
@@ -866,23 +875,17 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 						} catch (NoSuchMethodException | SecurityException e) {
 							interpMethod = null;
 						}
-
 						Method elementMethod;
 						try {
 							if (theAddOnClass != null) {
 								elementMethod = theAddOnClass.getDeclaredMethod(defMethod.getName());
-								Boolean elementListReturn = checkReturnType(elementMethod, ExElement.class);
+								ChildGetterReturn elementListReturn = checkReturnType(elementMethod, ExElement.class);
 								if (elementListReturn == null)
 									elementMethod = null;
-								else if (elementListReturn.booleanValue() != listReturn.booleanValue()) {
-									if (listReturn.booleanValue())
-										System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
-										+ "()) returns a list, the element method (" + theAddOnClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a list");
-									else
-										System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
-										+ "()) returns a singleton element, the element method (" + theAddOnClass.getName() + "."
-										+ defMethod.getName() + "()) must also return a singleton element" + "");
+								else if (elementListReturn != childGetterType) {
+									System.err.println("If the definition method (" + theDefClass.getName() + "." + defMethod.getName()
+									+ "()) returns a " + childGetterType + ", the element method (" + theAddOnClass.getName() + "."
+									+ defMethod.getName() + "()) must also return a " + childGetterType);
 									elementMethod = null;
 								}
 							} else
@@ -892,7 +895,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 						}
 
 						withChild(child.value(), new ReflectedAddOnChildGetter<>(theDefClass, defMethod, theInterpretedClass, interpMethod,
-							theAddOnClass, elementMethod, listReturn));
+							theAddOnClass, elementMethod, childGetterType));
 					}
 				}
 				TraceabilityConfiguration config = defMethod.getDeclaredAnnotation(TraceabilityConfiguration.class);
@@ -1053,13 +1056,13 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 		private final Method theDefGetter;
 		private final Method theInterpretedGetter;
 		private final Method theElementGetter;
-		private final boolean isListReturn;
+		private final ChildGetterReturn theGetterType;
 
-		public ReflectedChildGetter(Method defGetter, Method interpretedGetter, Method elementGetter, boolean listReturn) {
+		public ReflectedChildGetter(Method defGetter, Method interpretedGetter, Method elementGetter, ChildGetterReturn getterType) {
 			theDefGetter = defGetter;
 			theInterpretedGetter = interpretedGetter;
 			theElementGetter = elementGetter;
-			isListReturn = listReturn;
+			theGetterType = getterType;
 		}
 
 		@Override
@@ -1073,10 +1076,20 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement.Def<?>>) ret;
-			else
-				return Collections.singletonList((ExElement.Def<?>) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement.Def<?>) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement.Def<?>>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement.Def<?>>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement.Def<?>>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 
 		@Override
@@ -1092,10 +1105,20 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement.Interpreted<?>>) ret;
-			else
-				return Collections.singletonList((ExElement.Interpreted<?>) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement.Interpreted<?>) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement.Interpreted<?>>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement.Interpreted<?>>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement.Interpreted<?>>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 
 		@Override
@@ -1111,10 +1134,20 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement>) ret;
-			else
-				return Collections.singletonList((ExElement) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 
 		@Override
@@ -1128,15 +1161,15 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 		private final Method theDefGetter;
 		private final Method theInterpretedGetter;
 		private final Method theElementGetter;
-		private final boolean isListReturn;
+		private final ChildGetterReturn theGetterType;
 
 		public ReflectedAddOnChildGetter(Class<D> defType, Method defGetter, Class<I> interpType, Method interpretedGetter,
-			Class<AO> addOnType, Method elementGetter, boolean listReturn) {
+			Class<AO> addOnType, Method elementGetter, ChildGetterReturn getterType) {
 			super(defType, interpType, addOnType);
 			theDefGetter = defGetter;
 			theInterpretedGetter = interpretedGetter;
 			theElementGetter = elementGetter;
-			isListReturn = listReturn;
+			theGetterType = getterType;
 		}
 
 		@Override
@@ -1150,10 +1183,20 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement.Def<?>>) ret;
-			else
-				return Collections.singletonList((ExElement.Def<?>) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement.Def<?>) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement.Def<?>>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement.Def<?>>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement.Def<?>>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 
 		@Override
@@ -1169,10 +1212,20 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement.Interpreted<?>>) ret;
-			else
-				return Collections.singletonList((ExElement.Interpreted<?>) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement.Interpreted<?>) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement.Interpreted<?>>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement.Interpreted<?>>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement.Interpreted<?>>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 
 		@Override
@@ -1188,14 +1241,24 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			}
 			if (ret == null)
 				return Collections.emptyList();
-			else if (isListReturn)
-				return (List<? extends ExElement>) ret;
-			else
-				return Collections.singletonList((ExElement) ret);
+			else {
+				switch (theGetterType) {
+				case Singleton:
+					return Collections.singletonList((ExElement) ret);
+				case Collection:
+					if (ret instanceof List)
+						return (List<? extends ExElement>) ret;
+					else
+						return QommonsUtils.unmodifiableCopy((Collection<? extends ExElement>) ret);
+				case Map:
+					return QommonsUtils.unmodifiableCopy(((Map<?, ? extends ExElement>) ret).values());
+				}
+			}
+			throw new IllegalStateException("Unrecognized getter type: " + theGetterType);
 		}
 	}
 
-	class QonfigElementKey {
+	public static class QonfigElementKey {
 		public String toolkitName;
 		public int toolkitMajorVersion;
 		public int toolkitMinorVersion;

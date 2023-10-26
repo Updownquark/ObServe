@@ -588,6 +588,10 @@ public interface ExElement extends Identifiable {
 				adjustment.adjust();
 			}
 
+			protected Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> getTraceability() {
+				return theTraceability;
+			}
+
 			@Override
 			public final void update(ExpressoQIS session) throws QonfigInterpretationException {
 				if (session.getFocusType() != theQonfigType)
@@ -628,16 +632,21 @@ public interface ExElement extends Identifiable {
 					}
 				}
 
-				if (firstTime && thePromise == null) {
+				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
-					PartialQonfigElement element = thePromise == null ? theElement : thePromise.getElement();
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
-					for (QonfigAddOn addOn : element.getInheritance().values())
-						addAddOn(session, addOn, addOnsTested, theAddOns);
-					if (element.getType() instanceof QonfigElementDef)
-						addAddOns(session, (QonfigElementDef) element.getType(), addOnsTested, theAddOns);
-					else
-						addAddOn(session, (QonfigAddOn) element.getType(), addOnsTested, theAddOns);
+					for (QonfigAddOn addOn : theElement.getInheritance().values()) {
+						if (thePromise == null || !thePromise.getElement().isInstance(addOn))
+							addAddOn(session, addOn, addOnsTested, theAddOns);
+					}
+					if (thePromise == null)
+						addAddOns(session, theElement.getType(), addOnsTested, theAddOns);
+					else {
+						for (ExAddOn.Def<?, ?> addOn : thePromise.getAddOns()) {
+							SingleTypeTraceability.join(theTraceability, SingleTypeTraceability.traceabilityFor(addOn.getClass(),
+								theElement.getDocument().getDocToolkit(), theReporting));
+						}
+					}
 				}
 
 				try {
@@ -656,6 +665,8 @@ public interface ExElement extends Identifiable {
 						theExternalView.postUpdateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
 						session.setExpressoEnv(theExpressoEnv);
 					}
+
+					postUpdate();
 				} catch (RuntimeException | Error e) {
 					reporting().error(e.getMessage(), e);
 				}
@@ -686,6 +697,9 @@ public interface ExElement extends Identifiable {
 					theExternalView.updateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
 					session.setExpressoEnv(theExpressoEnv);
 				}
+			}
+
+			protected void postUpdate() throws QonfigInterpretationException {
 			}
 
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested,
@@ -1991,7 +2005,7 @@ public interface ExElement extends Identifiable {
 				Interpreted.Abstract<?>.ExtElementView myInterpreted = owner.theExternalView;
 				// Create add-ons
 				CollectionUtils
-				.synchronize(new ArrayList<>(theExtAddOns.getAllValues()), new ArrayList<>(myInterpreted.getAddOns()),
+					.synchronize(new ArrayList<>(theExtAddOns.getAllValues()), new ArrayList<>(myInterpreted.theExtAddOns.getAllValues()),
 					(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
 				.adjust(new CollectionUtils.CollectionSynchronizer<ExAddOn<?>, ExAddOn.Interpreted<?, ?>>() {
 					@Override

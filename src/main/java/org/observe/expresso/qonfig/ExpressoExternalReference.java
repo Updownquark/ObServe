@@ -1,5 +1,8 @@
 package org.observe.expresso.qonfig;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.observe.Observable;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -7,13 +10,21 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability.QonfigElementKey;
+import org.observe.expresso.qonfig.ExpressoExternalContent.AttributeValueSatisfier;
+import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterHashMultiMap;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMultiMap;
 import org.qommons.config.PartialQonfigElement;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.Builder;
 import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigElementView;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExpressoExternalReference extends ExElement.Abstract implements QonfigPromise {
@@ -27,9 +38,16 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 	public static class Def<P extends ExpressoExternalReference> extends ExElement.Def.Abstract<P> implements QonfigPromise.Def<P> {
 		private ExElement.Def<?> theFulfilledContent;
 		private ExpressoExternalContent.Def<?> theExternalContent;
+		private final BetterMultiMap<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> theChildren;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
+			theChildren = BetterHashMultiMap.<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> build().buildMultiMap();
+		}
+
+		@QonfigAttributeGetter("ref")
+		public QonfigDocument getReference() {
+			return theExternalContent == null ? null : theExternalContent.getElement().getDocument();
 		}
 
 		@Override
@@ -41,13 +59,21 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			return theExternalContent;
 		}
 
+		public BetterMultiMap<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> getChildren() {
+			return BetterCollections.unmodifiableMultiMap(theChildren);
+		}
+
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
 			theFulfilledContent = content;
-			update(session);
 
-			QonfigDocument extContentDoc = content.getElement().getExternalContent().getDocument();
-			QonfigElement.Builder extContentBuilder = QonfigElement.buildRoot(false, reporting(), extContentDoc,
+			update(session);
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			QonfigDocument extContentDoc = theFulfilledContent.getElement().getExternalContent().getDocument();
+			QonfigElement.Builder extContentBuilder = QonfigElement.buildRoot(false, session.reporting(), extContentDoc,
 				(QonfigElementDef) extContentDoc.getPartialRoot().getType(), extContentDoc.getPartialRoot().getDescription());
 			buildExtContent(extContentBuilder, extContentDoc.getPartialRoot(),
 				session.getType(ExpressoSessionImplV0_1.CORE, ExpressoExternalContent.EXPRESSO_EXTERNAL_CONTENT).getChild("fulfillment"));
@@ -55,7 +81,9 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			ExpressoQIS extContentSession = session.interpretRoot(extContentRoot).setExpressoEnv(CompiledExpressoEnv.STANDARD_JAVA);
 			if (theExternalContent == null || !ExElement.typesEqual(theExternalContent.getElement(), extContentDoc.getPartialRoot()))
 				theExternalContent = extContentSession.interpret(ExpressoExternalContent.Def.class);
-			theExternalContent.update(extContentSession, content);
+			theExternalContent.update(extContentSession, theFulfilledContent);
+
+			super.doUpdate(session);
 		}
 
 		private void buildExtContent(Builder builder, PartialQonfigElement element, QonfigChildDef fulfillmentRole) {
@@ -71,6 +99,64 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 					}, element.getFilePosition(), element.getDescription());
 				}
 			}
+		}
+
+		@Override
+		protected void postUpdate() throws QonfigInterpretationException {
+			super.postUpdate();
+			// Find our children
+			theChildren.clear();
+			findChildren(getFulfilledContent());
+
+			// Set up traceability
+			Map<QonfigElementKey, ElementTypeTraceability.SingleTypeTraceabilityBuilder<?, ?, ?>> builders = new LinkedHashMap<>();
+			for (Map.Entry<QonfigAttributeDef.Declared, AttributeValueSatisfier> attr : theExternalContent.getAttributeValues()
+				.entrySet()) {
+				QonfigElementKey key = new QonfigElementKey(attr.getKey().getOwner());
+				ElementTypeTraceability.SingleTypeTraceability<?, ?, ?> traceability = getTraceability().get(key);
+				ElementTypeTraceability.SingleTypeTraceabilityBuilder<?, ?, ?> builder = builders.get(key);
+				if (builder == null) {
+					builder = traceability == null //
+						? ElementTypeTraceability.build(key.toolkitName, key.toolkitMajorVersion, key.toolkitMinorVersion, key.typeName)//
+							: traceability.copy();
+					builders.put(key, builder);
+				}
+				builder.withAttribute(attr.getKey().getName(), __ -> attr.getValue().getValue(),
+					interp -> ((ExpressoExternalContent.Interpreted<?>) interp).getExternalAttribute(attr.getKey()));
+			}
+			for (QonfigChildDef.Declared childDef : theChildren.keySet()) {
+				QonfigElementKey key = new QonfigElementKey(childDef.getOwner());
+				ElementTypeTraceability.SingleTypeTraceability<?, ?, ?> traceability = getTraceability().get(key);
+				ElementTypeTraceability.SingleTypeTraceabilityBuilder<?, ?, ?> builder = builders.get(key);
+				if (builder == null) {
+					builder = traceability == null //
+						? ElementTypeTraceability.build(key.toolkitName, key.toolkitMajorVersion, key.toolkitMinorVersion, key.typeName)//
+							: traceability.copy();
+					builders.put(key, builder);
+				}
+				builder.withChild(childDef.getName(), __ -> (BetterList<ExpressoChildPlaceholder.Def<?>>) theChildren.get(childDef),
+					interp -> {
+						return ((ExpressoExternalContent.Interpreted<?>) interp).getChildren(childDef);
+					}, inst -> {
+						return ((ExpressoExternalContent) inst).getChildren(childDef);
+					});
+			}
+			for (Map.Entry<QonfigElementKey, ElementTypeTraceability.SingleTypeTraceabilityBuilder<?, ?, ?>> builder : builders.entrySet())
+				((Map<QonfigElementKey, ElementTypeTraceability.SingleTypeTraceability<?, ?, ?>>) (Map<?, ?>) getTraceability())
+				.put(builder.getKey(), builder.getValue().build());
+		}
+
+		private void findChildren(ExElement.Def<?> content) {
+			if (content.getPromise() instanceof ExpressoChildPlaceholder.Def) {
+				ExpressoChildPlaceholder.Def<?> child = (ExpressoChildPlaceholder.Def<?>) content.getPromise();
+				if (child.getDocumentParent() == getFulfilledContent()) {
+					QonfigChildDef childDef = QonfigElementView.of(getElement()).children().getDefinition(child.getRefRoleName());
+					child.setRefRole(childDef);
+					theChildren.add(childDef.getDeclared(), child);
+				}
+			}
+			for (ExElement.Def<?> child : content.getAllDefChildren())
+				findChildren(child);
 		}
 
 		@Override
