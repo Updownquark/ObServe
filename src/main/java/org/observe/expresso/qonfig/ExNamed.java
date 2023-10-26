@@ -34,7 +34,7 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 		}
 	}
 
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExNamed> {
+	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExNamed> implements Named {
 		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
@@ -42,6 +42,11 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 		@Override
 		public Def getDefinition() {
 			return (Def) super.getDefinition();
+		}
+
+		@Override
+		public String getName() {
+			return getDefinition().getName();
 		}
 
 		@Override

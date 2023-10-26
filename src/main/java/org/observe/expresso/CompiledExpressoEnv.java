@@ -130,7 +130,7 @@ public class CompiledExpressoEnv implements SessionValues {
 		if (theProperties instanceof SessionValues.Default)
 			return ((SessionValues.Default) theProperties).createChild();
 		else
-			return SessionValues.newRoot();
+			return theProperties;
 	}
 
 	/** @return The set of unary operators available for expressions */
@@ -440,7 +440,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	}
 
 	private SessionValues initProperties() {
-		if (theProperties == Collections.EMPTY_MAP) {
+		if (theProperties == SessionValues.EMPTY) {
 			if (this == STANDARD_JAVA || this == InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA)
 				throw new IllegalStateException("Cannot set a property on a static environment constant");
 			theProperties = SessionValues.newRoot();

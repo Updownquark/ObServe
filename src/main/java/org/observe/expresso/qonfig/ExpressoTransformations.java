@@ -99,7 +99,7 @@ public class ExpressoTransformations {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theSource = getAttributeExpression("source", session);
 			isPrepared = false;
 		}

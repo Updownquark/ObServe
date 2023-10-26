@@ -16,7 +16,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
-import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -106,7 +105,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theDerivedState = getAttributeExpression("derived-state", session);
 			theInternalStateVariable = getAddOn(ExWithElementModel.Def.class).getElementValueModelId("internalState");
 		}
@@ -256,7 +255,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theInternalState = getAttributeExpression("internal-state", session);
 			theDerivedState = getAttributeExpression("derived-state", session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -421,7 +420,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theInternalState = getAttributeExpression("internal-state", session);
 			theDerivedState = getAttributeExpression("derived-state", session);
 		}

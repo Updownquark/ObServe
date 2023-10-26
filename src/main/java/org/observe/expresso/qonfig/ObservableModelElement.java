@@ -98,7 +98,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			String name = getName();
 			if (theModelPath == null) {
 				if (name == null)
@@ -110,7 +110,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				else
 					theModelPath += "." + name;
 			}
-			session.put(ExpressoBaseV0_1.PATH_KEY, theModelPath);
+			session.put(ModelValueElement.PATH_KEY, theModelPath);
 
 			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
 			syncChildren(getValueType(), theValues, valueSessions);
@@ -297,7 +297,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 
-				session.put(ExpressoBaseV0_1.PATH_KEY, session.getElement().getType().getName());
+				session.put(ModelValueElement.PATH_KEY, session.getElement().getType().getName());
 				ObservableModelSet.Builder builder;
 				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
 					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();

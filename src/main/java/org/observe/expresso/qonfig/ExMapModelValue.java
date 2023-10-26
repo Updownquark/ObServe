@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.VariableType;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -32,9 +33,9 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 			QonfigValue keyTypeV = session.attributes().get("key-type").get();
 			if (keyTypeV != null && !keyTypeV.text.isEmpty()) {
 				theKeyType = VariableType.parseType(new LocatedPositionedContent.Default(keyTypeV.fileLocation, keyTypeV.position));
-				session.put(ExpressoBaseV0_1.KEY_TYPE_KEY, theKeyType);
+				session.put(ExMapModelValue.KEY_TYPE_KEY, theKeyType);
 			} else
-				theKeyType = session.get(ExpressoBaseV0_1.KEY_TYPE_KEY, VariableType.class);
+				theKeyType = session.get(ExMapModelValue.KEY_TYPE_KEY, VariableType.class);
 		}
 
 		@Override
@@ -81,6 +82,11 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	private TypeToken<?> theKeyType;
+	/**
+	 * Session key containing a model value's key-type, if applicable and known. This is typically a {@link VariableType}, but may be a
+	 * {@link ModelInstanceType} depending on the API of the thing being parsed
+	 */
+	public static final String KEY_TYPE_KEY = "key-type";
 
 	public ExMapModelValue(ExElement element) {
 		super(element);

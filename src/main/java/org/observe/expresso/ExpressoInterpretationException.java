@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.TextParseException;
 
 /**
@@ -58,6 +59,23 @@ public class ExpressoInterpretationException extends TextParseException {
 		int length, Throwable cause) {
 		super(message, new LocatedFilePosition(fileLocation, errorOffset, lineNumber, columnNumber), cause);
 		theLength = length;
+	}
+
+	/**
+	 * @param message The message for the exception
+	 * @param content The positioned content of the sequence where the error occurred
+	 */
+	public ExpressoInterpretationException(String message, LocatedPositionedContent content) {
+		this(message, content.getPosition(0), content.length());
+	}
+
+	/**
+	 * @param message The message for the exception
+	 * @param content The positioned content of the sequence where the error occurred
+	 * @param cause The cause of this exception
+	 */
+	public ExpressoInterpretationException(String message, LocatedPositionedContent content, Throwable cause) {
+		this(message, content.getPosition(0), content.length(), cause);
 	}
 
 	/** @return The length of the sequence where the error occurred */

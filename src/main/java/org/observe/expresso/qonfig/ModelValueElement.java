@@ -67,7 +67,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				super.doUpdate(session);
 				String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 				if (name != null) {
-					theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+					theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 					if (theModelPath == null || theModelPath.isEmpty())
 						theModelPath = name;
 					else
@@ -106,7 +106,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
+				theValueType = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
 			}
 
 			protected boolean useWrapperType() {
@@ -169,8 +169,8 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theValueType1 = session.get(ExpressoBaseV0_1.KEY_TYPE_KEY, VariableType.class);
-				theValueType2 = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
+				theValueType1 = session.get(ExMapModelValue.KEY_TYPE_KEY, VariableType.class);
+				theValueType2 = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
 			}
 
 			protected boolean useWrapperType() {
@@ -294,6 +294,9 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			}
 		}
 	}
+
+	/** Session key containing a model value's path */
+	String PATH_KEY = "model-path";
 
 	Object getElementValue();
 

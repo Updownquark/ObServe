@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.VariableType;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -32,9 +33,9 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			QonfigValue typeV = session.attributes().get("type").get();
 			if (typeV != null && !typeV.text.isEmpty()) {
 				theValueType = VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position));
-				session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, theValueType);
+				session.put(ExTyped.VALUE_TYPE_KEY, theValueType);
 			} else
-				theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
+				theValueType = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
 		}
 
 		@Override
@@ -64,7 +65,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			super.update(element);
 
 			if (getDefinition().getValueType() == null)
-				theValueType = null;
+				theValueType = element.getExpressoEnv().get(VALUE_TYPE_KEY, TypeToken.class);
 			else
 				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(getElement().getExpressoEnv());
 		}
@@ -81,6 +82,11 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	private TypeToken<T> theValueType;
+	/**
+	 * Session key containing a model value's type, if known. This is typically a {@link VariableType}, but may be a
+	 * {@link ModelInstanceType} depending on the API of the thing being parsed
+	 */
+	public static final String VALUE_TYPE_KEY = "value-type";
 
 	public ExTyped(ExElement element) {
 		super(element);

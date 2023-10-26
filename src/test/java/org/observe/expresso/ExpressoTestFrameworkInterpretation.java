@@ -12,7 +12,6 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
-import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.qommons.QommonsUtils;
@@ -90,7 +89,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theValue = getValueExpression(session);
 		}
 

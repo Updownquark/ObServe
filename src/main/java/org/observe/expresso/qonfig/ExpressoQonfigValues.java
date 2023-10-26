@@ -1556,7 +1556,7 @@ public class ExpressoQonfigValues {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
 			theEvent = getAttributeExpression("on", session);
 			theAction = getValueExpression(session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);

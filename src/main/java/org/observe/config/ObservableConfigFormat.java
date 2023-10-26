@@ -59,13 +59,19 @@ public interface ObservableConfigFormat<E> {
 	/** Persists text ({@link String}s) */
 	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, () -> null);
 	/** Persists {@link Double}s */
-	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat("0.############E0"), () -> 0.0);
+	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat(13)//
+		.printIntFor(3, false)//
+		.withExpCondition(6, -1)//
+		.build(), () -> 0.0);
 	/** Persists {@link Float}s */
-	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.floatFormat("0.########E0"), () -> 0.0f);
+	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.doubleFormat(9)//
+		.printIntFor(3, false)//
+		.withExpCondition(6, -1)//
+		.buildFloat(), () -> 0.0f);
 	/** Persists {@link Long}s */
-	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG, () -> 0L);
+	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG.withGroupingSeparator(','), () -> 0L);
 	/** Persists {@link Integer}s */
-	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, () -> 0);
+	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT.withGroupingSeparator(','), () -> 0);
 	/** Persists {@link Boolean}s */
 	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, () -> false);
 	/** Persists {@link Duration}s */
@@ -1959,7 +1965,7 @@ public interface ObservableConfigFormat<E> {
 								Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
 								change |= formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue,
 									c, fv -> {
-								}, until, null);
+									}, until, null);
 							} else {
 								ObservableConfig cfg = c.getChild(theFields.get(i).childName);
 								if (cfg != null) {

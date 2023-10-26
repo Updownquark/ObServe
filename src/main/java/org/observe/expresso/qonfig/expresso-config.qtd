@@ -18,6 +18,10 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<add-on name="config-map" requires="map" inherits="config-model-value">
 			<attribute name="key-format" type="expression" specify="optional" />
 		</add-on>
+		<add-on name="entity-config-field" requires="config-format">
+			<attribute name="field-name" type="string" />
+			<attribute name="config-name" type="string" specify="optional" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -138,13 +142,16 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="test" type="expression" />
 		</element-def>
 		
-		<element-def name="config-format" extends="model-value" abstract="true">
+		<element-def name="config-format" extends="model-value" inherits="typed" abstract="true">
 		</element-def>
 		<element-def name="text-config-format" extends="config-format">
-			<attribute name="type" type="string" specify="optional" />
 			<attribute name="text-format" type="expression" specify="optional" />
 			<attribute name="default" type="expression" specify="optional" />
 			<attribute name="default-text" type="string" specify="optional" />
+		</element-def>
+		<element-def name="entity-config-format" extends="config-format" inherits="type-required">
+			<attribute name="format-set" type="expression" specify="optional" />
+			<child-def name="field" type="config-format" inherits="entity-config-field" max="inf" />
 		</element-def>
 	</elements>
 

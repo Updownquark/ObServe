@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,8 +40,10 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ExAddOn.Void;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
+import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
@@ -496,7 +499,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		// TODO regex-format
 
 		// Text format validation
-		// TODO reged-validation
+		// TODO regex-validation
 		interpreter.createWith(FilterValidation.FILTER_VALIDATION, FormatValidation.Def.class,
 			ExElement.creator(FilterValidation.Def::new));
 
@@ -511,6 +514,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		// ObservableConfig formats
 		interpreter.createWith(TextConfigFormat.TEXT_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
 			ExElement.creator(TextConfigFormat::new));
+		interpreter.createWith(EntityConfigFormat.ENTITY_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
+			ExElement.creator(EntityConfigFormat::new));
+		interpreter.createWith(EntityConfigField.ENTITY_CONFIG_FIELD, EntityConfigField.class, ExAddOn.creator(EntityConfigField::new));
 	}
 
 	@ExElementTraceable(toolkit = CONFIG,
@@ -703,7 +709,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+		}
 
 		@Override
 		public Interpreted interpret() {
@@ -769,7 +776,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+		}
 
 		@Override
 		public Interpreted interpret() {
@@ -835,7 +843,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {}
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+		}
 
 		@Override
 		public Interpreted interpret() {
@@ -2152,19 +2161,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	implements
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
 		public static final String TEXT_CONFIG_FORMAT = "text-config-format";
+		public static final String INTERPRETED_TYPE_MANAGED = "Expresso.Config.Text.Format.Type.Managed";
 
-		private VariableType theType;
 		private CompiledExpression theTextFormat;
 		private CompiledExpression theDefaultValue;
 		private String theDefaultText;
 
 		public TextConfigFormat(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
-		}
-
-		@QonfigAttributeGetter("type")
-		public VariableType getConfiguredType() {
-			return theType;
 		}
 
 		@QonfigAttributeGetter("text-format")
@@ -2184,13 +2188,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			LocatedPositionedContent type = session.attributes().get("type").getLocatedContent();
-			theType = type == null ? null : VariableType.parseType(type);
+			VariableType type = getAddOn(ExTyped.Def.class).getValueType();
 			theTextFormat = getAttributeExpression("text-format", session);
-			if (theType == null && theTextFormat == null)
-				throw new QonfigInterpretationException("Either 'type' or 'text-format' must be specified",
-					session.getElement().getPositionInFile(), 0);
-			else if (theType != null && theTextFormat != null)
+			if (type == null && theTextFormat == null) {
+				if (!Boolean.TRUE.equals(session.get(INTERPRETED_TYPE_MANAGED)))
+					throw new QonfigInterpretationException("Either 'type' or 'text-format' must be specified",
+						session.getElement().getPositionInFile(), 0);
+			} else if (type != null && theTextFormat != null)
 				throw new QonfigInterpretationException("Only one of 'type' or 'text-format' may be specified",
 					session.getElement().getPositionInFile(), 0);
 			theDefaultValue = getAttributeExpression("default", session);
@@ -2209,7 +2213,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>>
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>> {
-			private TypeToken<T> theType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theTextFormat;
 			private Format<T> theDefaultFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefaultValue;
@@ -2230,7 +2233,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			protected TypeToken<T> getValueType() {
-				return theType != null ? theType
+				TypeToken<T> type = getAddOn(ExTyped.Interpreted.class).getValueType();
+				return type != null ? type
 					: (TypeToken<T>) theTextFormat.getType().getType(0).resolveType(Format.class.getTypeParameters()[0]);
 			}
 
@@ -2238,10 +2242,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			protected ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> getTargetType() {
 				return ModelTypes.Value.forType(
 					TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType()));
-			}
-
-			public TypeToken<T> getConfiguredType() {
-				return theType;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getTextFormat() {
@@ -2259,30 +2259,28 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theType = getDefinition().getConfiguredType() == null ? null
-					: (TypeToken<T>) getDefinition().getConfiguredType().getType(env);
+				TypeToken<T> type = getAddOn(ExTyped.Interpreted.class).getValueType();
 				ModelInstanceType<SettableValue<?>, SettableValue<Format<T>>> formatType;
-				if (theType != null)
-					formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(theType));
+				if (type != null)
+					formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(type));
 				else
 					formatType = ModelTypes.Value.anyAsV();
 				theTextFormat = interpret(getDefinition().getTextFormat(), formatType);
 
 				if (theTextFormat == null) {
-					if (theType == null)
+					if (type == null)
 						throw new ExpressoInterpretationException(
 							"If no text-format is specified, a type must be specified to determine a default text format",
 							reporting().getPosition(), 0);
 					try {
-						ObservableConfigFormat<T> defaultFormat = new ObservableConfigFormatSet().getConfigFormat(theType, null);
+						ObservableConfigFormat<T> defaultFormat = new ObservableConfigFormatSet().getConfigFormat(type, null);
 						if (!(defaultFormat instanceof ObservableConfigFormat.Impl.SimpleConfigFormat))
 							throw new IllegalArgumentException();
 						theDefaultFormat = ((ObservableConfigFormat.Impl.SimpleConfigFormat<T>) defaultFormat).format;
 					} catch (IllegalArgumentException e) {
 						throw new ExpressoInterpretationException(
-							"No default text format available for type " + theType + ". 'text-format' must be specified.",
-							getDefinition().getConfiguredType().getContent().getPosition(0),
-							getDefinition().getConfiguredType().getContent().length(), e);
+							"No default text format available for type " + type + ". 'text-format' must be specified.",
+							reporting().getFileLocation(), e);
 					}
 				}
 
@@ -2392,6 +2390,244 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						tf -> ObservableConfigFormat.ofQommonFormat(tf, newDefaultValue)),
 					__ -> "Unmodifiable");
 			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = EntityConfigFormat.ENTITY_CONFIG_FORMAT,
+		interpretation = EntityConfigFormat.Interpreted.class)
+	static class EntityConfigFormat extends
+	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>>
+	implements
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
+		public static final String ENTITY_CONFIG_FORMAT = "entity-config-format";
+
+		private CompiledExpression theFormatSet;
+		private final Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> theFields;
+
+		public EntityConfigFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.Value);
+			theFields = new LinkedHashMap<>();
+		}
+
+		@QonfigAttributeGetter("format-set")
+		public CompiledExpression getFormatSet() {
+			return theFormatSet;
+		}
+
+		@QonfigChildGetter("field")
+		public Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> getFields() {
+			return Collections.unmodifiableMap(theFields);
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+			theFormatSet = getAttributeExpression("format-set", session);
+			List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> fields;
+			fields = new ArrayList<>(theFields.values());
+			syncChildren(ModelValueElement.CompiledSynth.class, fields, session.forChildren("field"), (f, s) -> {
+				s = s.put(ExTyped.VALUE_TYPE_KEY, null).putLocal(TextConfigFormat.INTERPRETED_TYPE_MANAGED, true);
+				f.update(s);
+				f.prepareModelValue(s);
+			});
+			theFields.clear();
+			for (ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>> field : fields) {
+				String fieldName = field.getAddOn(EntityConfigField.class).getFieldName();
+				if (theFields.containsKey(fieldName))
+					reporting().warn("Multiple fields specified named '" + fieldName + "': using the first specification");
+				else
+					theFields.put(fieldName, field);
+			}
+		}
+
+		@Override
+		public Interpreted<?> interpret() {
+			return new Interpreted<>(this);
+		}
+
+		static class Interpreted<E> extends
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>
+		implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> theFormatSet;
+			private final Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> theFields;
+
+			Interpreted(EntityConfigFormat definition) {
+				super(definition, null);
+				theFields = new LinkedHashMap<>();
+			}
+
+			@Override
+			public EntityConfigFormat getDefinition() {
+				return (EntityConfigFormat) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted<E> setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> getFormatSet() {
+				return theFormatSet;
+			}
+
+			public Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> getFields() {
+				return Collections.unmodifiableMap(theFields);
+			}
+
+			protected TypeToken<ObservableConfigFormat<E>> getValueType() {
+				TypeToken<E> type = getAddOn(ExTyped.Interpreted.class).getValueType();
+				return TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<E>> parameterized(type);
+			}
+
+			@Override
+			protected ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>> getTargetType() {
+				return ModelTypes.Value.forType(getValueType());
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return new ArrayList<InterpretedValueSynth<?, ?>>(theFields.values());
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theFormatSet = interpret(getDefinition().getFormatSet(), ModelTypes.Value.forType(ObservableConfigFormatSet.class));
+				Set<String> fieldNames = new LinkedHashSet<>(getDefinition().getFields().keySet());
+				TypeToken<E> entityType = getAddOn(ExTyped.Interpreted.class).getValueType();
+				EntityReflector<E> reflector = EntityReflector.build(entityType, true).build();
+				List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> defFields;
+				defFields = new ArrayList<>();
+				for (int f = 0; f < reflector.getFields().keySize(); f++) {
+					ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>> defField;
+					String fieldName = reflector.getFields().keySet().get(f);
+					defField = getDefinition().getFields().get(fieldName);
+					if (defField == null)
+						continue;
+					fieldNames.remove(fieldName);
+					defFields.add(defField);
+				}
+				if (!fieldNames.isEmpty()) {
+					String msg = "No such field" + (fieldNames.size() == 1 ? "" : "s") + ": " + entityType + ".";
+					if (fieldNames.size() == 1)
+						msg += fieldNames.iterator().next();
+					else
+						msg += fieldNames;
+					msg += "\nAvailable fields are " + reflector.getFields().keySet();
+					reporting().warn(msg);
+				}
+				List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> fields;
+				fields = new ArrayList<>(theFields.values());
+				syncChildren(defFields, fields,
+					f -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>) f
+					.interpret(),
+					(i, mEnv) -> {
+						String fieldName = i.getDefinition().getAddOn(EntityConfigField.class).getFieldName();
+						mEnv.putLocal(ExTyped.VALUE_TYPE_KEY, reflector.getFields().get(fieldName).getType());
+						i.updateValue(mEnv);
+					});
+				theFields.clear();
+				for (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>> field : fields)
+					theFields.put(field.getDefinition().getAddOn(EntityConfigField.class).getFieldName(), field);
+			}
+
+			@Override
+			public ModelValueInstantiator<SettableValue<ObservableConfigFormat<E>>> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<E> implements ModelValueInstantiator<SettableValue<ObservableConfigFormat<E>>> {
+			private final TypeToken<E> theEntityType;
+			private final ModelValueInstantiator<SettableValue<ObservableConfigFormatSet>> theFormatSet;
+			private final Map<String, String> theFieldConfigNames;
+			private final Map<String, ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>>> theFields;
+
+			Instantiator(Interpreted<E> interpreted) {
+				theEntityType = interpreted.getAddOn(ExTyped.Interpreted.class).getValueType();
+				theFormatSet = interpreted.getFormatSet() == null ? null : interpreted.getFormatSet().instantiate();
+				theFieldConfigNames = new LinkedHashMap<>();
+				theFields = new LinkedHashMap<>();
+				for (Map.Entry<String, InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> field : interpreted
+					.getFields().entrySet()) {
+					String configName = field.getValue().getDefinition().getAddOn(EntityConfigField.class).getConfigName();
+					if (configName != null)
+						theFieldConfigNames.put(field.getKey(), configName);
+					theFields.put(field.getKey(), field.getValue().instantiate());
+				}
+			}
+
+			@Override
+			public void instantiate() {
+				if (theFormatSet != null)
+					theFormatSet.instantiate();
+				for (ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>> field : theFields.values())
+					field.instantiate();
+			}
+
+			@Override
+			public SettableValue<ObservableConfigFormat<E>> get(ModelSetInstance models)
+				throws ModelInstantiationException, IllegalStateException {
+				ObservableConfigFormatSet formatSet;
+				if (theFormatSet != null)
+					formatSet = theFormatSet.get(models).get();
+				else
+					formatSet = new ObservableConfigFormatSet();
+				ObservableConfigFormat.EntityFormatBuilder<E> builder = ObservableConfigFormat.buildEntities(theEntityType, formatSet);
+				for (Map.Entry<String, ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>>> field : theFields
+					.entrySet()) {
+					String configName = theFieldConfigNames.get(field.getKey());
+					if (configName != null)
+						builder.withFieldChildName(field.getKey(), configName);
+					builder.withFieldFormat(field.getKey(), field.getValue().get(models).get());
+				}
+				return SettableValue.of(
+					TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<E>> parameterized(theEntityType),
+					builder.build(), "Unmodifiable");
+			}
+
+			@Override
+			public SettableValue<ObservableConfigFormat<E>> forModelCopy(SettableValue<ObservableConfigFormat<E>> value,
+				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				// Meh
+				return get(newModels);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = CONFIG, qonfigType = EntityConfigField.ENTITY_CONFIG_FIELD)
+	static class EntityConfigField extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Void<ExElement>> {
+		public static final String ENTITY_CONFIG_FIELD = "entity-config-field";
+
+		private String theFieldName;
+		private String theConfigName;
+
+		public EntityConfigField(QonfigAddOn type, ExElement.Def<?> element) {
+			super(type, element);
+		}
+
+		@QonfigAttributeGetter("field-name")
+		public String getFieldName() {
+			return theFieldName;
+		}
+
+		@QonfigAttributeGetter("config-name")
+		public String getConfigName() {
+			return theConfigName;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+			super.update(session, element);
+			theFieldName = session.getAttributeText("field-name");
+			theConfigName = session.getAttributeText("config-name");
+		}
+
+		@Override
+		public ExAddOn.Interpreted<? extends ExElement, ? extends Void<ExElement>> interpret(ExElement.Interpreted<?> element) {
+			return null;
 		}
 	}
 }

@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.VariableType;
@@ -30,19 +29,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	/** {@link #NAME} and {@link #VERSION} combined */
 	public static final String BASE = "Expresso-Base 0.1";
-
-	/** Session key containing a model value's path */
-	public static final String PATH_KEY = "model-path";
-	/**
-	 * Session key containing a model value's type, if known. This is typically a {@link VariableType}, but may be a
-	 * {@link ModelInstanceType} depending on the API of the thing being parsed
-	 */
-	public static final String VALUE_TYPE_KEY = "value-type";
-	/**
-	 * Session key containing a model value's key-type, if applicable and known. This is typically a {@link VariableType}, but may be a
-	 * {@link ModelInstanceType} depending on the API of the thing being parsed
-	 */
-	public static final String KEY_TYPE_KEY = "key-type";
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -123,10 +109,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.modifyWith("map", Object.class, new QonfigValueModifier<Object>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
-				if (session.get(KEY_TYPE_KEY) == null) {
+				if (session.get(ExMapModelValue.KEY_TYPE_KEY) == null) {
 					QonfigValue typeV = session.getElement().getAttributes().get(session.attributes().get("key-type").getDefinition());
 					if (typeV != null && !typeV.text.isEmpty()) {
-						session.put(KEY_TYPE_KEY,
+						session.put(ExMapModelValue.KEY_TYPE_KEY,
 							VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position)));
 					}
 				}
