@@ -178,6 +178,17 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	}
 
 	/**
+	 * Tests if/else and switch/case structures in expresso
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testIfElseSwitchCase() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("ifElseSwitchCase");
+	}
+
+	/**
 	 * Tests the sort transformation type
 	 *
 	 * @throws ExpressoInterpretationException If an error occurs interpreting the test

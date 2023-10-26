@@ -12,12 +12,14 @@ import java.util.stream.Stream;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.MaybeReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationBuilder;
 import org.observe.Transformation.TransformReverse;
 import org.observe.Transformation.TransformationValues;
+import org.observe.assoc.ObservableMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.expresso.CompiledExpressoEnv;
@@ -37,6 +39,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExElement.Void;
 import org.observe.expresso.qonfig.ExpressoTransformations.CombineWith.TransformationModification;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
@@ -54,7 +57,8 @@ import com.google.common.reflect.TypeToken;
 public class ExpressoTransformations {
 	public static final String TARGET_MODEL_TYPE_KEY = "Expresso.Transformation.Target.Model.Type";
 
-	private ExpressoTransformations() {}
+	private ExpressoTransformations() {
+	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "transform",
@@ -477,7 +481,8 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ObservableTransform<M, E extends ExElement> extends Operation<Observable<?>, M, E> {}
+	public interface ObservableTransform<M, E extends ExElement> extends Operation<Observable<?>, M, E> {
+	}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableAction}
@@ -485,7 +490,8 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction, M, E> {}
+	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction, M, E> {
+	}
 
 	/**
 	 * A transformer capable of transforming a {@link SettableValue}
@@ -493,7 +499,8 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ValueTransform<M, E extends ExElement> extends Operation<SettableValue<?>, M, E> {}
+	public interface ValueTransform<M, E extends ExElement> extends Operation<SettableValue<?>, M, E> {
+	}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableCollection}
@@ -502,7 +509,8 @@ public class ExpressoTransformations {
 	 * @param <M2> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface CollectionTransform<M1 extends ObservableCollection<?>, M2, E extends ExElement> extends Operation<M1, M2, E> {}
+	public interface CollectionTransform<M1 extends ObservableCollection<?>, M2, E extends ExElement> extends Operation<M1, M2, E> {
+	}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableCollection} into another {@link ObservableCollection}
@@ -678,7 +686,7 @@ public class ExpressoTransformations {
 		implements Operation.Interpreted<M, MV, M, MV, ExElement> {
 			private ModelInstanceType<M, MV> theType;
 
-			protected Interpreted(Def<? super ExElement> definition, org.observe.expresso.qonfig.ExElement.Interpreted<?> parent) {
+			protected Interpreted(Def<? super ExElement> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -1968,5 +1976,594 @@ public class ExpressoTransformations {
 	public static boolean refersToSource(ObservableExpression ex, String sourceName) {
 		return !ex.find(ex2 -> ex2 instanceof NameExpression && ((NameExpression) ex2).getNames().getFirst().getName().equals(sourceName))
 			.isEmpty();
+	}
+
+	public interface ScalarOp extends ExElement.Def<ExElement.Void> {
+		Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent);
+
+		public interface Interpreted<S, T> extends ExElement.Interpreted<ExElement.Void> {
+			TypeToken<S> getSourceType();
+
+			TypeToken<T> getTargetType();
+
+			void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
+				throws ExpressoInterpretationException;
+
+			BetterList<InterpretedValueSynth<?, ?>> getComponents();
+
+			Instantiator<S, T> instantiate();
+		}
+
+		public interface Instantiator<S, T> {
+			void instantiate();
+
+			SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException;
+
+			boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
+		}
+	}
+
+	public static abstract class ScalarTransformOp<M, O extends ScalarOp> extends ExElement.Def.Abstract<ExElement.Void>
+	implements Operation<M, M, ExElement.Void> {
+		private final Class<O> theOpType;
+		private ModelType<M> theModelType;
+		private O theOp;
+
+		protected ScalarTransformOp(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, Class<O> opType) {
+			super(parent, qonfigType);
+			theOpType = opType;
+		}
+
+		public O getOp() {
+			return theOp;
+		}
+
+		@Override
+		public ModelType<? extends M> getTargetModelType() {
+			return theModelType;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<M> sourceModelType) throws QonfigInterpretationException {
+			theModelType = sourceModelType;
+			update(session);
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+
+			theOp = session.interpret(theOpType);
+		}
+
+		@Override
+		public abstract Interpreted<M, ?, ?, ?, ?, ?> interpret(ExElement.Interpreted<?> parent)
+			throws ExpressoInterpretationException;
+
+		public static abstract class Interpreted<M, S, MV1 extends M, T, MV2 extends M, O extends ScalarOp.Interpreted<S, T>>
+		extends ExElement.Interpreted.Abstract<ExElement.Void> implements Operation.Interpreted<M, MV1, M, MV2, ExElement.Void> {
+			private ModelInstanceType<M, MV1> theSourceType;
+			private ModelInstanceType<M, MV2> theTargetType;
+			private O theOp;
+
+			protected Interpreted(ScalarTransformOp<M, ?> def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
+			}
+
+			@Override
+			public ScalarTransformOp<M, ?> getDefinition() {
+				return (ScalarTransformOp<M, ?>) super.getDefinition();
+			}
+
+			public O getOp() {
+				return theOp;
+			}
+
+			@Override
+			public void update(ModelInstanceType<M, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSourceType = sourceType;
+				update(env);
+			}
+
+			@Override
+			public ModelInstanceType<? extends M, ? extends MV2> getTargetType() {
+				return theTargetType;
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return theOp.getComponents();
+			}
+
+			@Override
+			public abstract Instantiator<M, S, MV1, T, MV2> instantiate();
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+
+				theOp = (O) getDefinition().getOp().interpret(this);
+			}
+		}
+
+		public static abstract class Instantiator<M, S, MV1 extends M, T, MV2 extends M> implements Operation.Instantiator<MV1, MV2> {
+			private final ScalarOp.Instantiator<S, T> theOp;
+
+			protected Instantiator(ScalarOp.Instantiator<S, T> op) {
+				theOp = op;
+			}
+
+			public ScalarOp.Instantiator<S, T> getOp() {
+				return theOp;
+			}
+
+			@Override
+			public void instantiate() {
+				theOp.instantiate();
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				return theOp.isDifferent(sourceModels, newModels);
+			}
+		}
+	}
+
+	public static class If extends ExElement.Def.Abstract<ExElement.Void> implements ScalarOp {
+		public static final String IF = "if";
+
+		private CompiledExpression theValue;
+		private final List<ScalarOp> theIfs;
+
+		public If(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+			theIfs = new ArrayList<>();
+		}
+
+		public CompiledExpression getValue() {
+			return theValue;
+		}
+
+		public List<ScalarOp> getIfs() {
+			return Collections.unmodifiableList(theIfs);
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+			theValue = getValueExpression(session);
+			syncChildren(ScalarOp.class, theIfs, session.forChildren("if"));
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		public static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement.Void> implements ScalarOp.Interpreted<S, T> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+			private final List<ScalarOp.Interpreted<S, T>> theIfs;
+			private TypeToken<S> theSourceType;
+			private TypeToken<T> theTargetType;
+
+			Interpreted(If definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+				theIfs = new ArrayList<>();
+			}
+
+			@Override
+			public If getDefinition() {
+				return (If) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
+				return theValue;
+			}
+
+			public List<ScalarOp.Interpreted<S, T>> getIfs() {
+				return Collections.unmodifiableList(theIfs);
+			}
+
+			@Override
+			public TypeToken<S> getSourceType() {
+				return theSourceType;
+			}
+
+			@Override
+			public TypeToken<T> getTargetType() {
+				return theTargetType;
+			}
+
+			@Override
+			public void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
+				throws ExpressoInterpretationException {
+				theSourceType = sourceType;
+				theTargetType = targetType;
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+
+				theValue = interpret(getDefinition().getValue(),
+					theTargetType == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(theTargetType));
+				syncChildren(getDefinition().getIfs(), theIfs, iff -> (ScalarOp.Interpreted<S, T>) iff.interpret(this),
+					(iff, env) -> iff.updateOp(env, theSourceType, theTargetType));
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theIfs.stream(), iff -> iff.getComponents().stream());
+			}
+
+			@Override
+			public ScalarOp.Instantiator<S, T> instantiate() {
+				ModelValueInstantiator<SettableValue<T>> value = theValue.instantiate();
+				List<ModelValueInstantiator<SettableValue<Boolean>>> ifConditions = new ArrayList<>(theIfs.size());
+				List<ScalarOp.Instantiator<S, T>> ifs = new ArrayList<>(theIfs.size());
+				for (ScalarOp.Interpreted<S, T> iff : theIfs) {
+					ifConditions.add(iff.getAddOn(IfOp.Interpreted.class).getIf().instantiate());
+					ifs.add(iff.instantiate());
+				}
+				return new Instantiator<>(theTargetType, value, ifConditions, ifs);
+			}
+		}
+
+		static class Instantiator<S, T> implements ScalarOp.Instantiator<S, T> {
+			private final TypeToken<T> theTargetType;
+			private final ModelValueInstantiator<SettableValue<T>> theValue;
+			private final List<ModelValueInstantiator<SettableValue<Boolean>>> theIfConditions;
+			private final List<ScalarOp.Instantiator<S, T>> theIfs;
+
+			Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T>> value,
+				List<ModelValueInstantiator<SettableValue<Boolean>>> ifConditions, List<ScalarOp.Instantiator<S, T>> ifs) {
+				theTargetType = targetType;
+				theValue = value;
+				theIfConditions = ifConditions;
+				theIfs = ifs;
+			}
+
+			@Override
+			public void instantiate() {
+				theValue.instantiate();
+				for (ScalarOp.Instantiator<S, T> iff : theIfs)
+					iff.instantiate();
+			}
+
+			@Override
+			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				List<ObservableValue<ConditionalValue<T>>> ifs = new ArrayList<>(theIfs.size() + 1);
+				for (int i = 0; i < theIfs.size(); i++) {
+					SettableValue<Boolean> ifCondition = theIfConditions.get(i).get(models);
+					SettableValue<T> iff = theIfs.get(i).get(source, models);
+					ifs.add(ifCondition.map(b -> new ConditionalValue<>(Boolean.TRUE.equals(b), iff)));
+				}
+				SettableValue<T> value = theValue.get(models);
+				ifs.add(ObservableValue.of(new ConditionalValue<>(true, value)));
+				ObservableValue<ConditionalValue<T>> firstTrue = ObservableValue.<ConditionalValue<T>> firstValue(//
+					(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), cv -> cv.condition, null,
+					ifs.toArray(new ObservableValue[ifs.size()]));
+				return SettableValue.flatten(firstTrue
+					.map(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theTargetType), cv -> cv.value));
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<T> value = theValue.get(sourceModels);
+				if (value != theValue.forModelCopy(value, sourceModels, models))
+					return true;
+				for (ScalarOp.Instantiator<S, T> iff : theIfs) {
+					if (iff.isDifferent(sourceModels, models))
+						return true;
+				}
+				return false;
+			}
+		}
+
+		static class ConditionalValue<T> {
+			final boolean condition;
+			final SettableValue<T> value;
+
+			ConditionalValue(boolean condition, SettableValue<T> value) {
+				this.condition = condition;
+				this.value = value;
+			}
+		}
+	}
+
+	public static class IfOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+		public static final String IF_OP = "if-op";
+
+		private CompiledExpression theIf;
+
+		public IfOp(QonfigAddOn type, ExElement.Def<?> element) {
+			super(type, element);
+		}
+
+		public CompiledExpression getIf() {
+			return theIf;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<? extends Void> element) throws QonfigInterpretationException {
+			super.update(session, element);
+
+			theIf = getElement().getAttributeExpression("if", session);
+		}
+
+		@Override
+		public Interpreted interpret(ExElement.Interpreted<?> element) {
+			return new Interpreted(this, element);
+		}
+
+		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theIf;
+
+			Interpreted(IfOp definition, ExElement.Interpreted<?> element) {
+				super(definition, element);
+			}
+
+			@Override
+			public IfOp getDefinition() {
+				return (IfOp) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getIf() {
+				return theIf;
+			}
+
+			@Override
+			public void update(ExElement.Interpreted<? extends Void> element) throws ExpressoInterpretationException {
+				super.update(element);
+
+				theIf = getElement().interpret(getDefinition().getIf(), ModelTypes.Value.BOOLEAN);
+			}
+
+			@Override
+			public Class<ExAddOn.Void<ExElement.Void>> getInstanceType() {
+				return (Class<ExAddOn.Void<ExElement.Void>>) (Class<?>) ExAddOn.Void.class;
+			}
+
+			@Override
+			public ExAddOn.Void<Void> create(Void element) {
+				return null;
+			}
+		}
+	}
+
+	public static class Switch extends ExElement.Def.Abstract<ExElement.Void> implements ScalarOp {
+		public static final String SWITCH = "switch";
+
+		private CompiledExpression theDefault;
+		private final List<ScalarOp> theCases;
+
+		public Switch(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+			theCases = new ArrayList<>();
+		}
+
+		public CompiledExpression getDefault() {
+			return theDefault;
+		}
+
+		public List<ScalarOp> getCases() {
+			return Collections.unmodifiableList(theCases);
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+
+			theDefault = getAttributeExpression("default", session);
+			syncChildren(ScalarOp.class, theCases, session.forChildren("case"));
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		public static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement.Void> implements ScalarOp.Interpreted<S, T> {
+			private TypeToken<S> theSourceType;
+			private TypeToken<T> theTargetType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefault;
+			private final List<ScalarOp.Interpreted<S, T>> theCases;
+
+			Interpreted(Switch definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+				theCases = new ArrayList<>();
+			}
+
+			@Override
+			public Switch getDefinition() {
+				return (Switch) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getDefault() {
+				return theDefault;
+			}
+
+			public List<ScalarOp.Interpreted<S, T>> getCases() {
+				return Collections.unmodifiableList(theCases);
+			}
+
+			@Override
+			public TypeToken<S> getSourceType() {
+				return theSourceType;
+			}
+
+			@Override
+			public TypeToken<T> getTargetType() {
+				return theTargetType;
+			}
+
+			@Override
+			public void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
+				throws ExpressoInterpretationException {
+				theSourceType = sourceType;
+				theTargetType = targetType;
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+
+				theDefault = interpret(getDefinition().getDefault(), ModelTypes.Value.forType(theTargetType));
+				syncChildren(getDefinition().getCases(), theCases, def -> (ScalarOp.Interpreted<S, T>) def.interpret(this),
+					(interp, env) -> interp.updateOp(env, theSourceType, theTargetType));
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theCases.stream(), iff -> iff.getComponents().stream());
+			}
+
+			@Override
+			public ScalarOp.Instantiator<S, T> instantiate() {
+				ModelValueInstantiator<SettableValue<T>> def = theDefault.instantiate();
+				List<ModelValueInstantiator<SettableValue<S>>> caseValues = new ArrayList<>(theCases.size());
+				List<ScalarOp.Instantiator<S, T>> cases = new ArrayList<>(theCases.size());
+				for (ScalarOp.Interpreted<S, T> caase : theCases) {
+					caseValues.add(caase.getAddOn(CaseOp.Interpreted.class).getCase().instantiate());
+					cases.add(caase.instantiate());
+				}
+				return new Instantiator<>(theTargetType, def, caseValues, cases);
+			}
+		}
+
+		static class Instantiator<S, T> implements ScalarOp.Instantiator<S, T> {
+			private final TypeToken<T> theTargetType;
+			private final ModelValueInstantiator<SettableValue<T>> theDefault;
+			private final List<ModelValueInstantiator<SettableValue<S>>> theCaseValues;
+			private final List<ScalarOp.Instantiator<S, T>> theCases;
+
+			Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T>> def,
+				List<ModelValueInstantiator<SettableValue<S>>> caseValues, List<ScalarOp.Instantiator<S, T>> cases) {
+				theTargetType = targetType;
+				theDefault = def;
+				theCaseValues = caseValues;
+				theCases = cases;
+			}
+
+			@Override
+			public void instantiate() {
+				theDefault.instantiate();
+				for (ScalarOp.Instantiator<S, T> caase : theCases)
+					caase.instantiate();
+			}
+
+			@Override
+			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				List<ObservableValue<CaseValue<S, T>>> caseTuples = new ArrayList<>(theCases.size());
+				for (int i = 0; i < theCases.size(); i++) {
+					SettableValue<S> caseValue = theCaseValues.get(i).get(models);
+					SettableValue<T> value = theCases.get(i).get(source, models);
+					caseTuples.add(caseValue.<CaseValue<S, T>> map(cv -> new CaseValue<>(cv, value)));
+				}
+				TypeToken<CaseValue<S, T>> caseValueType = TypeTokens.get().keyFor(CaseValue.class)//
+					.<CaseValue<S, T>> parameterized((TypeToken<S>) (TypeToken<?>) TypeTokens.get().OBJECT, theTargetType);
+				TypeToken<SettableValue<T>> settableValueType = TypeTokens.get().keyFor(SettableValue.class)
+					.<SettableValue<T>> parameterized(theTargetType);
+				ObservableMap<S, SettableValue<T>> map = ObservableCollection.of(TypeTokens.get().keyFor(ObservableValue.class)//
+					.<ObservableValue<CaseValue<S, T>>> parameterized(caseValueType), caseTuples)//
+					.flow()//
+					.flattenValues(caseValueType, LambdaUtils.identity())//
+					.groupBy((TypeToken<S>) (TypeToken<?>) TypeTokens.get().OBJECT, cv -> cv.caseValue, null)//
+					.withValues(values -> values.map(settableValueType, cv -> cv.value))//
+					.gatherActive(models.getUntil())//
+					.singleMap(true);
+
+				ObservableValue<SettableValue<T>> mapValue = source.map(s -> map.get(s));
+				SettableValue<T> def = theDefault.get(models);
+				ObservableValue<SettableValue<T>> caseOrDefault = ObservableValue.firstValue(settableValueType, sv -> sv != null, null,
+					mapValue, ObservableValue.of(settableValueType, def));
+				return SettableValue.flatten(caseOrDefault);
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<T> value = theDefault.get(sourceModels);
+				if (value != theDefault.forModelCopy(value, sourceModels, models))
+					return true;
+				for (ScalarOp.Instantiator<S, T> iff : theCases) {
+					if (iff.isDifferent(sourceModels, models))
+						return true;
+				}
+				return false;
+			}
+		}
+
+		static class CaseValue<S, T> {
+			final S caseValue;
+			final SettableValue<T> value;
+
+			CaseValue(S caseValue, SettableValue<T> value) {
+				this.caseValue = caseValue;
+				this.value = value;
+			}
+		}
+	}
+
+	public static class CaseOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+		public static final String CASE_OP = "case-op";
+
+		private CompiledExpression theCase;
+
+		public CaseOp(QonfigAddOn type, ExElement.Def<?> element) {
+			super(type, element);
+		}
+
+		public CompiledExpression getCase() {
+			return theCase;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<? extends Void> element) throws QonfigInterpretationException {
+			super.update(session, element);
+
+			theCase = getElement().getAttributeExpression("case", session);
+		}
+
+		@Override
+		public Interpreted<?> interpret(ExElement.Interpreted<?> element) {
+			return new Interpreted(this, element);
+		}
+
+		public static class Interpreted<S> extends ExAddOn.Interpreted.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<S>> theCase;
+
+			Interpreted(CaseOp definition, ExElement.Interpreted<?> element) {
+				super(definition, element);
+			}
+
+			@Override
+			public CaseOp getDefinition() {
+				return (CaseOp) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<S>> getCase() {
+				return theCase;
+			}
+
+			@Override
+			public void update(ExElement.Interpreted<? extends Void> element) throws ExpressoInterpretationException {
+				super.update(element);
+
+				theCase = getElement().interpret(getDefinition().getCase(),
+					ModelTypes.Value.forType(((ScalarOp.Interpreted<S, ?>) element).getSourceType()));
+			}
+
+			@Override
+			public Class<ExAddOn.Void<ExElement.Void>> getInstanceType() {
+				return (Class<ExAddOn.Void<ExElement.Void>>) (Class<?>) ExAddOn.Void.class;
+			}
+
+			@Override
+			public ExAddOn.Void<Void> create(Void element) {
+				return null;
+			}
+		}
 	}
 }

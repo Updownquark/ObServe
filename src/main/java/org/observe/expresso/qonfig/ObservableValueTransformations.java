@@ -30,7 +30,11 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
+import org.observe.expresso.qonfig.ExpressoTransformations.If;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
+import org.observe.expresso.qonfig.ExpressoTransformations.ScalarOp;
+import org.observe.expresso.qonfig.ExpressoTransformations.ScalarTransformOp;
+import org.observe.expresso.qonfig.ExpressoTransformations.Switch;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.ValueTransform;
 import org.observe.util.TypeTokens;
@@ -58,6 +62,8 @@ public class ObservableValueTransformations {
 		interpreter.createWith(FilterAcceptValueTransform.FILTER_ACCEPT, ValueTransform.class,
 			ExElement.creator(FilterAcceptValueTransform::new));
 		interpreter.createWith("map-to", ValueTransform.class, ExElement.creator(MapValueTransform::new));
+		interpreter.createWith(If.IF, ValueTransform.class, ExElement.creator(IfValueTransform::new));
+		interpreter.createWith(Switch.SWITCH, ValueTransform.class, ExElement.creator(SwitchValueTransform::new));
 		interpreter.createWith("refresh", ValueTransform.class, ExElement.creator(RefreshValueTransform::new));
 		interpreter.createWith("unmodifiable", ValueTransform.class, ExElement.creator(UnmodifiableValueTransform::new));
 		interpreter.createWith("flatten", ValueTransform.class, ExElement.creator(FlattenValueTransform::new));
@@ -491,6 +497,115 @@ public class ObservableValueTransformations {
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+		}
+	}
+
+	static abstract class ScalarValueTransformOp<O extends ScalarOp> extends ScalarTransformOp<SettableValue<?>, O>
+		implements ValueTransform<SettableValue<?>, ExElement.Void> {
+		protected ScalarValueTransformOp(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, Class<O> opType) {
+			super(parent, qonfigType, opType);
+		}
+
+		static abstract class Interpreted<S, T, O extends ScalarOp.Interpreted<S, T>>
+		extends ScalarTransformOp.Interpreted<SettableValue<?>, S, SettableValue<S>, T, SettableValue<T>, O> {
+			protected Interpreted(ScalarValueTransformOp<?> def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
+			}
+
+			@Override
+			public ScalarValueTransformOp<?> getDefinition() {
+				return (ScalarValueTransformOp<?>) super.getDefinition();
+			}
+
+			@Override
+			public Instantiator<S, T> instantiate() {
+				return new Instantiator<>(getOp().instantiate());
+			}
+		}
+
+		static class Instantiator<S, T> extends ScalarTransformOp.Instantiator<SettableValue<?>, S, SettableValue<S>, T, SettableValue<T>> {
+			Instantiator(ScalarOp.Instantiator<S, T> op) {
+				super(op);
+			}
+
+			@Override
+			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				return getOp().get(source, models);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = If.IF, interpretation = IfValueTransform.Interpreted.class)
+	static class IfValueTransform extends ScalarValueTransformOp<If> {
+		public IfValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, If.class);
+		}
+
+		@QonfigAttributeGetter("value")
+		public CompiledExpression getValue() {
+			return getOp().getValue();
+		}
+
+		@QonfigChildGetter("if")
+		public List<ScalarOp> getIfs() {
+			return getOp().getIfs();
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<S, T> extends ScalarValueTransformOp.Interpreted<S, T, If.Interpreted<S, T>> {
+			public Interpreted(IfValueTransform def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
+				return getOp().getValue();
+			}
+
+			public List<ScalarOp.Interpreted<S, T>> getIfs() {
+				return getOp().getIfs();
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = Switch.SWITCH,
+		interpretation = SwitchValueTransform.Interpreted.class)
+	static class SwitchValueTransform extends ScalarValueTransformOp<Switch> {
+		public SwitchValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, Switch.class);
+		}
+
+		@QonfigAttributeGetter("default")
+		public CompiledExpression getDefault() {
+			return getOp().getDefault();
+		}
+
+		@QonfigChildGetter("case")
+		public List<ScalarOp> getCases() {
+			return getOp().getCases();
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<S, T> extends ScalarValueTransformOp.Interpreted<S, T, Switch.Interpreted<S, T>> {
+			public Interpreted(SwitchValueTransform def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getDefault() {
+				return getOp().getDefault();
+			}
+
+			public List<ScalarOp.Interpreted<S, T>> getCases() {
+				return getOp().getCases();
 			}
 		}
 	}

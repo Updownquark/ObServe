@@ -67,6 +67,15 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="inexact" type="boolean" default="false" />
 		</add-on>
 
+		<add-on name="if-op" requires="scalar-operation">
+			<attribute name="if" type="expression" />
+		</add-on>
+		<add-on name="if-as-operation" requires="if" inherits="abst-map-op, complex-operation, typed" />
+
+		<add-on name="case-op" requires="scalar-operation">
+			<attribute name="case" type="expression" />
+		</add-on>
+
 		<add-on name="flatten-reverse-type" abstract="true" />
 		<add-on name="flatten-replace-source" inherits="flatten-reverse-type">
 			<attribute name="function" type="expression" />
@@ -96,8 +105,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<li>Nothing, in which case the initial value will be defaulted (same as a java field)</li>
 		</ul>?>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
+
 		<?DOC An ordered collection of values.  For internal models, this may be initialized with elements.?>
 		<element-def name="list" extends="model-value" inherits="allow-ext-model" />
+		<?DOC May be used to initialize collections in internal models?>
+		<element-def name="element">
+			<?DOC The value for the element?>
+			<value type="expression" specify="required" />
+		</element-def>
 		<?DOC An ordered collection with added addition capabilities?>
 		<element-def name="value-set" extends="list" />
 		<?DOC An ordered collection of values with no duplicates?>
@@ -106,8 +121,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="sorted-list" extends="list" inherits="sorted-model-value" />
 		<?DOC An ordered, sorted collection of values with no duplicates?>
 		<element-def name="sorted-set" extends="set" inherits="sorted-model-value" />
+
 		<?DOC An association of key values each to a single other value?>
 		<element-def name="map" extends="model-value" inherits="allow-ext-model,map-model-value" />
+		<?DOC May be used to initialize maps in internal models?>
+		<element-def name="entry" extends="element">
+			<?DOC The key to store the value under?>
+			<attribute name="key" type="expression" />
+		</element-def>
 		<?DOC An association of sorted key values each to a single other value?>
 		<element-def name="sorted-map" extends="map" inherits="sorted-model-value" />
 		<?DOC An association of key values each to one or more other values?>
@@ -118,16 +139,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC A simple value that cannot be changed after initialization. This value does not change as the expression used to initialize it does.?>		
 		<element-def name="constant" extends="model-value">
 			<value-mod specify="required" />
-		</element-def>
-		<?DOC May be used to initialize collections in internal models?>
-		<element-def name="element">
-			<?DOC The value for the element?>
-			<value type="expression" specify="required" />
-		</element-def>
-		<?DOC May be used to initialize maps in internal models?>
-		<element-def name="entry" extends="element">
-			<?DOC The key to store the value under?>
-			<attribute name="key" type="expression" />
 		</element-def>
 
 		<?DOC A transformation takes a value or values supplied by other models and performs some dynamic operation on the value(s)
@@ -142,6 +153,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC An operation for a &lt;transformation>?>
 		<element-def name="operation" abstract="true" />
 		<?DOC Causes a model value or action to become unmodifiable or uninvokable on an expression?>
+
 		<element-def name="disable" extends="operation" inherits="complex-operation">
 			<attr-mod name="complex-operation.source-as" default="$SOURCE$" />
 			<?DOC The expression to disable the value or action with.  The expression can be String- or boolean-typed.<br>
@@ -150,14 +162,25 @@ It builds on the Expresso-Core specification and contains everything needed for 
 				Otherwise the value may be displayed to the user for information.?>
 			<attribute name="with" type="expression" />
 		</element-def>
+
 		<element-def name="filter-accept" extends="operation" inherits="complex-operation">
 			<attribute name="test" type="expression" />
 		</element-def>
-		<element-def name="combine-with" inherits="named">
-			<value type="expression" specify="required" />
+
+		<element-def name="map-to" extends="operation" inherits="abst-map-op, complex-operation, typed">
+			<element-model>
+				<value name-attribute="combined-value/name" />
+			</element-model>
+			<attribute name="equivalence" type="expression" specify="optional" />
+			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
+			<child-def name="map" type="map-with" />
+			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
 		<element-def name="map-with">
 			<value type="expression" />
+		</element-def>
+		<element-def name="combine-with" inherits="named">
+			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="map-reverse" inherits="with-element-model">
 			<element-model>
@@ -168,36 +191,50 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="target-as" type="identifier" />
 			<value type="expression" />
 		</element-def>
-		<element-def name="map-to" extends="operation" inherits="abst-map-op, complex-operation, typed">
-			<element-model>
-				<value name-attribute="combined-value/name" />
-			</element-model>
-			<attribute name="equivalence" type="expression" specify="optional" />
-			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
-			<child-def name="map" type="map-with" />
-			<child-def name="reverse" type="map-reverse" min="0" />
+
+		<element-def name="scalar-operation" extends="operation" abstract="true" />
+
+		<element-def name="return" extends="scalar-operation">
+			<value type="expression" />
 		</element-def>
+
+		<element-def name="if" extends="scalar-operation">
+			<value type="expression" />
+			<child-def name="if" type="scalar-operation" inherits="if-op" min="0" max="inf" />
+		</element-def>
+
+		<element-def name="switch" extends="scalar-operation" inherits="abst-map-op, typed">
+			<attribute name="default" type="expression" />
+			<child-def name="case" type="scalar-operation" inherits="case-op" max="inf" />
+		</element-def>
+
 		<element-def name="filter" extends="operation" inherits="complex-operation">
 			<attribute name="test" type="expression" />
 		</element-def>
+
 		<?DOC Filters an event such that only values which are instances of the given class are reported from this event.<br>
 			The type of this event is the same as that of the source event.  One may then map this event with a cast to produce an event of the target type.?>
 		<element-def name="filter-by-type" extends="operation">
 			<?DOC The name of the class to filter on. Parameterized types are not permitted.?>
 			<attribute name="type" type="string" />
 		</element-def>
+
 		<element-def name="reverse" extends="operation" />
+
 		<element-def name="refresh" extends="operation">
 			<attribute name="on" type="expression" />
 		</element-def>
+
 		<element-def name="refresh-each" extends="operation" inherits="complex-operation">
 			<attribute name="on" type="expression" />
 		</element-def>
+
 		<element-def name="distinct" extends="operation">
 			<child-def name="sort" type="sort" min="0" />
 			<attribute name="use-first" type="boolean" default="false" />
 			<attribute name="preserve-source-order" type="boolean" default="false" />
 		</element-def>
+
 		<element-def name="sort" extends="operation" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="sort-value-as" />
@@ -224,9 +261,11 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<?DOC The attribute to sort on?>
 			<value type="expression" />
 		</element-def>
+
 		<element-def name="unmodifiable" extends="operation">
 			<attribute name="allow-updates" type="boolean" default="true" />
 		</element-def>
+
 		<element-def name="filter-mod" extends="operation" inherits="complex-operation">
 			<!-- Obviously, some of these are incompatible -->
 			<attribute name="no-add" type="string" specify="optional" />
@@ -236,15 +275,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="filter-add" type="expression" specify="optional" />
 			<attribute name="filter-remove" type="expression" specify="optional" />
 		</element-def>
+
 		<element-def name="map-equivalent" extends="map-to">
 			<?DOC <p>The sorting for the mapped values. This sorting scheme must be equivalent to the sorting of the source collection for the mapped type.</p>
 				<p>For distinct, non-sorted flows, this may not be specified, and instead reverse must be specified.</p>
 				<p>For sorted flows (distinct or not), either the reverse operation or sorting must be specified.</p>?>
 			<child-def name="sort" type="sort" min="0" />
 		</element-def>
-		<element-def name="flatten-reverse">
-			<attribute name="type" type="flatten-reverse-type" />
-		</element-def>
+
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
 			<attribute name="to" type="string" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
@@ -254,26 +292,36 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<!-- This is needed to flatten sorted collections or sets -->
 			<child-def name="sort" type="sort" min="0" />
 		</element-def>
+		<element-def name="flatten-reverse">
+			<attribute name="type" type="flatten-reverse-type" />
+		</element-def>
+
 		<element-def name="cross" extends="flatten">
 			<attribute name="with" type="expression" />
 		</element-def>
+
 		<element-def name="where-contained" extends="operation">
 			<attribute name="filter" type="expression" />
 			<attribute name="inclusive" type="boolean" default="true" />
 		</element-def>
+
 		<element-def name="group-by" extends="operation" inherits="complex-operation">
 			<child-def name="key" type="operation" />
 		</element-def>
+
 		<element-def name="no-init" extends="operation" />
 		<element-def name="skip" extends="operation">
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
+
 		<element-def name="take" extends="operation">
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
+
 		<element-def name="take-until" extends="operation">
 			<attribute name="until" type="expression" specify="required" />
 		</element-def>
+
 		<?DOC Provides the size of a collection, map, or multi-map as a value.  This may not be used with scalar types.?>
 		<element-def name="size" extends="operation">
 			<?DOC Whether this operation provides the number of keys or values in the source structure.<br>
@@ -281,9 +329,11 @@ It builds on the Expresso-Core specification and contains everything needed for 
 				For collections, this must be 'value' (the default).?>
 			<attribute name="type" type="size-type" default="value" />
 		</element-def>
+
 		<element-def name="collect" extends="operation">
 			<attribute name="active" type="boolean" specify="optional" />
 		</element-def>
+
 		<element-def name="hook" extends="model-value" inherits="with-element-model">
 			<element-model>
 				<value name="event" />
@@ -340,6 +390,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<auto-inherit inherits="int-map">
 			<target element="map" role="model.value" />
 			<target element="multi-map" role="model.value" />
+		</auto-inherit>
+
+		<auto-inherit inherits="if-as-operation">
+			<target element="if" role="transform.op" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

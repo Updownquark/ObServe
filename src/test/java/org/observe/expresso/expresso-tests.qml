@@ -1640,6 +1640,40 @@
 		<action>mappedListDR.add(25)</action>
 		<action>assertEquals(-75, models.list.get(5))</action>
 	</test>
+	<test name="ifElseSwitchCase">
+		<model>
+			<value name="int1" type="int" />
+			<value name="int2" type="int" />
+			<value name="int3" type="int" />
+			<value name="int4" type="int" />
+
+			<transform name="ifElse" source="int1">
+				<if source-as="input">"odd"
+					<if if="input % 2 == 0">"even"</if>
+				</if>
+			</transform>
+			<transform name="switchV" source="int1">
+				<switch default="-1">
+					<return case="int2">int3</return>
+					<return case="5">int4</return>
+				</switch>
+			</transform>
+		</model>
+
+		<action>assertEquals("even", ifElse)</action>
+		<action>int1=5</action>
+		<action>assertEquals("odd", ifElse)</action>
+
+		<action>assertEquals(0, switchV)</action>
+		<action>int4=7</action>
+		<action>assertEquals(7, switchV)</action>
+		<action>int1=0</action>
+		<action>assertEquals(0, switchV)</action>
+		<action>int2=21</action>
+		<action>assertEquals(21, switchV)</action>
+		<action>int1=17</action>
+		<action>assertEquals(-1, switchV)</action>
+	</test>
 	<test name="sort">
 		<model>
 			<value name="entityCopy" init="new java.util.ArrayList&lt;&gt;(models.sortedEntityList)" />
