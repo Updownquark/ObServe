@@ -61,8 +61,9 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				syncChildren(TestAction.class, theActions, //
-					BetterList.of2(session.forChildren("test-action").stream(), s -> s.asElement("test-action")));
+				QonfigElementOrAddOn testAction = session.getType("test-action");
+				syncChildren(TestAction.class, theActions,
+					BetterList.of2(session.forChildren("test-action").stream(), s -> s.asElement(testAction)));
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {

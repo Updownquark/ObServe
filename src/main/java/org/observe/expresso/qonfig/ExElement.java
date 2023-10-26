@@ -565,10 +565,12 @@ public interface ExElement extends Identifiable {
 			@Override
 			public <T extends ExElement.Def<?>> void syncChildren(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions,
 				ExBiConsumer<? super T, ExpressoQIS, QonfigInterpretationException> update) throws QonfigInterpretationException {
-				for (ExpressoQIS childSession : sessions) {
-					if (thePromise != null && !documentsMatch(childSession.getElement().getDocument().getLocation(),
-						thePromise.getElement().getDocument().getLocation()))
-						childSession.setExpressoEnv(thePromise.getExternalExpressoEnv());
+				if (thePromise != null) {
+					for (ExpressoQIS childSession : sessions) {
+						if (!documentsMatch(childSession.getElement().getDocument().getLocation(),
+							thePromise.getElement().getDocument().getLocation()))
+							childSession.setExpressoEnv(thePromise.getExternalExpressoEnv());
+					}
 				}
 				CollectionUtils.SimpleAdjustment<T, ExpressoQIS, QonfigInterpretationException> adjustment = CollectionUtils
 					.synchronize((List<T>) defs, sessions, //
@@ -2005,7 +2007,7 @@ public interface ExElement extends Identifiable {
 				Interpreted.Abstract<?>.ExtElementView myInterpreted = owner.theExternalView;
 				// Create add-ons
 				CollectionUtils
-					.synchronize(new ArrayList<>(theExtAddOns.getAllValues()), new ArrayList<>(myInterpreted.theExtAddOns.getAllValues()),
+				.synchronize(new ArrayList<>(theExtAddOns.getAllValues()), new ArrayList<>(myInterpreted.theExtAddOns.getAllValues()),
 					(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
 				.adjust(new CollectionUtils.CollectionSynchronizer<ExAddOn<?>, ExAddOn.Interpreted<?, ?>>() {
 					@Override

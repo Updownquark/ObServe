@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Expresso-Testing" version="0.1" xmlns:base="Expresso-Base v0.1" xmlns:debug="Expresso-Debug v0.1" root="testing">
+<qonfig-def name="Expresso-Testing" version="0.1" xmlns:base="Expresso-Base v0.1" xmlns:debug="Expresso-Debug v0.1">
 	<add-ons>
 		<add-on name="test-action" requires="action" inherits="debug-value">
 			<attribute name="expect-throw" type="identifier" specify="optional" />

@@ -500,7 +500,10 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			public void update(TypeToken<OT> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				env = env.with(getParentElement().getModels());
-				theAttribute = interpret(getDefinition().getAttribute(), ModelTypes.Value.<SettableValue<IT>> anyAs());
+				if (getExpressoEnv() != null)
+					theAttribute = interpret(getDefinition().getAttribute(), ModelTypes.Value.anyAsV());
+				else
+					theAttribute = getDefinition().getAttribute().interpret(ModelTypes.Value.anyAsV(), env);
 				updateInternal((TypeToken<IT>) theAttribute.getType().getType(0), env);
 			}
 

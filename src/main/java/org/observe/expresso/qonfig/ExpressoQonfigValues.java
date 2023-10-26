@@ -2070,7 +2070,8 @@ public class ExpressoQonfigValues {
 				theFinally = interpret(getDefinition().getFinally() == null ? null : getDefinition().getFinally(),
 					ModelTypes.Action.instance());
 				this.syncChildren(getDefinition().getBody(), theBody,
-					(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv), null);
+					(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
+					(b, bEnv) -> b.updateValue(bEnv));
 			}
 
 			@Override
