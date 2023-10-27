@@ -32,8 +32,7 @@ import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.If;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
-import org.observe.expresso.qonfig.ExpressoTransformations.ScalarOp;
-import org.observe.expresso.qonfig.ExpressoTransformations.ScalarTransformOp;
+import org.observe.expresso.qonfig.ExpressoTransformations.Return;
 import org.observe.expresso.qonfig.ExpressoTransformations.Switch;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.ValueTransform;
@@ -64,6 +63,7 @@ public class ObservableValueTransformations {
 		interpreter.createWith("map-to", ValueTransform.class, ExElement.creator(MapValueTransform::new));
 		interpreter.createWith(If.IF, ValueTransform.class, ExElement.creator(IfValueTransform::new));
 		interpreter.createWith(Switch.SWITCH, ValueTransform.class, ExElement.creator(SwitchValueTransform::new));
+		interpreter.createWith(Return.RETURN, ValueTransform.class, ExElement.creator(ReturnValueTransform::new));
 		interpreter.createWith("refresh", ValueTransform.class, ExElement.creator(RefreshValueTransform::new));
 		interpreter.createWith("unmodifiable", ValueTransform.class, ExElement.creator(UnmodifiableValueTransform::new));
 		interpreter.createWith("flatten", ValueTransform.class, ExElement.creator(FlattenValueTransform::new));
@@ -501,73 +501,58 @@ public class ObservableValueTransformations {
 		}
 	}
 
-	static abstract class ScalarValueTransformOp<O extends ScalarOp> extends ScalarTransformOp<SettableValue<?>, O>
-		implements ValueTransform<SettableValue<?>, ExElement.Void> {
-		protected ScalarValueTransformOp(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, Class<O> opType) {
-			super(parent, qonfigType, opType);
+	static class IfValueTransform extends If implements ValueTransform<SettableValue<?>, ExElement.Void> {
+		public IfValueTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
 		}
 
-		static abstract class Interpreted<S, T, O extends ScalarOp.Interpreted<S, T>>
-		extends ScalarTransformOp.Interpreted<SettableValue<?>, S, SettableValue<S>, T, SettableValue<T>, O> {
-			protected Interpreted(ScalarValueTransformOp<?> def, ExElement.Interpreted<?> parent) {
+		@Override
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
+			update(session);
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<S, T> extends If.Interpreted<S, T>
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
+			Interpreted(IfValueTransform def, ExElement.Interpreted<?> parent) {
 				super(def, parent);
 			}
 
 			@Override
-			public ScalarValueTransformOp<?> getDefinition() {
-				return (ScalarValueTransformOp<?>) super.getDefinition();
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<T>> getTargetType() {
+				return ModelTypes.Value.forType(getTargetValueType());
+			}
+
+			@Override
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException {
+				updateOp(env, (TypeToken<S>) sourceType.getType(0));
 			}
 
 			@Override
 			public Instantiator<S, T> instantiate() {
-				return new Instantiator<>(getOp().instantiate());
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<S, T> extends ScalarTransformOp.Instantiator<SettableValue<?>, S, SettableValue<S>, T, SettableValue<T>> {
-			Instantiator(ScalarOp.Instantiator<S, T> op) {
-				super(op);
+		static class Instantiator<S, T> extends If.Instantiator<S, T>
+		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
+			public Instantiator(Interpreted<S, T> interpreted) {
+				super(interpreted);
 			}
 
 			@Override
 			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
-				return getOp().get(source, models);
-			}
-		}
-	}
-
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = If.IF, interpretation = IfValueTransform.Interpreted.class)
-	static class IfValueTransform extends ScalarValueTransformOp<If> {
-		public IfValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType, If.class);
-		}
-
-		@QonfigAttributeGetter("value")
-		public CompiledExpression getValue() {
-			return getOp().getValue();
-		}
-
-		@QonfigChildGetter("if")
-		public List<ScalarOp> getIfs() {
-			return getOp().getIfs();
-		}
-
-		@Override
-		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
-			return new Interpreted<>(this, parent);
-		}
-
-		static class Interpreted<S, T> extends ScalarValueTransformOp.Interpreted<S, T, If.Interpreted<S, T>> {
-			public Interpreted(IfValueTransform def, ExElement.Interpreted<?> parent) {
-				super(def, parent);
-			}
-
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
-				return getOp().getValue();
-			}
-
-			public List<ScalarOp.Interpreted<S, T>> getIfs() {
-				return getOp().getIfs();
+				return get(source, models);
 			}
 		}
 	}
@@ -575,37 +560,117 @@ public class ObservableValueTransformations {
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = Switch.SWITCH,
 		interpretation = SwitchValueTransform.Interpreted.class)
-	static class SwitchValueTransform extends ScalarValueTransformOp<Switch> {
+	static class SwitchValueTransform extends Switch implements ValueTransform<SettableValue<?>, ExElement.Void> {
 		public SwitchValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType, Switch.class);
-		}
-
-		@QonfigAttributeGetter("default")
-		public CompiledExpression getDefault() {
-			return getOp().getDefault();
-		}
-
-		@QonfigChildGetter("case")
-		public List<ScalarOp> getCases() {
-			return getOp().getCases();
+			super(parent, qonfigType);
 		}
 
 		@Override
-		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
+			update(session);
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<S, T> extends ScalarValueTransformOp.Interpreted<S, T, Switch.Interpreted<S, T>> {
+		static class Interpreted<S, T> extends Switch.Interpreted<S, T>
+			implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
 			public Interpreted(SwitchValueTransform def, ExElement.Interpreted<?> parent) {
 				super(def, parent);
 			}
 
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getDefault() {
-				return getOp().getDefault();
+			@Override
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException {
+				updateOp(env, (TypeToken<S>) sourceType.getType(0));
 			}
 
-			public List<ScalarOp.Interpreted<S, T>> getCases() {
-				return getOp().getCases();
+			@Override
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<T>> getTargetType() {
+				return ModelTypes.Value.forType(getTargetValueType());
+			}
+
+			@Override
+			public Instantiator<S, T> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<S, T> extends Switch.Instantiator<S, T>
+			implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
+			public Instantiator(Interpreted<S, T> interpreted) {
+				super(interpreted);
+			}
+
+			@Override
+			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				return get(source, models);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = Return.RETURN,
+		interpretation = ReturnValueTransform.Interpreted.class)
+	static class ReturnValueTransform extends Return implements ValueTransform<SettableValue<?>, ExElement.Void> {
+		public ReturnValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
+			update(session);
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<S, T> extends Return.Interpreted<S, T>
+			implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
+			public Interpreted(ReturnValueTransform def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
+			}
+
+			@Override
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException {
+				updateOp(env, (TypeToken<S>) sourceType.getType(0));
+			}
+
+			@Override
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<T>> getTargetType() {
+				return ModelTypes.Value.forType(getTargetValueType());
+			}
+
+			@Override
+			public Instantiator<S, T> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<S, T> extends Return.Instantiator<S, T>
+			implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
+			public Instantiator(Interpreted<S, T> interpreted) {
+				super(interpreted);
+			}
+
+			@Override
+			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				return get(source, models);
 			}
 		}
 	}

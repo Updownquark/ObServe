@@ -1978,138 +1978,119 @@ public class ExpressoTransformations {
 			.isEmpty();
 	}
 
-	public interface ScalarOp extends ExElement.Def<ExElement.Void> {
-		Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent);
+	public static abstract class ScalarOp extends ExElement.Def.Abstract<ExElement.Void> {
+		private ModelComponentId theSourceAsVariable;
 
-		public interface Interpreted<S, T> extends ExElement.Interpreted<ExElement.Void> {
-			TypeToken<S> getSourceType();
-
-			TypeToken<T> getTargetType();
-
-			void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
-				throws ExpressoInterpretationException;
-
-			BetterList<InterpretedValueSynth<?, ?>> getComponents();
-
-			Instantiator<S, T> instantiate();
-		}
-
-		public interface Instantiator<S, T> {
-			void instantiate();
-
-			SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException;
-
-			boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
-		}
-	}
-
-	public static abstract class ScalarTransformOp<M, O extends ScalarOp> extends ExElement.Def.Abstract<ExElement.Void>
-	implements Operation<M, M, ExElement.Void> {
-		private final Class<O> theOpType;
-		private ModelType<M> theModelType;
-		private O theOp;
-
-		protected ScalarTransformOp(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, Class<O> opType) {
+		protected ScalarOp(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
-			theOpType = opType;
 		}
 
-		public O getOp() {
-			return theOp;
-		}
-
-		@Override
-		public ModelType<? extends M> getTargetModelType() {
-			return theModelType;
-		}
-
-		@Override
-		public void update(ExpressoQIS session, ModelType<M> sourceModelType) throws QonfigInterpretationException {
-			theModelType = sourceModelType;
-			update(session);
+		public ModelComponentId getSourceAs() {
+			return theSourceAsVariable;
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theOp = session.interpret(theOpType);
+			String sourceAs = getAddOnValue(ExComplexOperation.class, ExComplexOperation::getSourceAs);
+			if (sourceAs != null) {
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theSourceAsVariable = elModels.getElementValueModelId(sourceAs);
+				elModels.satisfyElementValueType(theSourceAsVariable, ModelTypes.Value, (interp, env) -> {
+					return ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getSourceValueType());
+				});
+			} else
+				theSourceAsVariable = null;
 		}
 
-		@Override
-		public abstract Interpreted<M, ?, ?, ?, ?, ?> interpret(ExElement.Interpreted<?> parent)
-			throws ExpressoInterpretationException;
+		public abstract Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent);
 
-		public static abstract class Interpreted<M, S, MV1 extends M, T, MV2 extends M, O extends ScalarOp.Interpreted<S, T>>
-		extends ExElement.Interpreted.Abstract<ExElement.Void> implements Operation.Interpreted<M, MV1, M, MV2, ExElement.Void> {
-			private ModelInstanceType<M, MV1> theSourceType;
-			private ModelInstanceType<M, MV2> theTargetType;
-			private O theOp;
+		public static abstract class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement.Void> {
+			private TypeToken<S> theSourceValueType;
+			private TypeToken<T> theTargetValueType;
 
-			protected Interpreted(ScalarTransformOp<M, ?> def, ExElement.Interpreted<?> parent) {
-				super(def, parent);
+			public Interpreted(ScalarOp definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
-			public ScalarTransformOp<M, ?> getDefinition() {
-				return (ScalarTransformOp<M, ?>) super.getDefinition();
+			public ScalarOp getDefinition() {
+				return (ScalarOp) super.getDefinition();
 			}
 
-			public O getOp() {
-				return theOp;
+			public TypeToken<S> getSourceValueType() {
+				return theSourceValueType;
 			}
 
-			@Override
-			public void update(ModelInstanceType<M, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theSourceType = sourceType;
+			public TypeToken<T> getTargetValueType() {
+				return theTargetValueType;
+			}
+
+			protected void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType) throws ExpressoInterpretationException {
+				theSourceValueType = sourceType;
 				update(env);
+				theTargetValueType = evaluateTargetType();
 			}
-
-			@Override
-			public ModelInstanceType<? extends M, ? extends MV2> getTargetType() {
-				return theTargetType;
-			}
-
-			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return theOp.getComponents();
-			}
-
-			@Override
-			public abstract Instantiator<M, S, MV1, T, MV2> instantiate();
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
-
-				theOp = (O) getDefinition().getOp().interpret(this);
+				theTargetValueType = getAddOnValue(ExTyped.Interpreted.class, t -> t.getValueType());
 			}
+
+			protected abstract TypeToken<T> evaluateTargetType();
+
+			public abstract BetterList<InterpretedValueSynth<?, ?>> getComponents();
+
+			public abstract Instantiator<S, T> instantiate();
 		}
 
-		public static abstract class Instantiator<M, S, MV1 extends M, T, MV2 extends M> implements Operation.Instantiator<MV1, MV2> {
-			private final ScalarOp.Instantiator<S, T> theOp;
+		public static abstract class Instantiator<S, T> {
+			private final ModelInstantiator theLocalModels;
+			private final ModelComponentId theSourceAsVariable;
 
-			protected Instantiator(ScalarOp.Instantiator<S, T> op) {
-				theOp = op;
+			Instantiator(ScalarOp.Interpreted<S, T> interpreted) {
+				if (interpreted.getModels() != interpreted.getParentElement().getModels()) {
+					theLocalModels = interpreted.getModels().instantiate();
+					theSourceAsVariable = interpreted.getDefinition().getSourceAs();
+				} else {
+					theLocalModels = null;
+					theSourceAsVariable = null;
+				}
 			}
 
-			public ScalarOp.Instantiator<S, T> getOp() {
-				return theOp;
-			}
-
-			@Override
 			public void instantiate() {
-				theOp.instantiate();
+				if (theLocalModels != null)
+					theLocalModels.instantiate();
 			}
 
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				return theOp.isDifferent(sourceModels, newModels);
+			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				if (theLocalModels != null) {
+					models = theLocalModels.wrap(models);
+					if (theSourceAsVariable != null)
+						ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAsVariable, models, source);
+				}
+				return doGet(source, models);
 			}
+
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				if (theLocalModels != null) {
+					sourceModels = theLocalModels.wrap(sourceModels);
+					newModels = theLocalModels.wrap(newModels);
+				}
+				return checkIsDifferent(sourceModels, newModels);
+			}
+
+			protected abstract SettableValue<T> doGet(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException;
+
+			protected abstract boolean checkIsDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException;
 		}
 	}
 
-	public static class If extends ExElement.Def.Abstract<ExElement.Void> implements ScalarOp {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = If.IF, interpretation = If.Interpreted.class)
+	public static class If extends ScalarOp {
 		public static final String IF = "if";
 
 		private CompiledExpression theValue;
@@ -2120,10 +2101,12 @@ public class ExpressoTransformations {
 			theIfs = new ArrayList<>();
 		}
 
+		@QonfigAttributeGetter()
 		public CompiledExpression getValue() {
 			return theValue;
 		}
 
+		@QonfigChildGetter("if")
 		public List<ScalarOp> getIfs() {
 			return Collections.unmodifiableList(theIfs);
 		}
@@ -2140,11 +2123,9 @@ public class ExpressoTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement.Void> implements ScalarOp.Interpreted<S, T> {
+		public static class Interpreted<S, T> extends ScalarOp.Interpreted<S, T> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 			private final List<ScalarOp.Interpreted<S, T>> theIfs;
-			private TypeToken<S> theSourceType;
-			private TypeToken<T> theTargetType;
 
 			Interpreted(If definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -2165,91 +2146,85 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public TypeToken<S> getSourceType() {
-				return theSourceType;
-			}
-
-			@Override
-			public TypeToken<T> getTargetType() {
-				return theTargetType;
-			}
-
-			@Override
-			public void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
-				throws ExpressoInterpretationException {
-				theSourceType = sourceType;
-				theTargetType = targetType;
-				update(env);
-			}
-
-			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
 
 				theValue = interpret(getDefinition().getValue(),
-					theTargetType == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(theTargetType));
+					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
 				syncChildren(getDefinition().getIfs(), theIfs, iff -> (ScalarOp.Interpreted<S, T>) iff.interpret(this),
-					(iff, env) -> iff.updateOp(env, theSourceType, theTargetType));
+					(iff, env) -> iff.updateOp(env, getSourceValueType()));
+			}
+
+			@Override
+			protected TypeToken<T> evaluateTargetType() {
+				TypeToken<? extends T>[] types = new TypeToken[theIfs.size() + 1];
+				types[0] = (TypeToken<? extends T>) theValue.getType().getType(0);
+				for (int i = 0; i < theIfs.size(); i++)
+					types[i + 1] = theIfs.get(i).getTargetValueType();
+				return TypeTokens.get().getCommonType(types);
 			}
 
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(theIfs.stream(), iff -> iff.getComponents().stream());
+				return BetterList.of(Stream.concat(Stream.of(theValue), //
+					BetterList.of(theIfs.stream(), iff -> iff.getComponents().stream()).stream()));
 			}
 
 			@Override
 			public ScalarOp.Instantiator<S, T> instantiate() {
-				ModelValueInstantiator<SettableValue<T>> value = theValue.instantiate();
-				List<ModelValueInstantiator<SettableValue<Boolean>>> ifConditions = new ArrayList<>(theIfs.size());
-				List<ScalarOp.Instantiator<S, T>> ifs = new ArrayList<>(theIfs.size());
-				for (ScalarOp.Interpreted<S, T> iff : theIfs) {
-					ifConditions.add(iff.getAddOn(IfOp.Interpreted.class).getIf().instantiate());
-					ifs.add(iff.instantiate());
-				}
-				return new Instantiator<>(theTargetType, value, ifConditions, ifs);
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<S, T> implements ScalarOp.Instantiator<S, T> {
+		protected static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
 			private final TypeToken<T> theTargetType;
 			private final ModelValueInstantiator<SettableValue<T>> theValue;
 			private final List<ModelValueInstantiator<SettableValue<Boolean>>> theIfConditions;
 			private final List<ScalarOp.Instantiator<S, T>> theIfs;
 
-			Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T>> value,
-				List<ModelValueInstantiator<SettableValue<Boolean>>> ifConditions, List<ScalarOp.Instantiator<S, T>> ifs) {
-				theTargetType = targetType;
-				theValue = value;
-				theIfConditions = ifConditions;
-				theIfs = ifs;
+			protected Instantiator(Interpreted<S, T> interpreted){
+				super(interpreted);
+				theTargetType = interpreted.getTargetValueType();
+				theValue=interpreted.getValue().instantiate();
+				theIfConditions = new ArrayList<>(interpreted.getIfs().size());
+				theIfs = new ArrayList<>(interpreted.getIfs().size());
+				for (ScalarOp.Interpreted<S, T> iff : interpreted.getIfs()) {
+					theIfConditions.add(iff.getAddOn(IfOp.Interpreted.class).getIf().instantiate());
+					theIfs.add(iff.instantiate());
+				}
 			}
 
 			@Override
 			public void instantiate() {
+				super.instantiate();
 				theValue.instantiate();
 				for (ScalarOp.Instantiator<S, T> iff : theIfs)
 					iff.instantiate();
 			}
 
 			@Override
-			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+			protected SettableValue<T> doGet(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				List<ObservableValue<ConditionalValue<T>>> ifs = new ArrayList<>(theIfs.size() + 1);
 				for (int i = 0; i < theIfs.size(); i++) {
 					SettableValue<Boolean> ifCondition = theIfConditions.get(i).get(models);
 					SettableValue<T> iff = theIfs.get(i).get(source, models);
-					ifs.add(ifCondition.map(b -> new ConditionalValue<>(Boolean.TRUE.equals(b), iff)));
+					ifs.add(ifCondition
+						.map(LambdaUtils.printableFn(b -> new ConditionalValue<>(Boolean.TRUE.equals(b), iff),
+							() -> "condition(" + iff + ")", null)));
 				}
 				SettableValue<T> value = theValue.get(models);
 				ifs.add(ObservableValue.of(new ConditionalValue<>(true, value)));
 				ObservableValue<ConditionalValue<T>> firstTrue = ObservableValue.<ConditionalValue<T>> firstValue(//
-					(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), cv -> cv.condition, null,
+					(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class),
+					LambdaUtils.printablePred(cv -> cv.condition, "condition", null), null,
 					ifs.toArray(new ObservableValue[ifs.size()]));
 				return SettableValue.flatten(firstTrue
-					.map(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theTargetType), cv -> cv.value));
+					.map(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theTargetType),
+						LambdaUtils.printableFn(cv -> cv.value, "value", null)));
 			}
 
 			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
+			protected boolean checkIsDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> value = theValue.get(sourceModels);
 				if (value != theValue.forModelCopy(value, sourceModels, models))
 					return true;
@@ -2269,9 +2244,15 @@ public class ExpressoTransformations {
 				this.condition = condition;
 				this.value = value;
 			}
+
+			@Override
+			public String toString() {
+				return value.toString();
+			}
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = IfOp.IF_OP, interpretation = IfOp.Interpreted.class)
 	public static class IfOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
 		public static final String IF_OP = "if-op";
 
@@ -2281,6 +2262,7 @@ public class ExpressoTransformations {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("if")
 		public CompiledExpression getIf() {
 			return theIf;
 		}
@@ -2332,7 +2314,8 @@ public class ExpressoTransformations {
 		}
 	}
 
-	public static class Switch extends ExElement.Def.Abstract<ExElement.Void> implements ScalarOp {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = Switch.SWITCH, interpretation = Switch.Interpreted.class)
+	public static class Switch extends ScalarOp {
 		public static final String SWITCH = "switch";
 
 		private CompiledExpression theDefault;
@@ -2343,10 +2326,12 @@ public class ExpressoTransformations {
 			theCases = new ArrayList<>();
 		}
 
+		@QonfigAttributeGetter("default")
 		public CompiledExpression getDefault() {
 			return theDefault;
 		}
 
+		@QonfigChildGetter("case")
 		public List<ScalarOp> getCases() {
 			return Collections.unmodifiableList(theCases);
 		}
@@ -2364,9 +2349,7 @@ public class ExpressoTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement.Void> implements ScalarOp.Interpreted<S, T> {
-			private TypeToken<S> theSourceType;
-			private TypeToken<T> theTargetType;
+		public static class Interpreted<S, T> extends ScalarOp.Interpreted<S, T> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefault;
 			private final List<ScalarOp.Interpreted<S, T>> theCases;
 
@@ -2389,73 +2372,64 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public TypeToken<S> getSourceType() {
-				return theSourceType;
-			}
-
-			@Override
-			public TypeToken<T> getTargetType() {
-				return theTargetType;
-			}
-
-			@Override
-			public void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType, TypeToken<T> targetType)
-				throws ExpressoInterpretationException {
-				theSourceType = sourceType;
-				theTargetType = targetType;
-				update(env);
-			}
-
-			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
 
-				theDefault = interpret(getDefinition().getDefault(), ModelTypes.Value.forType(theTargetType));
+				theDefault = interpret(getDefinition().getDefault(), //
+					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
 				syncChildren(getDefinition().getCases(), theCases, def -> (ScalarOp.Interpreted<S, T>) def.interpret(this),
-					(interp, env) -> interp.updateOp(env, theSourceType, theTargetType));
+					(interp, env) -> interp.updateOp(env, getSourceValueType()));
+			}
+
+			@Override
+			protected TypeToken<T> evaluateTargetType() {
+				TypeToken<? extends T>[] types = new TypeToken[theCases.size() + 1];
+				types[0] = (TypeToken<? extends T>) theDefault.getType().getType(0);
+				for (int i = 0; i < theCases.size(); i++)
+					types[i + 1] = theCases.get(i).getTargetValueType();
+				return TypeTokens.get().getCommonType(types);
 			}
 
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(theCases.stream(), iff -> iff.getComponents().stream());
+				return BetterList.of(Stream.concat(Stream.of(theDefault), //
+					BetterList.of(theCases.stream(), iff -> iff.getComponents().stream()).stream()));
 			}
 
 			@Override
 			public ScalarOp.Instantiator<S, T> instantiate() {
-				ModelValueInstantiator<SettableValue<T>> def = theDefault.instantiate();
-				List<ModelValueInstantiator<SettableValue<S>>> caseValues = new ArrayList<>(theCases.size());
-				List<ScalarOp.Instantiator<S, T>> cases = new ArrayList<>(theCases.size());
-				for (ScalarOp.Interpreted<S, T> caase : theCases) {
-					caseValues.add(caase.getAddOn(CaseOp.Interpreted.class).getCase().instantiate());
-					cases.add(caase.instantiate());
-				}
-				return new Instantiator<>(theTargetType, def, caseValues, cases);
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<S, T> implements ScalarOp.Instantiator<S, T> {
+		static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
 			private final TypeToken<T> theTargetType;
 			private final ModelValueInstantiator<SettableValue<T>> theDefault;
 			private final List<ModelValueInstantiator<SettableValue<S>>> theCaseValues;
 			private final List<ScalarOp.Instantiator<S, T>> theCases;
 
-			Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T>> def,
-				List<ModelValueInstantiator<SettableValue<S>>> caseValues, List<ScalarOp.Instantiator<S, T>> cases) {
-				theTargetType = targetType;
-				theDefault = def;
-				theCaseValues = caseValues;
-				theCases = cases;
+			Instantiator(Interpreted<S, T> interpreted){
+				super(interpreted);
+				theTargetType = interpreted.getTargetValueType();
+				theDefault = interpreted.getDefault().instantiate();
+				theCaseValues = new ArrayList<>(interpreted.getCases().size());
+				theCases = new ArrayList<>(interpreted.getCases().size());
+				for (ScalarOp.Interpreted<S, T> caase : interpreted.getCases()) {
+					theCaseValues.add(caase.getAddOn(CaseOp.Interpreted.class).getCase().instantiate());
+					theCases.add(caase.instantiate());
+				}
 			}
 
 			@Override
 			public void instantiate() {
+				super.instantiate();
 				theDefault.instantiate();
 				for (ScalarOp.Instantiator<S, T> caase : theCases)
 					caase.instantiate();
 			}
 
 			@Override
-			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+			protected SettableValue<T> doGet(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				List<ObservableValue<CaseValue<S, T>>> caseTuples = new ArrayList<>(theCases.size());
 				for (int i = 0; i < theCases.size(); i++) {
 					SettableValue<S> caseValue = theCaseValues.get(i).get(models);
@@ -2475,15 +2449,15 @@ public class ExpressoTransformations {
 					.gatherActive(models.getUntil())//
 					.singleMap(true);
 
-				ObservableValue<SettableValue<T>> mapValue = source.map(s -> map.get(s));
+				ObservableValue<ObservableValue<SettableValue<T>>> mapValue = source.map(s -> map.observe(s));
 				SettableValue<T> def = theDefault.get(models);
 				ObservableValue<SettableValue<T>> caseOrDefault = ObservableValue.firstValue(settableValueType, sv -> sv != null, null,
-					mapValue, ObservableValue.of(settableValueType, def));
+					ObservableValue.flatten(mapValue), ObservableValue.of(settableValueType, def));
 				return SettableValue.flatten(caseOrDefault);
 			}
 
 			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
+			protected boolean checkIsDifferent(ModelSetInstance sourceModels, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> value = theDefault.get(sourceModels);
 				if (value != theDefault.forModelCopy(value, sourceModels, models))
 					return true;
@@ -2503,9 +2477,15 @@ public class ExpressoTransformations {
 				this.caseValue = caseValue;
 				this.value = value;
 			}
+
+			@Override
+			public String toString() {
+				return caseValue + "=" + value;
+			}
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = CaseOp.CASE_OP, interpretation = CaseOp.Interpreted.class)
 	public static class CaseOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
 		public static final String CASE_OP = "case-op";
 
@@ -2515,6 +2495,7 @@ public class ExpressoTransformations {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("case")
 		public CompiledExpression getCase() {
 			return theCase;
 		}
@@ -2552,7 +2533,7 @@ public class ExpressoTransformations {
 				super.update(element);
 
 				theCase = getElement().interpret(getDefinition().getCase(),
-					ModelTypes.Value.forType(((ScalarOp.Interpreted<S, ?>) element).getSourceType()));
+					ModelTypes.Value.forType(((ScalarOp.Interpreted<S, ?>) element).getSourceValueType()));
 			}
 
 			@Override
@@ -2563,6 +2544,102 @@ public class ExpressoTransformations {
 			@Override
 			public ExAddOn.Void<Void> create(Void element) {
 				return null;
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = Return.RETURN,
+		interpretation = Return.Interpreted.class)
+	static class Return extends ScalarOp {
+		public static final String RETURN = "return";
+
+		private CompiledExpression theValue;
+
+		public Return(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter()
+		public CompiledExpression getValue() {
+			return theValue;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+			theValue = getValueExpression(session);
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		public static class Interpreted<S, T> extends ScalarOp.Interpreted<S, T> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+
+			public Interpreted(Return definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public Return getDefinition() {
+				return (Return) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
+				return theValue;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+
+				theValue = interpret(getDefinition().getValue(),
+					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
+			}
+
+			@Override
+			protected TypeToken<T> evaluateTargetType() {
+				return (TypeToken<T>) theValue.getType().getType(0);
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theValue);
+			}
+
+			@Override
+			public ScalarOp.Instantiator<S, T> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
+			private final ModelValueInstantiator<SettableValue<T>> theValue;
+
+			Instantiator(Interpreted<S, T> interpreted) {
+				super(interpreted);
+				theValue = interpreted.getValue().instantiate();
+			}
+
+			@Override
+			public void instantiate() {
+				super.instantiate();
+				theValue.instantiate();
+			}
+
+			@Override
+			protected SettableValue<T> doGet(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				return theValue.get(models);
+			}
+
+			@Override
+			protected boolean checkIsDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				SettableValue<T> value = theValue.get(sourceModels);
+				return value != theValue.forModelCopy(value, sourceModels, newModels);
 			}
 		}
 	}

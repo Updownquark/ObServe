@@ -10,6 +10,7 @@ import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ExpressoTransformations.CaseOp;
 import org.observe.expresso.qonfig.ExpressoTransformations.If;
 import org.observe.expresso.qonfig.ExpressoTransformations.IfOp;
+import org.observe.expresso.qonfig.ExpressoTransformations.Return;
 import org.observe.expresso.qonfig.ExpressoTransformations.Switch;
 import org.qommons.Version;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -88,6 +89,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith(IfOp.IF_OP, IfOp.class, ExAddOn.creator(IfOp::new));
 		interpreter.createWith(Switch.SWITCH, Switch.class, ExElement.creator(Switch::new));
 		interpreter.createWith(CaseOp.CASE_OP, CaseOp.class, ExAddOn.creator(CaseOp::new));
+		interpreter.createWith(Return.RETURN, Return.class, ExElement.creator(Return::new));
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
 		configureInternalModels(interpreter);

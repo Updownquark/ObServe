@@ -1670,9 +1670,10 @@
 		<action>int1=0</action>
 		<action>assertEquals(0, switchV)</action>
 		<action>int2=21</action>
-		<action>assertEquals(21, switchV)</action>
-		<action>int1=17</action>
 		<action>assertEquals(-1, switchV)</action>
+		<action>int3=45</action>
+		<action>int1=21</action>
+		<action>assertEquals(45, switchV)</action>
 	</test>
 	<test name="sort">
 		<model>

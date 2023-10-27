@@ -616,7 +616,7 @@ public interface ExElement extends Identifiable {
 						throw new IllegalArgumentException(theParent + " is not the parent of " + this);
 				}
 
-				setExpressoEnv(session.getExpressoEnv());
+				setExpressoEnv(session.getExpressoEnv().at(theReporting.getFileLocation()));
 
 				if (theElement.getPromise() == null)
 					thePromise = null;

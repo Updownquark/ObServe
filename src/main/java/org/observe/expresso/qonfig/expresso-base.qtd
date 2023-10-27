@@ -70,11 +70,12 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<add-on name="if-op" requires="scalar-operation">
 			<attribute name="if" type="expression" />
 		</add-on>
-		<add-on name="if-as-operation" requires="if" inherits="abst-map-op, complex-operation, typed" />
+		<add-on name="if-as-operation" requires="if" inherits="complex-operation, typed" />
 
 		<add-on name="case-op" requires="scalar-operation">
 			<attribute name="case" type="expression" />
 		</add-on>
+		<add-on name="switch-as-operation" requires="switch" inherits="typed" />
 
 		<add-on name="flatten-reverse-type" abstract="true" />
 		<add-on name="flatten-replace-source" inherits="flatten-reverse-type">
@@ -203,7 +204,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="if" type="scalar-operation" inherits="if-op" min="0" max="inf" />
 		</element-def>
 
-		<element-def name="switch" extends="scalar-operation" inherits="abst-map-op, typed">
+		<element-def name="switch" extends="scalar-operation">
 			<attribute name="default" type="expression" />
 			<child-def name="case" type="scalar-operation" inherits="case-op" max="inf" />
 		</element-def>
@@ -394,6 +395,9 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 		<auto-inherit inherits="if-as-operation">
 			<target element="if" role="transform.op" />
+		</auto-inherit>
+		<auto-inherit inherits="switch-as-operation">
+			<target element="switch" role="transform.op" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

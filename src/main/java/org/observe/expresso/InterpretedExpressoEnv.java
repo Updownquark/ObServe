@@ -66,7 +66,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 * @return An interpreted environment that is an amalgamation of this environment and the child
 	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
-		InterpretedExpressoEnv env = this;
+		InterpretedExpressoEnv env = at(child.reporting().getFileLocation());
 		for (Map.Entry<String, ModelComponentId> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
