@@ -193,19 +193,27 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value type="expression" />
 		</element-def>
 
+		<?DOC A "simple" operation that returns a value?>
 		<element-def name="scalar-operation" extends="operation" abstract="true" />
 
+		<?DOC A simple scalar operation that just returns the given value?>
 		<element-def name="return" extends="scalar-operation">
 			<value type="expression" />
 		</element-def>
 
+		<?DOC A scalar operation that applies values based on a set of conditions?>
 		<element-def name="if" extends="scalar-operation">
+			<?DOC The value to return if none of the child "if" conditions are met?>
 			<value type="expression" />
+			<?DOC A sub-value whose value will be returned if the "if" condition is true?>
 			<child-def name="if" type="scalar-operation" inherits="if-op" min="0" max="inf" />
 		</element-def>
 
+		<?DOC A scalar operation that applies values based on whether the input matches a case value?>
 		<element-def name="switch" extends="scalar-operation">
+			<?DOC The value to return if the input doesn't match any of the child "case" values?>
 			<attribute name="default" type="expression" />
+			<?DOC A sub-value whose value will be returned if the input value matches the "case" value?>
 			<child-def name="case" type="scalar-operation" inherits="case-op" max="inf" />
 		</element-def>
 
