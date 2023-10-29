@@ -85,6 +85,8 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
+
+				session = session.asElement(ExpressoConfigV0_1.CONFIG, "config-model-value");
 				theValueType = getAddOn(ExTyped.Def.class).getValueType();
 				String configPath = session.getAttributeText("config-path");
 				if (configPath != null)

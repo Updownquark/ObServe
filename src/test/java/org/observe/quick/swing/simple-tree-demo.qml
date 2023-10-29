@@ -33,7 +33,7 @@
 						<tree-node value="2" />
 						<tree-node value="3" />
 					</tree-node>
-					<dynamic-tree-model value="app.root" dynamic-node-name="dNode" children="dNode.listFiles()" leaf="!dNode.isDirectory()" />
+					<dynamic-tree-model value="app.root" children="node.listFiles()" leaf="!node.isDirectory()" />
 				</tree-node>
 				<column>
 						<!-- This isn't working yet, not sure why -->

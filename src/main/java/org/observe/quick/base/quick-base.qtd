@@ -488,7 +488,7 @@
 			<?DOC The data to represent in the tree?>
 			<child-def name="tree-model" type="tree-model" />
 			<?DOC The name of the model value containing the termninal node of the current value's path?>
-			<attribute name="active-node-name" type="identifier" default="path" />
+			<attribute name="active-node-name" type="identifier" default="node" />
 			<?DOC Whether the root of the tree will be visible and collapsible?>
 			<attribute name="root-visible" type="boolean" default="true" />
 			<attribute name="node-selection" type="expression" specify="optional" />
@@ -498,19 +498,7 @@
 			<?DOC Actions that may be performed against selected values in the tree?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
-		<element-def name="dynamic-tree-model" inherits="tree-model,with-element-model">
-			<element-model>
-				<value name-attribute="dynamic-node-name" />
-				<value name-attribute="dynamic-path-name" />
-			</element-model>
-			<?DOC If this model is a component of a parent model, then the active node variable from the tree
-				may be a super type of this model's node.
-				In that case, it will be useful to have a variable of this model's type to avoid the need to cast.?>
-			<attribute name="dynamic-node-name" type="identifier" specify="optional" />
-			<?DOC If this model is a component of a parent model, then the active path variable from the tree
-				may be a super type of this model's node.
-				In that case, it will be useful to have a variable of this model's path type to avoid the need to cast.?>
-			<attribute name="dynamic-path-name" type="identifier" specify="optional" />
+		<element-def name="dynamic-tree-model" inherits="tree-model">
 			<?DOC The children of the current value?>
 			<attribute name="children" type="expression" specify="required" />
 			<?DOC Whether the current value is a leaf node with no possibility of children?>

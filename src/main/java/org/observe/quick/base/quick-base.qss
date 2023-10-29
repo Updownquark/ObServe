@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- A sample style sheet for use with the Quick-Base toolkit.  It contains a look & feel for quick. -->
+<style-sheet xmlns:base="Quick-Base v0.1">
+	<style attr="widget.color">
+		<style element="tabular-widget">
+			<style child="columns">
+				<style if="selected">`cornflower-blue`</style>
+				<style if="rowIndex % 2 == 1">
+					<style>`light-gray`</style>
+					<style if="selected">`steel-blue`</style>
+				</style>
+				<style>`white`</style>
+			</style>
+		</style>
+	</style>
+	<style-set name="simpleTreeModelData">
+		<ext-model>
+			<value name="node" type="org.observe.quick.base.SimpleTreeModelData" />
+		</ext-model>
+		<style element="text-style">
+			<style if="node.bg().hasAttribute()" attr="bg-color">node.bg().get()</style>
+			<style if="node.fg().hasAttribute()" attr="font-color">node.fg().get()</style>
+			<style if="node.fontWeight().hasAttribute()" attr="font-weight">node.fontWeight().get()</style>
+			<style if="node.fontSize().hasAttribute()" attr="font-size">node.fontSize().get()</style>
+			<style if="node.fontSlant().hasAttribute()" attr="font-slant">node.fontSlant().get()</style>
+			<style if="node.underline().hasAttribute()" attr="underline">node.underline().get()</style>
+			<style if="node.strikeThrough().hasAttribute()" attr="strike-through">node.strikeThrough().get()</style>
+			<style if="node.superScript().hasAttribute()" attr="super-script">node.superScript().get()</style>
+			<style if="node.subScript().hasAttribute()" attr="sub-script">node.subScript().get()</style>
+		</style>
+	</style-set>
+</style-sheet>

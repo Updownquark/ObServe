@@ -541,10 +541,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			callbackLock[0] = true;
 			try {
 				if (path != null) {
-					List<T> list = (List<T>) (List<?>) Arrays.asList(path.getPath());
-					selection.set(BetterList.of(list), e);
-				} else if (selection.get() != null)
-					selection.set(null, e);
+					BetterList<T> list = BetterList.of((List<T>) (List<?>) Arrays.asList(path.getPath()));
+					if (selection.isAcceptable(list) == null)
+						selection.set(list, e);
+				} else if (selection.get() != null) {
+					if (selection.isAcceptable(null) == null)
+						selection.set(null, e);
+				}
 			} finally {
 				callbackLock[0] = false;
 			}

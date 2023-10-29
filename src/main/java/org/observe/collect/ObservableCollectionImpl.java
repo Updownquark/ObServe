@@ -3631,7 +3631,8 @@ public final class ObservableCollectionImpl {
 						if (clearAndAdd) {
 							// The collection in the value is not changing--we just don't want it to while we're working
 							try (Transaction t = collection.lock(false, null)) {
-								collectionSub.unsubscribe();
+								if (collectionSub != null) // Subscription may have failed. Don't cause more trouble.
+									collectionSub.unsubscribe();
 								collectionSub = null;
 								// De-populate in opposite direction
 								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),

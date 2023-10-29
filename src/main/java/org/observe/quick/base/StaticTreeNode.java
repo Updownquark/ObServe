@@ -43,7 +43,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		qonfigType = TreeModel.TREE_MODEL,
 		interpretation = Interpreted.class,
 		instance = StaticTreeNode.class) })
-	public static class Def<TN extends StaticTreeNode<?>> extends ExElement.Def.Abstract<TN> implements TreeModel.Def<TN> {
+	public static class Def<TN extends StaticTreeNode<?>> extends TreeModel.Def.Abstract<TN> {
 		private CompiledExpression theValue;
 		private final List<TreeModel.Def<?>> theChildren;
 
@@ -66,7 +66,8 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theValue = getAttributeExpression("value", session);
-			syncChildren(TreeModel.Def.class, theChildren, session.forChildren("child"));
+			syncChildren(TreeModel.Def.class, theChildren, session.forChildren("child"),
+				(child, s) -> child.update(s, getActivePathVariable().getName(), getActiveNodeVariable().getName()));
 		}
 
 		@Override
@@ -75,8 +76,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 	}
 
-	public static class Interpreted<N, TN extends StaticTreeNode<N>> extends ExElement.Interpreted.Abstract<TN>
-	implements TreeModel.Interpreted<N, TN> {
+	public static class Interpreted<N, TN extends StaticTreeNode<N>> extends TreeModel.Interpreted.Abstract<N, TN> {
 		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends N>> theValue;
 		private List<TreeModel.Interpreted<? extends N, ?>> theChildren;
 		private TypeToken<N> theNodeType;
@@ -100,11 +100,11 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 
 		@Override
-		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected TypeToken<N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
 				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this),
-					(i, nEnv) -> i.updateModel(nEnv == null ? env : nEnv));
+					null);
 				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
 				if (getExpressoEnv() != null)
 					theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
@@ -119,16 +119,12 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 
 		@Override
-		public void updateModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 			getNodeType(expressoEnv); // Init value
-			// for (int c = 0; c < theChildren.size(); c++)
-			// theChildren.get(c).updateModel(expressoEnv);
+			// We didn't actually update the children, just interpreted them to get the node type
+			for (TreeModel.Interpreted<?, ?> child : theChildren)
+				child.updateModel(getExpressoEnv());
 		}
 
 		@Override
@@ -206,7 +202,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 
 		TypeToken<N> nodeType;
 		try {
-			nodeType = myInterpreted.getNodeType(null);
+			nodeType = (TypeToken<N>) myInterpreted.getNodeType(null);
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Not evaluated?", e);
 		}

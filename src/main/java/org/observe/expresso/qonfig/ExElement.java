@@ -701,8 +701,7 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
-			protected void postUpdate() throws QonfigInterpretationException {
-			}
+			protected void postUpdate() throws QonfigInterpretationException {}
 
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested,
 				ClassMap<ExAddOn.Def<? super E, ?>> addOns) throws QonfigInterpretationException {
@@ -1293,7 +1292,8 @@ public interface ExElement extends Identifiable {
 								element.getRightValue().getElement().getDocument().getLocation());
 							I interpreted = interpret.apply(element.getRightValue(), env);
 							if (interpreted != null) {
-								update.accept(interpreted, env);
+								if (update != null)
+									update.accept(interpreted, env);
 								return element.useValue(interpreted);
 							} else
 								return element.remove();

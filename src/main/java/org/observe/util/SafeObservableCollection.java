@@ -311,6 +311,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			if (evt.getMovement() != null)
 				theMidMoveCount++;
 			ElementRef<E> found = findRef(evt.getElementId());
+			if (found == null)
+				return; // Should not happen, but if there are errors down the line the state could get messed up
 			found.move = evt.getMovement();
 			found.isRemoved = true;
 			theRemovedElements.add(found);

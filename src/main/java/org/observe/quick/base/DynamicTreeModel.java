@@ -11,13 +11,13 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExMultiElementTraceable;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
@@ -39,12 +39,10 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		qonfigType = TreeModel.TREE_MODEL,
 		interpretation = Interpreted.class,
 		instance = DynamicTreeModel.class) })
-	public static class Def extends ExElement.Def.Abstract<DynamicTreeModel<?>> implements TreeModel.Def<DynamicTreeModel<?>> {
+	public static class Def extends TreeModel.Def.Abstract<DynamicTreeModel<?>> {
 		private CompiledExpression theRoot;
 		private CompiledExpression theChildren;
 		private CompiledExpression isLeaf;
-		private ModelComponentId theDynamicNodeVariable;
-		private ModelComponentId theDynamicPathVariable;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -65,35 +63,12 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 			return isLeaf;
 		}
 
-		@QonfigAttributeGetter(asType = DYNAMIC_TREE_MODEL, value = "dynamic-node-name")
-		public ModelComponentId getDynamicNodeVariable() {
-			return theDynamicNodeVariable;
-		}
-
-		@QonfigAttributeGetter(asType = DYNAMIC_TREE_MODEL, value = "dynamic-path-name")
-		public ModelComponentId getDynamicPathVariable() {
-			return theDynamicPathVariable;
-		}
-
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theRoot = getAttributeExpression("value", session);
 			theChildren = getAttributeExpression("children", session);
 			isLeaf = getAttributeExpression("leaf", session);
-			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
-			String dynamicNodeName = session.getAttributeText("dynamic-node-name");
-			if (dynamicNodeName != null) {
-				theDynamicNodeVariable = elModels.getElementValueModelId(dynamicNodeName);
-				elModels.satisfyElementValueType(theDynamicNodeVariable, ModelTypes.Value, //
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getNodeType(env)));
-			}
-			String dynamicPathName = session.getAttributeText("dynamic-path-name");
-			if (dynamicPathName != null) {
-				theDynamicPathVariable = elModels.getElementValueModelId(dynamicPathName);
-				elModels.satisfyElementValueType(theDynamicPathVariable, ModelTypes.Value, //
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getPathType(env)));
-			}
 		}
 
 		@Override
@@ -102,8 +77,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 	}
 
-	public static class Interpreted<N> extends ExElement.Interpreted.Abstract<DynamicTreeModel<N>>
-	implements TreeModel.Interpreted<N, DynamicTreeModel<N>> {
+	public static class Interpreted<N> extends TreeModel.Interpreted.Abstract<N, DynamicTreeModel<N>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theRoot;
 		private InterpretedValueSynth<ObservableCollection<?>, ? extends ObservableCollection<? extends N>> theChildren;
 		private TypeToken<N> theNodeType;
@@ -131,7 +105,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 
 		@Override
-		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public TypeToken<N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				if (getExpressoEnv() != null)
 					theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
@@ -147,16 +121,11 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 
 		@Override
-		public void updateModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
-		}
-
-		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			getNodeType(env); // Initialize root
-			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(getNodeType(env)));
+			getNodeType(getExpressoEnv()); // Initialize root
+			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(theNodeType));
 			TypeToken<?> childType = theChildren.getType().getType(0);
 			if (!TypeTokens.get().isAssignable(theNodeType, childType)) {
 				throw new ExpressoInterpretationException(
@@ -174,8 +143,8 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 	}
 
-	private ModelComponentId theDynamicPathVariable;
-	private ModelComponentId theDynamicNodeVariable;
+	private ModelComponentId theActivePathVariable;
+	private ModelComponentId theActiveNodeVariable;
 	private TypeToken<N> theNodeType;
 	private ModelValueInstantiator<SettableValue<N>> theRootInstantiator;
 	private ModelValueInstantiator<? extends ObservableCollection<? extends N>> theChildren;
@@ -183,8 +152,8 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 
 	private SettableValue<SettableValue<N>> theRoot;
 	private SettableValue<Boolean> isLeaf;
-	private SettableValue<N> theDynamicNodeValue;
-	private SettableValue<BetterList<N>> theDynamicPathValue;
+	private SettableValue<N> theActiveNodeValue;
+	private SettableValue<BetterList<N>> theActivePathValue;
 
 	public DynamicTreeModel(Object id) {
 		super(id);
@@ -198,25 +167,22 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	@Override
 	public ObservableCollection<? extends N> getChildren(ObservableValue<BetterList<N>> path, Observable<?> until)
 		throws ModelInstantiationException {
-		ModelSetInstance nodeModel = getUpdatingModels().copy(until).build();
+		ModelSetInstanceBuilder nodeModelBuilder = getUpdatingModels().copy(until);
+		ModelSetInstance nodeModel = nodeModelBuilder.build();
 		SettableValue<BetterList<N>> pathV = SettableValue.asSettable(path, __ -> "Not Settable");
 		SettableValue<N> nodeV = SettableValue.asSettable(path.map(theNodeType, p -> p == null ? null : p.peekLast()),
 			__ -> "Not Settable");
-		if (theDynamicPathVariable != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(theDynamicPathVariable, nodeModel, pathV,
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-		if (theDynamicNodeVariable != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(theDynamicNodeVariable, nodeModel, nodeV,
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActivePathVariable, nodeModel, pathV,
+			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveNodeVariable, nodeModel, nodeV,
+			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 		return theChildren.get(nodeModel);
 	}
 
 	@Override
 	public boolean isLeaf(BetterList<N> path) {
-		if (theDynamicPathValue != null)
-			theDynamicPathValue.set(path, null);
-		if (theDynamicNodeValue != null)
-			theDynamicNodeValue.set(path.getLast(), null);
+		theActivePathValue.set(path, null);
+		theActiveNodeValue.set(path.getLast(), null);
 		return isLeaf != null && isLeaf.get();
 	}
 
@@ -224,8 +190,8 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 		super.doUpdate(interpreted);
 		Interpreted<N> myInterpreted = (Interpreted<N>) interpreted;
-		theDynamicPathVariable = myInterpreted.getDefinition().getDynamicPathVariable();
-		theDynamicNodeVariable = myInterpreted.getDefinition().getDynamicNodeVariable();
+		theActivePathVariable = myInterpreted.getDefinition().getActivePathVariable();
+		theActiveNodeVariable = myInterpreted.getDefinition().getActiveNodeVariable();
 
 		theRootInstantiator = myInterpreted.getRoot().instantiate();
 		theChildren = myInterpreted.getChildren().instantiate();
@@ -233,18 +199,17 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 
 		TypeToken<N> nodeType;
 		try {
-			nodeType = myInterpreted.getNodeType(null);
+			nodeType = (TypeToken<N>) myInterpreted.getNodeType(null);
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Not evaluated?", e);
 		}
 		if (theRoot == null || !theNodeType.equals(nodeType)) {
 			theNodeType = nodeType;
 			theRoot = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType)).build();
-			theDynamicPathValue = theDynamicPathVariable == null ? null
-				: SettableValue.build(TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(theNodeType))
+			theActivePathValue = SettableValue.build(TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(theNodeType))
 				.withDescription("dynamicPath").build();
-			theDynamicNodeValue = theDynamicNodeVariable == null ? null : SettableValue.build(theNodeType)
-				.withValue(TypeTokens.get().getDefaultValue(theNodeType)).withDescription("dynamicNode").build();
+			theActiveNodeValue = SettableValue.build(theNodeType).withValue(TypeTokens.get().getDefaultValue(theNodeType))
+				.withDescription("dynamicNode").build();
 		}
 	}
 
@@ -261,10 +226,8 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 
-		if (theDynamicPathVariable != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(theDynamicPathVariable, myModels, theDynamicPathValue);
-		if (theDynamicNodeVariable != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(theDynamicNodeVariable, myModels, theDynamicNodeValue);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActivePathVariable, myModels, theActivePathValue);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveNodeVariable, myModels, theActiveNodeValue);
 
 		theRoot.set(theRootInstantiator.get(myModels), null);
 		isLeaf = theLeafInstantiator == null ? null : theLeafInstantiator.get(myModels);
@@ -274,11 +237,10 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	public DynamicTreeModel<N> copy(ExElement parent) {
 		DynamicTreeModel<N> copy = (DynamicTreeModel<N>) super.copy(parent);
 		copy.theRoot = SettableValue.build(theRoot.getType()).build();
-		copy.theDynamicPathValue = theDynamicPathVariable == null ? null
-			: SettableValue.build(TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(theNodeType))
+		copy.theActivePathValue = SettableValue.build(TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(theNodeType))
 			.withDescription("dynamicPath").build();
-		copy.theDynamicNodeValue = theDynamicNodeVariable == null ? null : SettableValue.build(theNodeType)
-			.withValue(TypeTokens.get().getDefaultValue(theNodeType)).withDescription("dynamicNode").build();
+		copy.theActiveNodeValue = SettableValue.build(theNodeType).withValue(TypeTokens.get().getDefaultValue(theNodeType))
+			.withDescription("dynamicNode").build();
 		return copy;
 	}
 }

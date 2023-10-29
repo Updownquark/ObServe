@@ -26,22 +26,8 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 		}
 
 		protected ObservableModelSet.Builder createBuilder(ExpressoQIS session) throws QonfigInterpretationException {
-			ObservableModelSet models = getElement().getExpressoEnv().getModels();
-			ObservableModelSet.Builder builder;
-			Object modelTag = session.getExpressoEnv().getModels().getTagValue(ELEMENT_MODEL_TAG);
-			if (modelTag != getElement().getIdentity()) {
-				builder = ObservableModelSet.build(getElement().toString() + ".local",
-					models == null ? ObservableModelSet.JAVA_NAME_CHECKER : models.getNameChecker());
-				builder.withTagValue(ELEMENT_MODEL_TAG, getElement().getIdentity());
-				if (getElement().getExpressoEnv().getModels() != null)
-					builder.withAll(getElement().getExpressoEnv().getModels());
-				getElement().setExpressoEnv(getElement().getExpressoEnv().with(builder));
-				session.setExpressoEnv(getElement().getExpressoEnv());
-			} else if (models != null)
-				builder = (ObservableModelSet.Builder) models;
-			else {
-				builder = ObservableModelSet.build(getElement().toString() + ".local",
-					ObservableModelSet.JAVA_NAME_CHECKER);
+			ObservableModelSet.Builder builder = augmentElementModel(getElement().getExpressoEnv().getModels(), getElement());
+			if (builder != getElement().getExpressoEnv().getModels()) {
 				getElement().setExpressoEnv(getElement().getExpressoEnv().with(builder));
 				session.setExpressoEnv(getElement().getExpressoEnv());
 			}
@@ -51,5 +37,18 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 
 	protected ExModelAugmentation(E element) {
 		super(element);
+	}
+
+	public static ObservableModelSet.Builder augmentElementModel(ObservableModelSet models, ExElement.Def<?> element) {
+		ObservableModelSet.Builder builder;
+		Object modelTag = models.getTagValue(ELEMENT_MODEL_TAG);
+		if (modelTag != element.getIdentity()) {
+			builder = ObservableModelSet.build(element.toString() + ".local",
+				models == null ? ObservableModelSet.JAVA_NAME_CHECKER : models.getNameChecker());
+			builder.withTagValue(ELEMENT_MODEL_TAG, element.getIdentity());
+			builder.withAll(models);
+		} else
+			builder = (ObservableModelSet.Builder) models;
+		return builder;
 	}
 }

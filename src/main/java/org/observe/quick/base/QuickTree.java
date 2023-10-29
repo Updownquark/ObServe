@@ -126,12 +126,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModel = syncChild(TreeModel.Def.class, theModel, session, "tree-model");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			String valueName = session.getAttributeText("active-value-name");
 			theActiveValueVariable = elModels.getElementValueModelId(valueName);
 			String nodeName = session.getAttributeText("active-node-name");
 			theNodeVariable = elModels.getElementValueModelId(nodeName);
+			theModel = syncChild(TreeModel.Def.class, theModel, session, "tree-model", (m, mEnv) -> m.update(mEnv, valueName, nodeName));
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theTreeColumn = syncChild(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
 			thePathSelection = getAttributeExpression("selection", session);
@@ -239,8 +239,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			TypeToken<BetterList<N>> pathType = TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(nodeType);
 			thePathSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(pathType));
 			thePathMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(pathType));
-			theNodeSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(nodeType));
-			theNodeMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(nodeType));
+			theNodeSelection = interpret(getDefinition().getNodeSelection(), ModelTypes.Value.forType(nodeType));
+			theNodeMultiSelection = interpret(getDefinition().getNodeMultiSelection(), ModelTypes.Collection.forType(nodeType));
 
 			syncChildren(getDefinition().getActions(), theActions,
 				def -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<BetterList<N>, ?>) def).interpret(this,
