@@ -433,7 +433,7 @@ public interface QuickInterpretedStyle {
 
 		@Override
 		public String toString() {
-			return value == null ? "StyleDefault" : value.toString();
+			return (pass ? "*" : "x") + (value == null ? "StyleDefault" : value.toString());
 		}
 	}
 }

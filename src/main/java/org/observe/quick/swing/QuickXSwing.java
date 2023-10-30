@@ -50,6 +50,7 @@ import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -356,8 +357,10 @@ public class QuickXSwing implements QuickInterpretation {
 					treeTable.withRender(treeColumn.getCRS());
 				treeTable.withColumns(crss);
 				treeTable.withLeafTest2(path -> {
-					tableCtx.getActiveValue().set(path, null);
-					return quick.getModel().isLeaf(path);
+					try (Transaction t = QuickCoreSwing.rendering()) {
+						tableCtx.getActiveValue().set(path, null);
+						return quick.getModel().isLeaf(path);
+					}
 				});
 				treeTable.withRootVisible(quick.isRootVisible());
 				try {

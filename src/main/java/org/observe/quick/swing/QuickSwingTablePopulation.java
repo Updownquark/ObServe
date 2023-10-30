@@ -7,6 +7,7 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -902,6 +903,14 @@ class QuickSwingTablePopulation {
 				unsupported("This editor type");
 		}
 
+		boolean isManaged(Component c, String property) {
+			for (PropertyChangeListener listener : c.getPropertyChangeListeners(property)) {
+				if (listener instanceof ComponentPropertyManager)
+					return true;
+			}
+			return false;
+		}
+
 		@Override
 		public <F> SwingCellPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<LabelEditor<JLabel, ?>> modify) {
@@ -926,8 +935,10 @@ class QuickSwingTablePopulation {
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
 						label[0].setOpaque(true);
-						label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-						label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+						if (!isManaged(label[0], "background"))
+							label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+						if (!isManaged(label[0], "foreground"))
+							label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 						label[0].setEnabled(cell.isEnabled() == null);
 						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						F fieldV = field.get();
@@ -966,8 +977,10 @@ class QuickSwingTablePopulation {
 				JLabel[] label = new JLabel[1];
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
 					label[0].setOpaque(true);
-					label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-					label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+					if (!isManaged(label[0], "background"))
+						label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					if (!isManaged(label[0], "foreground"))
+						label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					label[0].setEnabled(cell.isEnabled() == null);
 					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 					F fieldValue = field.get();
@@ -991,8 +1004,10 @@ class QuickSwingTablePopulation {
 				JCheckBox check = new JCheckBox();
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(check, cell -> {
 					check.setOpaque(true);
-					check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-					check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+					if (!isManaged(check, "background"))
+						check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					if (!isManaged(check, "foreground"))
+						check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					return Boolean.TRUE.equals(field.get());
 				});
 				ButtonRenderEditor<JCheckBox, ?> editor = new ButtonRenderEditor<>(null, theRenderer);
@@ -1008,8 +1023,10 @@ class QuickSwingTablePopulation {
 					ButtonRenderEditor<JCheckBox, ?> fieldEditor = new ButtonRenderEditor<>(null,
 						ObservableCellEditor.createCheckBoxEditor(check, cell -> {
 							check.setOpaque(true);
-							check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-							check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+							if (!isManaged(check, "background"))
+								check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+							if (!isManaged(check, "foreground"))
+								check.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 						}), check);
 					if (modify != null)
 						modify.accept(fieldEditor);
@@ -1025,8 +1042,10 @@ class QuickSwingTablePopulation {
 			if (isRenderer) {
 				JButton button = new JButton();
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(button, cell -> {
-					button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-					button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+					if (!isManaged(button, "background"))
+						button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					if (!isManaged(button, "foreground"))
+						button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					return editor[0].theButtonText == null ? null : editor[0].theButtonText.get();
 				});
 				editor[0] = new ButtonRenderEditor<>(buttonText, delegate);
@@ -1040,8 +1059,10 @@ class QuickSwingTablePopulation {
 					editor[0].decorateButton(button);
 					return editor[0].getButtonText().get();
 				}, button, cell -> {
-					button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
-					button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
+					if (!isManaged(button, "background"))
+						button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+					if (!isManaged(button, "foreground"))
+						button.setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 				}, cell -> {
 					action.act(null);
 					return cell.getCellValue();

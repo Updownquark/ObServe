@@ -277,10 +277,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							pm.setBackground(bg);
 							pm.setOpaque(bg == null ? null : true);
 						}
-						if (component[0] != null) {
-							if (!renderer && !isRendering())
-								component[0].repaint();
-						}
+						if (component[0] != null && !isRendering())
+							component[0].repaint();
 					});
 				}
 			});

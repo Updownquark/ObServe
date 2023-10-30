@@ -151,6 +151,19 @@ public class ClassView implements TypeParser {
 				return type;
 			}
 		}
+		int dot = typeName.lastIndexOf('.');
+		if (dot >= 0) {
+			Class<?> ownerType = getType(typeName.substring(0, dot));
+			if (ownerType != null) {
+				String newName = ownerType.getName() + "$" + typeName.substring(dot + 1);
+				type = tryLoad(newName);
+				if (type != null) {
+					theTypeCache.put(typeName, type);
+					return type;
+				}
+			}
+		}
+
 		theTypeCache.put(typeName, NOT_FOUND);
 		return null;
 	}
@@ -159,19 +172,8 @@ public class ClassView implements TypeParser {
 		for (ClassLoader cl : theClassLoaders) {
 			try {
 				return cl.loadClass(name);
-			} catch (ClassNotFoundException | NoClassDefFoundError e) { // It's fine, we'll try with the configured class loaders
+			} catch (ClassNotFoundException | NoClassDefFoundError e) { // We don't throw exceptions, just return null
 			}
-		}
-		int dot = name.lastIndexOf('.');
-		while (dot >= 0) {
-			name = new StringBuilder().append(name, 0, dot).append('$').append(name, dot + 1, name.length()).toString();
-			for (ClassLoader cl : theClassLoaders) {
-				try {
-					return cl.loadClass(name);
-				} catch (ClassNotFoundException e) { // We don't throw exceptions, just return null
-				}
-			}
-			dot = name.lastIndexOf('.', dot - 1);
 		}
 		return null;
 	}

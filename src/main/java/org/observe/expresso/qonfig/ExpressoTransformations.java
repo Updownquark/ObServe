@@ -1126,6 +1126,10 @@ public class ExpressoTransformations {
 
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				if (theLocalModel != null) {
+					sourceModels = theLocalModel.wrap(sourceModels);
+					newModels = theLocalModel.wrap(newModels);
+				}
 				if (theMapWith.isDifferent(sourceModels, newModels))
 					return true;
 				else if (theEquivalence != null) {
@@ -1693,7 +1697,7 @@ public class ExpressoTransformations {
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
 				enabledFn = enabledEvld == null ? null : LambdaUtils.printableFn(tvs -> {
 					prepareTx(tvs, isStateful, sourceV, targetV, null, modifications);
-					return acceptEvld.get();
+					return enabledEvld.get();
 				}, enabledEvld::toString, enabledEvld);
 				acceptFn = acceptEvld == null ? null : LambdaUtils.printableBiFn((target, tvs) -> {
 					prepareTx(tvs, isStateful, sourceV, targetV, target, modifications);

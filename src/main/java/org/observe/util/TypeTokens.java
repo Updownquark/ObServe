@@ -62,7 +62,7 @@ public class TypeTokens implements TypeParser {
 			comparable = clazz.isPrimitive() || Comparable.class.isAssignableFrom(clazz);
 			if (typeParameters > 0)
 				theCompoundTypes = new ConcurrentHashMap<>();
-			unity = new TypeConverter<>("no-op", "no-op", type, type, null, LambdaUtils.identity(), null, LambdaUtils.identity());
+			unity = new NoOpTypeConverter<>(type, type);
 		}
 
 		/**
@@ -201,8 +201,7 @@ public class TypeTokens implements TypeParser {
 			this.size = size;
 			this.defaultValue = defaultValue;
 			thePrimitiveCasts = new HashMap<>();
-			primitiveUnity = new TypeConverter<>("no-op", "no-op", primitiveType, primitiveType, //
-				null, LambdaUtils.identity(), null, LambdaUtils.identity());
+			primitiveUnity = new NoOpTypeConverter<>(primitiveType, primitiveType);
 			safeCast = isVoid ? null : new TypeConverter<>("safeCast", "primitiveWrap", type, primitiveType, //
 				ALWAYS_NULL, LambdaUtils.printableFn(w -> w != null ? w : defaultValue, "safeCast", null), //
 				ALWAYS_NULL, LambdaUtils.identity());
@@ -1253,6 +1252,8 @@ public class TypeTokens implements TypeParser {
 		}
 
 		public <TR2, T2 extends TR2> TypeConverter<S, R, TR2, T2> andThen(TypeConverter<? super T, ? extends T, TR2, T2> other) {
+			if (other instanceof NoOpTypeConverter)
+				return (TypeConverter<S, R, TR2, T2>) this;
 			// If one or the other is trivial, keep it simple
 			if (theConverter == LambdaUtils.identity()) {
 				if (theReverseType.equals(other.theReverseType))
@@ -1317,6 +1318,19 @@ public class TypeTokens implements TypeParser {
 		@Override
 		public String toString() {
 			return theName;
+		}
+	}
+
+	public static class NoOpTypeConverter<S, R extends S, TR, T extends TR> extends TypeConverter<S, R, TR, T> {
+		public static final String NAME = "no-op";
+
+		public NoOpTypeConverter(TypeToken<R> sourceType, TypeToken<T> convertedType) {
+			super(NAME, NAME, sourceType, convertedType, null, LambdaUtils.unenforcedCast(), null, LambdaUtils.unenforcedCast());
+		}
+
+		@Override
+		public <TR2, T2 extends TR2> TypeConverter<S, R, TR2, T2> andThen(TypeConverter<? super T, ? extends T, TR2, T2> other) {
+			return (TypeConverter<S, R, TR2, T2>) other;
 		}
 	}
 
@@ -1500,12 +1514,10 @@ public class TypeTokens implements TypeParser {
 			// As far as I can tell, Google seems to have broken this.
 			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
 			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
-			return new TypeConverter<>("no-op", "no-op", source, (TypeToken<T>) source, null, LambdaUtils.<S, T> unenforcedCast(), null,
-				LambdaUtils.<T, S> unenforcedCast());
+			return new NoOpTypeConverter<>(source, (TypeToken<T>) source);
 		} else if (isAssignable(target, source)) {
 			if (isAssignable(source, target))
-				return new TypeConverter<>("no-op", "no-op", source, target, //
-					null, LambdaUtils.<S, T> unenforcedCast(), null, LambdaUtils.<T, S> unenforcedCast());
+				return new NoOpTypeConverter<>(source, target);
 			else {
 				InstanceChecker<S> sourceChecker = new InstanceChecker<>(rawSource);
 				return new TypeConverter<>("no-op", sourceChecker.checkString, source, (TypeToken<T>) source, //

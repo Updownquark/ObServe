@@ -1230,8 +1230,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 				if (treeColumn != null)
 					tree.withRender(treeColumn.getCRS());
 				tree.withLeafTest2(path -> {
-					ctx.getActiveValue().set(path, null);
-					return quick.getModel().isLeaf(path);
+					try (Transaction t = QuickCoreSwing.rendering()) {
+						ctx.getActiveValue().set(path, null);
+						return quick.getModel().isLeaf(path);
+					}
 				});
 				tree.withRootVisible(quick.isRootVisible());
 				try {

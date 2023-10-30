@@ -36,7 +36,7 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The compile-time type of this observable's value
  */
 public interface ObservableValue<T>
-	extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable, CausableChanging {
+extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable, CausableChanging {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
@@ -892,11 +892,20 @@ public interface ObservableValue<T>
 				@Override
 				public void inUseChanged(boolean inUse) {
 					if (!inUse) {
-						if (getTransformation().isCached()) {
-							// So the get() method doesn't need to re-evaluate after cessation of listening
-							// unless something actually changes
-							theSourceStamp = theSource.getStamp();
-						}
+						// if (getTransformation().isCached()) {
+						// Set the stamp so the get() method doesn't need to re-evaluate after cessation of listening
+						// unless something actually changes
+
+						// Actually, it turns out that this can cause issues.
+						// If this unsubscription is due to a change that has affected the source value,
+						// the source may have changed without yet calling our listener, so setting this stamp would signify
+						// that we have the latest value, when actually it has changed.
+						// There's no way (right here) to detect this condition.
+						// The right way to do this would be to set the stamp each time an event fires,
+						// but stamp computation is not always super cheap.
+						// Instead, we'll just let the transformation re-evaluate.
+						// theSourceStamp = theSource.getStamp();
+						// }
 						Subscription.forAll(theSourceSub, theTransformSub).unsubscribe();
 						theSourceSub = null;
 						theTransformSub = null;

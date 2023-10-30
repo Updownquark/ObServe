@@ -465,7 +465,7 @@ public class BinaryOperator implements ObservableExpression {
 		@Override
 		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
 			return SettableValue.firstValue(TypeTokens.get().BOOLEAN,
-				LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null), LambdaUtils.constantSupplier(true, "true", null),
+				LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false?", null), LambdaUtils.constantSupplier(true, "true", null),
 				leftV, rightV);
 		}
 	}
