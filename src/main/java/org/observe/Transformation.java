@@ -305,6 +305,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	}
 
 	/**
+	 * @param sourceValue The source value being transformed
 	 * @param sourceEquivalence The equivalence to use for the source values. This can affect the behavior of the transformation via flags
 	 *        like {@link #isReEvalOnUpdate() re-eval-on-update}.
 	 * @return An engine to drive a transformed observable structure

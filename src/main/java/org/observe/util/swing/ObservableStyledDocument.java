@@ -419,12 +419,12 @@ public abstract class ObservableStyledDocument<T> {
 
 		int offset = node.getLocalText().length();
 		if (deep) {
-			BgFontAdjuster childStyle;
-			if (node.getChildNodes().size() > 1)
-				childStyle = style.clone();
-			else
-				childStyle = style;
 			for (ObservableStyledDocument<?>.DocumentNode child : node.getChildNodes()) {
+				BgFontAdjuster childStyle;
+				if (node.getChildNodes().size() > 1)
+					childStyle = style.clone();
+				else
+					childStyle = style;
 				renderSwingNode(child, true, swingDoc, index + offset, childStyle, styleCopy, init);
 				offset += child.length();
 			}

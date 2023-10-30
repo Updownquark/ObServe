@@ -16,7 +16,7 @@
 	</style>
 	<style-set name="simpleTreeModelData">
 		<ext-model>
-			<value name="node" type="org.observe.quick.base.SimpleTreeModelData" />
+			<value name="node" type="org.observe.quick.base.SimpleStyledTextModel" />
 		</ext-model>
 		<style element="text-style">
 			<style if="node.bg().hasAttribute()" attr="bg-color">node.bg().get()</style>
