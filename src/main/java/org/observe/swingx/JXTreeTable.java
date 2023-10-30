@@ -3191,9 +3191,13 @@ public class JXTreeTable extends JXTable {
 			@Override
 			public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row,
 				boolean hasFocus) {
-				if (theCachedCellRenderer != null)
-					return theCachedCellRenderer;
-				return theWrappedRenderer.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+				// Only use the cached renderer once. Sometimes the tree itself calls this tree renderer outside of this table renderer,
+				// in which case we haven't been given the opportunity to cache correctly, meaning we could return the wrong renderer.
+				Component cached = theCachedCellRenderer;
+				theCachedCellRenderer = null;
+				if (cached == null)
+					cached = theWrappedRenderer.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+				return cached;
 			}
 		}
 
