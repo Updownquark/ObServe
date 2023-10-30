@@ -15,10 +15,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.CollectionChangeType;
@@ -33,6 +35,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressionValueType;
 import org.observe.expresso.qonfig.LocatedExpression;
@@ -52,6 +55,7 @@ import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Colors;
 import org.qommons.LambdaUtils;
@@ -95,30 +99,30 @@ import org.qommons.io.TextParseException;
 import com.google.common.reflect.TypeToken;
 
 public class Qwysiwyg {
-	public class WatchExpression {
-		private final SimpleObservable<Void> theRelease;
-		ElementId theId;
-		private ExElement.Interpreted<?> theInterpretedContext;
-		private ExElement theContext;
+	public static class DebugExpression<T> {
+		private final TypeToken<T> theType;
 		private String theExpressionText;
 		private ObservableExpression theExpression;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<?>> theInterpretedValue;
-		private SettableValue<?> theValue;
-		private String theValueText;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInterpretedValue;
+		private SettableValue<T> theValue;
+		private String theErrorText;
+		private final Runnable theUpdateAction;
+		private final Consumer<ObservableValueEvent<T>> theValueUpdate;
+		private final SimpleObservable<Void> theRelease;
 
-		WatchExpression(ExElement.Interpreted<?> interpretedContext, ExElement context) {
+		DebugExpression(TypeToken<T> type, Runnable updateAction, Consumer<ObservableValueEvent<T>> valueUpdate) {
+			theType = type;
+			theUpdateAction = updateAction;
+			theValueUpdate = valueUpdate;
 			theRelease = new SimpleObservable<>();
-			theInterpretedContext = interpretedContext;
-			theContext = context;
 			theExpressionText = "";
-			theValueText = "<No value selected>";
 		}
 
 		public String getExpressionText() {
 			return theExpressionText;
 		}
 
-		public void setExpressionText(String expressionText) {
+		public void setExpressionText(String expressionText, ExElement.Interpreted<?> interpretedContext, ExElement context) {
 			theRelease.onNext(null);
 			theExpressionText = expressionText;
 			try {
@@ -126,39 +130,106 @@ public class Qwysiwyg {
 			} catch (ExpressoParseException e) {
 				e.printStackTrace();
 				theExpression = null;
-				theValueText = "<Parse Error: " + e.getMessage() + ">";
+				theErrorText = "<Parse Error: " + e.getMessage() + ">";
 			}
 			if (theExpression != null) {
 				try {
 					LocatedPositionedContent content = LocatedPositionedContent.of("QWYSIWYG Watch Expression",
 						new PositionedContent.Simple(FilePosition.START, expressionText));
-					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv()//
+					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.forType(theType), interpretedContext.getExpressoEnv()//
 						.withErrorReporting(new ErrorReporting.Default(content)), 0, ExceptionHandler.thrower2());
 				} catch (ExpressoInterpretationException | TypeConversionException e) {
 					e.printStackTrace();
 					theInterpretedValue = null;
-					theValueText = "<Interpret Error: " + e.getMessage() + ">";
+					theErrorText = "<Interpret Error: " + e.getMessage() + ">";
 				}
 			}
 			if (theInterpretedValue != null) {
 				try {
-					theValue = theInterpretedValue.instantiate().get(theContext.getUpdatingModels());
+					theValue = theInterpretedValue.instantiate().get(context.getUpdatingModels());
 				} catch (ModelInstantiationException e) {
 					e.printStackTrace();
 					theValue = null;
-					theValueText = "<Instantitate Error: " + e.getMessage() + ">";
+					theErrorText = "<Instantitate Error: " + e.getMessage() + ">";
 				}
 			}
-			if (theValue != null) {
-				theValueText = String.valueOf(theValue.get());
-				theValue.noInitChanges().takeUntil(theRelease).act(evt -> {
-					theValueText = String.valueOf(evt.getNewValue());
-					update();
-				});
+			if (theUpdateAction != null)
+				theUpdateAction.run();
+			if (theValue != null && theValueUpdate != null)
+				theValue.changes().takeUntil(theRelease).act(theValueUpdate);
+		}
+
+		public String getErrorText() {
+			return theErrorText;
+		}
+
+		public SettableValue<T> getValue() {
+			return theValue;
+		}
+
+		public void remove() {
+			theRelease.onNext(null);
+		}
+	}
+
+	public static class WatchExpression<T> {
+		private final ObservableCollection<? extends WatchExpression<?>> theCollection;
+		private ElementId theId;
+		private ExElement.Interpreted<?> theInterpretedContext;
+		private ExElement theContext;
+		private final DebugExpression<T> theExpression;
+		private String theValueText;
+
+		WatchExpression(ObservableCollection<? extends WatchExpression<?>> collection, TypeToken<T> type,
+			ExElement.Interpreted<?> interpretedContext, ExElement context) {
+			theCollection = collection;
+			theInterpretedContext = interpretedContext;
+			theContext = context;
+			theExpression = new DebugExpression<>(type, this::onExpressionUpdate, this::onExpressionValue);
+			theValueText = "<No value selected>";
+		}
+
+		void setId(ElementId id) {
+			theId = id;
+		}
+
+		protected DebugExpression<T> getExpression() {
+			return theExpression;
+		}
+
+		public ExElement.Interpreted<?> getInterpretedContext() {
+			return theInterpretedContext;
+		}
+
+		public ExElement getContext() {
+			return theContext;
+		}
+
+		public String getExpressionText() {
+			return theExpression.getExpressionText();
+		}
+
+		public void setExpressionText(String expressionText) {
+			theExpression.setExpressionText(expressionText, theInterpretedContext, theContext);
+		}
+
+		protected void onExpressionUpdate() {
+			if (theExpression.getValue() != null) { // Handled in the onExpressionValue
+			} else if (theExpression.getErrorText() != null) {
+				theValueText = theExpression.getErrorText();
+				update();
+			} else {
+				theValueText = "<No value selected>";
+				update();
 			}
 		}
 
-		public String getContext() {
+		protected void onExpressionValue(ObservableValueEvent<T> evt) {
+			theValueText = String.valueOf(evt.getNewValue());
+			update();
+		}
+
+		public String getContextString() {
 			return "<" + theContext.getTypeName() + "> " + theContext.reporting().getPosition().toShortString();
 		}
 
@@ -167,12 +238,90 @@ public class Qwysiwyg {
 		}
 
 		public void remove() {
-			theRelease.onNext(null);
-			watchExpressions.mutableElement(theId).remove();
+			theExpression.remove();
+			theCollection.mutableElement(theId).remove();
 		}
 
-		private void update() {
-			watchExpressions.mutableElement(theId).set(this);
+		protected void update() {
+			((ObservableCollection<WatchExpression<T>>) theCollection).mutableElement(theId).set(this);
+		}
+	}
+
+	public enum WatchActionType {
+		Break, Log
+	}
+
+	public static class WatchAction extends WatchExpression<Boolean> {
+		private WatchActionType theActionType;
+		private final DebugExpression<?> theActionConfiguration;
+		private final Causable.CausableKey ROOT_FINISH;
+
+		WatchAction(ObservableCollection<WatchAction> collection, Interpreted<?> interpretedContext,
+			ExElement context) {
+			super(collection, TypeTokens.get().BOOLEAN, interpretedContext, context);
+			theActionType = WatchActionType.Break;
+			theActionConfiguration = new DebugExpression<>(TypeTokens.get().WILDCARD, null, null);
+			ROOT_FINISH = Causable.key((c, vs) -> {
+				if (Boolean.TRUE.equals(getExpression().getValue().get()))
+					doWatchAction();
+			});
+		}
+
+		public WatchActionType getActionType() {
+			return theActionType;
+		}
+
+		public void setActionType(WatchActionType actionType) {
+			theActionType = actionType;
+			update();
+		}
+
+		public String getActionText() {
+			if (isActionConfigurable() == null)
+				return theActionType + " " + theActionConfiguration.getExpressionText();
+			else
+				return theActionType.name();
+		}
+
+		public String isActionConfigurable() {
+			switch (theActionType) {
+			case Log:
+				return null;
+			default:
+				return "Action type " + theActionType + " is not configurable";
+			}
+		}
+
+		public String getActionConfiguration() {
+			return theActionConfiguration.getExpressionText();
+		}
+
+		public void setActionConfiguration(String text) {
+			theActionConfiguration.setExpressionText(text, getInterpretedContext(), getContext());
+		}
+
+		@Override
+		protected void onExpressionValue(ObservableValueEvent<Boolean> value) {
+			super.onExpressionValue(value);
+			if (!value.isInitial() && Boolean.TRUE.equals(value.getNewValue()))
+				value.getRootCausable().onFinish(ROOT_FINISH);
+		}
+
+		protected void doWatchAction() {
+			switch (theActionType) {
+			case Break:
+				BreakpointHere.breakpoint();
+				break;
+			case Log:
+				if (theActionConfiguration.getValue() != null)
+					getContext().reporting().info(String.valueOf(theActionConfiguration.getValue().get()));
+			}
+		}
+
+		@Override
+		public void remove() {
+			theActionConfiguration.remove();
+			super.remove();
 		}
 	}
 
@@ -329,7 +478,8 @@ public class Qwysiwyg {
 	public final SettableValue<Integer> selectedStartIndex;
 	public final SettableValue<Integer> selectedEndIndex;
 	public final SettableValue<String> lineNumbers;
-	public final ObservableCollection<WatchExpression> watchExpressions;
+	public final ObservableCollection<WatchExpression<?>> watchExpressions;
+	public final ObservableCollection<WatchAction> watchActions;
 	public final ObservableCollection<QuickStyleAttribute<?>> availableStyles;
 	public final SettableValue<QuickStyleAttribute<?>> selectedStyle;
 	public final ObservableCollection<StyleDebugValue<?>> styleDebugValues;
@@ -364,10 +514,15 @@ public class Qwysiwyg {
 		lineNumbers = SettableValue.build(String.class).build();
 		availableStyles = ObservableCollection.build((Class<QuickStyleAttribute<?>>) (Class<?>) QuickStyleAttribute.class).build();
 		selectedStyle = SettableValue.build(availableStyles.getType()).build();
-		watchExpressions = ObservableCollection.build(WatchExpression.class).build();
+		watchExpressions = ObservableCollection.build((Class<WatchExpression<?>>) (Class<?>) WatchExpression.class).build();
 		watchExpressions.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.add)
-				evt.getNewValue().theId = evt.getElementId();
+				evt.getNewValue().setId(evt.getElementId());
+		});
+		watchActions = ObservableCollection.build(WatchAction.class).build();
+		watchActions.onChange(evt -> {
+			if (evt.getType() == CollectionChangeType.add)
+				evt.getNewValue().setId(evt.getElementId());
 		});
 		styleDebugValues = ObservableCollection.build((Class<StyleDebugValue<?>>) (Class<?>) StyleDebugValue.class).build();
 		theDebuggingStyle = selectedNode.transform((Class<QuickElementStyleAttribute<?>>) (Class<?>) QuickElementStyleAttribute.class,
@@ -650,6 +805,16 @@ public class Qwysiwyg {
 			doc.setHoveredComponent(null, false);
 	}
 
+	public String canAddWatchExpression(DocumentComponent selected) {
+		if (selected == null)
+			return "No context selected";
+		while (selected != null && selected.element == null)
+			selected = selected.parent;
+		if (selected == null)
+			return selected + "is not a valid context";
+		return null;
+	}
+
 	public void addWatchExpression(DocumentComponent selected) {
 		DocumentComponent context = selected;
 		while (context != null && context.element == null)
@@ -658,7 +823,7 @@ public class Qwysiwyg {
 			System.err.println("Cannot add watch expression at " + selected + "--no valid context");
 			return;
 		}
-		WatchExpression watch = new WatchExpression(context.interpreted, context.element);
+		WatchExpression<?> watch = new WatchExpression<>(watchExpressions, TypeTokens.get().WILDCARD, context.interpreted, context.element);
 		Integer start = selectedStartIndex.get();
 		Integer end = selectedEndIndex.get();
 		if (start != null && end != null && !start.equals(end)) {
@@ -670,14 +835,24 @@ public class Qwysiwyg {
 		watchExpressions.add(watch);
 	}
 
-	public String canAddWatchExpression(DocumentComponent selected) {
-		if (selected == null)
-			return "No context selected";
-		while (selected != null && selected.element == null)
-			selected = selected.parent;
-		if (selected == null)
-			return selected + "is not a valid context";
-		return null;
+	public void addWatchAction(DocumentComponent selected) {
+		DocumentComponent context = selected;
+		while (context != null && context.element == null)
+			context = context.parent;
+		if (context == null) {
+			System.err.println("Cannot add watch action at " + selected + "--no valid context");
+			return;
+		}
+		WatchAction watch = new WatchAction(watchActions, context.interpreted, context.element);
+		Integer start = selectedStartIndex.get();
+		Integer end = selectedEndIndex.get();
+		if (start != null && end != null && !start.equals(end)) {
+			int absStart = selectedNode.get().start.getPosition() + start.intValue();
+			int absEnd = selectedEndNode.get().start.getPosition() + end.intValue();
+			String expression = theDocumentContent.substring(absStart, absEnd);
+			watch.setExpressionText(expression);
+		}
+		watchActions.add(watch);
 	}
 
 	private void clear() {
@@ -927,6 +1102,8 @@ public class Qwysiwyg {
 	}
 
 	private void renderCompiledExpression(ObservableExpression ex, LocatedPositionedContent content, DocumentComponent component) {
+		if (!content.getFileLocation().equals(theDocumentURL))
+			return;
 		component.color(getExpressionColor(ex));
 		int c = 0;
 		for (ObservableExpression child : ex.getComponents()) {
