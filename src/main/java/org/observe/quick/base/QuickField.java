@@ -25,6 +25,7 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	public static class Def extends ExAddOn.Def.Abstract<QuickWidget, QuickField> {
 		private CompiledExpression theFieldLabel;
 		private boolean isFill;
+		private boolean isVFill;
 
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
@@ -40,11 +41,17 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 			return isFill;
 		}
 
+		@QonfigAttributeGetter("v-fill")
+		public boolean isVFill() {
+			return isVFill;
+		}
+
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			theFieldLabel = element.getAttributeExpression("field-label", session);
 			isFill = Boolean.TRUE.equals(session.getAttribute("fill", Boolean.class));
+			isVFill = Boolean.TRUE.equals(session.getAttribute("v-fill", Boolean.class));
 		}
 
 		@Override

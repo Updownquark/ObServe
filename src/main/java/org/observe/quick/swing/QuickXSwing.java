@@ -14,7 +14,6 @@ import java.util.function.Consumer;
 import javax.swing.JPanel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -48,6 +47,7 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.Shading;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -90,6 +90,7 @@ public class QuickXSwing implements QuickInterpretation {
 			private CollapsePane theCollapsePane;
 			private QuickSwingPopulator<QuickWidget> theInterpretedHeader;
 			private Consumer<ComponentEditor<?, ?>> theComponent;
+			private Shading theShading;
 
 			public CollapsePanePopulator(ContainerPopulator<?, ?> populator, CollapsePane collapsePane,
 				QuickSwingPopulator<QuickWidget> interpretedHeader, Consumer<ComponentEditor<?, ?>> component) {
@@ -102,6 +103,12 @@ public class QuickXSwing implements QuickInterpretation {
 			@Override
 			public Observable<?> getUntil() {
 				return thePopulator.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				theShading = shading;
+				return this;
 			}
 
 			@Override
@@ -118,9 +125,11 @@ public class QuickXSwing implements QuickInterpretation {
 				return this;
 			}
 
-			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel,
+			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel,
 				boolean verticalLayout) {
 				theComponent.accept(cp);
+				if (theShading != null)
+					cp.withShading(theShading);
 				if (theInterpretedHeader != null) {
 					cp.withHeader(hp -> {
 						try {

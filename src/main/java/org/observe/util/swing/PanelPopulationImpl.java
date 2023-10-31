@@ -35,7 +35,6 @@ import javax.swing.*;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -128,6 +127,15 @@ class PanelPopulationImpl {
 		@Override
 		public P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
 			return super.withGlassPane(layout, panel);
+		}
+
+		@Override
+		public P withShading(Shading shading) {
+			if (!(getEditor() instanceof ConformingPanel))
+				throw new IllegalStateException(
+					"This populator is not backed by a " + ConformingPanel.class.getName() + "--cannot install shading");
+			((ConformingPanel) getEditor()).setShading(shading);
+			return (P) this;
 		}
 
 		@Override
@@ -364,6 +372,15 @@ class PanelPopulationImpl {
 		@Override
 		public P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
 			return super.withGlassPane(layout, panel);
+		}
+
+		@Override
+		public P withShading(Shading shading) {
+			if (!(getEditor() instanceof ConformingPanel))
+				throw new IllegalStateException(
+					"This populator is not backed by a " + ConformingPanel.class.getName() + "--cannot install shading");
+			((ConformingPanel) getEditor()).setShading(shading);
+			return (P) this;
 		}
 
 		@Override
@@ -1620,11 +1637,11 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleCollapsePane extends AbstractComponentEditor<JXPanel, SimpleCollapsePane>
-	implements PartialPanelPopulatorImpl<JXPanel, SimpleCollapsePane>, CollapsePanel<JXCollapsiblePane, JXPanel, SimpleCollapsePane> {
+	static class SimpleCollapsePane extends AbstractComponentEditor<JPanel, SimpleCollapsePane>
+	implements PartialPanelPopulatorImpl<JPanel, SimpleCollapsePane>, CollapsePanel<JXCollapsiblePane, JPanel, SimpleCollapsePane> {
 		private final JXCollapsiblePane theCollapsePane;
 		private final PartialPanelPopulatorImpl<JPanel, ?> theOuterContainer;
-		private final PartialPanelPopulatorImpl<JXPanel, ?> theContentPanel;
+		private final PartialPanelPopulatorImpl<JPanel, ?> theContentPanel;
 		private SimpleHPanel<JPanel, ?> theHeaderPanel;
 		private PanelPopulator<JPanel, ?> theExposedHeaderPanel;
 		private final SettableValue<Boolean> theInternalCollapsed;
@@ -1635,10 +1652,10 @@ class PanelPopulationImpl {
 		private SettableValue<Boolean> isCollapsed;
 
 		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, boolean vertical, LayoutManager layout) {
-			super(null, (JXPanel) cp.getContentPane(), until);
+			super(null, new ConformingPanel(layout), until);
 			theCollapsePane = cp;
-			theCollapsePane.setLayout(layout);
-			theCollapsePane.getContentPane().setLayout(layout);
+			theCollapsePane.setContentPane(getEditor());
+			theCollapsePane.setLayout(new JustifiedBoxLayout(false).mainJustified().crossJustified());
 			if (vertical)
 				theContentPanel = new MigFieldPanel<>(null, getEditor(), getUntil());
 			else
@@ -1678,6 +1695,15 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public SimpleCollapsePane withShading(Shading shading) {
+			if (!(getEditor() instanceof ConformingPanel))
+				throw new IllegalStateException(
+					"This populator is not backed by a " + ConformingPanel.class.getName() + "--cannot install shading");
+			((ConformingPanel) getEditor()).setShading(shading);
+			return this;
+		}
+
+		@Override
 		public SimpleCollapsePane withCollapsed(SettableValue<Boolean> collapsed) {
 			isCollapsed = collapsed;
 			return this;
@@ -1712,7 +1738,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public JXPanel getContainer() {
+		public JPanel getContainer() {
 			return theContentPanel.getContainer();
 		}
 

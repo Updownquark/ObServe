@@ -716,6 +716,24 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	}
 
 	/**
+	 * @param <T> The super-type of all the observables in the parameter list
+	 * @param withInitial Whether the returned observable should fire an initial event
+	 * @param values All the values to listen to
+	 * @return An observable that fires whenever any of the given values changes
+	 */
+	public static <T> Observable<ObservableValueEvent<? extends T>> orChanges(boolean withInitial, ObservableValue<? extends T>... values) {
+		List<Observable<? extends ObservableValueEvent<? extends T>>> changesList = new ArrayList<>(values.length);
+		for (ObservableValue<? extends T> value : values) {
+			if (value == null) {//
+			} else if (withInitial && changesList.isEmpty())
+				changesList.add(value.changes());
+			else
+				changesList.add(value.noInitChanges());
+		}
+		return Observable.or(changesList.toArray(new Observable[changesList.size()]));
+	}
+
+	/**
 	 * Handles some of the boilerplate associated with an observable value wrapping another
 	 *
 	 * @param <F> The type of the wrapped value

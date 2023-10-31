@@ -1,6 +1,8 @@
 package org.observe.util.swing;
 
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.event.ContainerEvent;
@@ -14,6 +16,7 @@ public class ConformingPanel extends JPanel {
 	private boolean isPrefSizeDirty = true;
 	private boolean isMinSizeDirty = true;
 	private boolean isMaxSizeDirty = true;
+	private Shading theShading;
 
 	private final PropertyChangeListener invalidateListener = evt -> invalidate();
 
@@ -50,6 +53,16 @@ public class ConformingPanel extends JPanel {
 	 */
 	public ConformingPanel withName(String name) {
 		setName(name);
+		return this;
+	}
+
+	public Shading getShading() {
+		return theShading;
+	}
+
+	public ConformingPanel setShading(Shading shading) {
+		theShading = shading;
+		repaint();
 		return this;
 	}
 
@@ -94,5 +107,13 @@ public class ConformingPanel extends JPanel {
 			}
 		}
 		return super.getMinimumSize();
+	}
+
+	@Override
+	protected void paintComponent(Graphics g) {
+		if (theShading != null)
+			theShading.shade((Graphics2D) g, getSize(), getBackground());
+		else
+			super.paintComponent(g);
 	}
 }

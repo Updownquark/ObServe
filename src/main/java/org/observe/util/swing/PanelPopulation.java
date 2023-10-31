@@ -44,7 +44,6 @@ import javax.swing.text.TabSet;
 import javax.swing.text.TabStop;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -206,11 +205,11 @@ public class PanelPopulation {
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
 
-		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
 			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
 		}
 
-		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel);
+		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel);
 
 		P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
 
@@ -367,6 +366,8 @@ public class PanelPopulation {
 		}
 
 		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
+
+		P withShading(Shading shading);
 	}
 
 	public interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>>
@@ -877,7 +878,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
 			JXCollapsiblePane cp = new JXCollapsiblePane();
 			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, layout);
 			panel.accept(collapsePanel);

@@ -160,8 +160,10 @@
 		<add-on name="field" requires="widget">
 			<?DOC The name of the label for the field?>
 			<attribute name="field-label" type="expression" specify="optional" />
-			<?DOC Whether this widget should be stretched to fill the available width of the container?>
+			<?DOC Whether this widget should be stretched horizontally to fill the available width of the container?>
 			<attribute name="fill" type="boolean" specify="optional" />
+			<?DOC Whether this widget should be stretched vertically to fill the available height of the container?>
+			<attribute name="v-fill" type="boolean" specify="optional" />
 		</add-on>
 		
 		<add-on name="abstract-tab" abstract="true" inherits="styled,with-element-model">
@@ -224,6 +226,9 @@
 		<?DOC A button that opens a file browser?>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
+		</element-def>
+		<element-def name="color-chooser" extends="value-widget">
+			<attribute name="with-alpha" type="expression" default="false" />
 		</element-def>
 
 		<!-- Text components -->
@@ -508,13 +513,45 @@
 			<child-def name="child" type="tree-model" min="0" max="inf" />
 		</element-def>
 
+		<!-- Shading -->
+		<element-def name="custom-shading" extends="model-value" inherits="with-element-model,with-local-model">
+			<element-model>
+				<value name="width" type="int" />
+				<value name="height" type="int" />
+				<value name="x" type="int" />
+				<value name="y" type="int" />
+				<value name="px" type="float" />
+				<value name="py" type="float" />
+			</element-model>
+			<attribute name="unit-width" type="expression" specify="optional" />
+			<attribute name="unit-height" type="expression" specify="optional" />
+			<attribute name="stretch-x" type="boolean" default="true" />
+			<attribute name="stretch-y" type="boolean" default="true" />
+			<attribute name="lit" type="expression" />
+			<attribute name="opacity" type="expression" specify="optional" />
+			<attribute name="refresh" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="raised-shading" extends="model-value">
+			<attribute name="round" type="boolean" default="true" />
+			<attribute name="horizontal" type="boolean" default="true" />
+			<attribute name="vertical" type="boolean" default="true" />
+			<attribute name="opacity" type="expression" specify="optional" />
+		</element-def>
+
 		<!-- Containers -->
 		<?DOC A simple container with a layout for arranging its contents?>
 		<element-def name="box" extends="container">
-			<?DOC The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)?>
-			<attribute name="opacity" type="expression" specify="optional" />
+			<styles>
+				<style-attribute name="shading" type="org.observe.quick.base.QuickShading" trickle-down="false" />
+				<style-attribute name="light-source" type="float" trickle-down="true" />
+				<style-attribute name="light-color" type="java.awt.Color" trickle-down="false" />
+				<style-attribute name="shadow-color" type="java.awt.Color" trickle-down="false" />
+				<style-attribute name="corner-radius" type="org.observe.quick.base.QuickSize" trickle-down="false" />
+				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
+			</styles>
 			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
+			
 		</element-def>
 		<?DOC A panel for vertically listing various related fields, each with an optional field description for the user?>
 		<element-def name="field-panel" extends="container">
