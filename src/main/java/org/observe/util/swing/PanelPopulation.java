@@ -1234,6 +1234,8 @@ public class PanelPopulation {
 		@Override
 		public P withName(String name) {
 			theName = name;
+			if (theBuiltComponent != null)
+				theBuiltComponent.setName(name);
 			return (P) this;
 		}
 
