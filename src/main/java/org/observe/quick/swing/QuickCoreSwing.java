@@ -53,6 +53,7 @@ import org.observe.util.swing.ComponentPropertyManager;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.ObservableSwingUtils;
+import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
@@ -159,7 +160,6 @@ public class QuickCoreSwing implements QuickInterpretation {
 				qw.getEventListeners().stream(), //
 				l -> tx2.transform(l, QuickSwingEventListener.class));
 			QuickSwingBorder border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
-			String name = qw.getName();
 			Map<Object, QuickSwingDialog<QuickDialog>> dialogs;
 			if (qw.getDialogs().isEmpty())
 				dialogs = Collections.emptyMap();
@@ -172,9 +172,15 @@ public class QuickCoreSwing implements QuickInterpretation {
 					dialogs.put(dialog.getIdentity(), tx2.transform(dialog, QuickSwingDialog.class));
 			}
 			qsp.addModifier((comp, w) -> {
-				comp.withName(name);
 				FontAdjuster pmDecorator = new FontAdjuster();
 				List<ComponentPropertyManager<Component>> propertyManagers = new ArrayList<>();
+				ObservableValue<String> name = w.getName();
+				comp.withName(name.get());
+				name.noInitChanges().takeUntil(comp.getUntil()).act(evt -> {
+					comp.withName(evt.getNewValue());
+					for (ComponentPropertyManager<?> pm : propertyManagers)
+						pm.getComponent().setName(evt.getNewValue());
+				});
 				Component[] component = new Component[1];
 				ObservableValue<Color> color = w.getStyle().getColor();
 				ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
@@ -239,6 +245,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 						}
 					});
 					comp.modifyAssociatedComponents(c -> {
+						c.setName(name.get());
 						ComponentPropertyManager<Component> pm = new ComponentPropertyManager<>(c);
 						propertyManagers.add(pm);
 						pm.setForeground(pmDecorator.getForeground());
@@ -283,6 +290,13 @@ public class QuickCoreSwing implements QuickInterpretation {
 				}
 			});
 		});
+		QuickSwingPopulator.<QuickWidget, Iconized, Iconized.Interpreted> modifyForAddOn(tx, Iconized.Interpreted.class,
+			(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
+				qsp.addModifier((comp, w) -> {
+					if (comp instanceof PanelPopulation.Iconized)
+						((PanelPopulation.Iconized<?>) comp).withIcon(w.getAddOn(Iconized.class).getIcon());
+				});
+			});
 		tx.with(MouseCursor.StandardCursors.class, Cursor.class, (quickCursor, tx2) -> {
 			switch (quickCursor) {
 			case DEFAULT:

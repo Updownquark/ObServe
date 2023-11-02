@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.ext;
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -10,6 +10,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.swing.Shading;
 
 public class QuickCustomShading implements QuickShading {
@@ -48,8 +49,8 @@ public class QuickCustomShading implements QuickShading {
 	}
 
 	@Override
-	public CustomShading createShading(QuickBox box, Runnable repaint) throws ModelInstantiationException {
-		return new CustomShading(this, box, repaint);
+	public CustomShading createShading(ExElement box, Runnable repaint) throws ModelInstantiationException {
+		return new CustomShading(this, box.getAddOn(QuickShaded.class), repaint);
 	}
 
 	public static class CustomShading implements Shading {
@@ -71,7 +72,7 @@ public class QuickCustomShading implements QuickShading {
 		private byte[][] theShading;
 		private BufferedImage theImage;
 
-		CustomShading(QuickCustomShading type, QuickBox box, Runnable repaint) {
+		CustomShading(QuickCustomShading type, QuickShaded shaded, Runnable repaint) {
 			theContainerWidth = type.theContainerWidth;
 			theContainerHeight = type.theContainerHeight;
 			thePixelX = type.thePixelX;
@@ -83,9 +84,9 @@ public class QuickCustomShading implements QuickShading {
 			theLit = type.theLit;
 			theOpacity = type.theOpacity;
 
-			theLightColor = box.getStyle().getLightColor();
-			theShadowColor = box.getStyle().getShadowColor();
-			theMaxShadingAmount = box.getStyle().getMaxShadeAmount();
+			theLightColor = shaded.getLightColor();
+			theShadowColor = shaded.getShadowColor();
+			theMaxShadingAmount = shaded.getMaxShadeAmount();
 
 			if (type.theRefresh != null) {
 				type.theRefresh.act(__ -> {
@@ -94,7 +95,7 @@ public class QuickCustomShading implements QuickShading {
 				});
 			}
 			Observable.onRootFinish(ObservableValue.orChanges(false, theLightColor, theShadowColor, theMaxShadingAmount))
-				.act(__ -> repaint.run());
+			.act(__ -> repaint.run());
 		}
 
 		@Override

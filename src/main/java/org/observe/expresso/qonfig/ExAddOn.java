@@ -1,13 +1,17 @@
 package org.observe.expresso.qonfig;
 
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
+import org.observe.Observable;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.ex.ExConsumer;
 
 /**
  * The interpretation of a {@link QonfigAddOn}. Hangs on to an {@link ExElement} and provides specialized functionality to it.
@@ -111,6 +115,8 @@ public interface ExAddOn<E extends ExElement> {
 		default void postUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
 
+		default void addRuntimeModels(Consumer<InterpretedModelSet> model) {}
+
 		public Class<AO> getInstanceType();
 
 		/**
@@ -178,6 +184,9 @@ public interface ExAddOn<E extends ExElement> {
 
 	default void postUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
+
+	default void addRuntimeModels(ExConsumer<ModelSetInstance, ModelInstantiationException> model, ModelSetInstance elementModels,
+		Observable<?> until) throws ModelInstantiationException {}
 
 	void instantiated();
 

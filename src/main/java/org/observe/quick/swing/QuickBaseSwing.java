@@ -321,14 +321,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 			LayoutManager layoutInst = theLayout.create(quick.getLayout());
 			panel.addHPanel(null, layoutInst, p -> {
 				component.accept(p);
-				quick.getStyle().getShading().changes().takeUntil(p.getUntil()).act(evt -> {
-					try {
-						p.withShading(
-							evt.getNewValue() == null ? null : evt.getNewValue().createShading(quick, () -> p.getEditor().repaint()));
-					} catch (ModelInstantiationException e) {
-						quick.reporting().error(e.getMessage(), e);
-					}
-				});
 				int c = 0;
 				for (QuickWidget content : quick.getContents()) {
 					try {
@@ -418,7 +410,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		return new QuickSwingLayout<QuickBorderLayout>() {
 			@Override
 			public LayoutManager create(QuickBorderLayout quick) throws ModelInstantiationException {
-				return new BorderLayout();
+				return new BetterBorderLayout();
 			}
 
 			@Override
@@ -428,7 +420,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 					Component[] component = new Component[1];
 					comp.modifyComponent(c -> component[0] = c);
 					Sizeable size = w.getAddOn(Sizeable.class);
-					BorderLayout.Constraints childConstraint = borderConstraints(region, size);
+					BetterBorderLayout.Constraints childConstraint = borderConstraints(region, size);
 					comp.withLayoutConstraints(childConstraint);
 					if (size != null) {
 						size.changes().act(evt -> {
@@ -441,10 +433,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 		};
 	}
 
-	static BorderLayout.Constraints borderConstraints(QuickBorderLayout.Region region, Sizeable size) {
+	static BetterBorderLayout.Constraints borderConstraints(QuickBorderLayout.Region region, Sizeable size) {
 		if (size == null)
-			return new BorderLayout.Constraints(region, null, null, null, null);
-		return new BorderLayout.Constraints(region, //
+			return new BetterBorderLayout.Constraints(region, null, null, null, null);
+		return new BetterBorderLayout.Constraints(region, //
 			size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()), enforceAbsolute(size.getMaximum()));
 	}
 
@@ -1321,6 +1313,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 					}
 
 					@Override
+					public boolean supportsShading() {
+						return false;
+					}
+
+					@Override
 					public AbstractQuickContainerPopulator withShading(Shading shading) {
 						quick.reporting().warn("Shading not supported");
 						return this;
@@ -1402,6 +1399,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator withShading(Shading shading) {
 				System.err.println("Shading not supported for scroll pane");
 				return this;
@@ -1434,6 +1436,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator withShading(Shading shading) {
 				System.err.println("Shading not supported for scroll pane row header");
 				return this;
@@ -1463,6 +1470,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 			@Override
 			public Observable<?> getUntil() {
 				return theScroll.getUntil();
+			}
+
+			@Override
+			public boolean supportsShading() {
+				return false;
 			}
 
 			@Override
@@ -1734,6 +1746,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return false;
+		}
+
+		@Override
 		public AbstractQuickContainerPopulator withShading(Shading shading) {
 			System.err.println("Shading not supported for window content");
 			return this;
@@ -1806,6 +1823,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator withShading(Shading shading) {
 				System.err.println("Shading not supported for tab content");
 				return this;
@@ -1852,6 +1874,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public Observable<?> getUntil() {
 			return theUntil;
+		}
+
+		@Override
+		public boolean supportsShading() {
+			return false;
 		}
 
 		@Override

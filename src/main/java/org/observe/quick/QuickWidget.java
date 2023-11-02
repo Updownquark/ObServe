@@ -61,7 +61,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 		/** @return This widget's name, typically for debugging */
 		@QonfigAttributeGetter("name")
-		String getName();
+		CompiledExpression getName();
 
 		/** @return The tool tip to display when the user hovers over this widget */
 		@QonfigAttributeGetter("tooltip")
@@ -93,7 +93,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		 * @param <W> The type of widget that this definition is for
 		 */
 		public abstract class Abstract<W extends QuickWidget> extends QuickStyledElement.Def.Abstract<W> implements Def<W> {
-			private String theName;
+			private CompiledExpression theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
 
@@ -128,7 +128,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			public String getName() {
+			public CompiledExpression getName() {
 				return theName;
 			}
 
@@ -180,7 +180,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
-				theName = session.getAttributeText("name");
+				theName = getAttributeExpression("name", session);
 				theTooltip = getAttributeExpression("tooltip", session);
 				isVisible = getAttributeExpression("visible", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -210,9 +210,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@Override
 		Def<? super W> getDefinition();
 
-		default String getName() {
-			return getDefinition().getName();
-		}
+		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName();
 
 		@Override
 		QuickWidgetStyle.Interpreted getStyle();
@@ -246,6 +244,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		 * @param <W> The type of widget that this interpretation is for
 		 */
 		public abstract class Abstract<W extends QuickWidget> extends QuickStyledElement.Interpreted.Abstract<W> implements Interpreted<W> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 			private QuickBorder.Interpreted<?> theBorder;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
@@ -284,6 +283,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName() {
+				return theName;
+			}
+
+			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip() {
 				return theTooltip;
 			}
@@ -306,6 +310,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
+				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 				isVisible = interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
 
@@ -357,12 +362,13 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
-		private SettableValue<String> theName;
+		private SettableValue<SettableValue<String>> theName;
 		private SettableValue<SettableValue<Boolean>> isHovered;
 		private SettableValue<SettableValue<Boolean>> isFocused;
 		private SettableValue<SettableValue<Boolean>> isPressed;
 		private SettableValue<SettableValue<Boolean>> isRightPressed;
 
+		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
 		private ModelComponentId theHoveredValue;
@@ -379,7 +385,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 		protected Abstract(Object id) {
 			super(id);
-			theName = SettableValue.build(String.class).build();
+			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
+				.build();
 			theTooltip = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			isVisible = SettableValue
@@ -407,7 +414,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 		@Override
 		public ObservableValue<String> getName() {
-			return theName.unsettable();
+			return SettableValue.flatten(theName);
 		}
 
 		@Override
@@ -474,7 +481,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			thePressedValue = myInterpreted.getDefinition().getPressedValue();
 			theRightPressedValue = myInterpreted.getDefinition().getRightPressedValue();
 
-			theName.set(myInterpreted.getName(), null);
+			theNameInstantiator = myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate();
 			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
 			theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();
 
@@ -532,6 +539,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			ExFlexibleElementModelAddOn.satisfyElementValue(thePressedValue, myModels, SettableValue.flatten(isPressed));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theRightPressedValue, myModels, SettableValue.flatten(isRightPressed));
 
+			theName.set(theNameInstantiator == null ? null : theNameInstantiator.get(myModels), null);
 			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
 			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(myModels), null);
 
@@ -549,7 +557,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		public QuickWidget.Abstract copy(ExElement parent) {
 			QuickWidget.Abstract copy = (QuickWidget.Abstract) super.copy(parent);
 
-			copy.theName = SettableValue.build(String.class).build();
+			copy.theName = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			copy.theTooltip = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			copy.isVisible = SettableValue

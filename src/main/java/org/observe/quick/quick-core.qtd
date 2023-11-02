@@ -86,6 +86,11 @@
 				<style-attribute name="sub-script" type="boolean" trickle-down="false" />
 			</styles>
 		</add-on>
+		<add-on name="iconized" inherits="styled" abstract="true">
+			<styles>
+				<style-attribute name="icon" type="javax.swing.Icon" trickle-down="false" />
+			</styles>
+		</add-on>
 
 		<add-on name="renderer" requires="widget" abstract="true" />
 		<add-on name="rendering" abstract="true">
@@ -113,7 +118,7 @@
 
 		<element-def name="widget" abstract="true" inherits="with-background,with-text">
 			<?DOC The name of the widget.  Typically only used for debugging?>
-			<attribute name="name" type="string" specify="optional" />
+			<attribute name="name" type="expression" specify="optional" />
 			<?DOC The tooltip to display when the user hovers the mouse over the widget, for user feedback?>
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<?DOC Determines when the widget is displayed to the user or hidden?>

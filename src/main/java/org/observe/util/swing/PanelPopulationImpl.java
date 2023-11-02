@@ -8,8 +8,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -107,6 +105,8 @@ class PanelPopulationImpl {
 
 	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends AbstractComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
+		private Shading theShading;
+
 		MigFieldPanel(String fieldName, C container, Observable<?> until) {
 			super(fieldName, //
 				container != null ? container
@@ -130,12 +130,30 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return getEditor() instanceof ConformingPanel;
+		}
+
+		@Override
 		public P withShading(Shading shading) {
-			if (!(getEditor() instanceof ConformingPanel))
+			if (getEditor() instanceof ConformingPanel)
+				((ConformingPanel) getEditor()).setShading(shading);
+			else if (shading != null)
 				throw new IllegalStateException(
 					"This populator is not backed by a " + ConformingPanel.class.getName() + "--cannot install shading");
 			((ConformingPanel) getEditor()).setShading(shading);
+			for (Component c : getAssociatedComponents()) {
+				if (c instanceof ConformingPanel)
+					((ConformingPanel) c).setShading(shading);
+			}
 			return (P) this;
+		}
+
+		@Override
+		public void modifyAssociatedComponent(Component component) {
+			super.modifyAssociatedComponent(component);
+			if (theShading != null && component instanceof ConformingPanel)
+				((ConformingPanel) component).setShading(theShading);
 		}
 
 		@Override
@@ -360,6 +378,8 @@ class PanelPopulationImpl {
 
 	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleFieldEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
+		private Shading theShading;
+
 		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
 			super(fieldName, editor, until);
 		}
@@ -375,12 +395,30 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return getEditor() instanceof ConformingPanel;
+		}
+
+		@Override
 		public P withShading(Shading shading) {
-			if (!(getEditor() instanceof ConformingPanel))
+			if (getEditor() instanceof ConformingPanel)
+				((ConformingPanel) getEditor()).setShading(shading);
+			else if (shading != null)
 				throw new IllegalStateException(
 					"This populator is not backed by a " + ConformingPanel.class.getName() + "--cannot install shading");
-			((ConformingPanel) getEditor()).setShading(shading);
+			theShading = shading;
+			for (Component c : getAssociatedComponents()) {
+				if (c instanceof ConformingPanel)
+					((ConformingPanel) c).setShading(shading);
+			}
 			return (P) this;
+		}
+
+		@Override
+		public void modifyAssociatedComponent(Component component) {
+			super.modifyAssociatedComponent(component);
+			if (theShading != null && component instanceof ConformingPanel)
+				((ConformingPanel) component).setShading(theShading);
 		}
 
 		@Override
@@ -1612,6 +1650,7 @@ class PanelPopulationImpl {
 	private static class CollapsePaneOuterLayout extends JustifiedBoxLayout {
 		CollapsePaneOuterLayout() {
 			super(true);
+			setMargin(0, 0, 0, 0).setPadding(0);
 			mainJustified().crossJustified();
 		}
 
@@ -1646,8 +1685,7 @@ class PanelPopulationImpl {
 		private PanelPopulator<JPanel, ?> theExposedHeaderPanel;
 		private final SettableValue<Boolean> theInternalCollapsed;
 
-		private Icon theCollapsedIcon;
-		private Icon theExpandedIcon;
+		private final SettableValue<ObservableValue<? extends Icon>> theIcon;
 
 		private SettableValue<Boolean> isCollapsed;
 
@@ -1661,10 +1699,9 @@ class PanelPopulationImpl {
 			else
 				theContentPanel = new SimpleHPanel<>(null, getEditor(), getUntil());
 			theOuterContainer = new SimpleHPanel<>(null, new ConformingPanel(new CollapsePaneOuterLayout()), until);
-			theHeaderPanel = new SimpleHPanel<>(null, new ConformingPanel(new BorderLayout()), until);
+			theHeaderPanel = new SimpleHPanel<>(null, new ConformingPanel(new JustifiedBoxLayout(false).mainJustified().crossJustified()),
+				until);
 
-			theCollapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circlePlus.png", 16, 16);
-			theExpandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/circleMinus.png", 16, 16);
 			theInternalCollapsed = SettableValue.build(boolean.class).withValue(theCollapsePane.isCollapsed()).build();
 			theInternalCollapsed.set(theCollapsePane.isCollapsed(), null);
 			theCollapsePane.addPropertyChangeListener("collapsed", evt -> {
@@ -1680,18 +1717,31 @@ class PanelPopulationImpl {
 					theCollapsePane.setCollapsed(!theCollapsePane.isCollapsed());
 				}
 			};
-			theHeaderPanel.fill().addHPanel(null, new JustifiedBoxLayout(false), p -> p//
+			Icon collapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/up-chevron.png", 16, 16);
+			Icon expandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/down-chevron.png", 16, 16);
+			theIcon = SettableValue.build((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class)//
+				.withValue(theInternalCollapsed.map(collapsed -> collapsed ? collapsedIcon : expandedIcon))//
+				.build();
+			theHeaderPanel.fill()//
 				.decorate(cd -> cd.bold().withFontSize(16))//
-				.addIcon(null, theInternalCollapsed.map(collapsed -> collapsed ? theCollapsedIcon : theExpandedIcon), icon -> {
+				.addIcon(null, ObservableValue.flatten(theIcon), icon -> {
 					icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse"));
 					icon.modifyComponent(c -> c.addMouseListener(collapseMouseListener));
 				})//
-				.spacer(2)//
-				.withLayoutConstraints(BorderLayout.WEST))//
-			.addHPanel(null, new JustifiedBoxLayout(false).mainJustified().crossJustified(),
-				p -> theExposedHeaderPanel = p.withLayoutConstraints(BorderLayout.CENTER));
+				.spacer(2);
 			theHeaderPanel.getComponent().addMouseListener(collapseMouseListener);
 			decorate(deco -> deco.withBorder(BorderFactory.createLineBorder(Color.black)));
+		}
+
+		@Override
+		public SimpleCollapsePane withIcon(ObservableValue<? extends Icon> icon) {
+			theIcon.set(icon, null);
+			return this;
+		}
+
+		@Override
+		public boolean supportsShading() {
+			return getEditor() instanceof ConformingPanel;
 		}
 
 		@Override
@@ -1723,6 +1773,10 @@ class PanelPopulationImpl {
 
 		@Override
 		public SimpleCollapsePane withHeader(Consumer<PanelPopulator<JPanel, ?>> header) {
+			if (theExposedHeaderPanel == null)
+				theHeaderPanel.addHPanel(null, new JustifiedBoxLayout(false).mainCenter().crossJustified(),
+					p -> theExposedHeaderPanel = p.withLayoutConstraints(BorderLayout.CENTER));
+			theExposedHeaderPanel.modifyAssociatedComponent(theHeaderPanel.getEditor());
 			header.accept(theExposedHeaderPanel);
 			return this;
 		}
@@ -1746,6 +1800,7 @@ class PanelPopulationImpl {
 		protected Component createComponent() {
 			theOuterContainer.doAdd(theHeaderPanel, null, null, false);
 			theOuterContainer.addComponent(null, theCollapsePane, c -> c.fill());
+			modifyAssociatedComponent(theContentPanel.getComponent());
 
 			SettableValue<Boolean> collapsed = isCollapsed;
 			if (collapsed != null) {
@@ -1760,21 +1815,17 @@ class PanelPopulationImpl {
 						feedback[0] = false;
 					}
 				});
-				theCollapsePane.addPropertyChangeListener("collapsed", new PropertyChangeListener() {
-					@Override
-					public void propertyChange(PropertyChangeEvent evt) {
-						if (feedback[0])
-							return;
-						feedback[0] = true;
-						try {
-							collapsed.set(Boolean.TRUE.equals(evt.getNewValue()), evt);
-						} finally {
-							feedback[0] = false;
-						}
+				theCollapsePane.addPropertyChangeListener("collapsed", evt -> {
+					if (feedback[0])
+						return;
+					feedback[0] = true;
+					try {
+						collapsed.set(Boolean.TRUE.equals(evt.getNewValue()), evt);
+					} finally {
+						feedback[0] = false;
 					}
 				});
 			}
-			theContentPanel.getComponent(); // Initialization
 			return theOuterContainer.getComponent();
 		}
 

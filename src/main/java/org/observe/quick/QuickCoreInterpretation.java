@@ -18,6 +18,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils;
@@ -32,6 +33,7 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.ExceptionHandler.Double;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 
@@ -82,6 +84,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
 			ExElement.creator(QuickBorder.TitledBorder.Def::new));
+		interpreter.createWith(Iconized.ICONIZED, Iconized.Def.class, ExAddOn.creator(Iconized.Def::new));
 
 		interpreter.createWith(QuickMouseListener.QuickMouseClickListener.ON_MOUSE_CLICK,
 			QuickMouseListener.QuickMouseClickListener.Def.class, ExElement.creator(QuickMouseListener.QuickMouseClickListener.Def::new));

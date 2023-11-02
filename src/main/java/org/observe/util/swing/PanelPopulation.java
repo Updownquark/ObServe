@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
@@ -366,6 +367,8 @@ public class PanelPopulation {
 		}
 
 		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
+
+		boolean supportsShading();
 
 		P withShading(Shading shading);
 	}
@@ -879,7 +882,8 @@ public class PanelPopulation {
 
 		@Override
 		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
-			JXCollapsiblePane cp = new JXCollapsiblePane();
+			JXCollapsiblePane cp = new JXCollapsiblePane(vertical ? JXCollapsiblePane.Direction.DOWN : JXCollapsiblePane.Direction.RIGHT,
+				new JustifiedBoxLayout(true).mainJustified().crossJustified());
 			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, layout);
 			panel.accept(collapsePanel);
 			doAdd(collapsePanel, null, null, false);
@@ -1153,6 +1157,10 @@ public class PanelPopulation {
 		public P modifyEditor(Consumer<? super E> modify) {
 			modify.accept(getEditor());
 			return (P) this;
+		}
+
+		public List<Component> getAssociatedComponents() {
+			return theAssociatedComponents == null ? Collections.emptyList() : Collections.unmodifiableList(theAssociatedComponents);
 		}
 
 		@Override
@@ -1708,7 +1716,7 @@ public class PanelPopulation {
 	}
 
 	public interface CollapsePanel<CP extends Container, C extends Container, P extends CollapsePanel<CP, C, P>>
-	extends PanelPopulator<C, P> {
+	extends PanelPopulator<C, P>, Iconized<P> {
 		P withCollapsed(SettableValue<Boolean> collapsed);
 
 		P animated(boolean animated);

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick xmlns:base="Quick-Base v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
+<quick xmlns:x="Quick-X v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
 	title="`Simple Quick Shading Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
 	<head>
 		<imports>
@@ -32,7 +32,7 @@
 		</models>
 		<style-sheet>
 			<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
-			<style element="box">
+			<style element="shaded">
 				<style attr="light-source">shading.lightSource</style>
 				<style attr="max-shade-amount">shading.maxShading</style>
 				<style attr="corner-radius">shading.cornerRadius</style>

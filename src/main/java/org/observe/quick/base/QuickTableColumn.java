@@ -407,7 +407,9 @@ public interface QuickTableColumn<R, C> {
 
 			ExElement owner = getParentElement().getParentElement();
 			ModelSetInstanceBuilder editorModelBuilder = myModels.copy();
-			populateEditorModels(editorModelBuilder, myModels, owner.getModels());
+			ModelComponentId ownerModelId = findOwnerModelId(owner.getModels(), owner);
+			if (ownerModelId != null)
+				editorModelBuilder.withAll(myModels.getInherited(ownerModelId).copy(myModels.getUntil()).build());
 			ModelSetInstance editorModels = editorModelBuilder.build();
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
 			if (editing != null && owner instanceof MultiValueRenderable) {
@@ -433,6 +435,16 @@ public interface QuickTableColumn<R, C> {
 				editing.instantiateEditor(editorModels);
 			}
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
+		}
+
+		private ModelComponentId findOwnerModelId(ModelInstantiator models, ExElement owner) {
+			if (models.getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
+				return models.getIdentity();
+			for (ModelComponentId inh : models.getInheritance()) {
+				if (models.getInheritance(inh).getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
+					return inh;
+			}
+			return null;
 		}
 
 		private void populateEditorModels(ModelSetInstanceBuilder builder, ModelSetInstance myModels, ModelInstantiator ownerModels)

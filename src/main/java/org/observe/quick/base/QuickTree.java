@@ -162,7 +162,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> theNodeMultiSelection;
 		private final List<ValueAction.Interpreted<BetterList<N>, ?>> theActions;
 
-		Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			persistModelInstances(true);
 			theActions = new ArrayList<>();
@@ -275,7 +275,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
 
-	QuickTree(Object id) {
+	protected QuickTree(Object id) {
 		super(id);
 		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();

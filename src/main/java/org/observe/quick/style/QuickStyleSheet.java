@@ -294,6 +294,17 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			return Collections.unmodifiableMap(theStyleSets);
 		}
 
+		public Interpreted findInterpretation(QuickStyleSheet styleSheet) {
+			if (styleSheet.getIdentity() == getIdentity())
+				return this;
+			for (Interpreted imported : theImportedStyleSheets.values()) {
+				Interpreted found = imported.findInterpretation(styleSheet);
+				if (found != null)
+					return found;
+			}
+			return null;
+		}
+
 		public void updateStyleSheet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			update(expressoEnv);
 		}

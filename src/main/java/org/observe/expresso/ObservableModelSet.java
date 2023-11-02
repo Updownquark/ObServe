@@ -959,7 +959,26 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param tag The model tag to get the value of
 	 * @return The value for the given tag in this model set
 	 */
-	<T> T getTagValue(ModelTag<T> tag);
+	<T> T getLocalTagValue(ModelTag<T> tag);
+
+	/**
+	 * @param <T> The type of the tag
+	 * @param tag The model tag to get the value of
+	 * @return The value for the given tag in this model set or any of its {@link #getInheritance() inherited} models
+	 */
+	default <T> T getTagValue(ModelTag<T> tag) {
+		T value = getLocalTagValue(tag);
+		if (value == null) {
+			for (ObservableModelSet inh : getInheritance().values()) {
+				value = inh.getTagValue(tag);
+				if (value != null)
+					break;
+			}
+		}
+		if (value == null && getParent() != null)
+			value = getParent().getTagValue(tag);
+		return value;
+	}
 
 	/** @return All model sets (by ID) that were added to this model with {@link Builder#withAll(ObservableModelSet)} */
 	Map<ModelComponentId, ? extends ObservableModelSet> getInheritance();
@@ -1095,13 +1114,6 @@ public interface ObservableModelSet extends Identifiable {
 
 	/**
 	 * @param valueIdentifier The identifier of the value
-	 * @return The {@link IdentifiableCompiledValue identified} value in this model locally with the given value ID, or null if there is no
-	 *         such value
-	 */
-	ModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier);
-
-	/**
-	 * @param valueIdentifier The identifier of the value
 	 * @return The {@link IdentifiableCompiledValue identified} value in this model with the given value ID
 	 * @throws ModelException If no such identified value exists in this model
 	 */
@@ -1117,17 +1129,7 @@ public interface ObservableModelSet extends Identifiable {
 	 * @return The {@link IdentifiableCompiledValue identified} value in this model or one of its inherited models with the given value ID,
 	 *         or null if there is no such value
 	 */
-	default ModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier) {
-		ModelComponentNode<?> node = getLocalIdentifiedComponent(valueIdentifier);
-		if (node == null) {
-			for (ObservableModelSet inh : getInheritance().values()) {
-				node = inh.getIdentifiedComponentIfExists(valueIdentifier);
-				if (node != null)
-					break;
-			}
-		}
-		return node;
-	}
+	ModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier);
 
 	/**
 	 * @param path The dot-separated path of the sub-model to get
@@ -1375,7 +1377,7 @@ public interface ObservableModelSet extends Identifiable {
 		InterpretableModelComponentNode<?> getLocalComponent(String name);
 
 		@Override
-		InterpretableModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier);
+		InterpretableModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier);
 
 		@Override
 		default InterpretedModelSet getSubModelIfExists(String path) {
@@ -1410,11 +1412,6 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		default InterpretableModelComponentNode<?> getIdentifiedComponent(Object valueIdentifier) throws ModelException {
 			return (InterpretableModelComponentNode<?>) Built.super.getIdentifiedComponent(valueIdentifier);
-		}
-
-		@Override
-		default InterpretableModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier) {
-			return (InterpretableModelComponentNode<?>) Built.super.getIdentifiedComponentIfExists(valueIdentifier);
 		}
 
 		/**
@@ -1489,7 +1486,33 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
+		/**
+		 * @param <T> The type of the tag
+		 * @param tag The model tag to get the value of
+		 * @return The value for the given tag in this model set
+		 */
+		<T> T getLocalTagValue(ModelTag<T> tag);
+
+		/**
+		 * @param <T> The type of the tag
+		 * @param tag The model tag to get the value of
+		 * @return The value for the given tag in this model set or any of its {@link #getInheritance() inherited} models
+		 */
+		default <T> T getTagValue(ModelTag<T> tag) {
+			T value = getLocalTagValue(tag);
+			if (value == null) {
+				for (ModelComponentId inh : getInheritance()) {
+					value = getInheritance(inh).getTagValue(tag);
+					if (value != null)
+						break;
+				}
+			}
+			return value;
+		}
+
 		Set<ModelComponentId> getComponents();
+
+		Set<Object> getComponentIdentifiers();
 
 		/**
 		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the component to get
@@ -1933,18 +1956,8 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		public <T> T getTagValue(ModelTag<T> tag) {
-			T value = (T) theTagValues.get(tag);
-			if (value == null) {
-				for (ObservableModelSet inh : theInheritance.values()) {
-					value = inh.getTagValue(tag);
-					if (value != null)
-						break;
-				}
-			}
-			if (value == null && theParent != null)
-				value = theParent.getTagValue(tag);
-			return value;
+		public <T> T getLocalTagValue(ModelTag<T> tag) {
+			return (T) theTagValues.get(tag);
 		}
 
 		/** @return All model tag values in this model */
@@ -1968,7 +1981,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		public ModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier) {
+		public ModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier) {
 			ModelComponentId componentId = theComponentsByModelId.get(valueIdentifier);
 			return componentId == null ? null : getComponent(componentId);
 		}
@@ -2354,6 +2367,9 @@ public interface ObservableModelSet extends Identifiable {
 				else if (!getParent().getInheritance().containsKey(other.getParent().getIdentity()))
 					throw new IllegalStateException("A child model (" + getIdentity() + ") cannot inherit from another child model ("
 						+ other.getIdentity() + ") whose parents are not related");
+				for (Object id : other.getComponentIdentifiers())
+					getIdentifiedComponents().computeIfAbsent(id, __ -> other.getIdentifiedComponentIfExists(id).getIdentity());
+
 				// For each model that other inherits, add an inheritance entry for that model ID mapped to other (if not present)
 				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> subInh : other.getInheritance().entrySet())
 					((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh.getKey(), subInh.getValue());
@@ -2362,8 +2378,6 @@ public interface ObservableModelSet extends Identifiable {
 					ModelComponentNode<?> component = other.getLocalComponent(name);
 					if (component.getModel() != null)
 						createSubModel(component.getIdentity().getName(), component.getSourceLocation()).withAll(component.getModel());
-					else if (component.getValueIdentity() != null)
-						getIdentifiedComponents().putIfAbsent(component.getValueIdentity(), component.getIdentity());
 				}
 				return this;
 			}
@@ -2400,8 +2414,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			private DefaultBuilt _build(DefaultBuilt root, DefaultBuilt parent) {
 				Map<String, ModelComponentNode<?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
-				Map<Object, ModelComponentId> idComponents = getIdentifiedComponents().isEmpty() ? Collections.emptyMap()
-					: new LinkedHashMap<>(getIdentifiedComponents().size() * 3 / 2 + 1);
+				Map<Object, ModelComponentId> idComponents = QommonsUtils.unmodifiableCopy(getIdentifiedComponents());
 				Map<ModelComponentId, ObservableModelSet.Built> inheritance = new LinkedHashMap<>(
 					super.getInheritance().size() * 3 / 2 + 1);
 				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> inh : getInheritance().entrySet()) {
@@ -2427,8 +2440,6 @@ public interface ObservableModelSet extends Identifiable {
 					} else
 						node = component.getValue();
 					components.put(component.getKey(), node);
-					if (node.getValueIdentity() != null)
-						idComponents.put(node.getValueIdentity(), node.getIdentity());
 				}
 				return model;
 			}
@@ -2537,8 +2548,7 @@ public interface ObservableModelSet extends Identifiable {
 			protected DefaultInterpreted createModel(DefaultInterpreted root, DefaultInterpreted parent,
 				Map<ModelComponentId, InterpretedModelSet> inheritance, InterpretedExpressoEnv env) {
 				return new DefaultInterpreted(getIdentity(), root, parent, //
-					QommonsUtils.unmodifiableCopy(getTagValues()), //
-					inheritance, getIdentifiedComponents(), //
+					getTagValues(), inheritance, getIdentifiedComponents(), //
 					getNameChecker(), this, env);
 			}
 		}
@@ -2638,14 +2648,12 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public InterpretableModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier) {
+			public InterpretableModelComponentNode<?> getIdentifiedComponentIfExists(Object valueIdentifier) {
 				ModelComponentId interpreted = getIdentifiedComponents().get(valueIdentifier);
 				if (interpreted != null)
 					return getComponent(interpreted);
-				else if (theSource == null)
-					return null;
 				else
-					return interpretable(theSource.getLocalIdentifiedComponent(valueIdentifier));
+					return null;
 			}
 
 			private <M> InterpretableModelComponentNode<M> interpretable(ModelComponentNode<M> sourceNode) {
@@ -2663,7 +2671,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (getParent() != null)
 					return getParent().instantiate();
 				else if (theInstantiator == null)
-					theInstantiator = new ModelInstantiatorImpl(this, getIdentifiedComponents());
+					theInstantiator = new ModelInstantiatorImpl(this, getTagValues(), getIdentifiedComponents());
 				return theInstantiator;
 			}
 
@@ -2759,6 +2767,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class ModelInstantiatorImpl implements ModelInstantiator {
 			private final ModelComponentId theModelId;
+			private final Map<ModelTag<?>, Object> theTagValues;
 			private final Map<ModelComponentId, ModelValueInstantiator<?>> theComponents;
 			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelInstantiator> theInheritance;
@@ -2766,8 +2775,10 @@ public interface ObservableModelSet extends Identifiable {
 			// It may be noticed that I'm not checking for cycles here.
 			// I figure I already did that with the compiled and interpreted structures.
 
-			ModelInstantiatorImpl(InterpretedModelSet interpreted, Map<Object, ModelComponentId> componentsByValueId) {
+			ModelInstantiatorImpl(InterpretedModelSet interpreted, Map<ModelTag<?>, Object> tagValues,
+				Map<Object, ModelComponentId> componentsByValueId) {
 				theModelId = interpreted.getIdentity();
+				theTagValues = tagValues;
 				theComponentsByValueId = componentsByValueId;
 				theInterpretedModels = interpreted;
 				if (interpreted.getComponentNames().isEmpty())
@@ -2789,8 +2800,18 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public <T> T getLocalTagValue(ModelTag<T> tag) {
+				return (T) theTagValues.get(tag);
+			}
+
+			@Override
 			public Set<ModelComponentId> getComponents() {
-				return theComponents.keySet();
+				return Collections.unmodifiableSet(theComponents.keySet());
+			}
+
+			@Override
+			public Set<Object> getComponentIdentifiers() {
+				return Collections.unmodifiableSet(theComponentsByValueId.keySet());
 			}
 
 			@Override

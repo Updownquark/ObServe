@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -1084,12 +1085,12 @@ public interface ExElement extends Identifiable {
 		 */
 		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
 			private final Def.Abstract<? super E> theDefinition;
-			private Interpreted<?> theParent;
+			private Interpreted.Abstract<?> theParent;
 			private QonfigPromise.Interpreted<?> thePromise;
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedExpressoEnv theExpressoEnv;
-			private InterpretedModelSet theUnifiedModel;
+			private InterpretedModelSet theRuntimeModel;
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
 			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
@@ -1144,7 +1145,7 @@ public interface ExElement extends Identifiable {
 			protected Abstract<E> setParentElement(Interpreted<?> parent) {
 				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement())
 					throw new IllegalArgumentException(parent + " is not the parent of " + this);
-				theParent = parent;
+				theParent = (Interpreted.Abstract<?>) parent;
 				return this;
 			}
 
@@ -1351,6 +1352,7 @@ public interface ExElement extends Identifiable {
 			protected final void update(InterpretedExpressoEnv parentEnv) throws ExpressoInterpretationException {
 				if (isInterpreting)
 					return;
+				theRuntimeModel = null;
 				isInterpreting = true;
 				try {
 					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
@@ -1399,24 +1401,50 @@ public interface ExElement extends Identifiable {
 					theExternalView.updateAddOns();
 			}
 
-			protected void postUpdate() throws ExpressoInterpretationException {}
+			protected void postUpdate() throws ExpressoInterpretationException {
+			}
 
-			InterpretedModelSet getUnifiedModel() {
-				if (thePromise == null)
-					return theExpressoEnv.getModels();
-				else if (theUnifiedModel == null) {
-					ObservableModelSet.Builder modelBuilder = ObservableModelSet.build(toString() + ".unified",
-						theExpressoEnv.getModels().getNameChecker());
-					modelBuilder.withAll(theExpressoEnv.getModels());
-					modelBuilder.withAll(thePromise.getExternalExpressoEnv().getModels());
-					try {
-						theUnifiedModel = modelBuilder.build().createInterpreted(theExpressoEnv);
-						theUnifiedModel.interpret(theExpressoEnv);
-					} catch (ExpressoInterpretationException e) {
-						throw new IllegalStateException("This should not happen--should have been 100% interpreted already", e);
+			protected void addRuntimeModels(Consumer<InterpretedModelSet> model) {
+				if (theParent != null && theParent.theRuntimeModel != null)
+					model.accept(theParent.theRuntimeModel);
+				if (thePromise != null)
+					model.accept(thePromise.getExternalExpressoEnv().getModels());
+				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+					addOn.addRuntimeModels(model);
+				if (theExternalView != null) {
+					for (ExAddOn.Interpreted<?, ?> addOn : theExternalView.theExtAddOns.getAllValues())
+						addOn.addRuntimeModels(model);
+				}
+			}
+
+			InterpretedModelSet getRuntimeModel() {
+				if (theRuntimeModel == null) {
+					ObservableModelSet.Builder[] runtimeModel = new ObservableModelSet.Builder[1];
+					addRuntimeModels(model -> {
+						if (getExpressoEnv().getModels().getInheritance().containsKey(model.getIdentity()))
+							return; // We already have this model
+						else if (runtimeModel[0] != null && runtimeModel[0].getInheritance().containsKey(model.getIdentity()))
+							return;
+						try {
+							model.interpret(theExpressoEnv);
+						} catch (ExpressoInterpretationException e) {
+							reporting().error("Runtime models should already have been interpreted", e);
+						}
+						if (runtimeModel[0] == null)
+							runtimeModel[0] = ObservableModelSet.build(toString() + ".runtime", theExpressoEnv.getModels().getNameChecker())//
+							.withAll(theExpressoEnv.getModels());
+						runtimeModel[0].withAll(model);
+					});
+					if (runtimeModel[0] != null) {
+						theRuntimeModel = runtimeModel[0].build().createInterpreted(theExpressoEnv);
+						try {
+							theRuntimeModel.interpret(theExpressoEnv);
+						} catch (ExpressoInterpretationException e) {
+							reporting().error("Models should have been 100% interpreted already!", e);
+						}
 					}
 				}
-				return theUnifiedModel;
+				return theRuntimeModel;
 			}
 
 			@Override
@@ -1645,7 +1673,7 @@ public interface ExElement extends Identifiable {
 		private final Object theId;
 		private ExElement theParent;
 		private ModelInstantiator theLocalModel;
-		private ModelInstantiator theUnifiedModel;
+		private ModelInstantiator theRuntimeModel;
 		private boolean isModelPersistent;
 		private ClassMap<ExAddOn<?>> theAddOns;
 		private ErrorReporting theReporting;
@@ -1698,8 +1726,8 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public ModelInstantiator getModels() {
-			if (theUnifiedModel != null)
-				return theUnifiedModel;
+			if (theRuntimeModel != null)
+				return theRuntimeModel;
 			else if (theLocalModel != null)
 				return theLocalModel;
 			else if (theParent != null)
@@ -1784,10 +1812,10 @@ public interface ExElement extends Identifiable {
 				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
 			else
 				theLocalModel = null;
-			if (interpreted.getPromise() != null)
-				theUnifiedModel = myInterpreted.getUnifiedModel().instantiate();
+			if (myInterpreted.getRuntimeModel() != null)
+				theRuntimeModel = myInterpreted.getRuntimeModel().instantiate();
 			else
-				theUnifiedModel = null;
+				theRuntimeModel = null;
 			isModelPersistent = interpreted.isModelInstancePersistent();
 			try {
 				for (ExAddOn<?> addOn : theAddOns.getAllValues())
@@ -1820,8 +1848,8 @@ public interface ExElement extends Identifiable {
 		public void instantiated() {
 			if (theLocalModel != null)
 				theLocalModel.instantiate();
-			if (theUnifiedModel != null)
-				theUnifiedModel.instantiate();
+			if (theRuntimeModel != null)
+				theRuntimeModel.instantiate();
 			for (ExAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.instantiated();
 			if (theExternalView != null)
@@ -1855,8 +1883,20 @@ public interface ExElement extends Identifiable {
 			return myModels;
 		}
 
+		protected void addRuntimeModels(ExConsumer<ModelSetInstance, ModelInstantiationException> model, ModelSetInstance elementModels,
+			Observable<?> until) throws ModelInstantiationException {
+			if (thePromise != null)
+				model.accept(thePromise.getExternalModels(elementModels, until));
+			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				addOn.addRuntimeModels(model, elementModels, until);
+			if (theExternalView != null) {
+				for (ExAddOn<?> addOn : theExternalView.theExtAddOns.getAllValues())
+					addOn.addRuntimeModels(model, elementModels, until);
+			}
+		}
+
 		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
-			if (theLocalModel == null && theUnifiedModel == null) {
+			if (theLocalModel == null && theRuntimeModel == null) {
 				theUpdatingModels = parentModels;
 				return theUpdatingModels;
 			}
@@ -1880,10 +1920,11 @@ public interface ExElement extends Identifiable {
 			} else
 				localModels = parentModels;
 
-			if (theUnifiedModel != null) {
-				ModelSetInstanceBuilder builder = theUnifiedModel.createInstance(modelUntil);
+			if (theRuntimeModel != null) {
+				ModelSetInstanceBuilder builder = theRuntimeModel.createInstance(modelUntil);
+				addRuntimeModels(model -> builder.withAll(model), localModels, modelUntil);
+				builder.withAll(parentModels); // Some of the runtime models may be known to the parent
 				builder.withAll(localModels);
-				builder.withAll(thePromise.getExternalModels(parentModels, modelUntil));
 				theUpdatingModels = builder.build();
 			} else
 				theUpdatingModels = localModels;

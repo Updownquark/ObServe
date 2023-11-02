@@ -513,45 +513,11 @@
 			<child-def name="child" type="tree-model" min="0" max="inf" />
 		</element-def>
 
-		<!-- Shading -->
-		<element-def name="custom-shading" extends="model-value" inherits="with-element-model,with-local-model">
-			<element-model>
-				<value name="width" type="int" />
-				<value name="height" type="int" />
-				<value name="x" type="int" />
-				<value name="y" type="int" />
-				<value name="px" type="float" />
-				<value name="py" type="float" />
-			</element-model>
-			<attribute name="unit-width" type="expression" specify="optional" />
-			<attribute name="unit-height" type="expression" specify="optional" />
-			<attribute name="stretch-x" type="boolean" default="true" />
-			<attribute name="stretch-y" type="boolean" default="true" />
-			<attribute name="lit" type="expression" />
-			<attribute name="opacity" type="expression" specify="optional" />
-			<attribute name="refresh" type="expression" specify="optional" />
-		</element-def>
-		<element-def name="raised-shading" extends="model-value">
-			<attribute name="round" type="boolean" default="true" />
-			<attribute name="horizontal" type="boolean" default="true" />
-			<attribute name="vertical" type="boolean" default="true" />
-			<attribute name="opacity" type="expression" specify="optional" />
-		</element-def>
-
 		<!-- Containers -->
 		<?DOC A simple container with a layout for arranging its contents?>
 		<element-def name="box" extends="container">
-			<styles>
-				<style-attribute name="shading" type="org.observe.quick.base.QuickShading" trickle-down="false" />
-				<style-attribute name="light-source" type="float" trickle-down="true" />
-				<style-attribute name="light-color" type="java.awt.Color" trickle-down="false" />
-				<style-attribute name="shadow-color" type="java.awt.Color" trickle-down="false" />
-				<style-attribute name="corner-radius" type="org.observe.quick.base.QuickSize" trickle-down="false" />
-				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
-			</styles>
 			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
-			
 		</element-def>
 		<?DOC A panel for vertically listing various related fields, each with an optional field description for the user?>
 		<element-def name="field-panel" extends="container">

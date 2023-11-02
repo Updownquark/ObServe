@@ -96,6 +96,10 @@ public class ComponentPropertyManager<C extends Component> {
 		theProperties = new LinkedHashMap<>();
 	}
 
+	public C getComponent() {
+		return theComponent;
+	}
+
 	public ComponentPropertyManager<C> setImmediate(boolean immediate) {
 		isImmediate = immediate;
 		return this;

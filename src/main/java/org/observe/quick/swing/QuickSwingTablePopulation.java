@@ -788,6 +788,11 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return false;
+		}
+
+		@Override
 		public SwingCellPopulator<R, C> withShading(Shading shading) {
 			return unsupported("Shading");
 		}

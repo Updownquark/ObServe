@@ -1,10 +1,13 @@
 package org.observe.quick;
 
+import java.util.function.Consumer;
+
 import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -17,11 +20,13 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.ExWithStyleSheet;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.WithStyleSheet;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.ExConsumer;
 
 /** The root of a quick file, containing all information needed to power an application */
-public class QuickDocument extends ExElement.Abstract {
+public class QuickDocument extends ExElement.Abstract implements WithStyleSheet {
 	/** Name of the Qonfig element type that this interpretation is for */
 	public static final String QUICK = "quick";
 
@@ -30,7 +35,7 @@ public class QuickDocument extends ExElement.Abstract {
 		qonfigType = QUICK,
 		interpretation = Interpreted.class,
 		instance = QuickDocument.class)
-	public static class Def extends ExElement.Def.Abstract<QuickDocument> {
+	public static class Def extends ExElement.Def.Abstract<QuickDocument> implements WithStyleSheet.Def<QuickDocument> {
 		private QuickHeadSection.Def theHead;
 		private QuickWidget.Def<?> theBody;
 		private ModelComponentId theModelLoadValue;
@@ -54,6 +59,11 @@ public class QuickDocument extends ExElement.Abstract {
 		@QonfigChildGetter("body")
 		public QuickWidget.Def<?> getBody() {
 			return theBody;
+		}
+
+		@Override
+		public QuickStyleSheet getStyleSheet() {
+			return getHead() == null ? null : getHead().getStyleSheet();
 		}
 
 		public ModelComponentId getModelLoadValue() {
@@ -91,7 +101,8 @@ public class QuickDocument extends ExElement.Abstract {
 	}
 
 	/** An interpreted Quick document */
-	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickDocument> {
+	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickDocument>
+	implements WithStyleSheet.Interpreted<QuickDocument> {
 		private QuickHeadSection theHead;
 		private QuickWidget.Interpreted<?> theBody;
 
@@ -116,6 +127,11 @@ public class QuickDocument extends ExElement.Abstract {
 		/** @return The interpreted body of the document */
 		public QuickWidget.Interpreted<?> getBody() {
 			return theBody;
+		}
+
+		@Override
+		public QuickStyleSheet.Interpreted getStyleSheet() {
+			return getHead() == null ? null : getHead().getStyleSheet();
 		}
 
 		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
@@ -200,12 +216,20 @@ public class QuickDocument extends ExElement.Abstract {
 		}
 
 		/** @return The style sheet defined in this head section */
-		public QuickStyleSheet getStyleSheet() {
-			return getDefinition().getStyleSheet();
+		public QuickStyleSheet.Interpreted getStyleSheet() {
+			return getAddOnValue(ExWithStyleSheet.Interpreted.class, ExWithStyleSheet.Interpreted::getStyleSheet);
+		}
+
+		@Override
+		protected void addRuntimeModels(Consumer<InterpretedModelSet> model) {
+			super.addRuntimeModels(model);
+			if (getStyleSheet() != null)
+				model.accept(getStyleSheet().getExpressoEnv().getModels());
 		}
 	}
 
 	private ModelInstantiator theModels;
+	private ModelInstantiator theSpreadSheetModel;
 	private QuickWidget theBody;
 	private ModelComponentId theModelLoadValue;
 	private ModelComponentId theBodyLoadValue;
@@ -242,6 +266,8 @@ public class QuickDocument extends ExElement.Abstract {
 		theBodyLoadValue = myInterpreted.getDefinition().getBodyLoadValue();
 
 		theModels = myInterpreted.getHead().getExpressoEnv().getModels().instantiate();
+		theSpreadSheetModel = myInterpreted.getHead().getStyleSheet() == null ? null
+			: myInterpreted.getHead().getStyleSheet().getExpressoEnv().getModels().instantiate();
 		if (theBody == null)
 			theBody = myInterpreted.getBody().create();
 		theBody.update(myInterpreted.getBody(), this);
@@ -251,6 +277,8 @@ public class QuickDocument extends ExElement.Abstract {
 	@Override
 	public void instantiated() {
 		theModels.instantiate();
+		if (theSpreadSheetModel != null)
+			theSpreadSheetModel.instantiate();
 		super.instantiated();
 		theBody.instantiated();
 	}
@@ -265,6 +293,16 @@ public class QuickDocument extends ExElement.Abstract {
 		theModelLoad.onNext(null);
 		theBody.instantiate(headModels);
 		theBodyLoad.onNext(null);
+	}
+
+	@Override
+	protected void addRuntimeModels(ExConsumer<ModelSetInstance, ModelInstantiationException> model, ModelSetInstance elementModels,
+		Observable<?> until) throws ModelInstantiationException {
+		super.addRuntimeModels(model, elementModels, until);
+		if (theSpreadSheetModel != null)
+			model.accept(theSpreadSheetModel.createInstance(until)//
+				.withAll(elementModels)//
+				.build());
 	}
 
 	@Override

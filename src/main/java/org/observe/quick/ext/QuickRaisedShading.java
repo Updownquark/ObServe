@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.ext;
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -12,9 +12,11 @@ import java.util.Map;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExElement;
+import org.observe.quick.base.QuickSize;
 import org.observe.util.swing.Shading;
 
-public class QuickRaisedShading implements QuickShading{
+public class QuickRaisedShading implements QuickShading {
 	public static final float DEFAULT_LIGHT_SOURCE = 45;
 	public static final QuickSize DEFAULT_CORNER_RADIUS = QuickSize.ofPixels(4);
 	public static final float DEFAULT_MAX_SHADING = 0.5f;
@@ -48,12 +50,12 @@ public class QuickRaisedShading implements QuickShading{
 	}
 
 	@Override
-	public Shading createShading(QuickBox box, Runnable repaint) throws ModelInstantiationException {
+	public Shading createShading(ExElement widget, Runnable repaint) throws ModelInstantiationException {
 		// Round corners don't matter if there are no corners
 		if (isRound && (isHorizontal && isVertical))
-			return new RoundShading(this, box, repaint);
+			return new RoundShading(this, widget.getAddOn(QuickShaded.class), repaint);
 		else
-			return new SquareShading(this, box, repaint);
+			return new SquareShading(this, widget.getAddOn(QuickShaded.class), repaint);
 	}
 
 	protected static abstract class AbstractShading implements Shading {
@@ -67,16 +69,16 @@ public class QuickRaisedShading implements QuickShading{
 		private final ObservableValue<QuickSize> theCornerRadius;
 		private final ObservableValue<Float> theMaxShadingAmount;
 
-		AbstractShading(QuickRaisedShading type, QuickBox box, Runnable repaint) {
+		AbstractShading(QuickRaisedShading type, QuickShaded shaded, Runnable repaint) {
 			isHorizontal = type.isHorizontal();
 			isVertical = type.isVertical();
 
 			theOpacity = type.getOpacity();
-			theLightSource = box.getStyle().getLightSource();
-			theLightColor = box.getStyle().getLightColor();
-			theShadowColor = box.getStyle().getShadowColor();
-			theCornerRadius = box.getStyle().getCornerRadius();
-			theMaxShadingAmount = box.getStyle().getMaxShadeAmount();
+			theLightSource = shaded.getLightSource();
+			theLightColor = shaded.getLightColor();
+			theShadowColor = shaded.getShadowColor();
+			theCornerRadius = shaded.getCornerRadius();
+			theMaxShadingAmount = shaded.getMaxShadeAmount();
 
 			Observable
 			.onRootFinish(ObservableValue.orChanges(false, theOpacity, theLightSource, theLightColor, theShadowColor, theCornerRadius,
@@ -141,8 +143,8 @@ public class QuickRaisedShading implements QuickShading{
 			return corner;
 		}
 
-		RoundShading(QuickRaisedShading type, QuickBox box, Runnable repaint) {
-			super(type, box, repaint);
+		RoundShading(QuickRaisedShading type, QuickShaded shaded, Runnable repaint) {
+			super(type, shaded, repaint);
 		}
 
 		@Override
@@ -370,8 +372,8 @@ public class QuickRaisedShading implements QuickShading{
 	}
 
 	public static class SquareShading extends AbstractShading {
-		SquareShading(QuickRaisedShading type, QuickBox box, Runnable repaint) {
-			super(type, box, repaint);
+		SquareShading(QuickRaisedShading type, QuickShaded shaded, Runnable repaint) {
+			super(type, shaded, repaint);
 		}
 
 		@Override
@@ -388,8 +390,10 @@ public class QuickRaisedShading implements QuickShading{
 
 			// Top and bottom sides
 			for (int y = 0; y < hRad; y++) {
-				int startX = wRad * y / hRad + 1;
+				int startX = wRad * y / hRad;
 				int endX = size.width - startX;
+				if (wRad > 0)
+					endX--;
 				// Top
 				int shading = (int) (maxShading * cos * (hRad - y) / hRad);
 				Color lineColor;
@@ -422,8 +426,12 @@ public class QuickRaisedShading implements QuickShading{
 
 			// Left and right sides
 			for (int x = 0; x < wRad; x++) {
-				int startY = hRad * x / wRad + 1;
+				int startY = hRad * x / wRad;
 				int endY = size.height - startY;
+				if (hRad > 0) {
+					startY++;
+					endY -= 2;
+				}
 				// Left
 				int shading = (int) (maxShading * sin * (wRad - x) / wRad);
 				Color lineColor;
