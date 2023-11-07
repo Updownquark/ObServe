@@ -32,6 +32,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
+import org.observe.expresso.qonfig.ExpressoDocument;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.ArgumentParsing;
@@ -174,8 +175,9 @@ public class QuickApp extends QonfigApp {
 		QuickDocument.Def quickDocDef = quickApp.parseQuick(null);
 
 		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(quickDocDef.getHead().getExpressoEnv().getBuiltModels(),
-			quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
+			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
+			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
 
 		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 		quickDocDef = null; // Free up memory
@@ -218,7 +220,7 @@ public class QuickApp extends QonfigApp {
 			}
 			quickAppFile = mf.getMainAttributes().getValue("Quick-App");
 			if (quickAppFile == null)
-				throw new IllegalArgumentException("No Quick-App specified");
+				throw new IllegalArgumentException("No quick-app command line argument or Quick-App manifest property specified");
 		}
 
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();

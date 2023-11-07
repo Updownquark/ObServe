@@ -20,6 +20,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface ModelValueElement<M, MV extends M> extends ExElement {
+	static final String MODEL_PARENT_ELEMENT = "Model.Parent.Element";
+
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model-value", interpretation = Interpreted.class)
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
 		String getModelPath();
@@ -30,7 +32,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 		@QonfigAttributeGetter
 		CompiledExpression getElementValue();
 
-		void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException;
+		void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException;
 
 		void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException;
 
@@ -233,8 +235,6 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		InterpretedValueSynth<?, ?> getElementValue();
 
-		Interpreted<M, MV, E> setParentElement(ExElement.Interpreted<?> parent);
-
 		void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
 		E create();
@@ -255,12 +255,6 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			@Override
 			public InterpretedValueSynth<M, MV> getElementValue() {
 				return theValue;
-			}
-
-			@Override
-			public Interpreted.Abstract<M, MV, E> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			protected abstract ModelInstanceType<M, MV> getTargetType();
@@ -340,7 +334,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 	public interface CompiledSynth<M, E extends ModelValueElement<M, ?>> extends ModelValueElement.Def<M, E>, CompiledModelValue<M> {
 		@Override
-		default void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+		default void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException {
 			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 			if (name == null)
 				throw new QonfigInterpretationException("Not named, cannot add to model set", getElement().getPositionInFile(), 0);
@@ -349,17 +343,31 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		@Override
 		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			InterpretedSynth<M, ?, ? extends E> interpreted = interpret();
+			ExElement.Interpreted<?> parent=env.get(MODEL_PARENT_ELEMENT, ExElement.Interpreted.class);
+			if (parent == null)
+				throw new ExpressoInterpretationException("No " + MODEL_PARENT_ELEMENT + " installed in environment",
+					reporting().getFileLocation());
+			if(parent.getDefinition()!=getParentElement()) {
+				if(parent instanceof ObservableModelElement.Interpreted && getParentElement() instanceof ObservableModelElement.Def) {
+					try {
+						parent = ((ObservableModelElement.Interpreted<?>) parent).getInterpretingModel(//
+							((ObservableModelElement.Def<?, ?>) getParentElement()).getModelPath());
+					} catch (IllegalStateException e) {
+						throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation(), e);
+					}
+				} else
+					throw new ExpressoInterpretationException("Incorrect " + MODEL_PARENT_ELEMENT + " installed",
+						reporting().getFileLocation());
+			}
+			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
 			interpreted.updateValue(env);
 			return interpreted;
 		}
 
-		InterpretedSynth<M, ?, ? extends E> interpret();
+		InterpretedSynth<M, ?, ? extends E> interpretValue(ExElement.Interpreted<?> parent);
 	}
 
 	public interface InterpretedSynth<M, MV extends M, E extends ModelValueElement<M, MV>>
 	extends ModelValueElement.Interpreted<M, MV, E>, InterpretedValueSynth<M, MV> {
-		@Override
-		InterpretedSynth<M, MV, E> setParentElement(ExElement.Interpreted<?> parent);
 	}
 }

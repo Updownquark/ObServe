@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.Predicate;
 
 import javax.swing.JDialog;
 
@@ -67,8 +66,6 @@ import org.qommons.threading.QommonsTimer;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
-	public static final String PREVENT_MODEL_BUILDING = "ObservableModel.Prevent.Model.Building";
-
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "abst-model", interpretation = Interpreted.class)
 	public static abstract class Def<M extends ObservableModelElement, V extends ModelValueElement.Def<?, ?>>
 	extends ExElement.Def.Abstract<M> {
@@ -115,31 +112,19 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
 			syncChildren(getValueType(), theValues, valueSessions);
 
-			// Installing this control system because sometimes we want to control how the models are interpreted from above
-			Object building = session.get(PREVENT_MODEL_BUILDING);
-			boolean doBuild;
-			if (building == null)
-				doBuild = true;
-			else if (building instanceof Predicate)
-				doBuild = !((Predicate<Object>) building).test(this);
-			else if (building instanceof Boolean)
-				doBuild = !Boolean.TRUE.equals(building);
-			else {
-				reporting().warn("Unrecognized " + PREVENT_MODEL_BUILDING + " type: " + building.getClass().getName());
-				doBuild = true;
-			}
-			if (doBuild) {
-				ObservableModelSet.Builder builder;
-				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
-					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
-				else {
-					builder = getExpressoEnv().getModels().wrap(name);
-					setExpressoEnv(getExpressoEnv().with(builder));
-				}
-				for (ModelValueElement.Def<?, ?> value : theValues)
-					value.populate(builder);
-			}
 			int i = 0;
+			ObservableModelSet.Builder builder;
+			if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
+				builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
+			else {
+				builder = getExpressoEnv().getModels().wrap(name);
+				setExpressoEnv(getExpressoEnv().with(builder));
+			}
+			for (ModelValueElement.Def<?, ?> value : theValues) {
+				value.populate(builder, valueSessions.get(i));
+				i++;
+			}
+			i = 0;
 			for (ExpressoQIS vs : valueSessions) {
 				V value = theValues.get(i);
 				value.prepareModelValue(vs.asElement(value.getQonfigType()));
@@ -163,6 +148,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			return (Def<? super M, ?>) super.getDefinition();
 		}
 
+		protected abstract List<? extends ObservableModelElement.Interpreted<?>> getSubModels();
+
 		public List<? extends ModelValueElement.Interpreted<?, ?, ?>> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
@@ -181,18 +168,36 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			// Find all the interpreted model values and initialize them with this as their parent before they are initialized properly
 			theValues.clear();
-			for (String name : env.getModels().getComponentNames()) {
-				InterpretedModelComponentNode<?, ?> mv = env.getModels().getLocalComponent(name).interpreted();
-				ModelValueElement.Interpreted<?, ?, ?> modelValue = findModelValue(mv.getValue());
-				if (modelValue != null && modelValue.getDefinition().getParentElement() == getDefinition()) {
-					modelValue.setParentElement(this);
-					theValues.add(modelValue);
+			try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+				for (String name : env.getModels().getComponentNames()) {
+					InterpretedModelComponentNode<?, ?> mv = env.getModels().getLocalComponent(name).interpret(env);
+					ModelValueElement.Interpreted<?, ?, ?> modelValue = findModelValue(mv.getValue());
+					if (modelValue != null && modelValue.getDefinition().getParentElement() == getDefinition())
+						theValues.add(modelValue);
 				}
-			}
-			Collections.sort(theValues,
-				(mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(), mv2.reporting().getPosition().getPosition()));
+				Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(),
+					mv2.reporting().getPosition().getPosition()));
 
-			super.doUpdate(env);
+				super.doUpdate(env);
+			}
+		}
+
+		public Interpreted<?> getInterpretingModel(String modelPath) {
+			if (modelPath.startsWith(getDefinition().getModelPath())) {
+				if (modelPath.length() == getDefinition().getModelPath().length())
+					return this;
+				for (ObservableModelElement.Interpreted<?> subModel : getSubModels()) {
+					if (modelPath.startsWith(subModel.getDefinition().getModelPath()))
+						return subModel.getInterpretingModel(modelPath);
+				}
+			} else {
+				ExElement.Interpreted<?> parent = getParentElement();
+				while (parent != null && !(parent instanceof ModelSetElement.Interpreted))
+					parent = parent.getParentElement();
+				if (parent != null)
+					return ((ModelSetElement.Interpreted<?>) parent).getInterpretingModel(modelPath);
+			}
+			throw new IllegalStateException("Could not find model for path " + modelPath);
 		}
 
 		private ModelValueElement.Interpreted<?, ?, ?> findModelValue(InterpretedValueSynth<?, ?> value) {
@@ -309,22 +314,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					setExpressoEnv(session.getExpressoEnv());
 				}
 				BiConsumer<ObservableModelElement.Def<?, ?>, ExpressoQIS> sessionUpdater = (m, s) -> {
-					Object building = s.get(PREVENT_MODEL_BUILDING);
-					boolean doBuild;
-					if (building == null)
-						doBuild = true;
-					else if (building instanceof Predicate)
-						doBuild = !((Predicate<Object>) building).test(m);
-					else if (building instanceof Boolean)
-						doBuild = Boolean.TRUE.equals(building);
-					else {
-						reporting().warn("Unrecognized " + PREVENT_MODEL_BUILDING + " type: " + building.getClass().getName());
-						doBuild = true;
-					}
-					if (doBuild) {
-						s.setExpressoEnv(s.getExpressoEnv().with(//
-							builder.createSubModel(s.attributes().get("named", "name").getText(), s.getElement().getPositionInFile())));
-					}
+					s.setExpressoEnv(s.getExpressoEnv().with(//
+						builder.createSubModel(s.attributes().get("named", "name").getText(), s.getElement().getPositionInFile())));
 				};
 				CollectionUtils
 				.synchronize(theSubModels, session.forChildren("model"),
@@ -379,8 +370,19 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				// First create the models so all the linkages can happen
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
 				super.doUpdate(env);
+				// Now call the update method
 				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
+			}
+
+			public ObservableModelElement.Interpreted<?> getInterpretingModel(String modelPath) {
+				for (ObservableModelElement.Interpreted<?> subModel : getSubModels()) {
+					if (modelPath.startsWith(subModel.getDefinition().getModelPath()))
+						return subModel.getInterpretingModel(modelPath);
+				}
+				throw new IllegalStateException("Could not find model for path " + modelPath);
 			}
 		}
 
@@ -493,14 +495,18 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Def<? super M>) super.getDefinition();
 			}
 
+			@Override
 			public List<? extends Interpreted<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				// First, initialize the children so all the linkages can happen
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
 				super.doUpdate(env);
 
+				// Now call the update methods
 				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 
@@ -624,14 +630,18 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (List<? extends ExtModelValueElement.Interpreted<?, ?>>) super.getValues();
 			}
 
+			@Override
 			public List<? extends Interpreted<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				// First, initialize the children so all the linkages can happen
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
 				super.doUpdate(env);
 
+				// Now call the update methods
 				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 
@@ -1108,6 +1118,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			public Def<? super M> getDefinition() {
 				return (Def<? super M>) super.getDefinition();
+			}
+
+			@Override
+			protected List<? extends Interpreted<?>> getSubModels() {
+				return Collections.emptyList();
 			}
 
 			@Override

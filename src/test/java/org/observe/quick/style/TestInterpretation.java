@@ -104,8 +104,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		implements ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, StyledTestElement<T>> {
 			private final Class<T> theType;
 
-			protected Interpreted(Def<T> definition, Class<T> type) {
-				super(definition, null);
+			protected Interpreted(Def<T> definition, ExElement.Interpreted<?> parent, Class<T> type) {
+				super(definition, parent);
 				theType = type;
 			}
 
@@ -116,12 +116,6 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			protected Class<T> getTargetType() {
 				return theType;
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -209,8 +203,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public Interpreted interpret() {
-				return new Interpreted(this);
+			public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
 			}
 		}
 
@@ -220,14 +214,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> c;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> d;
 
-			Interpreted(Def definition) {
-				super(definition, A.class);
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent, A.class);
 			}
 
 			@Override
@@ -541,8 +529,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public Interpreted<T> interpret() {
-				return (Interpreted<T>) new Interpreted<>((Def<B>) this, B.class);
+			public Interpreted<T> interpretValue(ExElement.Interpreted<?> parent) {
+				return (Interpreted<T>) new Interpreted<>((Def<B>) this, parent, B.class);
 			}
 		}
 
@@ -551,8 +539,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> f;
 			private final List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>> theChildren;
 
-			Interpreted(Def<T> definition, Class<T> type) {
-				super(definition, type);
+			Interpreted(Def<T> definition, ExElement.Interpreted<?> parent, Class<T> type) {
+				super(definition, parent, type);
 				theChildren = new ArrayList<>();
 			}
 
@@ -574,8 +562,8 @@ public class TestInterpretation implements QonfigInterpretation {
 				f = interpret(getDefinition().getF(), ModelTypes.Value.INT);
 
 				syncChildren(getDefinition().getChildren(), theChildren,
-					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) def.interpret(), (v, vEnv) -> {
-						v.setParentElement(this);
+					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) def.interpretValue(this),
+					(v, vEnv) -> {
 						v.updateValue(vEnv);
 					});
 			}
@@ -808,16 +796,16 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public Interpreted interpret() {
-				return new Interpreted(this);
+			public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
 			}
 		}
 
 		static class Interpreted extends B.Interpreted<C> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> g;
 
-			public Interpreted(Def definition) {
-				super(definition, C.class);
+			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent, C.class);
 			}
 
 			@Override
@@ -991,16 +979,16 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public Interpreted interpret() {
-				return new Interpreted(this);
+			public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
 			}
 		}
 
 		static class Interpreted extends B.Interpreted<D> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> h;
 
-			public Interpreted(Def definition) {
-				super(definition, D.class);
+			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent, D.class);
 			}
 
 			@Override

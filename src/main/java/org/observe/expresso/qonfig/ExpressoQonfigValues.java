@@ -79,12 +79,6 @@ public class ExpressoQonfigValues {
 			protected Interpreted(AbstractCompiledValue<? super E> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
-
-			@Override
-			public Interpreted<T, E> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
-			}
 		}
 
 		public static abstract class Element<T> extends ModelValueElement.Default<SettableValue<?>, SettableValue<T>> {
@@ -115,13 +109,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, AbstractCompiledValue.VoidElement<T>> {
-			public Interpreted(ConstantValueDef definition) {
-				super(definition, null);
+			public Interpreted(ConstantValueDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -274,13 +268,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, Element<T>> {
-			public Interpreted(SimpleValueDef definition) {
-				super(definition, null);
+			public Interpreted(SimpleValueDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -399,13 +393,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, AbstractCompiledValue.VoidElement<T>> {
-			public Interpreted(CollectionElement definition) {
-				super(definition, null);
+			public Interpreted(CollectionElement definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -517,19 +511,19 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?, C> interpret() {
-			return (Interpreted<?, C>) interpret2();
+		public Interpreted<?, C> interpretValue(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, C>) interpret2(parent);
 		}
 
-		protected abstract Interpreted<?, ?> interpret2();
+		protected abstract Interpreted<?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<T, C extends ObservableCollection<T>>
 		extends ModelValueElement.Def.SingleTyped.Interpreted<C, C, ModelValueElement<C, C>>
 		implements ModelValueElement.InterpretedSynth<C, C, ModelValueElement<C, C>> {
 			private final List<CollectionElement.Interpreted<T>> theElements;
 
-			protected Interpreted(AbstractCollectionDef<?> definition) {
-				super((AbstractCollectionDef<C>) definition, null);
+			protected Interpreted(AbstractCollectionDef<?> definition, ExElement.Interpreted<?> parent) {
+				super((AbstractCollectionDef<C>) definition, parent);
 				theElements = new ArrayList<>();
 			}
 
@@ -548,16 +542,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Interpreted<T, C> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
-			}
-
-			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				syncChildren(getDefinition().getElements(), theElements,
-					(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
+				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+					syncChildren(getDefinition().getElements(), theElements,
+						(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
+				}
 			}
 
 			protected TypeToken<T> getValueType() {
@@ -629,13 +619,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractCollectionDef.Interpreted<T, ObservableCollection<T>> {
-			public Interpreted(PlainCollectionDef definition) {
-				super(definition);
+			public Interpreted(PlainCollectionDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -685,15 +675,15 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected abstract Interpreted<?, ?> interpret2();
+		protected abstract Interpreted<?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<T, C extends ObservableSortedCollection<T>>
 		extends AbstractCollectionDef.Interpreted<T, C> {
 			private ExSort.ExRootSort.Interpreted<T> theSort;
 			private Comparator<? super T> theDefaultSorting;
 
-			protected Interpreted(AbstractSortedCollectionDef<?> definition) {
-				super(definition);
+			protected Interpreted(AbstractSortedCollectionDef<?> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -757,13 +747,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractSortedCollectionDef.Interpreted<T, ObservableSortedCollection<T>> {
-			public Interpreted(AbstractSortedCollectionDef<?> definition) {
-				super(definition);
+			public Interpreted(AbstractSortedCollectionDef<?> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -794,13 +784,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractCollectionDef.Interpreted<T, ObservableSet<T>> {
-			public Interpreted(SetDef definition) {
-				super(definition);
+			public Interpreted(SetDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -831,13 +821,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends AbstractSortedCollectionDef.Interpreted<T, ObservableSortedSet<T>> {
-			public Interpreted(SortedSetDef definition) {
-				super(definition);
+			public Interpreted(SortedSetDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1022,19 +1012,19 @@ public class ExpressoQonfigValues {
 		protected void doPrepare(ExpressoQIS session) {}
 
 		@Override
-		public Interpreted<?, ?, M> interpret() {
-			return (Interpreted<?, ?, M>) interpret2();
+		public Interpreted<?, ?, M> interpretValue(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, ?, M>) interpret2(parent);
 		}
 
-		protected abstract Interpreted<?, ?, ?> interpret2();
+		protected abstract Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<K, V, M extends ObservableMap<K, V>>
 		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M, M>>
 		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M, M>> {
 			private final List<MapEntry.Interpreted<K, V>> theEntries;
 
-			protected Interpreted(AbstractMapDef<?> definition) {
-				super((AbstractMapDef<M>) definition, null);
+			protected Interpreted(AbstractMapDef<?> definition, ExElement.Interpreted<?> parent) {
+				super((AbstractMapDef<M>) definition, parent);
 				theEntries = new ArrayList<>();
 			}
 
@@ -1061,19 +1051,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Interpreted<K, V, M> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
-			}
-
-			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
-				syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
-					(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
+				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+					syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
+						(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
+				}
 			}
 
 			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
@@ -1135,13 +1121,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?, ?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?, ?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<K, V> extends AbstractMapDef.Interpreted<K, V, ObservableMap<K, V>> {
-			public Interpreted(PlainMapDef definition) {
-				super(definition);
+			public Interpreted(PlainMapDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1182,16 +1168,16 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?, ?, ?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<K, V, M extends ObservableSortedMap<K, V>> extends AbstractMapDef.Interpreted<K, V, M> {
 			private ExSort.ExRootSort.Interpreted<K> theSort;
 			private Comparator<? super K> theDefaultSorting;
 
-			public Interpreted(SortedMapDef definition) {
-				super(definition);
+			public Interpreted(SortedMapDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1281,19 +1267,19 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?, ?, M> interpret() {
-			return interpret();
+		public Interpreted<?, ?, M> interpretValue(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, ?, M>) interpret2(parent);
 		}
 
-		protected abstract Interpreted<?, ?, ?> interpret2();
+		protected abstract Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<K, V, M extends ObservableMultiMap<K, V>>
 		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M, M>>
 		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M, M>> {
 			private final List<MapEntry.Interpreted<K, V>> theEntries;
 
-			protected Interpreted(AbstractMultiMapDef<?> definition) {
-				super((AbstractMultiMapDef<M>) definition, null);
+			protected Interpreted(AbstractMultiMapDef<?> definition, ExElement.Interpreted<?> parent) {
+				super((AbstractMultiMapDef<M>) definition, parent);
 				theEntries = new ArrayList<>();
 			}
 
@@ -1309,12 +1295,6 @@ public class ExpressoQonfigValues {
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 				return Collections.emptyList(); // Elements are initialization only, this value is independent (fundamental)
-			}
-
-			@Override
-			public Interpreted<K, V, M> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -1394,13 +1374,13 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?, ?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?, ?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<K, V> extends AbstractMultiMapDef.Interpreted<K, V, ObservableMultiMap<K, V>> {
-			public Interpreted(PlainMultiMapDef definition) {
-				super(definition);
+			public Interpreted(PlainMultiMapDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1441,16 +1421,16 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected Interpreted<?, ?, ?> interpret2() {
-			return new Interpreted<>(this);
+		protected Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<K, V, M extends ObservableSortedMultiMap<K, V>> extends AbstractMultiMapDef.Interpreted<K, V, M> {
 			private ExSort.ExRootSort.Interpreted<K> theSort;
 			private Comparator<? super K> theDefaultSorting;
 
-			public Interpreted(SortedMultiMapDef definition) {
-				super(definition);
+			public Interpreted(SortedMultiMapDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1571,8 +1551,8 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<Observable<?>, Observable<T>>>
@@ -1581,8 +1561,8 @@ public class ExpressoQonfigValues {
 			private InterpretedValueSynth<Observable<?>, Observable<T>> theEvent;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
-			public Interpreted(Hook definition) {
-				super(definition, null);
+			public Interpreted(Hook definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -1618,12 +1598,6 @@ public class ExpressoQonfigValues {
 
 			public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 				return theAction;
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -1746,26 +1720,21 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		protected static class Interpreted extends
 		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
 		implements
 		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
-			public Interpreted(Action definition) {
-				super(definition, null);
+			public Interpreted(Action definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public Action getDefinition() {
 				return (Action) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				return (Interpreted) super.setParentElement(parent);
 			}
 
 			@Override
@@ -1816,8 +1785,8 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -1826,19 +1795,14 @@ public class ExpressoQonfigValues {
 		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
 			private final List<Action.Interpreted> theActions;
 
-			public Interpreted(ActionGroup definition) {
-				super(definition, null);
+			public Interpreted(ActionGroup definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 				theActions = new ArrayList<>();
 			}
 
 			@Override
 			public ActionGroup getDefinition() {
 				return (ActionGroup) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				return (Interpreted) super.setParentElement(parent);
 			}
 
 			@Override
@@ -1854,8 +1818,10 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
-					(i, aEnv) -> i.setParentElement(this).update(aEnv));
+				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+					syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
+						(i, aEnv) -> i.update(aEnv));
+				}
 			}
 
 			@Override
@@ -2016,8 +1982,8 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -2032,19 +1998,14 @@ public class ExpressoQonfigValues {
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theFinally;
 			private final List<ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>> theBody;
 
-			Interpreted(Loop definition) {
-				super(definition, null);
+			Interpreted(Loop definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 				theBody = new ArrayList<>();
 			}
 
 			@Override
 			public Loop getDefinition() {
 				return (Loop) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				return (Interpreted) super.setParentElement(parent);
 			}
 
 			@Override
@@ -2069,9 +2030,11 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				theFinally = interpret(getDefinition().getFinally() == null ? null : getDefinition().getFinally(),
 					ModelTypes.Action.instance());
-				this.syncChildren(getDefinition().getBody(), theBody,
-					(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
-					(b, bEnv) -> b.updateValue(bEnv));
+				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+					this.syncChildren(getDefinition().getBody(), theBody,
+						(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
+						(b, bEnv) -> b.updateValue(bEnv));
+				}
 			}
 
 			@Override
@@ -2285,21 +2248,15 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<T> extends
 		ModelValueElement.Def.SingleTyped.Interpreted<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>>
 		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>> {
-			Interpreted(Event definition) {
-				super(definition, null);
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
+			Interpreted(Event definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -2325,27 +2282,22 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public InterpretedSynth<ObservableValueSet<?>, ?, ? extends ModelValueElement<ObservableValueSet<?>, ?>> interpret() {
-			return new Interpreted<>(this);
+		public InterpretedSynth<ObservableValueSet<?>, ?, ? extends ModelValueElement<ObservableValueSet<?>, ?>> interpretValue(
+			ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends
 		ModelValueElement.Def.SingleTyped.Interpreted<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<?>, ObservableValueSet<T>>>
 		implements
 		ModelValueElement.InterpretedSynth<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<?>, ObservableValueSet<T>>> {
-			public Interpreted(ValueSet definition) {
-				super(definition, null);
+			public Interpreted(ValueSet definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public ValueSet getDefinition() {
 				return (ValueSet) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -2473,8 +2425,8 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -2490,19 +2442,13 @@ public class ExpressoQonfigValues {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theExecutionCount;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isExecuting;
 
-			Interpreted(Timer definition) {
-				super(definition, null);
+			Interpreted(Timer definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public Timer getDefinition() {
 				return (Timer) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override

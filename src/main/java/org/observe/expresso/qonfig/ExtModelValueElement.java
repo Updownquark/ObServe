@@ -22,6 +22,12 @@ import com.google.common.reflect.TypeToken;
 
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
 	public static final String EXT_MODEL_VALUE = "ext-model-value";
+	public static final String EXT_MODEL_VALUE_HANDLER = "Ext.Model.Value.Handler";
+
+	public interface ExtModelValueHandler {
+		<M> void handleExtValue(Def<M> value, ObservableModelSet.Builder builder, ExpressoQIS valueSession)
+			throws QonfigInterpretationException;
+	}
 
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = EXT_MODEL_VALUE, interpretation = Interpreted.class)
 	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<M, ?>> implements ExtValueRef<M> {
@@ -42,11 +48,15 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		}
 
 		@Override
-		public void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+		public void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException {
 			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 			if (name == null)
 				throw new QonfigInterpretationException("Not named, cannot add to model set", getElement().getPositionInFile(), 0);
-			builder.withExternal(name, this, reporting().getFileLocation().getPosition(0));
+			ExtModelValueHandler handler = session.get(EXT_MODEL_VALUE_HANDLER, ExtModelValueHandler.class);
+			if (handler != null)
+				handler.handleExtValue(this, builder, session);
+			else
+				builder.withExternal(name, this, reporting().getFileLocation().getPosition(0));
 		}
 
 		@QonfigAttributeGetter("default")

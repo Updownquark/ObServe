@@ -74,9 +74,14 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="required" type="ext-model" min="0" />
 		</add-on>
 
+		<add-on name="expresso-document" abstract="true">
+			<?DOC The head section of the document, containing application models, etc.?>
+			<child-def name="head" type="head" min="0" />
+		</add-on>
+
 		<!-- To support external content -->
-		<add-on name="external-head-section" requires="expresso">
-			<child-mod child="expresso.models" inherits="external-content-model" />
+		<add-on name="external-head-section" requires="head">
+			<child-mod child="head.models" inherits="external-content-model" />
 		</add-on>
 		<add-on name="external-content-model" requires="models" />
 		<add-on name="attr-backed-ext-model" requires="ext-model">
@@ -137,14 +142,14 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="element-model-value" />
 		</element-def>
 
-		<element-def name="expresso">
+		<element-def name="head">
 			<child-def name="imports" type="imports" min="0" />
 			<?DOC The model of the document, defining values and other structures that can be used to control the behavior of elements in the document?>
 			<child-def name="models" type="models" />
 		</element-def>
 
-		<element-def name="expresso-external-content" extends="external-content">
-			<child-def name="head" type="expresso" inherits="external-head-section" />
+		<element-def name="expresso-external-content" extends="external-content" inherits="expresso-document">
+			<child-mod child="expresso-document.head" type="head" inherits="external-head-section" />
 			<child-mod child="external-content.fulfillment" inherits="expresso-external-fulfillment" />
 		</element-def>
 	</elements>

@@ -102,19 +102,12 @@
 
 	<elements>
 		<?DOC The root of a Quick application document?>
-		<element-def name="quick" inherits="with-element-model">
-			<element-model>
-				<?DOC An event that fires after the application's model's have been loaded?>
-				<event name="onModelLoad" type="Void" />
-				<?DOC An event that fires after the application's user interface body has been loaded?>
-				<event name="onBodyLoad" type="Void" />
-			</element-model>
+		<element-def name="quick" inherits="expresso-document">
 			<?DOC The head section of the Quick document, containing application models, style sheets, etc.?>
-			<child-def name="head" type="head" min="0" />
+			<child-mod child="expresso-document.head" min="0" inherits="with-style-sheet" />
 			<?DOC The widget content of the application?>
 			<child-def name="body" type="widget" min="1" />
 		</element-def>
-		<element-def name="head" extends="expresso" inherits="with-style-sheet" />
 
 		<element-def name="widget" abstract="true" inherits="with-background,with-text">
 			<?DOC The name of the widget.  Typically only used for debugging?>

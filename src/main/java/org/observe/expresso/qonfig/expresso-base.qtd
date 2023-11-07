@@ -17,6 +17,15 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</value-types>
 
 	<add-ons>
+		<add-on name="base-expresso-document" abstract="true" inherits="expresso-document,with-element-model">
+			<element-model>
+				<?DOC An event that fires after the application's model's have been loaded?>
+				<event name="onModelLoad" type="Void" />
+				<?DOC An event that fires after the application's body has been loaded?>
+				<event name="onBodyLoad" type="Void" />
+			</element-model>
+		</add-on>
+
 		<?DOC A scalar value in a &lt;model> element. This element has 2 modes:<br>
 			If its value is not set, it will function as a container which may be set as needed.<br>
 			If its value is set, it will function as a transformation of other values in the models.
@@ -390,6 +399,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</elements>
 
 	<auto-inheritance>
+		<auto-inherit inherits="base-expresso-document">
+			<target element="expresso-document" />
+		</auto-inherit>
+
 		<auto-inherit inherits="int-value">
 			<target element="value" role="model.value" />
 		</auto-inherit>

@@ -90,8 +90,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		qonfigType = QuickCustomShadingElement.CUSTOM_SHADING,
 		interpretation = QuickCustomShadingElement.Interpreted.class)
 	static class QuickCustomShadingElement
-		extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-		implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
 		public static final String CUSTOM_SHADING = "custom-shading";
 
 		private CompiledExpression theUnitWidth;
@@ -192,22 +192,22 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
-			ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-			implements
-			ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+		implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitWidth;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitHeight;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theLit;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theOpacity;
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theRefresh;
 
-			Interpreted(QuickCustomShadingElement definition) {
-				super(definition, null);
+			Interpreted(QuickCustomShadingElement definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -352,8 +352,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		qonfigType = QuickRaisedShadingElement.RAISED_SHADING,
 		interpretation = QuickCustomShadingElement.Interpreted.class)
 	static class QuickRaisedShadingElement
-		extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-		implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
 		public static final String RAISED_SHADING = "raised-shading";
 
 		private boolean isRound;
@@ -397,18 +397,18 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
-			ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-			implements
-			ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+		implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
-			Interpreted(QuickRaisedShadingElement definition) {
-				super(definition, null);
+			Interpreted(QuickRaisedShadingElement definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override

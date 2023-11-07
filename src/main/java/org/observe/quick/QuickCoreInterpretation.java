@@ -18,7 +18,6 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils;
@@ -33,7 +32,6 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExceptionHandler;
-import org.qommons.ex.ExceptionHandler.Double;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 
@@ -73,9 +71,6 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, ExElement.creator(QuickDocument.Def::new));
-		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
-			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.getElementRepresentation(),
-				session.getFocusType()));
 		interpreter.createWith(QuickAbstractWindow.ABSTRACT_WINDOW, QuickAbstractWindow.Def.Default.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickAbstractWindow.Def.Default<>(ao, p)));
 		interpreter.createWith(QuickWindow.WINDOW, QuickWindow.Def.class,

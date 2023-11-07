@@ -7,20 +7,20 @@ import org.junit.Test;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.qonfig.ElementModelValue;
-import org.observe.expresso.qonfig.Expresso;
+import org.observe.expresso.qonfig.ExpressoHeadSection;
 import org.observe.util.TypeTokens;
 import org.qommons.testing.TestUtil;
 
 /** Some tests for Expresso functionality */
-public class ExpressoTests extends AbstractExpressoTest<Expresso> {
+public class ExpressoTests extends AbstractExpressoTest<ExpressoHeadSection> {
 	@Override
 	protected String getTestAppFile() {
 		return "expresso-tests-app.qml";
 	}
 
 	@Override
-	public void prepareTest() {
-		super.prepareTest();
+	public void compileTesting() {
+		super.compileTesting();
 	}
 
 	/**
@@ -31,7 +31,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testConstant() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("constant");
+		executeTest("constant");
 	}
 
 	/**
@@ -42,7 +42,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testSimpleValue() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("simpleValue");
+		executeTest("simpleValue");
 	}
 
 	/**
@@ -53,7 +53,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testDerivedValue() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("derivedValue");
+		executeTest("derivedValue");
 	}
 
 	/**
@@ -64,7 +64,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testList() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("list");
+		executeTest("list");
 	}
 
 	/**
@@ -75,7 +75,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testUnaryOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("unaryOperators");
+		executeTest("unaryOperators");
 	}
 
 	/**
@@ -86,7 +86,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testBooleanOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("booleanOperators");
+		executeTest("booleanOperators");
 	}
 
 	/**
@@ -97,7 +97,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testComparisonOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("comparisonOperators");
+		executeTest("comparisonOperators");
 	}
 
 	/**
@@ -108,7 +108,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testMathOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("mathOperators");
+		executeTest("mathOperators");
 	}
 
 	/**
@@ -119,7 +119,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testCasts() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("casts");
+		executeTest("casts");
 	}
 
 	/**
@@ -130,7 +130,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testStringConcat() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("stringConcat");
+		executeTest("stringConcat");
 	}
 
 	/**
@@ -141,7 +141,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testBitwiseOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("bitwiseOperators");
+		executeTest("bitwiseOperators");
 	}
 
 	/**
@@ -152,7 +152,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testObjectOr() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("objectOr");
+		executeTest("objectOr");
 	}
 
 	/**
@@ -163,7 +163,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testConditionalOperator() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("conditionalOperator");
+		executeTest("conditionalOperator");
 	}
 
 	/**
@@ -174,7 +174,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testMapTo() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("mapTo");
+		executeTest("mapTo");
 	}
 
 	/**
@@ -185,7 +185,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testIfElseSwitchCase() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("ifElseSwitchCase");
+		executeTest("ifElseSwitchCase");
 	}
 
 	/**
@@ -196,7 +196,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testSort() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("sort");
+		executeTest("sort");
 	}
 
 	/**
@@ -207,7 +207,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testAssignInt() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("assignInt");
+		executeTest("assignInt");
 	}
 
 	/**
@@ -218,7 +218,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testAssignInstant() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("assignInstant");
+		executeTest("assignInstant");
 	}
 
 	/**
@@ -229,7 +229,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testReflection() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("reflection");
+		executeTest("reflection");
 	}
 
 	/**
@@ -240,7 +240,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testClasses() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("classes");
+		executeTest("classes");
 	}
 
 	/**
@@ -251,7 +251,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testHook() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("hook");
+		executeTest("hook");
 	}
 
 	/**
@@ -262,7 +262,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testStaticInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("staticInternalState");
+		executeTest("staticInternalState");
 	}
 
 	/**
@@ -273,7 +273,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testDynamicTypeInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("dynamicTypeInternalState");
+		executeTest("dynamicTypeInternalState");
 	}
 
 	/**
@@ -284,7 +284,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testDynamicTypeInternalState2() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("dynamicTypeInternalState2");
+		executeTest("dynamicTypeInternalState2");
 	}
 
 	/**

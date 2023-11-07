@@ -680,11 +680,6 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws ExpressoInterpretationException If this value could not be interpreted
 		 */
 		InterpretedModelComponentNode<M, ?> interpreted() throws ExpressoInterpretationException;
-
-		@Override
-		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			return interpreted();
-		}
 	}
 
 	/**
@@ -699,8 +694,8 @@ public interface ObservableModelSet extends Identifiable {
 		ModelType<M> getModelType();
 
 		@Override
-		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			return InterpretableModelComponentNode.super.interpret(env);
+		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) {
+			return this;
 		}
 
 		@Override
@@ -1103,6 +1098,8 @@ public interface ObservableModelSet extends Identifiable {
 			return component;
 		} else {
 			ObservableModelSet inh = getInheritance().get(id.getRootId());
+			if (inh == null)
+				inh = getRoot().getInheritance().get(id.getRootId());
 			if (inh == null)
 				throw new IllegalArgumentException("Component " + id + " is for a model unrelated to this one (" + getIdentity() + ")");
 			return inh.getComponent(id);
@@ -1524,6 +1521,8 @@ public interface ObservableModelSet extends Identifiable {
 
 		ModelInstantiator getInheritance(ModelComponentId inherited);
 
+		void instantiate();
+
 		/**
 		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
 		 *
@@ -1532,8 +1531,6 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A builder for the new instance set
 		 */
 		ModelSetInstanceBuilder createInstance(Observable<?> until);
-
-		void instantiate();
 
 		default ModelSetInstance wrap(ModelSetInstance models) throws ModelInstantiationException {
 			if (getIdentity() != models.getModel().getIdentity())
@@ -1598,6 +1595,8 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder {
+		ModelInstantiator getModel();
+
 		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
 		Observable<?> getUntil();
 
@@ -1618,6 +1617,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws ModelInstantiationException If any of <code>other</code>'s components could not be instantiated
 		 */
 		ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException;
+
+		ModelSetInstanceBuilder withAll(ModelSetInstanceBuilder other) throws ModelInstantiationException;
 
 		/**
 		 * @return The model instance set configured with this builder
@@ -2002,7 +2003,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		private void print(StringBuilder str, int indent) {
 			Set<String> components = new LinkedHashSet<>();
-			addComponents(components, this);
+			addComponents(components, this, new HashSet<>());
 			for (String component : components) {
 				str.append('\n');
 				for (int i = 0; i < indent; i++)
@@ -2016,10 +2017,12 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		private static void addComponents(Set<String> components, ObservableModelSet model) {
+		private static void addComponents(Set<String> components, ObservableModelSet model, Set<ModelComponentId> models) {
+			if (!models.add(model.getIdentity()))
+				return;
 			components.addAll(model.getComponentNames());
 			for (ObservableModelSet inh : model.getInheritance().values())
-				addComponents(components, inh);
+				addComponents(components, inh, models);
 		}
 
 		class ModelNodeImpl<M> implements ModelComponentNode<M> {
@@ -2356,6 +2359,8 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public Builder withAll(ObservableModelSet other) {
+				if (other.getIdentity() == getIdentity())
+					throw new IllegalStateException("A model cannot inherit itself: " + getIdentity());
 				assertNotBuilt();
 				if (((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).put(other.getIdentity().getRootId(),
 					other) != null)
@@ -2371,8 +2376,11 @@ public interface ObservableModelSet extends Identifiable {
 					getIdentifiedComponents().computeIfAbsent(id, __ -> other.getIdentifiedComponentIfExists(id).getIdentity());
 
 				// For each model that other inherits, add an inheritance entry for that model ID mapped to other (if not present)
-				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> subInh : other.getInheritance().entrySet())
-					((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh.getKey(), subInh.getValue());
+				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> subInh : other.getInheritance().entrySet()) {
+					if (!isRelated(subInh.getKey()))
+						((Map<ModelComponentId, ObservableModelSet>) super.getInheritance()).putIfAbsent(subInh.getKey(),
+							subInh.getValue());
+				}
 				// For any sub-models with the same name, this model's sub-model should inherit that of the other
 				for (String name : other.getComponentNames()) {
 					ModelComponentNode<?> component = other.getLocalComponent(name);
@@ -2417,6 +2425,8 @@ public interface ObservableModelSet extends Identifiable {
 				Map<Object, ModelComponentId> idComponents = QommonsUtils.unmodifiableCopy(getIdentifiedComponents());
 				Map<ModelComponentId, ObservableModelSet.Built> inheritance = new LinkedHashMap<>(
 					super.getInheritance().size() * 3 / 2 + 1);
+				DefaultBuilt model = createModel(root, parent, components, idComponents, inheritance);
+				theBuilt = model;
 				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> inh : getInheritance().entrySet()) {
 					ObservableModelSet.Built inhModel;
 					if (inh.getValue() instanceof ObservableModelSet.Built)
@@ -2427,8 +2437,6 @@ public interface ObservableModelSet extends Identifiable {
 						throw new IllegalStateException("Model " + inh + " is not either built or a builder?");
 					inheritance.put(inh.getKey(), inhModel);
 				}
-				DefaultBuilt model = createModel(root, parent, components, idComponents, inheritance);
-				theBuilt = model;
 				if (root == null)
 					root = model;
 				for (Map.Entry<String, ? extends ModelComponentNode<?>> component : theComponents.entrySet()) {
@@ -2458,7 +2466,7 @@ public interface ObservableModelSet extends Identifiable {
 				Map<Object, ModelComponentId> idComponents, Map<ModelComponentId, ObservableModelSet.Built> inheritance) {
 				return new DefaultBuilt(getIdentity(), root, parent, //
 					QommonsUtils.unmodifiableCopy(getTagValues()), //
-					QommonsUtils.unmodifiableCopy(inheritance), //
+					Collections.unmodifiableMap(inheritance), //
 					Collections.unmodifiableMap(components), //
 					idComponents == Collections.EMPTY_MAP ? idComponents : Collections.unmodifiableMap(idComponents), //
 						getNameChecker());
@@ -2756,6 +2764,17 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+					InterpretedExpressoEnv prevEnv = theExpressoEnv;
+					theExpressoEnv = env;
+					try {
+						return interpreted();
+					} finally {
+						theExpressoEnv = prevEnv;
+					}
+				}
+
+				@Override
 				public InterpretedModelComponentNode<M, ?> interpreted() throws ExpressoInterpretationException {
 					InterpretedModelComponentNode<?, ?> localNode = getComponents().get(theSourceNode.getIdentity().getName());
 					if (localNode != null)
@@ -2928,8 +2947,13 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public ModelInstantiator getModel() {
+				return theMSI.getModel();
+			}
+
+			@Override
 			public ModelSetInstance getInherited(ModelComponentId id) throws IllegalArgumentException {
-				return theMSI.getInherited(id);
+				return theInheritance.get(id);
 			}
 
 			@Override
@@ -2962,6 +2986,26 @@ public interface ObservableModelSet extends Identifiable {
 					if (!hasCommon) // Don't need to throw an exception, I guess, but this probably represents an error
 						System.err.println("This model instance (" + theMSI.getModel().getIdentity() + ") is not related to "
 							+ other.getModel().getIdentity());
+				}
+				return this;
+			}
+
+			@Override
+			public ModelSetInstanceBuilder withAll(ModelSetInstanceBuilder other) throws ModelInstantiationException {
+				if (theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())) {
+					for (ModelComponentId inh : theMSI.getModel().getInheritance())
+						theInheritance.put(inh, other.getInherited(inh));
+				} else { // The other model may include models we need
+					for (ModelComponentId inh : other.getModel().getInheritance()) {
+						ModelSetInstance inhInst = other.getInherited(inh);
+						if (inhInst == null) {// Nothing to do
+						} else if (inh.equals(theMSI.getModel().getIdentity())) {
+							withAll(inhInst);
+							break;
+						} else if (theMSI.getModel().getInheritance().contains(inh)) {
+							withAll(inhInst);
+						}
+					}
 				}
 				return this;
 			}
