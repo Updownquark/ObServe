@@ -8,6 +8,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -209,16 +210,24 @@ public class QuickApp extends QonfigApp {
 			.parse(clArgs);
 		String quickAppFile = args.get("quick-app", String.class);
 		if (quickAppFile == null) {
-			InputStream mfIn = QuickApplication.class.getResourceAsStream("/META-INF/MANIFEST.MF");
-			if (mfIn == null)
+			Enumeration<URL> manifests = QuickApplication.class.getClassLoader().getResources("META-INF/MANIFEST.MF");
+			if (!manifests.hasMoreElements())
 				throw new IllegalStateException("Could not locate manifest");
-			Manifest mf;
-			try {
-				mf = new Manifest(mfIn);
-			} catch (IOException e) {
-				throw new IllegalStateException("Could not read manifest", e);
-			}
-			quickAppFile = mf.getMainAttributes().getValue("Quick-App");
+			do {
+				URL mfUrl = manifests.nextElement();
+				try (InputStream mfIn = mfUrl.openStream()) {
+					Manifest mf;
+					try {
+						mf = new Manifest(mfIn);
+					} catch (IOException e) {
+						System.err.println("Could not read manifest " + mfUrl + ": " + e);
+						continue;
+					}
+					quickAppFile = mf.getMainAttributes().getValue("Quick-App");
+					if (quickAppFile != null)
+						break;
+				}
+			} while (manifests.hasMoreElements());
 			if (quickAppFile == null)
 				throw new IllegalArgumentException("No quick-app command line argument or Quick-App manifest property specified");
 		}
