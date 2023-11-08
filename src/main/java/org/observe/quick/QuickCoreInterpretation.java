@@ -1,39 +1,27 @@
 package org.observe.quick;
 
-import java.awt.Image;
-import java.awt.MediaTracker;
-import java.io.IOException;
-import java.net.URL;
 import java.util.Set;
 import java.util.function.BiFunction;
 
 import javax.swing.Icon;
-import javax.swing.ImageIcon;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.util.TypeTokens;
-import org.observe.util.swing.ObservableSwingUtils;
+import org.observe.quick.style.QuickStyleUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.AbstractQIS;
-import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
-import org.qommons.ex.ExceptionHandler;
-import org.qommons.ex.NeverThrown;
-import org.qommons.io.ErrorReporting;
 
 /** {@link QonfigInterpretation} for the Quick-Core toolkit */
 public class QuickCoreInterpretation implements QonfigInterpretation {
@@ -125,53 +113,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 */
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(CompiledExpression expression,
 		ExElement.Interpreted<?> element, String sourceDocument) throws ExpressoInterpretationException {
-		if (expression != null) {
-			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
-				.holder2();
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = element.interpret(expression,
-				ModelTypes.Value.forType(Icon.class), tce);
-			if (iconV != null)
-				return iconV;
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imageV = element.interpret(expression,
-				ModelTypes.Value.forType(Image.class), tce.clear());
-			if (imageV != null)
-				return imageV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
-					.map(sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon(img)), __ -> "Unsettable")));
-			InterpretedValueSynth<SettableValue<?>, SettableValue<URL>> urlV = element.interpret(expression,
-				ModelTypes.Value.forType(URL.class), tce.clear());
-			if (urlV != null)
-				return urlV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
-					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url)), __ -> "unsettable")));
-			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = element.interpret(expression,
-				ModelTypes.Value.forType(String.class), tce.clear());
-			ErrorReporting reporting = element.reporting().at(expression.getFilePosition());
-			if (stringV != null) {
-				return stringV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
-					if (loc == null)
-						return null;
-					String relLoc;
-					try {
-						relLoc = QommonsConfig.resolve(loc, sourceDocument);
-					} catch (IOException e) {
-						reporting.at(expression.getFilePosition())
-						.error("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
-						e.printStackTrace();
-						return null;
-					}
-					Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
-					if (icon == null)
-						icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
-					if (icon == null)
-						reporting.at(expression.getFilePosition()).error("Icon file not found: '" + loc);
-					else if (icon instanceof ImageIcon && ((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
-						reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
-					return icon;
-				}), __ -> "unsettable")));
-			}
-			reporting.warn("Cannot evaluate '" + expression + "' as an icon");
-			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
-		} else
-			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "None provided");
+		return QuickStyleUtils.evaluateIcon(expression, element.getEnvironmentFor(expression));
 	}
 
 	/**
