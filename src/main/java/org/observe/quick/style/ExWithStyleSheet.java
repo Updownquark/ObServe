@@ -2,7 +2,6 @@ package org.observe.quick.style;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
@@ -85,11 +84,11 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public ExWithStyleSheet create(ExElement element) {
-			return null;
+			return new ExWithStyleSheet(element);
 		}
 	}
 
-	private ModelInstantiator theSpreadSheetModel;
+	private QuickStyleSheet.StyleSheetModels theStyleSheetModels;
 
 	ExWithStyleSheet(ExElement element) {
 		super(element);
@@ -105,24 +104,21 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theSpreadSheetModel = myInterpreted.getStyleSheet() == null ? null
-			: myInterpreted.getStyleSheet().getExpressoEnv().getModels().instantiate();
+		theStyleSheetModels = myInterpreted.getStyleSheet() == null ? null : myInterpreted.getStyleSheet().instantiateModels();
 	}
 
 	@Override
 	public void instantiated() {
 		super.instantiated();
 
-		if (theSpreadSheetModel != null)
-			theSpreadSheetModel.instantiate();
+		if (theStyleSheetModels != null)
+			theStyleSheetModels.instantiate();
 	}
 
 	@Override
 	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
 		super.addRuntimeModels(builder, elementModels);
-		if (theSpreadSheetModel != null)
-			builder.withAll(theSpreadSheetModel.createInstance(builder.getUntil())//
-				.withAll(elementModels)//
-				.build());
+		if (theStyleSheetModels != null)
+			theStyleSheetModels.populate(builder);
 	}
 }

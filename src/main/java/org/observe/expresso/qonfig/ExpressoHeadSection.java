@@ -3,10 +3,7 @@ package org.observe.expresso.qonfig;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -124,12 +121,5 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 		theModels.instantiate();
 
 		super.instantiated();
-	}
-
-	@Override
-	protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		super.addRuntimeModels(builder, elementModels);
-
-		builder.withAll(theModels.wrap(elementModels));
 	}
 }

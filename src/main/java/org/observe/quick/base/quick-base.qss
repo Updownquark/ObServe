@@ -2,6 +2,8 @@
 
 <!-- A sample style sheet for use with the Quick-Base toolkit.  It contains a look & feel for quick. -->
 <style-sheet xmlns:base="Quick-Base v0.1">
+
+	<!-- Nice UI for table row colors -->
 	<style attr="widget.color">
 		<style element="tabular-widget">
 			<style child="columns">
@@ -14,6 +16,8 @@
 			</style>
 		</style>
 	</style>
+
+	<!-- Default style interpretation for the simple styled text model -->
 	<style-set name="simpleTreeModelData">
 		<ext-model>
 			<value name="node" type="org.observe.quick.base.SimpleStyledTextModel" />

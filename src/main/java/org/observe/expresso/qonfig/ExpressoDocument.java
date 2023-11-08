@@ -97,7 +97,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 
 			theHead = getElement().syncChild(getDefinition().getHead(), theHead, def -> def.interpret(element),
 				(i, iEnv) -> i.updateHead(iEnv));
-			if (theHead != null)
+			if (theHead != null && theHead.getClassView() != null)
 				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theHead.getClassView()));
 		}
 
@@ -174,8 +174,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
 		super.addRuntimeModels(builder, elementModels);
 
-		ModelSetInstance headModels = theHead.instantiate(elementModels);
-		builder.withAll(headModels);
+		theHead.addRuntimeModels(builder, elementModels);
 	}
 
 	@Override

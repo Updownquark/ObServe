@@ -26,7 +26,6 @@
 	<scroll>
 		<box role="content" layout="inline-layout" orientation="vertical" cross-align="justify">
 			<tree active-node-name="node">
-				<!-- These up casts are because child nodes can't be sub-types of their parent node -->
 				<tree-node value="&quot;Root&quot;">
 					<tree-node value="&quot;Numbers&quot;">
 						<tree-node value="1" />
@@ -36,10 +35,8 @@
 					<dynamic-tree-model value="app.root" children="node.listFiles()" leaf="!node.isDirectory()" />
 				</tree-node>
 				<column>
-						<!-- This isn't working yet, not sure why -->
 					<label value="columnValue instanceof ObservableFile ? ((ObservableFile) columnValue).getName() : columnValue.toString()"
 						icon="columnValue instanceof ObservableFile ? (&quot;/icons/icons8-&quot;+ ( ((ObservableFile) columnValue).isFile() ? &quot;file-50&quot; : &quot;folder-16&quot;)+&quot;.png&quot;) : null" />
-						<!-- -->
 				</column>
 			</tree>
 		</box>

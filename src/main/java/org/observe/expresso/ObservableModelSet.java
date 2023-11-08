@@ -552,7 +552,7 @@ public interface ObservableModelSet extends Identifiable {
 			return theRootId;
 		}
 
-		/** @return The component ID oif this component's owner model, or null if this is the identifier of a root model */
+		/** @return The component ID of this component's owner model, or null if this is the identifier of a root model */
 		public ModelComponentId getOwnerId() {
 			return theOwnerId;
 		}
@@ -1247,6 +1247,10 @@ public interface ObservableModelSet extends Identifiable {
 		return new ExternalModelSetBuilder(null, "", nameChecker);
 	}
 
+	public static ModelSetInstanceBuilder createMultiModelInstanceBag(Observable<?> until) {
+		return new DefaultModelSet.MultipleModelInstanceBuilder(until);
+	}
+
 	/** Builds an {@link ObservableModelSet} */
 	public interface Builder extends ObservableModelSet {
 		/**
@@ -1533,19 +1537,42 @@ public interface ObservableModelSet extends Identifiable {
 		ModelSetInstanceBuilder createInstance(Observable<?> until);
 
 		default ModelSetInstance wrap(ModelSetInstance models) throws ModelInstantiationException {
-			if (getIdentity() != models.getModel().getIdentity())
-				return createInstance(models.getUntil()).withAll(models).build();
-			else
+			if (models.getTopLevelModels().contains(getIdentity()) || models.getInheritance().contains(getIdentity()))
 				return models;
+			else
+				return createInstance(models.getUntil()).withAll(models).build();
 		}
 	}
 
-	/** A set of actual values created by the containers declared in an {@link ObservableModelSet} */
-	public interface ModelSetInstance {
-		ModelInstantiator getModel();
+	public interface ModelInstance {
+		/**
+		 * @return The identities of all models that this instance contains values for which are not inherited by any other models in this
+		 *         instance
+		 */
+		Set<ModelComponentId> getTopLevelModels();
 
-		/** @return An observable that will fire when this model instance set's lifetime expires */
+		/** @return All models inherited by any of this instance's {@link #getTopLevelModels() top-level models} */
+		Set<ModelComponentId> getInheritance();
+
+		/**
+		 * @param modelId The identity of the model to get the instantiator for
+		 * @return The model instantiator for the given model
+		 * @throws IllegalArgumentException If this instance does not contain the given model
+		 */
+		ModelInstantiator getModel(ModelComponentId modelId) throws IllegalArgumentException;
+
+		/** @return The observable that the model set instance will die with */
 		Observable<?> getUntil();
+
+		/**
+		 * @param modelId The id of the inherited model
+		 * @return The instance of the given model inherited by this instance, or null if this is a {@link ModelSetInstanceBuilder} and this
+		 *         model does not contain or inherit the given model
+		 * @throws IllegalArgumentException If this is a built {@link ModelSetInstance} and this model does not contain the given model
+		 */
+		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
+
+		Map<Object, ModelComponentId> getComponentsByValueId();
 
 		/**
 		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the model component to get the value for
@@ -1567,15 +1594,32 @@ public interface ObservableModelSet extends Identifiable {
 				throw new IllegalArgumentException("No value in this model with value identifier '" + valueId + "'");
 			return get(componentId);
 		}
+	}
 
-		Map<Object, ModelComponentId> getComponentsByValueId();
+	/** A set of actual values created by the containers declared in one or more {@link ObservableModelSet}s */
+	public interface ModelSetInstance extends ModelInstance {
+		/**
+		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the model component to get the value for
+		 * @return The model value in this model instance set for the given component
+		 * @throws ModelInstantiationException If the model component could not be instantiated
+		 * @throws IllegalArgumentException If the component does not belong to this model or is a sub-model
+		 */
+		@Override
+		Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException;
 
 		/**
-		 * @param modelId The id of the inherited model
-		 * @return The instance of the given model inherited by this instance builder
-		 * @throws IllegalArgumentException
+		 * @param valueId The {@link ModelComponentNode#getValueIdentity() value ID} of the model component to get the value for
+		 * @return The model value in this model instance set for the given component
+		 * @throws ModelInstantiationException If the model component could not be instantiated
+		 * @throws IllegalArgumentException If there is no component with the given value ID in this model
 		 */
-		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
+		@Override
+		default Object getByValueId(Object valueId) throws ModelInstantiationException, IllegalArgumentException {
+			ModelComponentId componentId = getComponentsByValueId().get(valueId);
+			if (componentId == null)
+				throw new IllegalArgumentException("No value in this model with value identifier '" + valueId + "'");
+			return get(componentId);
+		}
 
 		/**
 		 * @return A builder that will produce a {@link ModelSetInstance} containing
@@ -1594,19 +1638,7 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/** Builds a {@link ModelSetInstance} */
-	public interface ModelSetInstanceBuilder {
-		ModelInstantiator getModel();
-
-		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
-		Observable<?> getUntil();
-
-		/**
-		 * @param modelId The id of the inherited model
-		 * @return The instance of the given model inherited by this instance
-		 * @throws IllegalArgumentException
-		 */
-		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
-
+	public interface ModelSetInstanceBuilder extends ModelInstance {
 		/**
 		 * Satisfies inherited models in this instance builder.
 		 *
@@ -1614,11 +1646,8 @@ public interface ObservableModelSet extends Identifiable {
 		 *        model that this instance set is being built for, or an instance of a model that may inherit models also inherited by this
 		 *        model.
 		 * @return This builder
-		 * @throws ModelInstantiationException If any of <code>other</code>'s components could not be instantiated
 		 */
-		ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException;
-
-		ModelSetInstanceBuilder withAll(ModelSetInstanceBuilder other) throws ModelInstantiationException;
+		ModelSetInstanceBuilder withAll(ModelInstance other);
 
 		/**
 		 * @return The model instance set configured with this builder
@@ -2807,9 +2836,10 @@ public interface ObservableModelSet extends Identifiable {
 				if (interpreted.getInheritance().isEmpty())
 					theInheritance = Collections.emptyMap();
 				else {
-					theInheritance = new HashMap<>(interpreted.getInheritance().size() * 3 / 2 + 1);
+					Map<ModelComponentId, ModelInstantiator> inheritance = new HashMap<>(interpreted.getInheritance().size() * 3 / 2 + 1);
+					theInheritance = Collections.unmodifiableMap(inheritance);
 					for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : interpreted.getInheritance().entrySet())
-						theInheritance.put(inh.getKey(), inh.getValue().instantiate());
+						inheritance.put(inh.getKey(), inh.getValue().instantiate());
 				}
 			}
 
@@ -2887,8 +2917,9 @@ public interface ObservableModelSet extends Identifiable {
 			public ModelSetInstanceBuilder createInstance(Observable<?> until) {
 				if (theInterpretedModels != null)
 					throw new IllegalStateException(
-						"Attempting to build a model instance set from a model instantiator that has not been completely instantiated");
-				return new DefaultMSIBuilder(this, null, theComponentsByValueId, until);
+						"Attempting to build a model instance set from a model instantiator that has not been completely instantiated: "
+							+ getIdentity());
+				return new SingleModelInstanceBuilder(this, null, theComponentsByValueId, until);
 			}
 
 			@Override
@@ -2897,7 +2928,7 @@ public interface ObservableModelSet extends Identifiable {
 					return;
 				instantiate(theInterpretedModels);
 				for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : theInterpretedModels.getInheritance().entrySet())
-					theInheritance.computeIfAbsent(inh.getKey(), __ -> inh.getValue().instantiate());
+					theInheritance.get(inh.getKey()).instantiate();
 				theInterpretedModels = null;
 				for (ModelValueInstantiator<?> component : theComponents.values())
 					component.instantiate();
@@ -2931,28 +2962,50 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		static class DefaultMSIBuilder implements ModelSetInstanceBuilder {
+		static class SingleModelInstanceBuilder implements ModelSetInstanceBuilder {
 			private final Map<ModelComponentId, Object> theComponents;
 			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
-			private final DefaultMSI theMSI;
+			private final SingleModelInstance theMSI;
 
-			DefaultMSIBuilder(ModelInstantiatorImpl modelInstantiator, ModelSetInstance sourceModel,
+			SingleModelInstanceBuilder(ModelInstantiatorImpl modelInstantiator, ModelSetInstance sourceModel,
 				Map<Object, ModelComponentId> componentsByValueId, Observable<?> until) {
 				theComponents = new HashMap<>();
 				theComponentsByValueId = componentsByValueId;
 				theInheritance = new LinkedHashMap<>();
-				theMSI = new DefaultMSI(modelInstantiator, sourceModel, until, theComponents, theComponentsByValueId,
+				theMSI = new SingleModelInstance(modelInstantiator, sourceModel, until, theComponents, theComponentsByValueId,
 					Collections.unmodifiableMap(theInheritance));
 			}
 
 			@Override
+			public Set<ModelComponentId> getTopLevelModels() {
+				return theMSI.getTopLevelModels();
+			}
+
+			@Override
+			public ModelInstantiator getModel(ModelComponentId modelId) {
+				return theMSI.getModel(modelId);
+			}
+
+			@Override
+			public Set<ModelComponentId> getInheritance() {
+				return theMSI.getInheritance();
+			}
+
+			@Override
+			public Map<Object, ModelComponentId> getComponentsByValueId() {
+				return theComponentsByValueId;
+			}
+
 			public ModelInstantiator getModel() {
 				return theMSI.getModel();
 			}
 
 			@Override
 			public ModelSetInstance getInherited(ModelComponentId id) throws IllegalArgumentException {
+				// Unlike the built instance, this method:
+				// * Does not return anything if id==getModel().getIdentity()--that instance is not yet built and should not be accessible
+				// * Does not throw an exception if the inheritance is missing--it just returns null
 				return theInheritance.get(id);
 			}
 
@@ -2962,57 +3015,53 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException {
-				if (theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())) {
-					addAll(theMSI.getModel(), other);
-					for (ModelComponentId inh : theMSI.getModel().getInheritance())
-						theInheritance.put(inh, other.getInherited(inh));
-				} else if (theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
-					theInheritance.put(other.getModel().getIdentity().getRootId(), other);
-					for (ModelComponentId modelId : other.getModel().getInheritance())
-						theInheritance.put(modelId, other.getInherited(modelId));
-				} else { // The other model is not known to us, but it may inherit from the same models
-					boolean hasCommon = false;
-					for (ModelComponentId inh : other.getModel().getInheritance()) {
-						if (inh.equals(theMSI.getModel().getIdentity())) {
-							hasCommon = true;
-							withAll(other.getInherited(inh));
-							break;
-						} else if (theMSI.getModel().getInheritance().contains(inh)) {
-							hasCommon = true;
-							withAll(other.getInherited(inh));
-						}
-					}
-					if (!hasCommon) // Don't need to throw an exception, I guess, but this probably represents an error
-						System.err.println("This model instance (" + theMSI.getModel().getIdentity() + ") is not related to "
-							+ other.getModel().getIdentity());
-				}
-				return this;
+			public Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException {
+				return theMSI.get(component);
 			}
 
 			@Override
-			public ModelSetInstanceBuilder withAll(ModelSetInstanceBuilder other) throws ModelInstantiationException {
-				if (theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())) {
+			public ModelSetInstanceBuilder withAll(ModelInstance other) {
+				if (other.getTopLevelModels().contains(theMSI.getModel().getIdentity())//
+					|| other.getInheritance().contains(theMSI.getModel().getIdentity())) {
+					// The model knows about us. Grab its contents
+					ModelSetInstance otherMe = other.getInherited(getModel().getIdentity());
+					if (otherMe != null)
+						addAll(theMSI.getModel(), otherMe);
 					for (ModelComponentId inh : theMSI.getModel().getInheritance())
 						theInheritance.put(inh, other.getInherited(inh));
-				} else { // The other model may include models we need
-					for (ModelComponentId inh : other.getModel().getInheritance()) {
-						ModelSetInstance inhInst = other.getInherited(inh);
-						if (inhInst == null) {// Nothing to do
-						} else if (inh.equals(theMSI.getModel().getIdentity())) {
-							withAll(inhInst);
-							break;
-						} else if (theMSI.getModel().getInheritance().contains(inh)) {
-							withAll(inhInst);
+				} else { // The other model is not known to us, but it may inherit from the same models
+					for (ModelComponentId inh : getModel().getInheritance()) {
+						if (other.getTopLevelModels().contains(inh) || other.getInheritance().contains(inh)) {
+							ModelSetInstance otherMSI = other.getInherited(inh);
+							if (otherMSI != null) { // May be a builder, which won't expose its unbuilt model
+								theInheritance.put(inh, otherMSI);
+								addInheritance(otherMSI);
+							}
 						}
 					}
 				}
 				return this;
 			}
 
-			private void addAll(ModelInstantiator model, ModelSetInstance other) throws ModelInstantiationException {
-				for (ModelComponentId comp : model.getComponents())
-					theComponents.put(comp, other.get(comp));
+			private void addAll(ModelInstantiator model, ModelSetInstance other) {
+				for (ModelComponentId comp : model.getComponents()) {
+					Object value;
+					try {
+						value = other.get(comp);
+					} catch (ModelInstantiationException e) {
+						throw new IllegalStateException("But you said you had it!", e);
+					}
+					theComponents.put(comp, value);
+				}
+				addInheritance(other);
+			}
+
+			private void addInheritance(ModelSetInstance other) {
+				for (ModelComponentId inh : other.getInheritance()) {
+					ModelSetInstance inhInstance = other.getInherited(inh);
+					theInheritance.put(inh, inhInstance);
+					addInheritance(inhInstance);
+				}
 			}
 
 			@Override
@@ -3049,7 +3098,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		static class DefaultMSI implements ModelSetInstance {
+		static class SingleModelInstance implements ModelSetInstance {
 			private final ModelInstantiatorImpl theModelInstantiator;
 			protected final Map<ModelComponentId, Object> theComponents;
 			private final Map<Object, ModelComponentId> theComponentsByValueId;
@@ -3059,7 +3108,7 @@ public interface ObservableModelSet extends Identifiable {
 			private ModelSetInstance theSourceModel;
 			private Set<ModelComponentId> theCircularityDetector;
 
-			protected DefaultMSI(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel, Observable<?> until,
+			protected SingleModelInstance(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel, Observable<?> until,
 				Map<ModelComponentId, Object> components, Map<Object, ModelComponentId> componentsByValueId,
 				Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModelInstantiator = instantiator;
@@ -3073,6 +3122,25 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public Set<ModelComponentId> getTopLevelModels() {
+				return Collections.singleton(theModelInstantiator.getIdentity());
+			}
+
+			@Override
+			public Set<ModelComponentId> getInheritance() {
+				return theInheritance.keySet();
+			}
+
+			@Override
+			public ModelInstantiator getModel(ModelComponentId modelId) {
+				if (modelId == theModelInstantiator.getIdentity())
+					return theModelInstantiator;
+				ModelSetInstance inh = theInheritance.get(modelId);
+				if (inh != null)
+					return inh.getModel(modelId);
+				throw new IllegalArgumentException("This model (" + theModelInstantiator.getIdentity() + ") does not inherit " + modelId);
+			}
+
 			public ModelInstantiator getModel() {
 				return theModelInstantiator;
 			}
@@ -3136,20 +3204,17 @@ public interface ObservableModelSet extends Identifiable {
 			public ModelSetInstanceBuilder copy(Observable<?> until) {
 				if (theCircularityDetector != null)
 					throw new IllegalStateException("Cannot create a copy of a model that is currently being built");
-				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModelInstantiator, this, theComponentsByValueId, until);
+				ModelSetInstanceBuilder builder = new SingleModelInstanceBuilder(theModelInstantiator, this, theComponentsByValueId, until);
 
-				for (ModelSetInstance inh : theInheritance.values()) {
-					try {
-						builder.withAll(inh);
-					} catch (ModelInstantiationException e) {
-						throw new IllegalStateException("Inherited model not completely instantiated?", e);
-					}
-				}
+				for (ModelSetInstance inh : theInheritance.values())
+					builder.withAll(inh);
 				return builder;
 			}
 
 			@Override
 			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
+				if (modelId == theModelInstantiator.getIdentity())
+					return this;
 				ModelSetInstance inh = theInheritance.get(modelId);
 				if (inh != null)
 					return inh;
@@ -3168,6 +3233,180 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public String toString() {
 				return "instance:" + theModelInstantiator.getIdentity();
+			}
+		}
+
+		static class MultipleModelInstanceBuilder implements ModelSetInstanceBuilder {
+			private final Map<ModelComponentId, ModelSetInstance> theTopLevelModels;
+			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
+			private final Map<Object, ModelComponentId> theComponentsByValueId;
+			private final MultipleModelInstance theMSI;
+			private boolean isBuilt;
+
+			MultipleModelInstanceBuilder(Observable<?> until) {
+				theTopLevelModels = new LinkedHashMap<>();
+				theInheritance = new LinkedHashMap<>();
+				theComponentsByValueId = new LinkedHashMap<>();
+				theMSI = new MultipleModelInstance(Collections.unmodifiableMap(theTopLevelModels),
+					Collections.unmodifiableMap(theInheritance), Collections.unmodifiableMap(theComponentsByValueId), until);
+			}
+
+			@Override
+			public Set<ModelComponentId> getTopLevelModels() {
+				return theMSI.getTopLevelModels();
+			}
+
+			@Override
+			public Set<ModelComponentId> getInheritance() {
+				return theMSI.getInheritance();
+			}
+
+			@Override
+			public ModelInstantiator getModel(ModelComponentId modelId) {
+				return theMSI.getModel(modelId);
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theMSI.getUntil();
+			}
+
+			@Override
+			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
+				ModelSetInstance model = theTopLevelModels.get(modelId);
+				if (model == null)
+					model = theInheritance.get(modelId);
+				return model;
+			}
+
+			@Override
+			public Map<Object, ModelComponentId> getComponentsByValueId() {
+				return theMSI.getComponentsByValueId();
+			}
+
+			@Override
+			public Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException {
+				return theMSI.get(component);
+			}
+
+			@Override
+			public ModelSetInstanceBuilder withAll(ModelInstance other) {
+				if (isBuilt)
+					throw new IllegalStateException("This model instance is built and cannot be modified");
+				for (ModelComponentId model : other.getTopLevelModels()) {
+					ModelSetInstance instance = other.getInherited(model);
+					if (instance == null) {
+						// other is a single builder and doesn't expose the un-built model
+						// We can still use its inheritance
+						for (ModelComponentId inh : other.getInheritance())
+							withAll(other.getInherited(inh));
+					} else {
+						if (theTopLevelModels.containsKey(model))
+							theTopLevelModels.put(model, instance);
+						else if (theInheritance.containsKey(model))
+							theInheritance.put(model, instance);
+						else {
+							// Remove any currently top-level models which are inherited by the new model
+							theTopLevelModels.keySet().removeAll(instance.getInheritance());
+							// Install the new model as top-level
+							theTopLevelModels.put(model, instance);
+						}
+
+						// Add the inheritance too, which we know is not top-level
+						for (ModelComponentId inh : other.getInheritance())
+							theInheritance.put(inh, other.getInherited(inh));
+
+						theComponentsByValueId.putAll(instance.getComponentsByValueId());
+					}
+				}
+				return this;
+			}
+
+			@Override
+			public ModelSetInstance build() throws ModelInstantiationException {
+				isBuilt = true;
+				return theMSI;
+			}
+
+			@Override
+			public String toString() {
+				return "instanceBuilder:" + getTopLevelModels();
+			}
+		}
+
+		static class MultipleModelInstance implements ModelSetInstance {
+			private final Map<ModelComponentId, ModelSetInstance> theTopLevelModels;
+			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
+			private final Map<Object, ModelComponentId> theComponentsByValueId;
+			private final Observable<?> theUntil;
+
+			MultipleModelInstance(Map<ModelComponentId, ModelSetInstance> topLevelModels,
+				Map<ModelComponentId, ModelSetInstance> inheritance, Map<Object, ModelComponentId> componentsByValueId,
+				Observable<?> until) {
+				theTopLevelModels = topLevelModels;
+				theInheritance = inheritance;
+				theComponentsByValueId = componentsByValueId;
+				theUntil = until;
+			}
+
+			@Override
+			public Set<ModelComponentId> getTopLevelModels() {
+				return theTopLevelModels.keySet();
+			}
+
+			@Override
+			public Set<ModelComponentId> getInheritance() {
+				return theInheritance.keySet();
+			}
+
+			@Override
+			public ModelInstantiator getModel(ModelComponentId modelId) {
+				ModelSetInstance found = theTopLevelModels.get(modelId);
+				if (found != null)
+					return found.getModel(modelId);
+				found = theInheritance.get(modelId);
+				if (found != null)
+					return found.getModel(modelId);
+				throw new IllegalArgumentException("This model " + getTopLevelModels() + " does not inherit " + modelId);
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theUntil;
+			}
+
+			@Override
+			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
+				ModelSetInstance model = theTopLevelModels.get(modelId);
+				if (model != null)
+					return model;
+				model = theInheritance.get(modelId);
+				if (model != null)
+					return model;
+				throw new IllegalArgumentException("This model " + getTopLevelModels() + " does not inherit " + modelId);
+			}
+
+			@Override
+			public Map<Object, ModelComponentId> getComponentsByValueId() {
+				return theComponentsByValueId;
+			}
+
+			@Override
+			public Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException {
+				ModelComponentId root = component.getRootId();
+				ModelSetInstance models = getInherited(root);
+				return models.get(component);
+			}
+
+			@Override
+			public ModelSetInstanceBuilder copy(Observable<?> until) {
+				return new MultipleModelInstanceBuilder(until)//
+					.withAll(this);
+			}
+
+			@Override
+			public String toString() {
+				return "instance:" + getTopLevelModels();
 			}
 		}
 	}

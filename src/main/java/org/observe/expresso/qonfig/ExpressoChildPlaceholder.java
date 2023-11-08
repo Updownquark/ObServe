@@ -182,6 +182,13 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 	}
 
 	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theExtLocalModels != null)
+			theExtLocalModels.instantiate();
+	}
+
+	@Override
 	protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
 		// Should still be updating as the content is one of its descendants
 		ModelSetInstance parentModels = theDocumentParent.getUpdatingModels();

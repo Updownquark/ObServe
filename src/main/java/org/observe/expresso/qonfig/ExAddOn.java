@@ -3,11 +3,9 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigAddOn;
@@ -119,8 +117,6 @@ public interface ExAddOn<E extends ExElement> {
 
 		default void postUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
-
-		default void addRuntimeModels(Consumer<InterpretedModelSet> model) {}
 
 		public Class<AO> getInstanceType();
 

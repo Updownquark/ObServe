@@ -7,7 +7,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -17,7 +16,6 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExAddOn;
@@ -251,13 +249,6 @@ public interface QuickStyledElement extends ExElement {
 
 				syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
 					QuickStyleElement.Interpreted::updateStyle);
-			}
-
-			@Override
-			protected void addRuntimeModels(Consumer<InterpretedModelSet> model) {
-				super.addRuntimeModels(model);
-				if(theStyleSheet!=null)
-					model.accept(theStyleSheet.getExpressoEnv().getModels());
 			}
 		}
 	}

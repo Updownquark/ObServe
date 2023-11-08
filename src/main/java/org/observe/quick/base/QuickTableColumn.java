@@ -407,7 +407,12 @@ public interface QuickTableColumn<R, C> {
 
 			ExElement owner = getParentElement().getParentElement();
 			ModelSetInstanceBuilder editorModelBuilder = myModels.copy();
-			ModelComponentId ownerModelId = findOwnerModelId(owner.getModels(), owner);
+			ModelComponentId ownerModelId;
+			ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
+			if (ownerElModels != null)
+				ownerModelId = findOwnerModelId(ownerElModels.getElement().getModels(), owner);
+			else
+				ownerModelId = null;
 			if (ownerModelId != null)
 				editorModelBuilder.withAll(myModels.getInherited(ownerModelId).copy(myModels.getUntil()).build());
 			ModelSetInstance editorModels = editorModelBuilder.build();
@@ -449,7 +454,7 @@ public interface QuickTableColumn<R, C> {
 
 		private void populateEditorModels(ModelSetInstanceBuilder builder, ModelSetInstance myModels, ModelInstantiator ownerModels)
 			throws ModelInstantiationException, IllegalArgumentException {
-			if (myModels.getModel().getInheritance().contains(ownerModels.getIdentity()))
+			if (myModels.getInheritance().contains(ownerModels.getIdentity()))
 				builder.withAll(myModels.getInherited(ownerModels.getIdentity()).copy(myModels.getUntil()).build());
 			else {
 				// We don't directly extend our owner's model
@@ -458,8 +463,8 @@ public interface QuickTableColumn<R, C> {
 				// So we need to find the most specific component of the owner models that we recognize and copy that instead
 				ModelInstantiator target = null;
 				for (ModelComponentId inh : ownerModels.getInheritance()) {
-					if (myModels.getModel().getInheritance().contains(inh)) {
-						ModelInstantiator myInh = myModels.getModel().getInheritance(inh);
+					if (myModels.getInheritance().contains(inh)) {
+						ModelInstantiator myInh = myModels.getModel(inh);
 						if (target == null || myInh.getInheritance().contains(target.getIdentity()))
 							target = myInh;
 					}

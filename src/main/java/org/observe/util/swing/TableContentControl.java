@@ -4,18 +4,7 @@ import java.awt.EventQueue;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -462,61 +451,6 @@ public interface TableContentControl {
 	 */
 	public static TableContentControl parseContentControl(CharSequence controlText) throws ParseException {
 		return Parsing.parseContentControl(controlText, new int[1], 0, false);
-		// List<String> splitList = new LinkedList<>();
-		// int contentStart = 0;
-		// boolean quoted = false;
-		// for (int c = 0; c < controlText.length(); c++) {
-		// if (controlText.charAt(c) == '"') {
-		// if (quoted) {
-		// splitList.add(controlText.subSequence(contentStart, c).toString());
-		// contentStart = c + 1;
-		// continue;
-		// } else if (contentStart == c) {
-		// quoted = true;
-		// contentStart++;
-		// continue;
-		// }
-		// }
-		// if (!quoted && Character.isWhitespace(controlText.charAt(c))) {
-		// if (contentStart < c) {
-		// splitList.add(controlText.subSequence(contentStart, c).toString());
-		// }
-		// contentStart = c + 1;
-		// }
-		// }
-		// if (contentStart < controlText.length())
-		// splitList.add(controlText.subSequence(contentStart, controlText.length()).toString());
-		// else if (splitList.isEmpty())
-		// splitList.add(controlText.toString()); // If all the text is whitespace, then search for whitespace
-		// String[] split = splitList.toArray(new String[splitList.size()]);
-		// TableContentControl[] splitFilters = new TableContentControl[split.length];
-		// for (int i = 0; i < split.length; i++) {
-		// TableContentControl splitFilter;
-		// int colonIndex = split[i].indexOf(':');
-		// if (colonIndex > 0) {
-		// String category = split[i].substring(0, colonIndex);
-		// if (colonIndex < split[i].length() - 1) {
-		// String catFilter = split[i].substring(colonIndex + 1);
-		// if (category.equalsIgnoreCase("sort")) {
-		// splitFilter = new RowSorter(Arrays.asList(catFilter.split(",")));
-		// } else if (category.equalsIgnoreCase("columns")) {
-		// splitFilter = new ColumnSorter(Arrays.asList(catFilter.split(",")));
-		// } else {
-		// splitFilter = new CategoryFilter(category, _parseFilterElement(catFilter))//
-		// .or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
-		// }
-		// } else {
-		// splitFilter = new CategoryFilter(category, new EmptyFilter())//
-		// .or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
-		// }
-		// } else
-		// splitFilter = _parseFilterElement(split[i]);
-		// splitFilters[i] = splitFilter;
-		// }
-		// if (splitFilters.length == 1)
-		// return splitFilters[0];
-		// else
-		// return new AndFilter(splitFilters);
 	}
 
 	/**
@@ -1247,7 +1181,7 @@ public interface TableContentControl {
 			theHigh = comp <= 0 ? high : low;
 			if (text != null)
 				theText = text;
-			else if (theLow == theHigh)
+			else if (theLow.equals(theHigh))
 				theText = String.valueOf(theLow);
 			else
 				theText = new StringBuilder().append(theLow).append('-').append(theHigh).toString();
@@ -1631,6 +1565,7 @@ public interface TableContentControl {
 		@Override
 		public abstract SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts);
 
+		/** @return Whether this join is a trival OR operation whose content are different versions of the same thing--just for printing */
 		protected abstract boolean isTrivialOr();
 
 		@Override
@@ -1714,7 +1649,11 @@ public interface TableContentControl {
 	public static class OrFilter extends JoinControl {
 		private final boolean isTrivialOr;
 
-		/** @param filters The component filters for this OR filter */
+		/**
+		 * @param trivial Whether this filter is a trivial OR operation whose content are different versions of the same thing--just for
+		 *        printing
+		 * @param filters The component filters for this OR filter
+		 */
 		public OrFilter(boolean trivial, TableContentControl... filters) {
 			super(filters);
 			isTrivialOr = trivial;
@@ -2166,7 +2105,7 @@ public interface TableContentControl {
 			StringBuilder str = new StringBuilder("sort:");
 			boolean[] quote = new boolean[1];
 			StringUtils.print(str, ",", theSorting, (sb, cat) -> {
-				String replacedCat = cat.replaceAll(",", "\\,");
+				String replacedCat = cat.replace(",", "\\,");
 				quote[0] |= cat != replacedCat;
 				sb.append(replacedCat);
 			});

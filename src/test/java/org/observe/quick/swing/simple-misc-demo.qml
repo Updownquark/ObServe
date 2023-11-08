@@ -8,12 +8,14 @@
 		</imports>
 		<models />
 		<style-sheet>
+			<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
+			<import-style-sheet name="ext" ref="classpath://org/observe/quick/ext/quick-ext.qss" />
 			<style-set name="header">
 				<style element="with-text" attr="font-size">16</style>
 			</style-set>
 		</style-sheet>
 	</head>
-	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
+	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<model>
 			<value name="intValue" type="Integer" init="10" />
 			<value name="boolValue" init="false" />

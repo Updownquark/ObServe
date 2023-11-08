@@ -15,9 +15,6 @@
 				<value name="height" init="150" />
 			</model>
 		</models>
-		<style-sheet>
-			<!--<import-style-sheet name="searcher" ref="quick-testing.qss" />-->
-		</style-sheet>
 	</head>
 	<box layout="simple-layout">
 		<label right="`24%`" top="5">N</label>

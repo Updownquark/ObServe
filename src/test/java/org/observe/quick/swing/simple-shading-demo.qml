@@ -32,6 +32,7 @@
 		</models>
 		<style-sheet>
 			<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
+			<import-style-sheet name="ext" ref="classpath://org/observe/quick/ext/quick-ext.qss" />
 			<style element="shaded">
 				<style attr="light-source">shading.lightSource</style>
 				<style attr="max-shade-amount">shading.maxShading</style>
