@@ -90,6 +90,8 @@
 			<styles>
 				<style-attribute name="icon" type="javax.swing.Icon" trickle-down="false" />
 			</styles>
+			<!-- The icon, to override the style, for ease of use -->
+			<attribute name="icon" type="expression" specify="optional" />
 		</add-on>
 
 		<add-on name="renderer" requires="widget" abstract="true" />

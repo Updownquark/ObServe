@@ -39,6 +39,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.quick.Iconized;
 import org.observe.quick.QuickAbstractWindow;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
@@ -219,8 +220,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menuBar.withMenu(null, menu -> {
 					menu.withText(quick.getValue().map(fFormat::format));
-					if (quick.getIcon() != null)
-						menu.withIcon(quick.getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -245,8 +245,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withAction(null, quick.getAction(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				if (quick.getIcon() != null)
-					menuItem.withIcon(quick.getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -270,8 +269,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menu.withSubMenu(null, subMenu -> {
 					subMenu.withText(quick.getValue().map(fFormat::format));
-					if (quick.getIcon() != null)
-						subMenu.withIcon(quick.getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -296,8 +294,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withCheckBoxMenuItem(null, quick.isSelected(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				if (quick.getIcon() != null)
-					menuItem.withIcon(quick.getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -457,8 +454,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
-				if (quick.getIcon() != null)
-					lbl.withIcon(quick.getIcon());
+				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -762,7 +758,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addToggleButton(null, quick.getValue(), null, cb -> {
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -802,8 +798,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				component.accept(btn);
 				if (quick.getText() != null)
 					btn.withText(quick.getText());
-				if (quick.getIcon() != null)
-					btn.withIcon(quick.getIcon());
+				btn.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}

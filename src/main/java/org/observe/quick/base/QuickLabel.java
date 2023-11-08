@@ -1,21 +1,11 @@
 package org.observe.quick.base;
 
-import javax.swing.Icon;
-
-import org.observe.SettableValue;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickTextWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -31,7 +21,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static class Def<W extends QuickLabel<?>> extends QuickTextWidget.Def.Abstract<W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
-		private CompiledExpression theIcon;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
@@ -52,11 +41,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		@QonfigAttributeGetter
 		public String getValueText() {
 			return theStaticText;
-		}
-
-		@QonfigAttributeGetter("icon")
-		public CompiledExpression getIcon() {
-			return theIcon;
 		}
 
 		@Override
@@ -80,7 +64,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
 					this::getExpressoEnv);
 			}
-			theIcon = getAttributeExpression("icon", session);
 		}
 
 		@Override
@@ -91,8 +74,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
-
 		public Interpreted(QuickLabel.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -102,60 +83,14 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			return (Def<? super W>) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
-			return theIcon;
-		}
-
-		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
-			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
-				getDefinition().getElement().getDocument().getLocation());
-		}
-
-		@Override
-		protected void checkValidModel() throws ExpressoInterpretationException {
-			super.checkValidModel();
-			if (getDefinition().getValue().getExpression() == ObservableExpression.EMPTY && getDefinition().getValueText() == null
-				&& getIcon() == null)
-				reporting().warn("Label has no value, text, or icon");
-		}
-
 		@Override
 		public W create() {
 			return (W) new QuickLabel<>(getIdentity());
 		}
 	}
 
-	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
-	private SettableValue<Icon> theIcon;
-
 	public QuickLabel(Object id) {
 		super(id);
-	}
-
-	public SettableValue<Icon> getIcon() {
-		return theIcon;
-	}
-
-	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
-		super.doUpdate(interpreted);
-		QuickLabel.Interpreted<T, ?> myInterpreted = (QuickLabel.Interpreted<T, ?>) interpreted;
-		theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
-	}
-
-	@Override
-	public void instantiated() {
-		super.instantiated();
-		if (theIconInstantiator != null)
-			theIconInstantiator.instantiate();
-	}
-
-	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
-		theIcon = theIconInstantiator == null ? null : theIconInstantiator.get(myModels);
 	}
 
 	@Override

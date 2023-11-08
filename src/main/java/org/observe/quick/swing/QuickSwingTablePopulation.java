@@ -27,6 +27,7 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.quick.Iconized;
 import org.observe.quick.KeyCode;
 import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickKeyListener;
@@ -1520,7 +1521,7 @@ class QuickSwingTablePopulation {
 				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
-					btn.withIcon(action.getIcon());
+					btn.withIcon(action.getAddOn(Iconized.class).getIcon());
 					btn.withTooltip(action.getTooltip());
 				});
 			});
@@ -1564,7 +1565,7 @@ class QuickSwingTablePopulation {
 				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
-					btn.withIcon(action.getIcon());
+					btn.withIcon(action.getAddOn(Iconized.class).getIcon());
 					btn.withTooltip(action.getTooltip());
 				});
 			});

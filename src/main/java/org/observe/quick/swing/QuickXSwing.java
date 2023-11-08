@@ -21,6 +21,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.quick.Iconized;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
@@ -274,7 +275,7 @@ public class QuickXSwing implements QuickInterpretation {
 				combo[0] = cb;
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
 				if (theRenderer != null) {
 					cb.renderWith(renderer);
 					cb.withValueTooltip(v -> renderer.getTooltip(v, v));

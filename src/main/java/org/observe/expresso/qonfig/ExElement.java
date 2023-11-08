@@ -1040,13 +1040,25 @@ public interface ExElement extends Identifiable {
 
 		Interpreted<E> persistModelInstances(boolean persist);
 
-		<M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-			throws ExpressoInterpretationException;
+		default <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
+			throws ExpressoInterpretationException {
+			if (expression == null)
+				return null;
+			InterpretedExpressoEnv env = getEnvironmentFor(expression);
+			return expression.interpret(type, env);
+		}
 
-		public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
+		default <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
 			LocatedExpression expression, ModelInstanceType<M, MV> type,
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-				throws ExpressoInterpretationException, X1, X2;
+				throws ExpressoInterpretationException, X1, X2 {
+			if (expression == null)
+				return null;
+			InterpretedExpressoEnv env = getEnvironmentFor(expression);
+			return expression.interpret(type, env, handler);
+		}
+
+		InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env);
 
 		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
 			ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
@@ -1238,33 +1250,12 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-				throws ExpressoInterpretationException {
-				if (expression == null)
-					return null;
-				InterpretedExpressoEnv env;
+			public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression expression) {
 				if (thePromise == null || documentsMatch(expression.getFilePosition().getFileLocation(),
 					theDefinition.getPromise().getElement().getDocument().getLocation()))
-					env = theExpressoEnv;
+					return theExpressoEnv;
 				else
-					env = thePromise.getExternalExpressoEnv();
-				return expression.interpret(type, env);
-			}
-
-			@Override
-			public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
-				LocatedExpression expression, ModelInstanceType<M, MV> type,
-				ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-					throws ExpressoInterpretationException, X1, X2 {
-				if (expression == null)
-					return null;
-				InterpretedExpressoEnv env;
-				if (thePromise == null || documentsMatch(expression.getFilePosition().getFileLocation(),
-					theDefinition.getPromise().getElement().getDocument().getLocation()))
-					env = theExpressoEnv;
-				else
-					env = thePromise.getExternalExpressoEnv();
-				return expression.interpret(type, env, handler);
+					return thePromise.getExternalExpressoEnv();
 			}
 
 			@Override
@@ -1496,17 +1487,8 @@ public interface ExElement extends Identifiable {
 				}
 
 				@Override
-				public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-					throws ExpressoInterpretationException {
-					return Abstract.this.interpret(expression, type);
-				}
-
-				@Override
-				public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
-					LocatedExpression expression, ModelInstanceType<M, MV> type,
-					ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-						throws ExpressoInterpretationException, X1, X2 {
-					return Abstract.this.interpret(expression, type, handler);
+				public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env) {
+					return Abstract.this.getEnvironmentFor(env);
 				}
 
 				@Override

@@ -118,7 +118,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 * Evaluates an icon in Quick
 	 *
 	 * @param expression The expression to parse
-	 * @param env The expresso environment in which to parse the expression
+	 * @param element The interpreted element containing the environment in which to parse the expression
 	 * @param sourceDocument The location of the document that the icon source may be relative to
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated

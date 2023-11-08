@@ -3,10 +3,19 @@ package org.observe.quick;
 import javax.swing.Icon;
 
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickStyleAttribute;
@@ -16,26 +25,44 @@ import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle.Def.StyleDefBuilder;
 import org.observe.quick.style.QuickTypeStyle;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigInterpretationException;
 
 public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 	public static final String ICONIZED = "iconized";
 
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = ICONIZED,
+		interpretation = Interpreted.class,
+		instance = Iconized.class)
 	public static class Def extends ExAddOn.Def.Abstract<QuickStyledElement, Iconized>
 	implements QuickStyledAddOn<QuickStyledElement, Iconized> {
-		private QuickStyleAttributeDef theIcon;
+		private QuickStyleAttributeDef theIconAttr;
+		private CompiledExpression theIcon;
 
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
 
-		public QuickStyleAttributeDef getIcon() {
+		public QuickStyleAttributeDef getIconAttr() {
+			return theIconAttr;
+		}
+
+		@QonfigAttributeGetter("icon")
+		public CompiledExpression getIcon() {
 			return theIcon;
 		}
 
 		@Override
 		public void addStyleAttributes(QuickTypeStyle type, StyleDefBuilder builder) {
-			theIcon = builder.addApplicableAttribute(type.getAttribute("icon"));
+			theIconAttr = builder.addApplicableAttribute(type.getAttribute("icon"));
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<? extends QuickStyledElement> element) throws QonfigInterpretationException {
+			super.update(session, element);
+			theIcon = getElement().getAttributeExpression("icon", session);
 		}
 
 		@Override
@@ -45,7 +72,8 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickStyledElement, Iconized> {
-		private QuickElementStyleAttribute<Icon> theIcon;
+		private QuickElementStyleAttribute<Icon> theIconAttr;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 
 		Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
@@ -61,7 +89,11 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 			return Iconized.class;
 		}
 
-		public QuickElementStyleAttribute<Icon> getIcon() {
+		public QuickElementStyleAttribute<Icon> getIconAttr() {
+			return theIconAttr;
+		}
+
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
 			return theIcon;
 		}
 
@@ -71,7 +103,9 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 			QuickStyledElement.QuickInstanceStyle.Interpreted styled = ((QuickStyledElement.Interpreted<?>) element).getStyle();
 			InterpretedExpressoEnv env = element.getExpressoEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-			theIcon = styled.get(cache.getAttribute(getDefinition().getIcon(), Icon.class, env));
+			theIconAttr = styled.get(cache.getAttribute(getDefinition().getIconAttr(), Icon.class, env));
+			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(),
+				getElement(), getElement().getDefinition().getElement().getDocument().getLocation());
 		}
 
 		@Override
@@ -80,11 +114,15 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
 	private QuickStyleAttribute<Icon> theIconAttr;
-	private ObservableValue<Icon> theIcon;
+	private ObservableValue<Icon> theIconStyle;
+	private SettableValue<ObservableValue<Icon>> theIconValue;
 
 	Iconized(QuickStyledElement element) {
 		super(element);
+		theIconValue = SettableValue.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Icon>> parameterized(Icon.class))
+			.build();
 	}
 
 	@Override
@@ -93,7 +131,15 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	public ObservableValue<Icon> getIcon() {
-		return theIcon;
+		return ObservableValue.flatten(theIconValue);
+	}
+
+	@Override
+	public void update(ExAddOn.Interpreted<? extends QuickStyledElement, ?> interpreted, QuickStyledElement element) {
+		super.update(interpreted, element);
+
+		Interpreted myInterpreted = (Interpreted) interpreted;
+		theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
 	}
 
 	@Override
@@ -101,8 +147,23 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		super.postUpdate(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theIconAttr = myInterpreted.getIcon().getAttribute();
-		theIcon = element.getStyle().getApplicableAttribute(theIconAttr);
+		theIconAttr = myInterpreted.getIconAttr().getAttribute();
+		theIconStyle = element.getStyle().getApplicableAttribute(theIconAttr);
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theIconInstantiator != null)
+			theIconInstantiator.instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+
+		theIconValue.set(theIconInstantiator != null ? theIconInstantiator.get(models) : theIconStyle, null);
 	}
 
 	@Override
@@ -111,7 +172,8 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 
 		QuickInstanceStyle style = element.getStyle();
 
-		copy.theIcon = style.getApplicableAttribute(theIconAttr);
+		copy.theIconStyle = style.getApplicableAttribute(theIconAttr);
+		copy.theIconValue = SettableValue.build(theIconValue.getType()).build();
 
 		return copy;
 	}
