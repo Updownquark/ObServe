@@ -383,8 +383,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			str.append('\t');
 	}
 
-	@Override
-	public String toString() {
+	public String printContent() {
 		return print(null, 0).toString();
 	}
 

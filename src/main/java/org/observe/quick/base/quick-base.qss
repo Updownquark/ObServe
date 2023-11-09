@@ -2,17 +2,30 @@
 
 <!-- A sample style sheet for use with the Quick-Base toolkit.  It contains a look & feel for quick. -->
 <style-sheet xmlns:base="Quick-Base v0.1">
+	<head>
+		<imports>
+			<import>java.awt.Color</import>
+		</imports>
+		<models>
+			<model name="baseColors">
+				<value name="tableRowDefault" type="Color">`white`</value>
+				<value name="tableOddRow" type="Color">`light-gray`</value>
+				<value name="tableRowSelected" type="Color">`cornflower-blue`</value>
+				<value name="tableOddRowSelected" type="Color">`steel-blue`</value>
+			</model>
+		</models>
+	</head>
 
 	<!-- Nice UI for table row colors -->
 	<style attr="widget.color">
 		<style element="tabular-widget">
 			<style child="columns">
-				<style if="selected">`cornflower-blue`</style>
+				<style if="selected">baseColors.tableRowSelected</style>
 				<style if="rowIndex % 2 == 1">
-					<style>`light-gray`</style>
-					<style if="selected">`steel-blue`</style>
+					<style>baseColors.tableOddRow</style>
+					<style if="selected">baseColors.tableOddRowSelected</style>
 				</style>
-				<style>`white`</style>
+				<style>baseColors.tableRowDefault</style>
 			</style>
 		</style>
 	</style>

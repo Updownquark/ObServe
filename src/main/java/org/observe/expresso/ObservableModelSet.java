@@ -2398,7 +2398,7 @@ public interface ObservableModelSet extends Identifiable {
 				} else if (other.getParent() == null)
 					throw new IllegalStateException(
 						"A child model (" + getIdentity() + ") cannot inherit from a root model (" + other.getIdentity() + ")");
-				else if (!getParent().getInheritance().containsKey(other.getParent().getIdentity()))
+				else if (!getParent().getInheritance().containsKey(other.getParent().getIdentity().getRootId()))
 					throw new IllegalStateException("A child model (" + getIdentity() + ") cannot inherit from another child model ("
 						+ other.getIdentity() + ") whose parents are not related");
 				for (Object id : other.getComponentIdentifiers())

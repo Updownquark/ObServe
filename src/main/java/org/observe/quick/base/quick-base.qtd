@@ -213,11 +213,9 @@
 			<value type="expression" specify="optional" />
 		</element-def>
 		<?DOC A toggle button to edit a boolean value?>
-		<element-def name="toggle-button" extends="check-box">
+		<element-def name="toggle-button" extends="check-box" inherits="iconized">
 			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
-			<?DOC The icon to display for the button?>
-			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<?DOC A single radio button to control a boolean value?>
 		<element-def name="radio-button" extends="check-box" />

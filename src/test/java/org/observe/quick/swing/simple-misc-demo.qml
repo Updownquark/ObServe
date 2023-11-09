@@ -68,7 +68,7 @@
 					<label icon="`/icons/`+(b ? &quot;green&quot; : &quot;red&quot;)+`Dot.png`" />
 				</column>
 				<column name="`Button`" value="row.getBoolean()" column-value-name="b">
-					<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
+					<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
 						`Set`
 						<style attr="mouse-cursor">
 							<style if="b">HAND</style>
@@ -76,7 +76,7 @@
 						</style>
 					</button>
 					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!b">
-						<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
+						<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
 					</column-edit>
 				</column>
 			</table>

@@ -80,7 +80,7 @@
 			<attribute name="ref" type="string" specify="required" />
 		</element-def>
 
-		<element-def name="style-sheet" inherits="with-required-models,with-local-model">
+		<element-def name="style-sheet" inherits="with-required-models,expresso-document">
 			<?DOC A style sheet imported by this style sheet?>
 			<child-def name="style-sheet-ref" type="import-style-sheet" min="0" max="inf" />
 			<?DOC A style set declared by this style sheet?>
