@@ -24,10 +24,12 @@ import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
+import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.AbstractObservableTableModel.TableRenderContext;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
@@ -241,6 +243,13 @@ implements TreeTableEditor<F, P> {
 	protected void syncSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
 		SettableValue<BetterList<F>> selection, boolean enforceSingle) {
 		ObservableTreeTableModel.syncSelection(table, selection, false, Equivalence.DEFAULT, getUntil());
+		if (theValueSingleSelection != null) {
+			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
+			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
+				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
+				tx -> tx.map(v -> treeModel.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
+				Equivalence.DEFAULT, getUntil());
+		}
 	}
 
 	@Override
@@ -248,11 +257,13 @@ implements TreeTableEditor<F, P> {
 		ObservableCollection<BetterList<F>> selection) {
 		if (selection != null)
 			ObservableTreeTableModel.syncSelection(table, selection, getUntil());
-	}
-
-	@Override
-	protected void watchSelection(AbstractObservableTableModel<BetterList<F>> model, JXTreeTable table, Consumer<Object> onSelect) {
-		getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> onSelect.accept(evt));
+		if (theValueMultiSelection != null) {
+			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
+			Subscription sub = ObservableUtils.link(selection, theValueMultiSelection, //
+				path -> path == null ? null : path.getLast(), //
+				value -> treeModel.getBetterPath(value, true), false, false);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+		}
 	}
 
 	@Override
@@ -387,19 +398,6 @@ implements TreeTableEditor<F, P> {
 	protected Component createComponent() {
 		Component comp = super.createComponent();
 
-		ObservableTreeTableModel<F> model = (ObservableTreeTableModel<F>) getEditor().getTreeTableModel();
-		// Selection
-		if (theValueMultiSelection != null)
-			ObservableTreeTableModel.syncSelection(
-				getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, getUntil()).transformReversible(//
-					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()), tx -> tx
-					.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
-				false, Equivalence.DEFAULT, getUntil());
-		if (theValueSingleSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
-				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-				tx -> tx.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
-				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 

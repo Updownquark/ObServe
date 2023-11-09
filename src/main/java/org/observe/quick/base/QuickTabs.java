@@ -581,7 +581,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-				ModelSetInstance copy = models.copy(Observable.or(models.getUntil(), theTabRenderer.isDestroyed().noInitChanges().take(1)))
+				ModelSetInstance copy = getModels()
+					.createCopy(models, Observable.or(models.getUntil(), theTabRenderer.isDestroyed().noInitChanges().take(1)))
 					.build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTabIdVariable, copy,
 					SettableValue.of(theTabIdType, theTabId, "Tab ID is not modifiable"),

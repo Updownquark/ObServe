@@ -21,6 +21,7 @@ import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -167,11 +168,11 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	@Override
 	public ObservableCollection<? extends N> getChildren(ObservableValue<BetterList<N>> path, Observable<?> until)
 		throws ModelInstantiationException {
-		ModelSetInstanceBuilder nodeModelBuilder = getUpdatingModels().copy(until);
+		ModelSetInstanceBuilder nodeModelBuilder = getModels().createCopy(getUpdatingModels(), until);
 		ModelSetInstance nodeModel = nodeModelBuilder.build();
 		SettableValue<BetterList<N>> pathV = SettableValue.asSettable(path, __ -> "Not Settable");
-		SettableValue<N> nodeV = SettableValue.asSettable(path.map(theNodeType, p -> p == null ? null : p.peekLast()),
-			__ -> "Not Settable");
+		SettableValue<N> nodeV = SettableValue.asSettable(
+			path.map(theNodeType, LambdaUtils.printableFn(p -> p == null ? null : p.peekLast(), "last", null)), __ -> "Not Settable");
 		ExFlexibleElementModelAddOn.satisfyElementValue(theActivePathVariable, nodeModel, pathV,
 			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveNodeVariable, nodeModel, nodeV,

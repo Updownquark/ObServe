@@ -1542,6 +1542,16 @@ public interface ObservableModelSet extends Identifiable {
 			else
 				return createInstance(models.getUntil()).withAll(models).build();
 		}
+
+		default ModelSetInstanceBuilder createCopy(ModelSetInstance updatingModels, Observable<?> until)
+			throws ModelInstantiationException {
+			ModelSetInstanceBuilder copy = updatingModels.copy(until);
+			if (updatingModels.getTopLevelModels().size() != 1 || !updatingModels.getTopLevelModels().contains(getIdentity())) {
+				ModelSetInstance myModel = updatingModels.getInherited(getIdentity());
+				copy.withAll(myModel.copy(until).build());
+			}
+			return copy;
+		}
 	}
 
 	public interface ModelInstance {

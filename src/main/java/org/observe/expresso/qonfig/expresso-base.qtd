@@ -102,7 +102,9 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC An event that fires values to be consumed by listeners?>
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<?DOC An action that can be invoked?>
-		<element-def name="action" extends="model-value" inherits="allow-ext-model,with-local-model" />
+		<element-def name="action" extends="model-value" inherits="allow-ext-model,with-local-model">
+			<attribute name="async" type="boolean" default="false" />
+		</element-def>
 		<?DOC An action that invokes a list of actions?>
 		<element-def name="action-group" extends="model-value" inherits="with-local-model">
 			<child-def name="action" type="action" min="0" max="inf" />

@@ -1697,9 +1697,11 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "action", interpretation = Action.Interpreted.class)
 	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ?>>
 	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ?>> {
 		private CompiledExpression theAction;
+		private boolean isAsync;
 
 		public Action(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Action);
@@ -1709,10 +1711,16 @@ public class ExpressoQonfigValues {
 			return theAction;
 		}
 
+		@QonfigAttributeGetter("async")
+		public boolean isAsync() {
+			return isAsync;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theAction = getValueExpression(session);
+			isAsync = session.getAttribute("async", boolean.class);
 		}
 
 		@Override
@@ -1749,7 +1757,80 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ModelValueInstantiator<ObservableAction> instantiate() {
-				return getElementValue().instantiate();
+				if (getDefinition().isAsync())
+					return new AsyncActionInstantiator(getElementValue().instantiate());
+				else
+					return getElementValue().instantiate();
+			}
+		}
+
+		static class AsyncActionInstantiator implements ModelValueInstantiator<ObservableAction> {
+			private final ModelValueInstantiator<ObservableAction> theWrapped;
+
+			AsyncActionInstantiator(ModelValueInstantiator<ObservableAction> wrapped) {
+				theWrapped = wrapped;
+			}
+
+			@Override
+			public void instantiate() {
+				theWrapped.instantiate();
+			}
+
+			@Override
+			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				return new AsyncAction(theWrapped.get(models));
+			}
+
+			@Override
+			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				ObservableAction wrapped = ((AsyncAction) value).theWrapped;
+				ObservableAction newWrapped = theWrapped.forModelCopy(wrapped, sourceModels, newModels);
+				if (wrapped == newWrapped)
+					return wrapped;
+				return new AsyncAction(newWrapped);
+			}
+		}
+
+		static class AsyncAction implements ObservableAction {
+			final ObservableAction theWrapped;
+
+			AsyncAction(ObservableAction wrapped) {
+				theWrapped = wrapped;
+			}
+
+			@Override
+			public void act(Object cause) throws IllegalStateException {
+				QommonsTimer.getCommonInstance().offload(() -> {
+					if (cause instanceof Causable)
+						theWrapped.act(Causable.broken(cause));
+					else
+						theWrapped.act(cause);
+				});
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return theWrapped.isEnabled();
+			}
+
+			@Override
+			public int hashCode() {
+				return theWrapped.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (this == obj)
+					return true;
+				else if (!(obj instanceof AsyncAction))
+					return false;
+				return theWrapped.equals(((AsyncAction) obj).theWrapped);
+			}
+
+			@Override
+			public String toString() {
+				return theWrapped.toString();
 			}
 		}
 	}

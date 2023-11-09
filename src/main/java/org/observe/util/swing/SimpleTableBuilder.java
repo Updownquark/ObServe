@@ -7,7 +7,6 @@ import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.dnd.DnDConstants;
 import java.awt.event.MouseEvent;
-import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -30,9 +29,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.TransferHandler;
 import javax.swing.border.TitledBorder;
-import javax.swing.event.ListDataEvent;
-import javax.swing.event.ListDataListener;
-import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import org.observe.Observable;
@@ -528,41 +524,6 @@ implements TableBuilder<R, T, P> {
 		// selectionModel.synchronize(theSelectionValues, getUntil());
 		// ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
 		// theSelectionValues, getUntil());
-	}
-
-	@Override
-	protected void watchSelection(AbstractObservableTableModel<R> model, T table, Consumer<Object> onSelect) {
-		ObservableTableModel<R> tableModel = (ObservableTableModel<R>) model;
-		ListSelectionListener selListener = e -> onSelect.accept(e);
-		ListDataListener dataListener = new ListDataListener() {
-			@Override
-			public void intervalAdded(ListDataEvent e) {}
-
-			@Override
-			public void intervalRemoved(ListDataEvent e) {}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-				ListSelectionModel selModel = table.getSelectionModel();
-				if (selModel.getMinSelectionIndex() >= 0 && e.getIndex0() <= selModel.getMaxSelectionIndex()
-					&& e.getIndex1() >= selModel.getMinSelectionIndex()) {
-					onSelect.accept(e);
-				}
-			}
-		};
-
-		PropertyChangeListener selModelListener = evt -> {
-			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
-		};
-		table.getSelectionModel().addListSelectionListener(selListener);
-		table.addPropertyChangeListener("selectionModel", selModelListener);
-		tableModel.getRowModel().addListDataListener(dataListener);
-		getUntil().take(1).act(__ -> {
-			table.removePropertyChangeListener("selectionModel", selModelListener);
-			table.getSelectionModel().removeListSelectionListener(selListener);
-			tableModel.getRowModel().removeListDataListener(dataListener);
-		});
 	}
 
 	@Override
