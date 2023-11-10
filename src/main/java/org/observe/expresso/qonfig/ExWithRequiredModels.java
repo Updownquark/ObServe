@@ -12,7 +12,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.Builder;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
@@ -44,25 +44,22 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 				theRequiredModelElement = null;
 				return;
 			}
-			session.put(ObservableModelElement.PREVENT_MODEL_BUILDING, true);
-			ObservableModelSet.Builder builder = createBuilder(session);
+			session.put(ExtModelValueElement.EXT_MODEL_VALUE_HANDLER, new ExtModelValueElement.ExtModelValueHandler() {
+				@Override
+				public <M> void handleExtValue(ExtModelValueElement.Def<M> value, Builder builder, ExpressoQIS valueSession)
+					throws QonfigInterpretationException {
+					String name = value.getAddOn(ExNamed.Def.class).getName();
+					PlaceholderExtValue<?> placeholder = new PlaceholderExtValue<>(name, value);
+					addElementValue(name, placeholder, builder, value.getFilePosition());
+				}
+			});
+			if (!session.children().get("required").get().isEmpty())
+				createBuilder(session);
 			theRequiredModelElement = getElement().syncChild(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
 				session, "required");
-			installModelValues(session, builder, theRequiredModelElement);
-			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theRequiredModelElement.getExpressoEnv().getModels()));
+			if (theRequiredModelElement != null)
+				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theRequiredModelElement.getExpressoEnv().getModels()));
 			session.setExpressoEnv(getElement().getExpressoEnv());
-		}
-
-		private void installModelValues(ExpressoQIS session, ObservableModelSet.Builder builder,
-			ObservableModelElement.ExtModelElement.Def<?> required) throws QonfigInterpretationException {
-			for (ExtModelValueElement.Def<?> value : required.getValues()) {
-				String name = value.getAddOn(ExNamed.Def.class).getName();
-				PlaceholderExtValue<?> placeholder = new PlaceholderExtValue<>(name, value);
-				addElementValue(name, placeholder, builder, value.getFilePosition());
-			}
-			for (ObservableModelElement.ExtModelElement.Def<?> subModel : required.getSubModels())
-				installModelValues(session, builder.createSubModel(subModel.getName(), subModel.getElement().getPositionInFile()),
-					subModel);
 		}
 
 		public RequiredModelContext getContext(CompiledExpressoEnv contextEnv) throws QonfigInterpretationException {

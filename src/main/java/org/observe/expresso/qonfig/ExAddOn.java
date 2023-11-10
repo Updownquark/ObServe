@@ -1,10 +1,13 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.BiFunction;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -24,6 +27,10 @@ public interface ExAddOn<E extends ExElement> {
 	public interface Def<E extends ExElement, AO extends ExAddOn<? super E>> {
 		/** @return The add-on that the Qonfig toolkit uses to represent this type */
 		QonfigAddOn getType();
+
+		default Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return Collections.emptySet();
+		}
 
 		/** @return The element definition that this add-on is added onto */
 		ExElement.Def<?> getElement();
@@ -179,6 +186,10 @@ public interface ExAddOn<E extends ExElement> {
 	default void postUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
 
+	default void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {}
+
+	default void preInstantiated() {}
+
 	void instantiated();
 
 	default void preInstantiate() {
@@ -197,6 +208,8 @@ public interface ExAddOn<E extends ExElement> {
 	}
 
 	ExAddOn<E> copy(E element);
+
+	default void destroy() {}
 
 	/**
 	 * An abstract {@link ExAddOn} implementation

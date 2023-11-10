@@ -52,7 +52,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		CompiledExpression getFormat();
 
 		@Override
-		Interpreted<?, M, ?> interpret();
+		Interpreted<?, M, ?> interpretValue(ExElement.Interpreted<?> interpreted);
 
 		public abstract class Abstract<M> extends ModelValueElement.Def.Abstract<M, ConfigModelValue<?, M, ?>> implements Def<M> {
 			private VariableType theValueType;
@@ -117,19 +117,13 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> theFormat;
 			private ObservableConfigFormatSet theFormatSet;
 
-			protected Abstract(Def<M> definition) {
-				super(definition, null);
+			protected Abstract(Def<M> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public Def<M> getDefinition() {
 				return (Def<M>) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted.Abstract<T, M, MV> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> getConfigValue() {

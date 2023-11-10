@@ -22,7 +22,6 @@ import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -107,7 +106,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator addCollapsePanel(boolean vertical, LayoutManager layout,
-		Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+		Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addCollapsePanel(vertical, layout, panel));
 	}

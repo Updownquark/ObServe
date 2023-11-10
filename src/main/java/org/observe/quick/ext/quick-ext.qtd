@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Quick-X" version="0.1" xmlns:base="Quick-Base v0.1">
+	<add-ons>
+		<add-on name="shaded" inherits="styled">
+			<styles>
+				<style-attribute name="shading" type="org.observe.quick.ext.QuickShading" trickle-down="false" />
+				<style-attribute name="light-source" type="float" trickle-down="true" />
+				<style-attribute name="light-color" type="java.awt.Color" trickle-down="false" />
+				<style-attribute name="shadow-color" type="java.awt.Color" trickle-down="false" />
+				<style-attribute name="corner-radius" type="org.observe.quick.base.QuickSize" trickle-down="false" />
+				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
+			</styles>
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<!-- Shading -->
+		<element-def name="custom-shading" extends="model-value" inherits="with-element-model,with-local-model">
+			<element-model>
+				<value name="width" type="int" />
+				<value name="height" type="int" />
+				<value name="x" type="int" />
+				<value name="y" type="int" />
+				<value name="px" type="float" />
+				<value name="py" type="float" />
+			</element-model>
+			<attribute name="unit-width" type="expression" specify="optional" />
+			<attribute name="unit-height" type="expression" specify="optional" />
+			<attribute name="stretch-x" type="boolean" default="true" />
+			<attribute name="stretch-y" type="boolean" default="true" />
+			<attribute name="lit" type="expression" />
+			<attribute name="opacity" type="expression" specify="optional" />
+			<attribute name="refresh" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="raised-shading" extends="model-value">
+			<attribute name="round" type="boolean" default="true" />
+			<attribute name="horizontal" type="boolean" default="true" />
+			<attribute name="vertical" type="boolean" default="true" />
+			<attribute name="opacity" type="expression" specify="optional" />
+		</element-def>
+
+		<element-def name="collapse-pane" extends="container">
+			<element-model>
+				<value name="collapsed" type="boolean" priority="50" />
+			</element-model>
+			<attribute name="collapsed" type="expression" specify="optional" />
+			<attribute name="animated" type="boolean" default="false" />
+			<child-def name="header" type="widget" inherits="iconized" />
+			<child-mod child="content" min="1" max="1" />
+		</element-def>
+
+		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
+
+		<element-def name="combo-button" extends="button" inherits="rendering,multi-value-renderable">
+			<label role="default-renderer" value="{active-value-name}" />
+			<attribute name="values" type="expression" />
+		</element-def>
+
+		<element-def name="multi-slider" extends="widget">
+			<attribute name="values" type="expression" />
+			<attribute name="orientation" type="orientation" default="horizontal" />
+			<attribute name="enforce-order" type="boolean" default="true" />
+			<attribute name="min" type="expression" />
+			<attribute name="max" type="expression" />
+			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
+			<child-def name="bg-renderer" type="slider-bg-renderer" min="0" max="inf" />
+		</element-def>
+		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
+			<styles>
+				<style-attribute name="line-thickness" type="int" trickle-down="false" />
+				<style-attribute name="line-color" type="java.awt.Color" trickle-down="false" />
+			</styles>
+			<element-model>
+				<value name="handleValue" type="double" priority="10" />
+				<value name="handleIndex" type="int" priority="10" />
+			</element-model>
+			<attribute name="tooltip" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="slider-bg-renderer" inherits="with-background">
+			<styles>
+				<style-attribute name="line-thickness" type="int" trickle-down="false" />
+			</styles>
+			<attribute name="max-value" type="expression" specify="optional" />
+		</element-def>
+	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="shaded">
+			<target element="box" />
+		</auto-inherit>
+	</auto-inheritance>
+</qonfig-def>

@@ -54,7 +54,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.createWith("testing", ExpressoTesting.class, ExElement.creator(ExpressoTesting::new));
+		.createWith("testing", ExpressoTesting.Def.class, ExElement.creator(ExpressoTesting.Def::new));
 		interpreter.createWith("test", ExpressoTesting.ExpressoTest.Def.class, ExElement.creator(ExpressoTesting.ExpressoTest.Def::new));
 		interpreter.createWith("test-action", ExpressoTesting.TestAction.class, ExElement.creator(ExpressoTesting.TestAction::new));
 		interpreter.createWith("watch", ModelValueElement.CompiledSynth.class, ExElement.creator(WatchedValue::new));
@@ -98,16 +98,16 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<T>>> implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<?>, SettableValue<T>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
-			public Interpreted(WatchedValue definition) {
-				super(definition, null);
+			public Interpreted(WatchedValue definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override

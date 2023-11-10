@@ -38,6 +38,11 @@ public abstract class QonfigExternalContent extends ExElement.Abstract {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
+			if (theFulfills == null)
+				initFulfills(session);
+		}
+
+		protected void initFulfills(ExpressoQIS session) throws QonfigInterpretationException {
 			try {
 				theFulfills = session.getElement().getDocument().getDocToolkit().getElement(//
 					session.getAttributeText("fulfills"));
@@ -75,14 +80,8 @@ public abstract class QonfigExternalContent extends ExElement.Abstract {
 		}
 	}
 
-	private ExElement theContent;
-
 	protected QonfigExternalContent(Object id) {
 		super(id);
-	}
-
-	public ExElement getContent() {
-		return theContent;
 	}
 
 	@Override

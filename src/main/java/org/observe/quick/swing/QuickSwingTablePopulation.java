@@ -27,6 +27,7 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.quick.Iconized;
 import org.observe.quick.KeyCode;
 import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickKeyListener;
@@ -788,6 +789,16 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return false;
+		}
+
+		@Override
+		public SwingCellPopulator<R, C> withShading(Shading shading) {
+			return unsupported("Shading");
+		}
+
+		@Override
 		public boolean isSyntheticRenderer() {
 			return true;
 		}
@@ -1493,6 +1504,7 @@ class QuickSwingTablePopulation {
 		return (table, action) -> {
 			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
+			long[] lastUpdate = new long[1];
 			table.withAction(null, LambdaUtils.printableConsumer(v -> {
 				if (!Objects.equals(v, ctx.getActionValue().get()))
 					ctx.getActionValue().set(v, null);
@@ -1503,14 +1515,24 @@ class QuickSwingTablePopulation {
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhen(v -> {
-					if (!Objects.equals(v, ctx.getActionValue().get()))
+					/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
+					 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
+					 * so the stamp isn't changed, so the out-of-date cached enablement was used.
+					 *
+					 * However, the if here serves the purpose that setting this value many times can be costly.
+					 * So here's my solution.
+					 */
+					long now = System.currentTimeMillis();
+					if (now - lastUpdate[0] > 3 || !Objects.equals(v, ctx.getActionValue().get())) {
+						lastUpdate[0] = now;
 						ctx.getActionValue().set(v, null);
+					}
 					return action.getAction().isEnabled().get();
 				}, null);
 				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
-					btn.withIcon(action.getIcon());
+					btn.withIcon(action.getAddOn(Iconized.class).getIcon());
 					btn.withTooltip(action.getTooltip());
 				});
 			});
@@ -1523,6 +1545,7 @@ class QuickSwingTablePopulation {
 			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
 			Supplier<List<R>>[] actionValues = new Supplier[1];
+			long[] lastUpdate = new long[1];
 			table.withMultiAction(null, LambdaUtils.printableConsumer(values -> {
 				if (!ctx.getActionValues().equals(values)) {
 					try (Transaction t = ctx.getActionValues().lock(true, null)) {
@@ -1541,7 +1564,16 @@ class QuickSwingTablePopulation {
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhenMulti(values -> {
-					if (!ctx.getActionValues().equals(values)) {
+					/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
+					 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
+					 * so the stamp isn't changed, so the out-of-date cached enablement was used.
+					 *
+					 * However, the if here serves the purpose that setting this value many times can be costly.
+					 * So here's my solution.
+					 */
+					long now = System.currentTimeMillis();
+					if (now - lastUpdate[0] > 3 || !ctx.getActionValues().equals(values)) {
+						lastUpdate[0] = now;
 						try (Transaction t = ctx.getActionValues().lock(true, null)) {
 							CollectionUtils.synchronize(ctx.getActionValues(), values)//
 							.simple(v -> v)//
@@ -1554,7 +1586,7 @@ class QuickSwingTablePopulation {
 				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
-					btn.withIcon(action.getIcon());
+					btn.withIcon(action.getAddOn(Iconized.class).getIcon());
 					btn.withTooltip(action.getTooltip());
 				});
 			});

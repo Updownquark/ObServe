@@ -1,9 +1,10 @@
 package org.observe.quick.style;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
-import org.observe.expresso.qonfig.ExAddOn.Interpreted;
-import org.observe.expresso.qonfig.ExAddOn.Void;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -12,47 +13,49 @@ import org.observe.quick.base.MultiValueWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
-qonfigType = "with-style-sheet",
-interpretation = Interpreted.class,
-instance = MultiValueWidget.class)
-public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Void<ExElement>> {
+public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	public static final String QUICK_STYLE_SHEET = "Quick.Style.Sheet";
 
-	private QuickStyleSheet theStyleSheet;
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+		qonfigType = "with-style-sheet",
+		interpretation = Interpreted.class,
+		instance = MultiValueWidget.class)
+	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithStyleSheet> {
+		private QuickStyleSheet theStyleSheet;
 
-	public ExWithStyleSheet(QonfigAddOn type, ExElement.Def<?> element) {
-		super(type, element);
+		public Def(QonfigAddOn type, ExElement.Def<?> element) {
+			super(type, element);
+		}
+
+		@QonfigChildGetter("style-sheet")
+		public QuickStyleSheet getStyleSheet() {
+			return theStyleSheet;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+			super.update(session, element);
+
+			theStyleSheet = element.syncChild(QuickStyleSheet.class, theStyleSheet, session, "style-sheet");
+			session.put(QUICK_STYLE_SHEET, theStyleSheet);
+		}
+
+		@Override
+		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+			return new Interpreted(this, element);
+		}
 	}
 
-	@QonfigChildGetter("style-sheet")
-	public QuickStyleSheet getStyleSheet() {
-		return theStyleSheet;
-	}
-
-	@Override
-	public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
-		super.update(session, element);
-
-		theStyleSheet = element.syncChild(QuickStyleSheet.class, theStyleSheet, session, "style-sheet");
-		session.put(QUICK_STYLE_SHEET, theStyleSheet);
-	}
-
-	@Override
-	public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
-		return new Interpreted(this, element);
-	}
-
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExAddOn.Void<ExElement>> {
+	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExWithStyleSheet> {
 		private QuickStyleSheet.Interpreted theStyleSheet;
 
-		Interpreted(ExWithStyleSheet definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
 		@Override
-		public ExWithStyleSheet getDefinition() {
-			return (ExWithStyleSheet) super.getDefinition();
+		public Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		public QuickStyleSheet.Interpreted getStyleSheet() {
@@ -60,8 +63,8 @@ public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Vo
 		}
 
 		@Override
-		public Class<ExAddOn.Void<ExElement>> getInstanceType() {
-			return (Class<ExAddOn.Void<ExElement>>) (Class<?>) ExAddOn.Void.class;
+		public Class<ExWithStyleSheet> getInstanceType() {
+			return ExWithStyleSheet.class;
 		}
 
 		@Override
@@ -80,8 +83,42 @@ public class ExWithStyleSheet extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Vo
 		}
 
 		@Override
-		public Void<ExElement> create(ExElement element) {
-			return null;
+		public ExWithStyleSheet create(ExElement element) {
+			return new ExWithStyleSheet(element);
 		}
+	}
+
+	private QuickStyleSheet.StyleSheetModels theStyleSheetModels;
+
+	ExWithStyleSheet(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<? extends Interpreted> getInterpretationType() {
+		return Interpreted.class;
+	}
+
+	@Override
+	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) {
+		super.update(interpreted, element);
+
+		Interpreted myInterpreted = (Interpreted) interpreted;
+		theStyleSheetModels = myInterpreted.getStyleSheet() == null ? null : myInterpreted.getStyleSheet().instantiateModels();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theStyleSheetModels != null)
+			theStyleSheetModels.instantiate();
+	}
+
+	@Override
+	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
+		super.addRuntimeModels(builder, elementModels);
+		if (theStyleSheetModels != null)
+			theStyleSheetModels.populate(builder);
 	}
 }

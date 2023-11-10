@@ -21,7 +21,7 @@
 			</model>
 		</models>
 	</head>
-	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
+	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<entity-table entities="app.entities1">
 			<titled-border title="`Entity Set 1 (`+size+`)`">
 				<model>

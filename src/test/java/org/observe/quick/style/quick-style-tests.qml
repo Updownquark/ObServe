@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <testing xmlns:style="Quick-Style-Test 0.1">
-	<expresso>
+	<head>
 		<imports>
 			<import>org.junit.Assert.*</import>
 			<import>org.observe.quick.style.QuickStyleTests.*</import>
@@ -15,7 +15,7 @@
 				<value name="m4" type="boolean "/>
 			</model>
 		</models>
-	</expresso>
+	</head>
 	<test name="basicStyleNoWatch">
 		<model>
 			<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->

@@ -5,6 +5,7 @@ import java.awt.event.KeyEvent;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -303,7 +304,8 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			theCachedValueStamp = -1;
 			theCachedPrevious = null;
 			theCachedNext = null;
-			theValue.set((T) value, null);
+			if (!Objects.equals(theValue.get(), value))
+				theValue.set((T) value, null);
 		}
 
 		@Override

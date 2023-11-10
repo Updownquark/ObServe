@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- A sample style sheet for use with the Quick-Base toolkit.  It contains a look & feel for quick. -->
+<style-sheet xmlns:x="Quick-X v0.1">
+	<head>
+		<imports>
+			<import>java.awt.Color</import>
+			<import>org.qommons.Colors</import>
+		</imports>
+		<models>
+			<model name="collapsePaneStyle">
+				<value name="headerColor" type="Color">Colors.bleach(base.baseColors.tableRowSelected, 0.75f)</value>
+				<raised-shading name="headerShading" horizontal="false"/>
+			</model>
+		</models>
+	</head>
+
+	<import-style-sheet name="base" ref="../base/quick-base.qss" />
+
+	<!-- Same as the table row UI in quick-base.qss, but for tree-table.tree-column, which can't be addressed by quick-base -->
+	<style attr="widget.color">
+		<style element="tree-table">
+			<style child="tree-column">
+				<style if="selected">`cornflower-blue`</style>
+				<style if="rowIndex % 2 == 1">
+					<style>`light-gray`</style>
+					<style if="selected">`steel-blue`</style>
+				</style>
+				<style>`white`</style>
+			</style>
+		</style>
+	</style>
+
+	<!-- Nice UI for collapse pane -->
+	<style element="collapse-pane">
+		<style child="header" element="shaded">
+			<style attr="shading">collapsePaneStyle.headerShading</style>
+			<style attr="color">collapsePaneStyle.headerColor</style>
+			<style attr="corner-radius">`50%`</style>
+		</style>
+	</style>
+</style-sheet>

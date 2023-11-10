@@ -115,8 +115,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted
@@ -124,19 +124,13 @@ public class TestInterpretation implements QonfigInterpretation {
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<StatefulTestStructure>, ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theDerivedState;
 
-			Interpreted(StatefulStruct def) {
-				super(def, null);
+			Interpreted(StatefulStruct def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
 			}
 
 			@Override
 			public StatefulStruct getDefinition() {
 				return (StatefulStruct) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -269,8 +263,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends
@@ -279,19 +273,13 @@ public class TestInterpretation implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInternalState;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDerivedState;
 
-			Interpreted(DynamicTypeStatefulStruct def) {
-				super(def, null);
+			Interpreted(DynamicTypeStatefulStruct def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
 			}
 
 			@Override
 			public DynamicTypeStatefulStruct getDefinition() {
 				return (DynamicTypeStatefulStruct) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -430,8 +418,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends
@@ -440,19 +428,13 @@ public class TestInterpretation implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInternalState;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDerivedState;
 
-			Interpreted(DynamicTypeStatefulStruct2 def) {
-				super(def, null);
+			Interpreted(DynamicTypeStatefulStruct2 def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
 			}
 
 			@Override
 			public DynamicTypeStatefulStruct2 getDefinition() {
 				return (DynamicTypeStatefulStruct2) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override

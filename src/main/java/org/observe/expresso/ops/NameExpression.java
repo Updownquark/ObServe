@@ -257,10 +257,10 @@ public class NameExpression implements ObservableExpression, Named {
 			if (nextMV != null) {
 				return evaluateModel(//
 					nextMV.interpreted(), nameIndex + 1, path, type, models, expressionOffset,
-					reporting.at(theNames.get(nameIndex).length()), divisions, context, env, exHandler);
+					reporting.at(theNames.get(nameIndex - 1).length() + 1), divisions, context, env, exHandler);
 			} else
 				throw new ExpressoInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value",
-					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length());
+					reporting.getFileLocation().getPosition(theNames.get(nameIndex - 1).length() + 1), theNames.get(nameIndex).length());
 		} else if (mvType == ModelTypes.Value) {
 			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv;
 			ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> instType = imv.getType();
@@ -273,11 +273,12 @@ public class NameExpression implements ObservableExpression, Named {
 			} catch (NoSuchFieldException e) {
 				exHandler.handle1(new ExpressoInterpretationException(
 					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName(),
-					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length()));
+					reporting.getFileLocation().getPosition(theNames.get(nameIndex - 1).length() + 1), theNames.get(nameIndex).length()));
 				return null;
 			} catch (SecurityException e) {
 				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed",
-					reporting.at(getDivisionOffset(nameIndex)).getPosition(), theNames.get(nameIndex).length(), e));
+					reporting.getFileLocation().getPosition(theNames.get(nameIndex - 1).length() + 1), theNames.get(nameIndex).length(),
+					e));
 				return null;
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //

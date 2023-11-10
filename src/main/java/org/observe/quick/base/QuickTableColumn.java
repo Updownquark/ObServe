@@ -407,7 +407,14 @@ public interface QuickTableColumn<R, C> {
 
 			ExElement owner = getParentElement().getParentElement();
 			ModelSetInstanceBuilder editorModelBuilder = myModels.copy();
-			populateEditorModels(editorModelBuilder, myModels, owner.getModels());
+			ModelComponentId ownerModelId;
+			ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
+			if (ownerElModels != null)
+				ownerModelId = findOwnerModelId(ownerElModels.getElement().getModels(), owner);
+			else
+				ownerModelId = null;
+			if (ownerModelId != null)
+				editorModelBuilder.withAll(myModels.getInherited(ownerModelId).copy(myModels.getUntil()).build());
 			ModelSetInstance editorModels = editorModelBuilder.build();
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
 			if (editing != null && owner instanceof MultiValueRenderable) {
@@ -435,9 +442,19 @@ public interface QuickTableColumn<R, C> {
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
 		}
 
+		private ModelComponentId findOwnerModelId(ModelInstantiator models, ExElement owner) {
+			if (models.getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
+				return models.getIdentity();
+			for (ModelComponentId inh : models.getInheritance()) {
+				if (models.getInheritance(inh).getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
+					return inh;
+			}
+			return null;
+		}
+
 		private void populateEditorModels(ModelSetInstanceBuilder builder, ModelSetInstance myModels, ModelInstantiator ownerModels)
 			throws ModelInstantiationException, IllegalArgumentException {
-			if (myModels.getModel().getInheritance().contains(ownerModels.getIdentity()))
+			if (myModels.getInheritance().contains(ownerModels.getIdentity()))
 				builder.withAll(myModels.getInherited(ownerModels.getIdentity()).copy(myModels.getUntil()).build());
 			else {
 				// We don't directly extend our owner's model
@@ -446,8 +463,8 @@ public interface QuickTableColumn<R, C> {
 				// So we need to find the most specific component of the owner models that we recognize and copy that instead
 				ModelInstantiator target = null;
 				for (ModelComponentId inh : ownerModels.getInheritance()) {
-					if (myModels.getModel().getInheritance().contains(inh)) {
-						ModelInstantiator myInh = myModels.getModel().getInheritance(inh);
+					if (myModels.getInheritance().contains(inh)) {
+						ModelInstantiator myInh = myModels.getModel(inh);
 						if (target == null || myInh.getInheritance().contains(target.getIdentity()))
 							target = myInh;
 					}

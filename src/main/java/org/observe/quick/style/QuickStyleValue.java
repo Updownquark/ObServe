@@ -1,13 +1,17 @@
 package org.observe.quick.style;
 
+import javax.swing.Icon;
+
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.LocatedExpression;
+import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 
@@ -131,8 +135,8 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 
 	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
 		QuickStyleSheet.Interpreted styleSheet, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = theValueExpression
-			.interpret(ModelTypes.Value.forType(attribute.getType()), env);
+		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = interpretStyleValue(theValueExpression,
+			ModelTypes.Value.forType(attribute.getType()), env);
 		ExWithRequiredModels.InterpretedRequiredModelContext modelContext = null;
 		if (theModelContext == null)
 			modelContext = null;
@@ -151,6 +155,15 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 			}
 		}
 		return new InterpretedStyleValue<>(this, application, attribute, value, modelContext);
+	}
+
+	private <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> interpretStyleValue(LocatedExpression valueExpression,
+		SingleTyped<SettableValue<?>, T, SettableValue<T>> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		if (TypeTokens.getRawType(type.getType(0)) == Icon.class)
+			return (InterpretedValueSynth<SettableValue<?>, SettableValue<T>>) (InterpretedValueSynth<?, ?>) QuickStyleUtils
+				.evaluateIcon(valueExpression, env);
+		else
+			return valueExpression.interpret(type, env);
 	}
 
 	/**
@@ -191,7 +204,10 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 
 	@Override
 	public String toString() {
-		return new StringBuilder(theApplication.toString()).append(':').append(theAttribute.getName()).append('=')
-			.append(theValueExpression).toString();
+		StringBuilder str = new StringBuilder(theApplication.toString());
+		if (str.length() > 0)
+			str.append(':');
+		str.append(theAttribute.getName()).append('=').append(theValueExpression).toString();
+		return str.toString();
 	}
 }

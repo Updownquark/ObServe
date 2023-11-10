@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.observe.ObservableAction;
-import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoTesting.TestAction.TestActionElement;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
@@ -15,7 +14,6 @@ import org.observe.expresso.TestInterpretation.StatefulStruct;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExNamed;
-import org.observe.expresso.qonfig.Expresso;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExpressoQonfigValues;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -32,9 +30,9 @@ import org.qommons.io.LocatedFilePosition;
 @ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
 qonfigType = "testing",
 interpretation = StatefulStruct.Interpreted.class)
-public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
+public class ExpressoTesting extends ExElement.Abstract {
 	/** A test to execute */
-	public static class ExpressoTest extends ExElement.Abstract {
+	public static class ExpressoTest extends ExElement.Abstract implements Named {
 		@ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
 			qonfigType = "test",
 			interpretation = Interpreted.class,
@@ -100,8 +98,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				syncChildren(getDefinition().getActions(), theActions, d -> d.interpret().setParentElement(this),
-					TestAction.Interpreted::updateValue);
+				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this), TestAction.Interpreted::updateValue);
 			}
 
 			public ExpressoTest create(ExElement parent) {
@@ -114,6 +111,11 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		public ExpressoTest(Object id) {
 			super(id);
 			theActions = new ArrayList<>();
+		}
+
+		@Override
+		public String getName() {
+			return getAddOn(ExNamed.class).getName();
 		}
 
 		public List<TestAction.TestActionElement> getActions() {
@@ -131,8 +133,8 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				try {
 					obsAction.act(null);
 					if (action.getExpectedException() != null)
-						throw new AssertionError(action.reporting().getPosition() + ":\n\tExpected exception "
-							+ action.getExpectedException());
+						throw new AssertionError(
+							action.reporting().getPosition() + ":\n\tExpected exception " + action.getExpectedException());
 				} catch (RuntimeException e) {
 					if (action.getExpectedException() == null || !action.getExpectedException().isInstance(e))
 						throw new AssertionError(action.reporting().getPosition() + ":\n\tUnexpected exception", e);
@@ -208,15 +210,15 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		public static class Interpreted extends ExpressoQonfigValues.Action.Interpreted {
 			private Class<? extends Throwable> theExpectedException;
 
-			Interpreted(TestAction def) {
-				super(def);
+			Interpreted(TestAction def, ExElement.Interpreted<?> parent) {
+				super(def, parent);
 			}
 
 			@Override
@@ -303,95 +305,122 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
-	private Expresso.Def theHead;
-	private final List<ExpressoTest.Def> theTests;
-	private final Map<String, ExpressoTest.Def> theTestsByName;
+	public static class Def extends ExElement.Def.Abstract<ExpressoTesting> {
+		private final List<ExpressoTest.Def> theTests;
+		private final Map<String, ExpressoTest.Def> theTestsByName;
 
-	public ExpressoTesting(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-		super(parent, qonfigType);
-		theTests = new ArrayList<>();
-		theTestsByName = new LinkedHashMap<>();
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+			theTests = new ArrayList<>();
+			theTestsByName = new LinkedHashMap<>();
+		}
+
+		/** @return All the tests to execute */
+		@QonfigChildGetter("test")
+		public List<ExpressoTest.Def> getTests() {
+			return Collections.unmodifiableList(theTests);
+		}
+
+		/** @return All the tests to execute, by name */
+		public Map<String, ExpressoTest.Def> getTestsByName() {
+			return Collections.unmodifiableMap(theTestsByName);
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+			syncChildren(ExpressoTest.Def.class, theTests, session.forChildren("test"));
+			for (ExpressoTest.Def test : theTests) {
+				if (theTestsByName.putIfAbsent(test.getName(), test) != null)
+					throw new QonfigInterpretationException("Multiple tests named '" + test.getName() + "'",
+						test.getElement().getPositionInFile(), 0);
+			}
+		}
+
+		/**
+		 * @param targetTest The name of the test to execute
+		 * @return The interpretation of this testing for the given test
+		 * @throws IllegalArgumentException If no such test was found in this test's XML definition
+		 */
+		public Interpreted interpret(String targetTest) throws IllegalArgumentException {
+			ExpressoTest.Def testDef = theTestsByName.get(targetTest);
+			if (testDef == null)
+				throw new IllegalArgumentException("No such test in markup: " + targetTest);
+
+			return new Interpreted(this, testDef);
+		}
 	}
 
-	@QonfigChildGetter("head")
-	public Expresso.Def getHead() {
-		return theHead;
+	public static class Interpreted extends ExElement.Interpreted.Abstract<ExpressoTesting> {
+		private ExpressoTest.Def theTargetTestDef;
+		private ExpressoTest.Interpreted theTargetTest;
+
+		public Interpreted(Def definition, ExpressoTest.Def targetTest) {
+			super(definition, null);
+			theTargetTestDef = targetTest;
+		}
+
+		public ExpressoTest.Interpreted getTargetTest() {
+			return theTargetTest;
+		}
+
+		public void updateTest() throws ExpressoInterpretationException {
+			update(getDefinition().getExpressoEnv().interpret(null, InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getClassView()));
+		}
+
+		@Override
+		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+			System.out.print("Interpreting global models...");
+			System.out.flush();
+			super.doUpdate(expressoEnv);
+			System.out.println("complete");
+
+			System.out.print("Interpreting test " + theTargetTestDef.getName() + "...");
+			System.out.flush();
+			theTargetTest = syncChild(theTargetTestDef, theTargetTest, def -> def.interpret(this), (i, iEnv) -> i.updateTest(iEnv));
+			System.out.println("complete");
+		}
+
+		public ExpressoTesting create() {
+			return new ExpressoTesting(getIdentity());
+		}
 	}
 
-	/** @return All the tests to execute */
-	@QonfigChildGetter("test")
-	public List<ExpressoTest.Def> getTests() {
-		return Collections.unmodifiableList(theTests);
-	}
+	private ExpressoTest theTargetTest;
 
-	/** @return All the tests to execute, by name */
-	public Map<String, ExpressoTest.Def> getTestsByName() {
-		return Collections.unmodifiableMap(theTestsByName);
+	ExpressoTesting(Object id) {
+		super(id);
 	}
 
 	@Override
-	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-		super.doUpdate(session);
-		theHead = syncChild(Expresso.Def.class, theHead, session, "head");
-		setExpressoEnv(theHead.getExpressoEnv()); // Inherit all the models and imports from the head section
-		session.setExpressoEnv(getExpressoEnv());
-		syncChildren(ExpressoTest.Def.class, theTests, session.forChildren("test"));
-		for (ExpressoTest.Def test : theTests) {
-			if (theTestsByName.putIfAbsent(test.getName(), test) != null)
-				throw new QonfigInterpretationException("Multiple tests named '" + test.getName() + "'",
-					test.getElement().getPositionInFile(), 0);
-		}
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
+
+		Interpreted myInterpreted = (Interpreted) interpreted;
+		theTargetTest = myInterpreted.getTargetTest().create(this);
+		theTargetTest.update(myInterpreted.getTargetTest(), this);
 	}
 
-	/**
-	 * @param testName The name of the test to execute
-	 * @throws ExpressoInterpretationException If the test structures could not be evaluated
-	 * @throws ModelInstantiationException If the test structures could not be instantiated
-	 * @throws IllegalArgumentException If no such test was found in this test's XML definition
-	 */
-	public void executeTest(String testName) throws ExpressoInterpretationException, ModelInstantiationException {
-		ExpressoTest.Def testDef = theTestsByName.get(testName);
-		if (testDef == null)
-			throw new IllegalArgumentException("No such test in markup: " + testName);
+	@Override
+	public void instantiated() {
+		super.instantiated();
 
-		System.out.print("Interpreting global models...");
+		theTargetTest.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+
+		System.out.print("Instantiating test " + theTargetTest.getName() + "...");
 		System.out.flush();
-		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
-			.withAllNonStructuredParsers(getExpressoEnv())//
-			.withOperators(getExpressoEnv().getUnaryOperators(), getExpressoEnv().getBinaryOperators())//
-			.forTesting(true);
-		Expresso head = theHead.interpret(null);
-		if (theHead.getClassViewElement() != null)
-			env = env.with(theHead.getClassViewElement().configureClassView(env.getClassView().copy()).build());
-		head.updateExpresso(env);
-		env = head.getExpressoEnv(); // Use all the models and imports from the head section
+		theTargetTest.instantiate(myModels);
 		System.out.println("complete");
+	}
 
-		System.out.print("Interpreting test " + testName + "...");
-		System.out.flush();
-		ExpressoTest.Interpreted testInterp = testDef.interpret(null);
-		testInterp.updateTest(env);
+	public void execute() {
+		System.out.println("Executing test " + theTargetTest.getName() + "...");
+		theTargetTest.execute();
 		System.out.println("complete");
-
-		System.out.print("Instantiating global models...");
-		System.out.flush();
-		SimpleObservable<Void> until = new SimpleObservable<>();
-		try {
-			ModelSetInstance models = env.getModels().createInstance(until).build();
-			System.out.println("complete");
-
-			System.out.print("Instantiating test " + testName + "...");
-			System.out.flush();
-			ExpressoTest test = testInterp.create(null);
-			test.update(testInterp, null);
-			test.instantiated();
-			test.instantiate(models);
-			System.out.println("complete");
-
-			System.out.println("Executing test " + testName + "...");
-			test.execute();
-		} finally {
-			until.onNext(null);
-		}
 	}
 }

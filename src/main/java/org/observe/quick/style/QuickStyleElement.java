@@ -148,6 +148,14 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 					targetElement = parentEl.getElement();
 			}
 			QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
+			QuickStyleSheet ancestorSS = null;
+			for (ExElement.Def<?> p = getParentElement(); p != null; p = p.getParentElement()) {
+				if (p instanceof QuickStyleSheet) {
+					ancestorSS = (QuickStyleSheet) p;
+					break;
+				}
+			}
+
 			StyleApplicationDef application = parent == null ? StyleApplicationDef.ALL : parent.getApplication();
 			theRoles.clear();
 			QonfigValue rolePath = session.attributes().get("child").get();
@@ -215,8 +223,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
 				theCondition = application.findModelValues(theCondition, new ArrayList<>(), getExpressoEnv().getModels(),
-					priorityAttr.getDeclarer(), styleSheet != null, emvCache, reporting());
-				application = application.forCondition(theCondition, getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
+					priorityAttr.getDeclarer(), ancestorSS != null, emvCache, reporting());
+				application = application.forCondition(theCondition, getExpressoEnv().getModels(), priorityAttr, ancestorSS != null,
 					emvCache, reporting());
 			}
 			theApplication = application;
@@ -258,8 +266,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 						theValue.getFilePosition().getPosition(0), theValue.length());
 				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
 				theValue = theApplication.findModelValues(theValue, new HashSet<>(),
-					getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache, reporting());
-				theStyleValues.add(new QuickStyleValue(styleSheet, styleSet, theApplication, theEffectiveAttribute, theValue));
+					getExpressoEnv().getModels(), getQonfigType().getDeclarer(), ancestorSS != null, emvCache, reporting());
+				theStyleValues.add(new QuickStyleValue(ancestorSS, styleSet, theApplication, theEffectiveAttribute, theValue));
 			}
 			QonfigValue styleSetName = session.attributes().get("style-set").get();
 			if (styleSetName != null) {

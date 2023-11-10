@@ -8,6 +8,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -32,6 +33,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
+import org.observe.expresso.qonfig.ExpressoDocument;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.ArgumentParsing;
@@ -174,8 +176,9 @@ public class QuickApp extends QonfigApp {
 		QuickDocument.Def quickDocDef = quickApp.parseQuick(null);
 
 		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(quickDocDef.getHead().getExpressoEnv().getBuiltModels(),
-			quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
+			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
+			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
 
 		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 		quickDocDef = null; // Free up memory
@@ -207,18 +210,26 @@ public class QuickApp extends QonfigApp {
 			.parse(clArgs);
 		String quickAppFile = args.get("quick-app", String.class);
 		if (quickAppFile == null) {
-			InputStream mfIn = QuickApplication.class.getResourceAsStream("/META-INF/MANIFEST.MF");
-			if (mfIn == null)
+			Enumeration<URL> manifests = QuickApplication.class.getClassLoader().getResources("META-INF/MANIFEST.MF");
+			if (!manifests.hasMoreElements())
 				throw new IllegalStateException("Could not locate manifest");
-			Manifest mf;
-			try {
-				mf = new Manifest(mfIn);
-			} catch (IOException e) {
-				throw new IllegalStateException("Could not read manifest", e);
-			}
-			quickAppFile = mf.getMainAttributes().getValue("Quick-App");
+			do {
+				URL mfUrl = manifests.nextElement();
+				try (InputStream mfIn = mfUrl.openStream()) {
+					Manifest mf;
+					try {
+						mf = new Manifest(mfIn);
+					} catch (IOException e) {
+						System.err.println("Could not read manifest " + mfUrl + ": " + e);
+						continue;
+					}
+					quickAppFile = mf.getMainAttributes().getValue("Quick-App");
+					if (quickAppFile != null)
+						break;
+				}
+			} while (manifests.hasMoreElements());
 			if (quickAppFile == null)
-				throw new IllegalArgumentException("No Quick-App specified");
+				throw new IllegalArgumentException("No quick-app command line argument or Quick-App manifest property specified");
 		}
 
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();

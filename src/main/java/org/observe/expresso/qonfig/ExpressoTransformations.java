@@ -183,8 +183,8 @@ public class ExpressoTransformations {
 		}
 
 		@Override
-		public Interpreted<M1, ?, M2, ?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<M1, ?, M2, ?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		public static class Interpreted<M1, MV1 extends M1, M2, MV2 extends M2>
@@ -193,8 +193,8 @@ public class ExpressoTransformations {
 			private InterpretedValueSynth<M1, MV1> theSource;
 			private final List<Operation.Interpreted<?, ?, ?, ?, ?>> theOperations;
 
-			public Interpreted(ExpressoTransformedElement<M1, M2> definition) {
-				super(definition, null);
+			public Interpreted(ExpressoTransformedElement<M1, M2> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 				theOperations = new ArrayList<>();
 			}
 

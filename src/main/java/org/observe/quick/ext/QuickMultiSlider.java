@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.ext;
 
 import java.awt.Color;
 import java.util.ArrayList;

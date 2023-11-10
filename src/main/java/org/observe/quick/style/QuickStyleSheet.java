@@ -12,12 +12,28 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -38,6 +54,8 @@ import org.qommons.io.SimpleXMLParser;
 /** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-sheet")
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
+	private static final String SUB_SHEET_MODEL_NAME = "$MODELINSTANCE";
+
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "import-style-sheet")
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement.Void> {
 		private String theName;
@@ -114,7 +132,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			}
 			importSession.as(ExpressoQIS.class)//
 			.setExpressoEnv(importSession.getExpressoEnv()
-				.with(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build()))//
+				.with(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker())))//
 			.put(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			if (theTarget == null)
 				theTarget = importSession.interpret(QuickStyleSheet.class);
@@ -127,6 +145,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	private final Map<String, QuickStyleSheet> theImportedStyleSheets;
 	private final List<QuickStyleSet> theStyleSetList;
 	private final Map<String, QuickStyleSet> theStyleSets;
+	private final Map<String, ModelComponentId> theStyleSheetSubModelRefs;
 
 	public QuickStyleSheet(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 		super(parent, qonfigType);
@@ -135,6 +154,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		theStyleSheetRefs = new ArrayList<>();
 		theImportedStyleSheets = new LinkedHashMap<>();
 		theStyleElements = new ArrayList<>();
+		theStyleSheetSubModelRefs = new LinkedHashMap<>();
 	}
 
 	/** @return This style sheet's style sets, whose values can be inherited en-masse by name */
@@ -201,6 +221,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+		if (getParentElement() == null && session.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder) {
+			// Label the models as ours
+			((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG,
+				getIdentity());
+		}
+
 		super.doUpdate(session);
 
 		session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, this);
@@ -211,6 +237,21 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			if (theImportedStyleSheets.put(ref.getName(), ref.getTarget()) != null)
 				throw new QonfigInterpretationException("Multiple imported style sheets named '" + ref.getName() + "'",
 					ref.reporting().getPosition(), 0);
+			if (!ref.getTarget().getExpressoEnv().getModels().getComponentNames().isEmpty()) {
+				// Local style-sheet model. Expose to this style-sheet.
+				ObservableModelSet.Builder builder = ExModelAugmentation.augmentElementModel(getExpressoEnv().getModels(), this);
+				setExpressoEnv(getExpressoEnv().with(builder));
+				session.setExpressoEnv(getExpressoEnv());
+				ObservableModelSet.Builder subSheetModel = builder.createSubModel(ref.getName(), ref.reporting().getPosition());
+				subSheetModel.with(SUB_SHEET_MODEL_NAME, ModelTypes.Value.forType(ModelSetInstance.class), ModelValueInstantiator
+					.of(msi -> SettableValue.build(ModelSetInstance.class).withDescription(SUB_SHEET_MODEL_NAME).build()), null);
+				ModelComponentId subSheetModelId = subSheetModel.getLocalComponent(SUB_SHEET_MODEL_NAME).getIdentity();
+				try {
+					addComponents(subSheetModel, ref.getTarget().getExpressoEnv(), subSheetModelId);
+				} catch (ExpressoCompilationException e) {
+					reporting().error(e.getMessage(), e);
+				}
+			}
 		}
 
 		// Parse style-sheets and style-sets first so they can be referred to
@@ -223,6 +264,88 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 
 		syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
+	}
+
+	private static void addComponents(ObservableModelSet.Builder myModel, CompiledExpressoEnv subSheetEnv, ModelComponentId subSheetModelId)
+		throws ExpressoCompilationException {
+		for (String name : subSheetEnv.getModels().getComponentNames()) {
+			ModelComponentNode<?> node = subSheetEnv.getModels().getComponentIfExists(name);
+			if (node.getModel() != null)
+				addComponents(myModel.createSubModel(name, node.getSourceLocation()), subSheetEnv.with(node.getModel()), subSheetModelId);
+			else
+				myModel.withMaker(name, new CompiledSubSheetValue<>(node, subSheetEnv, subSheetModelId), node.getSourceLocation());
+		}
+	}
+
+	static class CompiledSubSheetValue<M> implements CompiledModelValue<M> {
+		private final CompiledModelValue<M> theSubSheetValue;
+		private final ModelType<M> theType;
+		private final ModelComponentId theSubSheetModelId;
+
+		CompiledSubSheetValue(CompiledModelValue<M> subSheetValue, CompiledExpressoEnv subSheetEnv, ModelComponentId subSheetModelId)
+			throws ExpressoCompilationException {
+			theSubSheetValue = subSheetValue;
+			theType = subSheetValue.getModelType(subSheetEnv);
+			theSubSheetModelId = subSheetModelId;
+		}
+
+		@Override
+		public ModelType<M> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
+			return theType;
+		}
+
+		@Override
+		public InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			InterpretedExpressoEnv subSheetModel = env.get(theSubSheetModelId.getPath(), InterpretedExpressoEnv.class);
+			if (subSheetModel == null)
+				throw new IllegalStateException("No " + theSubSheetModelId.getPath() + " property set in environment");
+			InterpretedValueSynth<M, M> subSheetModelValue = (InterpretedValueSynth<M, M>) theSubSheetValue.interpret(subSheetModel);
+			return new InterpretedValueSynth<M, M>() {
+				@Override
+				public ModelInstanceType<M, M> getType() {
+					return subSheetModelValue.getType();
+				}
+
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return Collections.singletonList(subSheetModelValue);
+				}
+
+				@Override
+				public ModelValueInstantiator<M> instantiate() {
+					ModelValueInstantiator<M> ssmvInstantiated = subSheetModelValue.instantiate();
+					return new SubSheetValueInstantiator<>(ssmvInstantiated, theSubSheetModelId);
+				}
+			};
+		}
+	}
+
+	static class SubSheetValueInstantiator<M> implements ModelValueInstantiator<M> {
+		private final ModelValueInstantiator<M> theSubSheetModelValue;
+		private final ModelComponentId theSubSheetModelId;
+
+		SubSheetValueInstantiator(ModelValueInstantiator<M> subSheetModelValue, ModelComponentId subSheetModelId) {
+			theSubSheetModelValue = subSheetModelValue;
+			theSubSheetModelId = subSheetModelId;
+		}
+
+		@Override
+		public void instantiate() {
+			theSubSheetModelValue.instantiate();
+		}
+
+		@Override
+		public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			ModelSetInstance subSheetModelInstance = ((SettableValue<ModelSetInstance>) models.get(theSubSheetModelId)).get();
+			return theSubSheetModelValue.get(subSheetModelInstance);
+		}
+
+		@Override
+		public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+			ModelSetInstance subSheetSourceModel = ((SettableValue<ModelSetInstance>) sourceModels.get(theSubSheetModelId)).get();
+			ModelSetInstance subSheetNewModel = ((SettableValue<ModelSetInstance>) newModels.get(theSubSheetModelId)).get();
+			return theSubSheetModelValue.forModelCopy(value, subSheetSourceModel, subSheetNewModel);
+		}
 	}
 
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -238,7 +361,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	 */
 	public StringBuilder print(StringBuilder str, int indent) {
 		if (str == null)
-			str = new StringBuilder();
+			str = new StringBuilder(super.toString());
 		str.append("{");
 		for (QuickStyleElement.Def style : theStyleElements) {
 			indent(str, indent);
@@ -260,8 +383,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			str.append('\t');
 	}
 
-	@Override
-	public String toString() {
+	public String printContent() {
 		return print(null, 0).toString();
 	}
 
@@ -294,17 +416,30 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			return Collections.unmodifiableMap(theStyleSets);
 		}
 
+		public Interpreted findInterpretation(QuickStyleSheet styleSheet) {
+			if (styleSheet.getIdentity() == getIdentity())
+				return this;
+			for (Interpreted imported : theImportedStyleSheets.values()) {
+				Interpreted found = imported.findInterpretation(styleSheet);
+				if (found != null)
+					return found;
+			}
+			return null;
+		}
+
 		public void updateStyleSheet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			update(expressoEnv);
 		}
 
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+			if (getParentElement() == null) {
+				// The root model for imported style sheets with their own model isn't interpreted anywhere else
+				for (InterpretedModelSet model : getModels().getInheritance().values())
+					model.interpret(expressoEnv);
+			}
 
-			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
-				(i, sEnv) -> i.updateStyle(sEnv));
-
+			// Interpret the imported style sheets
 			List<QuickStyleSheet.Interpreted> importedStyleSheets = new ArrayList<>(theImportedStyleSheets.values());
 			theImportedStyleSheets.clear();
 			CollectionUtils
@@ -314,6 +449,9 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			.onLeftX(el -> el.getLeftValue().destroy())//
 			.onRightX(el -> {
 				el.getLeftValue().updateStyleSheet(expressoEnv);
+				// Populate the sub-sheet environment for imported models
+				if (expressoEnv.getModels().getLocalComponent(el.getRightValue().getKey()) != null)
+					expressoEnv.put(el.getRightValue().getKey() + "." + SUB_SHEET_MODEL_NAME, el.getLeftValue().getExpressoEnv());
 				theImportedStyleSheets.put(el.getRightValue().getKey(), el.getLeftValue());
 			})//
 			.onCommonX(el -> {
@@ -322,6 +460,11 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			})//
 			.rightOrder()//
 			.adjust();
+
+			super.doUpdate(expressoEnv);
+
+			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
+				(i, sEnv) -> i.updateStyle(sEnv));
 
 			List<QuickStyleSet.Interpreted> styleSets = new ArrayList<>(theStyleSets.values());
 			theStyleSets.clear();
@@ -340,6 +483,47 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			})//
 			.rightOrder()//
 			.adjust();
+		}
+
+		public StyleSheetModels instantiateModels() {
+			Map<ModelComponentId, StyleSheetModels> subModels = new LinkedHashMap<>();
+			StyleSheetModels models = new StyleSheetModels(getModels().instantiate(), subModels);
+			for (Map.Entry<String, QuickStyleSheet.Interpreted> subSheet : theImportedStyleSheets.entrySet()) {
+				ModelComponentNode<?> component = getModels().getLocalComponent(subSheet.getKey());
+				if (component != null)
+					subModels.put(component.getModel().getLocalComponent(SUB_SHEET_MODEL_NAME).getIdentity(),
+						subSheet.getValue().instantiateModels());
+			}
+			return models;
+		}
+	}
+
+	public static class StyleSheetModels {
+		private final ModelInstantiator theStyleSheetModels;
+		private final Map<ModelComponentId, StyleSheetModels> theSubModels;
+
+		StyleSheetModels(ModelInstantiator styleSheetModels, Map<ModelComponentId, StyleSheetModels> subModels) {
+			theStyleSheetModels = styleSheetModels;
+			theSubModels = subModels;
+		}
+
+		public void instantiate() {
+			theStyleSheetModels.instantiate();
+			for (StyleSheetModels subSheet : theSubModels.values())
+				subSheet.instantiate();
+		}
+
+		public ModelSetInstance populate(ModelSetInstanceBuilder into) throws ModelInstantiationException {
+			ModelSetInstanceBuilder builder = theStyleSheetModels.createInstance(into.getUntil())//
+				.withAll(into);
+			// Populate the models for each imported style sheet
+			for (Map.Entry<ModelComponentId, StyleSheetModels> subModel : theSubModels.entrySet()) {
+				SettableValue<ModelSetInstance> subModelHolder = (SettableValue<ModelSetInstance>) builder.get(subModel.getKey());
+				subModelHolder.set(subModel.getValue().populate(into), null);
+			}
+			ModelSetInstance built = builder.build();
+			into.withAll(built);
+			return built;
 		}
 	}
 }

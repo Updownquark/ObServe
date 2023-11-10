@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.ext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +14,15 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.QuickTableColumn;
+import org.observe.quick.base.QuickTree;
+import org.observe.quick.base.TabularWidget;
+import org.observe.quick.base.MultiValueRenderable.MultiValueRenderContext;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
+import org.observe.quick.base.QuickTree.Def;
+import org.observe.quick.base.QuickTree.Interpreted;
+import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;

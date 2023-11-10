@@ -11,12 +11,17 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 	public static final ObservableModelSet.ModelTag<Object> ELEMENT_MODEL_TAG = new ObservableModelSet.ModelTag<Object>() {
 		@Override
 		public String getName() {
-			return "ElementModelTag";
+			return "ElementLocalModelTag";
 		}
 
 		@Override
 		public TypeToken<Object> getType() {
 			return TypeTokens.get().OBJECT;
+		}
+
+		@Override
+		public String toString() {
+			return getName();
 		}
 	};
 
@@ -43,8 +48,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 		ObservableModelSet.Builder builder;
 		Object modelTag = models.getTagValue(ELEMENT_MODEL_TAG);
 		if (modelTag != element.getIdentity()) {
-			builder = ObservableModelSet.build(element.toString() + ".local",
-				models == null ? ObservableModelSet.JAVA_NAME_CHECKER : models.getNameChecker());
+			builder = ObservableModelSet.build(element.toString() + "(local)", models.getNameChecker());
 			builder.withTagValue(ELEMENT_MODEL_TAG, element.getIdentity());
 			builder.withAll(models);
 		} else

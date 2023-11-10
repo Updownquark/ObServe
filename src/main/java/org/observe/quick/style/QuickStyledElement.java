@@ -18,6 +18,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
@@ -193,6 +194,7 @@ public interface QuickStyledElement extends ExElement {
 		public abstract class Abstract<S extends QuickStyledElement> extends ExElement.Interpreted.Abstract<S> implements Interpreted<S> {
 			private QuickInstanceStyle.Interpreted theStyle;
 			private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
+			private QuickStyleSheet.Interpreted theStyleSheet;
 
 			/**
 			 * @param definition The definition producing this interpretation
@@ -234,13 +236,16 @@ public interface QuickStyledElement extends ExElement {
 					theStyle = getDefinition().getStyle().interpret(this,
 						parent == null ? null : ((QuickStyledElement.Interpreted<?>) parent).getStyle(), getExpressoEnv());
 				}
-				QuickStyleSheet.Interpreted styleSheet = null;
+				theStyleSheet=null;
 				ExElement.Interpreted<?> parent = getParentElement();
-				while (parent != null && styleSheet == null) {
-					styleSheet = parent.getAddOnValue(ExWithStyleSheet.Interpreted.class, ss -> ss.getStyleSheet());
+				while (parent != null && theStyleSheet == null) {
+					if (parent instanceof WithStyleSheet.Interpreted)
+						theStyleSheet = ((WithStyleSheet.Interpreted<?>) parent).getStyleSheet();
+					if (theStyleSheet == null)
+						theStyleSheet = parent.getAddOnValue(ExWithStyleSheet.Interpreted.class, ss -> ss.getStyleSheet());
 					parent = parent.getParentElement();
 				}
-				theStyle.update(getExpressoEnv(), styleSheet, new QuickInterpretedStyleCache.Applications());
+				theStyle.update(getExpressoEnv(), theStyleSheet, new QuickInterpretedStyleCache.Applications());
 
 				syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
 					QuickStyleElement.Interpreted::updateStyle);
@@ -343,6 +348,10 @@ public interface QuickStyledElement extends ExElement {
 
 			Set<QuickStyleAttributeDef> getApplicableAttributes();
 
+			public interface StyleDefBuilder {
+				QuickStyleAttributeDef addApplicableAttribute(QuickStyleAttributeDef attr);
+			}
+
 			public static abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
 				private final QuickStyledElement.Def<?> theStyledElement;
 				private final Set<QuickStyleAttributeDef> theApplicableAttributes;
@@ -351,6 +360,13 @@ public interface QuickStyledElement extends ExElement {
 					super(parent, wrapped);
 					theStyledElement = styledElement;
 					theApplicableAttributes = new LinkedHashSet<>();
+
+					for (ExAddOn.Def<?, ?> addOn : styledElement.getAddOns()) {
+						if (addOn instanceof QuickStyledAddOn) {
+							QuickTypeStyle type = getWrapped().getStyleTypes().get(addOn.getType());
+							((QuickStyledAddOn<?, ?>) addOn).addStyleAttributes(type, this::addApplicableAttribute);
+						}
+					}
 				}
 
 				@Override

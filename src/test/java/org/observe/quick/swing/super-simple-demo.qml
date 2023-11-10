@@ -26,9 +26,9 @@ blah -->
 			<!--<import-style-sheet name="searcher" ref="quick-testing.qss" />-->
 		</style-sheet>
 	</head>
-	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
-		<box layout="inline-layout" orientation="horizontal" main-align="center" name="box1">
-			<label name="label1">The value from the text field should be reflected in the label to the right</label>
+	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="`Root`">
+		<box layout="inline-layout" orientation="horizontal" main-align="center" name="`Box1`">
+			<label name="`Label1`">The value from the text field should be reflected in the label to the right</label>
 		</box>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<box layout="inline-layout" orientation="horizontal">

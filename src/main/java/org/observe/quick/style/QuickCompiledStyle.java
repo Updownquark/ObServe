@@ -9,7 +9,6 @@ import java.util.Set;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
@@ -75,9 +74,7 @@ public interface QuickCompiledStyle {
 	 * @param parent The interpreted style of this style's element's {@link QonfigElement#getParent() parent}
 	 * @param applications A cache of interpreted style applications for re-use
 	 * @return The interpreted style for this style's element
-	 * @throws ExpressoInterpretationException If this structure's expressions could not be
-	 *         {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, org.observe.expresso.InterpretedExpressoEnv, int)
-	 *         evaluated}
+	 * @throws ExpressoInterpretationException If this structure's expressions could not be evaluated
 	 */
 	QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 		throws ExpressoInterpretationException;
@@ -306,8 +303,18 @@ public interface QuickCompiledStyle {
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, env);
 			List<InterpretedStyleValue<T>> values = new ArrayList<>(theValues.size());
-			for (QuickStyleValue v : theValues)
-				values.add((InterpretedStyleValue<T>) v.interpret(env, styleSheet, appCache));
+			for (QuickStyleValue v : theValues) {
+				QuickStyleSheet.Interpreted vStyleSheet;
+				if (v.getStyleSheet() != null) {
+					vStyleSheet = styleSheet == null ? null : styleSheet.findInterpretation(v.getStyleSheet());
+					if (vStyleSheet == null)
+						throw new ExpressoInterpretationException("Unable to locate style sheet interpretation for " + v.getStyleSheet(),
+							env.reporting().getFileLocation());
+				} else
+					vStyleSheet = null;
+				InterpretedExpressoEnv vEnv = vStyleSheet == null ? env : vStyleSheet.getExpressoEnv();
+				values.add((InterpretedStyleValue<T>) v.interpret(vEnv, vStyleSheet, appCache));
+			}
 			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values), inherited);
 		}
 

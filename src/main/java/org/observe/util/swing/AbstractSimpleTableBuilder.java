@@ -19,7 +19,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import javax.swing.BoundedRangeModel;
 import javax.swing.DropMode;
@@ -39,6 +38,7 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchor.InstantiationTransaction;
+import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -53,6 +53,7 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.IntList;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 
@@ -313,8 +314,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	protected abstract void syncMultiSelection(T table, AbstractObservableTableModel<R> model, ObservableCollection<R> selection);
 
-	protected abstract void watchSelection(AbstractObservableTableModel<R> model, T table, Consumer<Object> onSelect);
-
 	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource, SimpleTransferAccepter<R, R, R> dragAccepter);
 
 	protected abstract void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange);
@@ -371,10 +370,13 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		}
 
 		// Selection
-		Supplier<List<R>> selectionGetter = () -> getSelection();
 		if (theSelectionValue != null)
 			syncSelection(table, model, theSelectionValue, false);
-		syncMultiSelection(table, model, theSelectionValues);
+		// Sync multi-selection so we can control the actions if nothing else
+		ObservableCollection<R> multiSelection = ObservableCollection.build(getRowType()).build().safe(ThreadConstraint.EDT, getUntil());
+		syncMultiSelection(table, model, multiSelection);
+		if (theSelectionValues != null)
+			ObservableUtils.link(multiSelection, theSelectionValues);
 
 		JComponent comp;
 		if (!theActions.isEmpty()) {
@@ -389,17 +391,17 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 						hasButtons = true;
 				}
 			}
-			watchSelection(model, table, e -> {
-				List<R> selection = selectionGetter.get();
+			multiSelection.simpleChanges().act(e -> {
+				List<R> copy = QommonsUtils.unmodifiableCopy(multiSelection);
 				for (Object action : theActions) {
 					if (action instanceof SimpleDataAction)
-						((SimpleDataAction<R, ?>) action).updateSelection(selection, e);
+						((SimpleDataAction<R, ?>) action).updateSelection(copy, e);
 				}
 			});
-			List<R> selection = selectionGetter.get();
+			List<R> copy = QommonsUtils.unmodifiableCopy(multiSelection);
 			for (Object action : theActions) {
 				if (action instanceof SimpleDataAction)
-					((SimpleDataAction<R, ?>) action).updateSelection(selection, null);
+					((SimpleDataAction<R, ?>) action).updateSelection(copy, null);
 			}
 
 			if (hasPopups) {

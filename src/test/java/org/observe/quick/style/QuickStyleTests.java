@@ -5,10 +5,10 @@ import org.observe.ObservableValue;
 import org.observe.expresso.AbstractExpressoTest;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.qonfig.Expresso;
+import org.observe.expresso.qonfig.ExpressoHeadSection;
 
 /** Tests the default implementation of the Quick-Style toolkit */
-public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
+public class QuickStyleTests extends AbstractExpressoTest<ExpressoHeadSection> {
 	@Override
 	protected String getTestAppFile() {
 		return "quick-style-tests-app.qml";
@@ -22,7 +22,7 @@ public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testBasicNoWatch() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("basicStyleNoWatch");
+		executeTest("basicStyleNoWatch");
 	}
 
 	/**
@@ -33,7 +33,7 @@ public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testBasicWithWatch() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("basicStyleWithWatch");
+		executeTest("basicStyleWithWatch");
 	}
 
 	/**
@@ -44,7 +44,7 @@ public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testLocalStyleSheet() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("localStyleSheet");
+		executeTest("localStyleSheet");
 	}
 
 	/**
@@ -55,6 +55,6 @@ public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
 	 */
 	@Test
 	public void testWithStyleSets() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("withStyleSets");
+		executeTest("withStyleSets");
 	}
 }

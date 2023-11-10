@@ -39,6 +39,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.quick.Iconized;
 import org.observe.quick.QuickAbstractWindow;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
@@ -55,6 +56,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.BgFontAdjuster;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.ObservableColorEditor;
 import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.PanelPopulation;
@@ -66,6 +68,7 @@ import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.Shading;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
@@ -105,6 +108,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, SwingComboBox::new);
 		tx.with(QuickSlider.Interpreted.class, QuickSwingPopulator.class, widget(SwingSlider::new));
 		tx.with(QuickSpinner.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSpinner<>(i));
+		tx.with(QuickColorChooser.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingColorChooser());
 		tx.with(QuickRadioButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButtons::new));
 		tx.with(QuickToggleButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingToggleButtons::new));
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
@@ -121,6 +125,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 						comp.withFieldName(w.getAddOn(QuickField.class).getFieldLabel());
 					if (ao.getDefinition().isFill())
 						comp.fill();
+					if (ao.getDefinition().isVFill())
+						comp.fillV();
 				});
 			});
 		tx.with(QuickSplit.Interpreted.class, QuickSwingContainerPopulator.class, SwingSplit::new);
@@ -214,8 +220,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menuBar.withMenu(null, menu -> {
 					menu.withText(quick.getValue().map(fFormat::format));
-					if (quick.getIcon() != null)
-						menu.withIcon(quick.getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -240,8 +245,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withAction(null, quick.getAction(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				if (quick.getIcon() != null)
-					menuItem.withIcon(quick.getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -265,8 +269,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menu.withSubMenu(null, subMenu -> {
 					subMenu.withText(quick.getValue().map(fFormat::format));
-					if (quick.getIcon() != null)
-						subMenu.withIcon(quick.getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -291,8 +294,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withCheckBoxMenuItem(null, quick.isSelected(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				if (quick.getIcon() != null)
-					menuItem.withIcon(quick.getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -405,7 +407,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		return new QuickSwingLayout<QuickBorderLayout>() {
 			@Override
 			public LayoutManager create(QuickBorderLayout quick) throws ModelInstantiationException {
-				return new BorderLayout();
+				return new BetterBorderLayout();
 			}
 
 			@Override
@@ -415,7 +417,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 					Component[] component = new Component[1];
 					comp.modifyComponent(c -> component[0] = c);
 					Sizeable size = w.getAddOn(Sizeable.class);
-					BorderLayout.Constraints childConstraint = borderConstraints(region, size);
+					BetterBorderLayout.Constraints childConstraint = borderConstraints(region, size);
 					comp.withLayoutConstraints(childConstraint);
 					if (size != null) {
 						size.changes().act(evt -> {
@@ -428,10 +430,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 		};
 	}
 
-	static BorderLayout.Constraints borderConstraints(QuickBorderLayout.Region region, Sizeable size) {
+	static BetterBorderLayout.Constraints borderConstraints(QuickBorderLayout.Region region, Sizeable size) {
 		if (size == null)
-			return new BorderLayout.Constraints(region, null, null, null, null);
-		return new BorderLayout.Constraints(region, //
+			return new BetterBorderLayout.Constraints(region, null, null, null, null);
+		return new BetterBorderLayout.Constraints(region, //
 			size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()), enforceAbsolute(size.getMaximum()));
 	}
 
@@ -452,8 +454,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
-				if (quick.getIcon() != null)
-					lbl.withIcon(quick.getIcon());
+				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -757,7 +758,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addToggleButton(null, quick.getValue(), null, cb -> {
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -797,8 +798,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				component.accept(btn);
 				if (quick.getText() != null)
 					btn.withText(quick.getText());
-				if (quick.getIcon() != null)
-					btn.withIcon(quick.getIcon());
+				btn.withIcon(quick.getAddOn(Iconized.class).getIcon());
 			});
 		}
 	}
@@ -996,6 +996,18 @@ public class QuickBaseSwing implements QuickInterpretation {
 					// quick.isEditable().changes().takeUntil(tf.getUntil())
 					// .act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 				});
+			});
+		}
+	}
+
+	static class SwingColorChooser extends QuickSwingPopulator.Abstract<QuickColorChooser> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickColorChooser quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			ObservableColorEditor editor = new ObservableColorEditor(quick.getValue(), true, quick.isWithAlpha(),
+				Observable.or(panel.getUntil(), quick.onDestroy()));
+			panel.addComponent(null, editor, c -> {
+				component.accept(c);
 			});
 		}
 	}
@@ -1296,6 +1308,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 					}
 
 					@Override
+					public boolean supportsShading() {
+						return false;
+					}
+
+					@Override
+					public AbstractQuickContainerPopulator withShading(Shading shading) {
+						quick.reporting().warn("Shading not supported");
+						return this;
+					}
+
+					@Override
 					public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 						Consumer<PanelPopulator<JPanel, ?>> hPanel) {
 						if (isFirst) {
@@ -1371,6 +1394,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				System.err.println("Shading not supported for scroll pane");
+				return this;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
 				theScroll.withHContent(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
@@ -1397,6 +1431,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				System.err.println("Shading not supported for scroll pane row header");
+				return this;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
 				theScroll.withHRowHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
@@ -1420,6 +1465,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 			@Override
 			public Observable<?> getUntil() {
 				return theScroll.getUntil();
+			}
+
+			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				System.err.println("Shading not supported for scroll pane column header");
+				return this;
 			}
 
 			@Override
@@ -1685,6 +1741,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public boolean supportsShading() {
+			return false;
+		}
+
+		@Override
+		public AbstractQuickContainerPopulator withShading(Shading shading) {
+			System.err.println("Shading not supported for window content");
+			return this;
+		}
+
+		@Override
 		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 			Consumer<PanelPopulator<JPanel, ?>> panel) {
 			theWindow.withHContent(layout, p -> panel.accept((PanelPopulator<JPanel, ?>) p));
@@ -1751,6 +1818,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return false;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				System.err.println("Shading not supported for tab content");
+				return this;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
 				theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
@@ -1791,6 +1869,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public Observable<?> getUntil() {
 			return theUntil;
+		}
+
+		@Override
+		public boolean supportsShading() {
+			return false;
+		}
+
+		@Override
+		public AbstractQuickContainerPopulator withShading(Shading shading) {
+			System.err.println("Shading not supported");
+			return this;
 		}
 
 		@Override

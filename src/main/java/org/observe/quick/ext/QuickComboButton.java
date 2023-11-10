@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.ext;
 
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -21,6 +21,13 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.QuickBaseInterpretation;
+import org.observe.quick.base.QuickButton;
+import org.observe.quick.base.QuickComboBox;
+import org.observe.quick.base.MultiValueRenderable.MultiValueRenderContext;
+import org.observe.quick.base.QuickButton.Def;
+import org.observe.quick.base.QuickButton.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;

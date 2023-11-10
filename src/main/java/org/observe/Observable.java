@@ -745,7 +745,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			return theObservers.add(observer, false)::run;
+			return theObservers.add(observer, true)::run;
 		}
 
 		@Override
@@ -1170,6 +1170,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				@Override
 				public <O extends Observable<? extends T>> void onNext(O innerObs) {
 					if (innerObs != null) {
+						theWrapper.noInit().act(__ -> {
+							System.out.println("flat until");
+						});
 						innerObs.takeUntil(theWrapper.noInit()).subscribe(new Observer<T>() {
 							@Override
 							public <V extends T> void onNext(V value) {
@@ -1210,6 +1213,25 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return theWrapper.getCoreId(); // Can't access the contents reliably
+		}
+
+		@Override
+		public int hashCode() {
+			return theWrapper.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof FlattenedObservable))
+				return false;
+			return theWrapper.equals(((FlattenedObservable<?>) obj).theWrapper);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapper + ".flat()";
 		}
 	}
 

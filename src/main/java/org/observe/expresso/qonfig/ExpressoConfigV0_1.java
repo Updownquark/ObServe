@@ -171,15 +171,15 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends ConfigModelValue.Interpreted.Abstract<T, SettableValue<?>, SettableValue<T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefaultValue;
 
-			Interpreted(ConfigValue definition) {
-				super(definition);
+			Interpreted(ConfigValue definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -246,13 +246,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends ConfigModelValue.Interpreted.Abstract<T, ObservableValueSet<?>, ObservableValueSet<T>> {
-			public Interpreted(ConfigValueSet definition) {
-				super(definition);
+			public Interpreted(ConfigValueSet definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -402,8 +402,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private TypeToken<K> theKeyType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
-			protected Interpreted(AbstractConfigMap<M> definition) {
-				super(definition);
+			protected Interpreted(AbstractConfigMap<M> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -436,13 +436,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?, ?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?, ?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<K, V> extends AbstractConfigMap.Interpreted<K, V, ObservableMap<?, ?>, ObservableMap<K, V>> {
-			public Interpreted(ExConfigMap definition) {
-				super(definition);
+			public Interpreted(ExConfigMap definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -560,8 +560,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> interpret() {
-			return new Interpreted(this);
+		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> interpretValue(
+			ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -572,20 +573,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaxArchiveDepth;
 			private final List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>> theArchiveMethods;
 
-			Interpreted(ExArchiveEnabledFileSource definition) {
-				super(definition, null);
+			Interpreted(ExArchiveEnabledFileSource definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 				theArchiveMethods = new ArrayList<>();
 			}
 
 			@Override
 			public ExArchiveEnabledFileSource getDefinition() {
 				return (ExArchiveEnabledFileSource) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -713,8 +708,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -722,14 +717,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>>> {
 
-			Interpreted(ZipCompression definition) {
-				super(definition, null);
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
+			Interpreted(ZipCompression definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -780,8 +769,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -789,14 +778,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>>> {
 
-			Interpreted(GZCompression definition) {
-				super(definition, null);
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
+			Interpreted(GZCompression definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -847,8 +830,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
@@ -856,14 +839,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>>> {
 
-			Interpreted(TarArchival definition) {
-				super(definition, null);
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
+			Interpreted(TarArchival definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -923,7 +900,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public abstract Interpreted<T> interpret();
+		public abstract Interpreted<T> interpretValue(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<T> extends
 		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Format<T>>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>>
@@ -948,12 +925,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			public List<FormatValidation.Interpreted<T, ?>> getValidation() {
 				return Collections.unmodifiableList(theValidation);
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			protected abstract TypeToken<T> getValueType();
@@ -1255,27 +1226,21 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<BetterFile> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> theFileSource;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> theWorkingDir;
 
-			Interpreted(FileFormat definition) {
-				super(definition, null);
+			Interpreted(FileFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public FileFormat getDefinition() {
 				return (FileFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> getFileSource() {
@@ -1461,26 +1426,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<Double> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSignificantDigits;
 
-			Interpreted(DoubleFormat definition) {
-				super(definition, null);
+			Interpreted(DoubleFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public DoubleFormat getDefinition() {
 				return (DoubleFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSignificantDigits() {
@@ -1704,26 +1663,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<Instant> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> theRelativeTo;
 
-			Interpreted(DateFormat definition) {
-				super(definition, null);
+			Interpreted(DateFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public DateFormat getDefinition() {
 				return (DateFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> getRelativeTo() {
@@ -1846,24 +1799,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<String> {
-			Interpreted(RegexStringFormat definition) {
-				super(definition, null);
+			Interpreted(RegexStringFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public RegexStringFormat getDefinition() {
 				return (RegexStringFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			@Override
@@ -1910,16 +1857,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<T> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<T> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends AbstractFormat.Interpreted<T> {
 			private TypeToken<T> theType;
 			private Format<T> theFormat;
 
-			Interpreted(StandardTextFormat<T> definition) {
-				super(definition, null);
+			Interpreted(StandardTextFormat<T> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
@@ -2205,8 +2152,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends
@@ -2217,19 +2164,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private Format<T> theDefaultFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefaultValue;
 
-			Interpreted(TextConfigFormat definition) {
-				super(definition, null);
+			Interpreted(TextConfigFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public TextConfigFormat getDefinition() {
 				return (TextConfigFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			protected TypeToken<T> getValueType() {
@@ -2441,8 +2382,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted<?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<E> extends
@@ -2452,20 +2393,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> theFormatSet;
 			private final Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> theFields;
 
-			Interpreted(EntityConfigFormat definition) {
-				super(definition, null);
+			Interpreted(EntityConfigFormat definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
 				theFields = new LinkedHashMap<>();
 			}
 
 			@Override
 			public EntityConfigFormat getDefinition() {
 				return (EntityConfigFormat) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<E> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> getFormatSet() {
@@ -2522,7 +2457,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				fields = new ArrayList<>(theFields.values());
 				syncChildren(defFields, fields,
 					f -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>) f
-					.interpret(),
+						.interpretValue(this),
 					(i, mEnv) -> {
 						String fieldName = i.getDefinition().getAddOn(EntityConfigField.class).getFieldName();
 						mEnv.putLocal(ExTyped.VALUE_TYPE_KEY, reflector.getFields().get(fieldName).getType());

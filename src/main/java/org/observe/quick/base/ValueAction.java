@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import javax.swing.Icon;
 
 import org.observe.ObservableAction;
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -21,19 +20,21 @@ import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickCoreInterpretation;
+import org.observe.quick.style.QuickCompiledStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public interface ValueAction<T> extends ExElement {
+public interface ValueAction<T> extends QuickStyledElement {
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = "abstract-value-action",
 		interpretation = Interpreted.class,
 		instance = ValueAction.class)
-	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
+	public interface Def<T, A extends ValueAction<T>> extends QuickStyledElement.Def<A> {
 		@QonfigAttributeGetter("name")
 		CompiledExpression getName();
 
@@ -42,9 +43,6 @@ public interface ValueAction<T> extends ExElement {
 
 		@QonfigAttributeGetter("as-popup")
 		boolean isPopup();
-
-		@QonfigAttributeGetter("icon")
-		CompiledExpression getIcon();
 
 		@QonfigAttributeGetter("enabled")
 		CompiledExpression isEnabled();
@@ -57,13 +55,12 @@ public interface ValueAction<T> extends ExElement {
 
 		Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<? extends T> valueType);
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Def.Abstract<A> implements Def<T, A> {
+		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickStyledElement.Def.Abstract<A> implements Def<T, A> {
 			public static final String ABTRACT_VALUE_ACTION = "abstract-value-action";
 
 			private CompiledExpression theName;
 			private boolean isButton;
 			private boolean isPopup;
-			private CompiledExpression theIcon;
 			private CompiledExpression isEnabled;
 			private CompiledExpression theTooltip;
 			private CompiledExpression theAction;
@@ -88,11 +85,6 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public CompiledExpression getIcon() {
-				return theIcon;
-			}
-
-			@Override
 			public CompiledExpression isEnabled() {
 				return isEnabled;
 			}
@@ -108,12 +100,16 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
+			protected ActionStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new ActionStyle.Def(parentStyle, this, style);
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
 				theName = getAttributeExpression("name", session);
 				isButton = session.getAttribute("as-button", boolean.class);
 				isPopup = session.getAttribute("as-popup", boolean.class);
-				theIcon = getAttributeExpression("icon", session);
 				isEnabled = getAttributeExpression("enabled", session);
 				theTooltip = getAttributeExpression("tooltip", session);
 				theAction = getValueExpression(session);
@@ -121,15 +117,13 @@ public interface ValueAction<T> extends ExElement {
 		}
 	}
 
-	public interface Interpreted<T, A extends ValueAction<T>> extends ExElement.Interpreted<A> {
+	public interface Interpreted<T, A extends ValueAction<T>> extends QuickStyledElement.Interpreted<A> {
 		@Override
 		Def<? super T, ? super A> getDefinition();
 
 		TypeToken<T> getValueType();
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName();
-
-		InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon();
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled();
 
@@ -141,10 +135,10 @@ public interface ValueAction<T> extends ExElement {
 
 		ValueAction<T> create();
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A> implements Interpreted<T, A> {
+		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickStyledElement.Interpreted.Abstract<A>
+		implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
@@ -167,11 +161,6 @@ public interface ValueAction<T> extends ExElement {
 			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName() {
 				return theName;
-			}
-
-			@Override
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
-				return theIcon;
 			}
 
 			@Override
@@ -198,8 +187,6 @@ public interface ValueAction<T> extends ExElement {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
-				theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), this,
-					getDefinition().getElement().getDocument().getLocation());
 				isEnabled = interpret(getDefinition().isEnabled(), ModelTypes.Value.STRING);
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
@@ -213,8 +200,6 @@ public interface ValueAction<T> extends ExElement {
 
 	boolean isPopup();
 
-	ObservableValue<Icon> getIcon();
-
 	SettableValue<String> isEnabled();
 
 	SettableValue<String> getTooltip();
@@ -224,7 +209,7 @@ public interface ValueAction<T> extends ExElement {
 	@Override
 	ValueAction<T> copy(ExElement parent);
 
-	public abstract class Abstract<T> extends ExElement.Abstract implements ValueAction<T> {
+	public abstract class Abstract<T> extends QuickStyledElement.Abstract implements ValueAction<T> {
 		private TypeToken<T> theValueType;
 		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
 		private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
@@ -234,7 +219,6 @@ public interface ValueAction<T> extends ExElement {
 		private SettableValue<SettableValue<String>> theName;
 		private boolean isButton;
 		private boolean isPopup;
-		private SettableValue<SettableValue<Icon>> theIcon;
 		private SettableValue<SettableValue<String>> isEnabled;
 		private SettableValue<SettableValue<String>> theTooltip;
 		private ObservableAction theAction;
@@ -242,8 +226,6 @@ public interface ValueAction<T> extends ExElement {
 		protected Abstract(Object id) {
 			super(id);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
-			theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Icon>> parameterized(Icon.class))
 				.build();
 			isEnabled = SettableValue.build(theName.getType()).build();
 			theTooltip = SettableValue.build(theName.getType()).build();
@@ -269,11 +251,6 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		public ObservableValue<Icon> getIcon() {
-			return SettableValue.flatten(theIcon);
-		}
-
-		@Override
 		public SettableValue<String> isEnabled() {
 			return SettableValue.flatten(isEnabled);
 		}
@@ -296,7 +273,6 @@ public interface ValueAction<T> extends ExElement {
 			theNameInstantiator = myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate();
 			isButton = myInterpreted.getDefinition().isButton();
 			isPopup = myInterpreted.getDefinition().isPopup();
-			theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
 			theEnabledInstantiator = myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().instantiate();
 			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
 			theActionInstantiator = myInterpreted.getAction().instantiate();
@@ -322,7 +298,6 @@ public interface ValueAction<T> extends ExElement {
 			super.doInstantiate(myModels);
 
 			theName.set(theNameInstantiator == null ? null : theNameInstantiator.get(myModels), null);
-			theIcon.set(theIconInstantiator == null ? null : theIconInstantiator.get(myModels), null);
 			isEnabled.set(theEnabledInstantiator == null ? null : theEnabledInstantiator.get(myModels), null);
 			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
 			theAction = theActionInstantiator.get(myModels);
@@ -333,7 +308,6 @@ public interface ValueAction<T> extends ExElement {
 			ValueAction.Abstract<T> copy = (ValueAction.Abstract<T>) super.copy(parent);
 
 			copy.theName = SettableValue.build(theName.getType()).build();
-			copy.theIcon = SettableValue.build(theIcon.getType()).build();
 			copy.isEnabled = SettableValue.build(isEnabled.getType()).build();
 			copy.theTooltip = SettableValue.build(theTooltip.getType()).build();
 
@@ -595,6 +569,38 @@ public interface ValueAction<T> extends ExElement {
 			copy.theActionValues = SettableValue.build(theActionValues.getType()).build();
 
 			return copy;
+		}
+	}
+
+	/** Doesn't do anything, but it's needed by the {@link QuickStyledElement} API since this doesn't extend another styled element */
+	static class ActionStyle extends QuickInstanceStyle.Abstract {
+		public static class Def extends QuickInstanceStyle.Def.Abstract {
+			Def(QuickInstanceStyle.Def parent, QuickStyledElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
+				super(parent, styledElement, wrapped);
+			}
+
+			@Override
+			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+					throws ExpressoInterpretationException {
+				return new Interpreted(this, (ValueAction.Interpreted<?, ?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
+					getWrapped().interpret(parentEl, parent, env));
+			}
+		}
+
+		public static class Interpreted extends QuickInstanceStyle.Interpreted.Abstract {
+			Interpreted(QuickInstanceStyle.Def definition, ValueAction.Interpreted<?, ?> styledElement,
+				QuickInstanceStyle.Interpreted parent, QuickInterpretedStyle wrapped) {
+				super(definition, styledElement, parent, wrapped);
+			}
+
+			@Override
+			public QuickInstanceStyle create(QuickStyledElement parent) {
+				return new ActionStyle();
+			}
+		}
+
+		ActionStyle() {
+			super();
 		}
 	}
 }

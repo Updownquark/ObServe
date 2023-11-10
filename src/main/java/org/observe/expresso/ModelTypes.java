@@ -46,6 +46,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -465,6 +466,30 @@ public class ModelTypes {
 						return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges().map(__ -> null), "changes", null),
 							dest);
 					} else {
+						ModelType<?> holderType = ALL_TYPES.get(TypeTokens.getRawType(source.getType(0)), TypeMatch.SUPER_TYPE);
+						if (holderType != null) {
+							TypeToken<?>[] holderParamTypes = new TypeToken[holderType.getTypeCount()];
+							for (int t = 0; t < holderParamTypes.length; t++)
+								holderParamTypes[t] = source.getType(0).resolveType(holderType.modelType.getTypeParameters()[t]);
+							ModelInstanceType<?, ?> holderInstanceType = holderType.forTypes(holderParamTypes);
+							ModelInstanceConverter<Object, Observable<?>> holderConverter = (ModelInstanceConverter<Object, Observable<?>>) holderInstanceType
+								.convert(dest, env);
+							if (holderConverter != null) {
+								ErrorReporting reporting = env.reporting();
+								return ModelType.<SettableValue<?>, Observable<?>> converter(LambdaUtils.printableFn(src -> {
+									if (src == null)
+										return null;
+									return Observable.flatten(src.value().map(v -> {
+										try {
+											return holderConverter.convert(v);
+										} catch (ModelInstantiationException e) {
+											reporting.error(e.getMessage(), e);
+											return null;
+										}
+									}));
+								}, "flat" + holderConverter, null), holderConverter.getType());
+							}
+						}
 						TypeToken<?> oveType = TypeTokens.get().keyFor(ObservableValueEvent.class).parameterized(source.getType(0));
 						if (TypeTokens.get().isAssignable(dest.getType(0), oveType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges(), "changes", null),

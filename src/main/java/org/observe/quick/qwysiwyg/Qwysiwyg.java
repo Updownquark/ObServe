@@ -38,6 +38,7 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressionValueType;
+import org.observe.expresso.qonfig.ExpressoDocument;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.quick.QuickApp;
@@ -256,8 +257,7 @@ public class Qwysiwyg {
 		private final DebugExpression<?> theActionConfiguration;
 		private final Causable.CausableKey ROOT_FINISH;
 
-		WatchAction(ObservableCollection<WatchAction> collection, Interpreted<?> interpretedContext,
-			ExElement context) {
+		WatchAction(ObservableCollection<WatchAction> collection, Interpreted<?> interpretedContext, ExElement context) {
 			super(collection, TypeTokens.get().BOOLEAN, interpretedContext, context);
 			theActionType = WatchActionType.Break;
 			theActionConfiguration = new DebugExpression<>(TypeTokens.get().WILDCARD, null, null);
@@ -707,8 +707,9 @@ public class Qwysiwyg {
 			renderDef(document.get().getRoot(), theDocumentDef, null);
 
 			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(
-				theDocumentDef.getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
-				ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
+				theDocumentDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(),
+				quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER),
+				InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
 
 			try {
 				if (theDocumentInterpreted == null)
@@ -981,8 +982,7 @@ public class Qwysiwyg {
 				}
 
 				@Override
-				public void handleElementContent(String elementName, PositionedContent elementValue) {
-				}
+				public void handleElementContent(String elementName, PositionedContent elementValue) {}
 
 				@Override
 				public void handleCDataContent(String elementName, XmlCdata cdata) {
@@ -1432,8 +1432,7 @@ public class Qwysiwyg {
 			else {
 				try {
 					str.append(renderType(node.getModelType(theCompiledEnv).any()));
-				} catch (ExpressoCompilationException e) {
-				}
+				} catch (ExpressoCompilationException e) {}
 			}
 			if (node.getSourceLocation() != null) {
 				str.append("<br>");

@@ -160,8 +160,10 @@
 		<add-on name="field" requires="widget">
 			<?DOC The name of the label for the field?>
 			<attribute name="field-label" type="expression" specify="optional" />
-			<?DOC Whether this widget should be stretched to fill the available width of the container?>
+			<?DOC Whether this widget should be stretched horizontally to fill the available width of the container?>
 			<attribute name="fill" type="boolean" specify="optional" />
+			<?DOC Whether this widget should be stretched vertically to fill the available height of the container?>
+			<attribute name="v-fill" type="boolean" specify="optional" />
 		</add-on>
 		
 		<add-on name="abstract-tab" abstract="true" inherits="styled,with-element-model">
@@ -197,11 +199,9 @@
 			<attribute name="length" type="int" />
 		</element-def>
 		<?DOC A button that does something when the user clicks it?>
-		<element-def name="button" extends="widget">
+		<element-def name="button" extends="widget" inherits="iconized">
 			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
-			<?DOC The icon to display for the button?>
-			<attribute name="icon" type="expression" specify="optional" />
 			<?DOC The action to perform when the button is pressed?>
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
@@ -213,17 +213,18 @@
 			<value type="expression" specify="optional" />
 		</element-def>
 		<?DOC A toggle button to edit a boolean value?>
-		<element-def name="toggle-button" extends="check-box">
+		<element-def name="toggle-button" extends="check-box" inherits="iconized">
 			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
-			<?DOC The icon to display for the button?>
-			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<?DOC A single radio button to control a boolean value?>
 		<element-def name="radio-button" extends="check-box" />
 		<?DOC A button that opens a file browser?>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
+		</element-def>
+		<element-def name="color-chooser" extends="value-widget">
+			<attribute name="with-alpha" type="expression" default="false" />
 		</element-def>
 
 		<!-- Text components -->
@@ -279,7 +280,7 @@
 		</element-def>
 		
 		<?DOC A simple, un-editable text (or icon) component?>
-		<element-def name="label" extends="text-widget">
+		<element-def name="label" extends="text-widget" inherits="iconized">
 			<?DOC The text for the label. If this is specified, it takes the place of both value and format.<br>
 			Note that this is simple text, not an expression.?>
 			<value type="string" specify="optional" />
@@ -287,8 +288,6 @@
 			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<?DOC Labels cannot be editable?>
 			<attr-mod name="text-widget.editable" specify="forbidden" default="false" />
-			<?DOC The icon to display for the label?>
-			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
 			<element-model>
@@ -433,15 +432,13 @@
 			<attribute name="column-variable-name" type="identifier" default="columnVariableValue" />
 			<child-def name="column" type="column" />
 		</element-def>
-		<element-def name="abstract-value-action" abstract="true" inherits="with-local-model">
+		<element-def name="abstract-value-action" abstract="true" inherits="with-local-model,iconized">
 			<?DOC The name of the action to display to the user?>
 			<attribute name="name" type="expression" specify="optional" />
 			<?DOC Whether the action should be presented to the user as a button near the widget?>
 			<attribute name="as-button" type="boolean" default="true" />
 			<?DOC Whether the action should be presented to the user as a popup when they right-click on a value in the widget?>
 			<attribute name="as-popup" type="boolean" default="false" />
-			<?DOC The icon to display to represent this action?>
-			<attribute name="icon" type="expression" specify="optional" />
 			<?DOC Whether the action is currently enabled?>
 			<attribute name="enabled" type="expression" specify="optional" />
 			<?DOC The tooltip to display to the user to describe the action?>
@@ -453,7 +450,7 @@
 		The action may potentially be applied to multiple values in the collection in a single user action, but each applicable element is acted upon independently.?>
 		<element-def name="value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
-				<value name-attribute="value-name"/>
+				<value name-attribute="value-name" priority="100" />
 			</element-model>
 			<?DOC The variable name of the value that the action is invoked upon, for expressions?>
 			<attribute name="value-name" type="identifier" default="actionValue" />
@@ -463,7 +460,7 @@
 		<?DOC An action that may be applied to multiple values in a collection editor at once.?>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
-				<list name-attribute="values-name"/>
+				<list name-attribute="values-name" priority="100" />
 			</element-model>
 			<?DOC The variable name of the values that the action is invoked upon, for expressions?>
 			<attribute name="values-name" type="identifier" default="actionValues" />
@@ -511,8 +508,6 @@
 		<!-- Containers -->
 		<?DOC A simple container with a layout for arranging its contents?>
 		<element-def name="box" extends="container">
-			<?DOC The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)?>
-			<attribute name="opacity" type="expression" specify="optional" />
 			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>

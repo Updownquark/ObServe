@@ -8,12 +8,14 @@
 		</imports>
 		<models />
 		<style-sheet>
+			<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
+			<import-style-sheet name="ext" ref="classpath://org/observe/quick/ext/quick-ext.qss" />
 			<style-set name="header">
 				<style element="with-text" attr="font-size">16</style>
 			</style-set>
 		</style-sheet>
 	</head>
-	<box layout="inline-layout" orientation="vertical" cross-align="justify" name="root">
+	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<model>
 			<value name="intValue" type="Integer" init="10" />
 			<value name="boolValue" init="false" />
@@ -66,7 +68,7 @@
 					<label icon="`/icons/`+(b ? &quot;green&quot; : &quot;red&quot;)+`Dot.png`" />
 				</column>
 				<column name="`Button`" value="row.getBoolean()" column-value-name="b">
-					<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
+					<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
 						`Set`
 						<style attr="mouse-cursor">
 							<style if="b">HAND</style>
@@ -74,7 +76,7 @@
 						</style>
 					</button>
 					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!b">
-						<button action="row.setBoolean(true)" icon="`icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
+						<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
 					</column-edit>
 				</column>
 			</table>

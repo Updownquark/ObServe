@@ -21,6 +21,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -752,6 +753,14 @@ public class ObservableSwingUtils {
 						otherLocation = "/" + location;
 					searchUrl = ObservableSwingUtils.class.getResource(otherLocation);
 				}
+			}
+			if (searchUrl == null) {
+				try {
+					if (location.startsWith("file://"))
+						searchUrl = new File(location.substring("file://".length())).toURI().toURL();
+					else
+						searchUrl = new URL(location);
+				} catch (MalformedURLException e) {}
 			}
 			icon = searchUrl != null ? new ImageIcon(searchUrl) : null;
 			iconRef = new WeakReference<>(icon);

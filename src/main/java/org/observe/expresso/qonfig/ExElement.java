@@ -1,15 +1,6 @@
 package org.observe.expresso.qonfig;
 
-import java.util.AbstractCollection;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -28,7 +19,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
@@ -37,6 +27,9 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.observe.expresso.qonfig.ExElement.Def.Abstract.JoinedCollection;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
+import org.qommons.StringUtils;
+import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
@@ -309,6 +302,7 @@ public interface ExElement extends Identifiable {
 			private final QonfigElementOrAddOn theQonfigType;
 			private QonfigElement theElement;
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
+			private final Set<ExAddOn.Def<? super E, ?>> theAddOnSequence;
 			private Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
 			private CompiledExpressoEnv theExpressoEnv;
 			private ErrorReporting theReporting;
@@ -325,6 +319,7 @@ public interface ExElement extends Identifiable {
 				theParent = parent;
 				theQonfigType = qonfigType;
 				theAddOns = new ClassMap<>();
+				theAddOnSequence = new LinkedHashSet<>(); // Order is very important here
 			}
 
 			@Override
@@ -371,10 +366,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public Collection<ExAddOn.Def<? super E, ?>> getAddOns() {
-				if (thePromise != null)
-					return new JoinedCollection<>(theAddOns.getAllValues(), theExternalView.theExtAddOns.getAllValues());
-				else
-					return theAddOns.getAllValues();
+				return Collections.unmodifiableSet(theAddOnSequence);
 			}
 
 			@Override
@@ -649,24 +641,25 @@ public interface ExElement extends Identifiable {
 								theElement.getDocument().getDocToolkit(), theReporting));
 						}
 					}
+					if (theExternalView != null) {
+						theExternalView.update(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
+						session.setExpressoEnv(theExpressoEnv);
+					}
+					makeAddOnSequence(theAddOns.getAllValues(),
+						theExternalView == null ? null : theExternalView.theExtAddOns.getAllValues(),
+							ao -> getAddOn((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
+					if (theExternalView != null)
+						makeAddOnSequence(theExternalView.theExtAddOns.getAllValues(), theAddOns.getAllValues(),
+							ao -> theExternalView.getAddOn((Class<ExAddOn.Def<? super ExElement, ?>>) ao),
+							theExternalView.theExtAddOnSequence, theExternalView.reporting());
 				}
 
 				try {
-					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-						addOn.preUpdate(session.asElement(addOn.getType()), this);
-					if (theExternalView != null) {
-						theExternalView.preUpdateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
-						session.setExpressoEnv(theExpressoEnv);
-					}
+					forAddOns(session, (addOn, s) -> addOn.preUpdate(s, this));
 
 					doUpdate(session);
 
-					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-						addOn.postUpdate(session.asElement(addOn.getType()), this);
-					if (theExternalView != null) {
-						theExternalView.postUpdateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
-						session.setExpressoEnv(theExpressoEnv);
-					}
+					forAddOns(session, (addOn, s) -> addOn.postUpdate(s, this));
 
 					postUpdate();
 				} catch (RuntimeException | Error e) {
@@ -681,6 +674,20 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
+			private void forAddOns(ExpressoQIS session,
+				ExBiConsumer<ExAddOn.Def<? super E, ?>, ExpressoQIS, QonfigInterpretationException> action)
+					throws QonfigInterpretationException {
+				for (ExAddOn.Def<? super E, ?> addOn : theAddOnSequence) {
+					session = session.asElement(addOn.getType());
+					if (addOn.getElement() == this)
+						session.setExpressoEnv(theExpressoEnv);
+					else
+						session.setExpressoEnv(thePromise.getExternalExpressoEnv());
+					action.accept(addOn, session);
+				}
+				session.setExpressoEnv(theExpressoEnv);
+			}
+
 			@Override
 			public void setExpressoEnv(CompiledExpressoEnv env) {
 				theExpressoEnv = env;
@@ -689,16 +696,7 @@ public interface ExElement extends Identifiable {
 			}
 
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				if (thePromise != null) {
-					theExternalView.update(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
-					session.setExpressoEnv(theExpressoEnv);
-				}
-				for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-					addOn.update(session.asElement(addOn.getType()), this);
-				if (theExternalView != null) {
-					theExternalView.updateAddOns(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
-					session.setExpressoEnv(theExpressoEnv);
-				}
+				forAddOns(session, (addOn, s) -> addOn.update(s, this));
 			}
 
 			protected void postUpdate() throws QonfigInterpretationException {}
@@ -752,34 +750,21 @@ public interface ExElement extends Identifiable {
 				return theId.toString();
 			}
 
-			static class ExtViewIdentity {
-				private final Object theElementId;
-
-				ExtViewIdentity(Object elementId) {
-					theElementId = elementId;
-				}
-
-				@Override
-				public String toString() {
-					return theElementId + ".extView";
-				}
-			}
-
 			private class ExtElementView implements ExElement.Def<ExElement> {
-				private final ExtViewIdentity theViewId;
 				private final ClassMap<ExAddOn.Def<? super E, ?>> theExtAddOns;
+				private final Set<ExAddOn.Def<? super E, ?>> theExtAddOnSequence;
 				private final ErrorReporting theExtReporting;
 
 				ExtElementView() {
-					theViewId = new ExtViewIdentity(Abstract.this.getIdentity());
 					theExtAddOns = new ClassMap<>();
+					theExtAddOnSequence = new LinkedHashSet<>();
 					theExtReporting = Abstract.this.reporting()//
 						.at(theElement.getExternalContent().getFilePosition());
 				}
 
 				@Override
-				public ExtViewIdentity getIdentity() {
-					return theViewId;
+				public Object getIdentity() {
+					return Abstract.this.getIdentity();
 				}
 
 				@Override
@@ -822,8 +807,7 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public Collection<ExAddOn.Def<? super ExElement, ?>> getAddOns() {
-					return (Collection<ExAddOn.Def<? super ExElement, ?>>) (Collection<?>) new JoinedCollection<>(
-						theExtAddOns.getAllValues(), theAddOns.getAllValues());
+					return (Set<ExAddOn.Def<? super ExElement, ?>>) (Set<?>) Collections.unmodifiableSet(theExtAddOnSequence);
 				}
 
 				@Override
@@ -913,24 +897,9 @@ public interface ExElement extends Identifiable {
 					}
 				}
 
-				void preUpdateAddOns(ExpressoQIS session) throws QonfigInterpretationException {
-					for (ExAddOn.Def<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.preUpdate(session.asElement(addOn.getType()), Abstract.this);
-				}
-
-				void updateAddOns(ExpressoQIS session) throws QonfigInterpretationException {
-					for (ExAddOn.Def<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.update(session.asElement(addOn.getType()), Abstract.this);
-				}
-
-				void postUpdateAddOns(ExpressoQIS session) throws QonfigInterpretationException {
-					for (ExAddOn.Def<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.postUpdate(session.asElement(addOn.getType()), Abstract.this);
-				}
-
 				@Override
 				public String toString() {
-					return theViewId.toString();
+					return Abstract.this.toString() + ".extView";
 				}
 			}
 
@@ -975,6 +944,41 @@ public interface ExElement extends Identifiable {
 							return theSource2.next();
 					}
 				}
+			}
+
+			static <E extends ExElement> void makeAddOnSequence(Collection<ExAddOn.Def<? super E, ?>> addOns1,
+				Collection<ExAddOn.Def<? super E, ?>> addOns2, Function<Class<? extends ExAddOn.Def<?, ?>>, ExAddOn.Def<?, ?>> getter,
+					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
+				BetterSet<ExAddOn.Def<? super E, ?>> dependencies = BetterHashSet.build().build();
+				for (ExAddOn.Def<? super E, ?> addOn : addOns1) {
+					if (sequence.contains(addOn)) {// Already added via dependencies
+					} else
+						addWithDependencies(addOn, getter, dependencies, sequence, reporting);
+				}
+				if (addOns2 != null) {
+					for (ExAddOn.Def<? super E, ?> addOn : addOns2) {
+						if (sequence.contains(addOn)) {// Already added via dependencies
+						} else
+							addWithDependencies(addOn, getter, dependencies, sequence, reporting);
+					}
+				}
+			}
+
+			private static <E extends ExElement> void addWithDependencies(ExAddOn.Def<? super E, ?> addOn,
+				Function<Class<? extends ExAddOn.Def<?, ?>>, ExAddOn.Def<?, ?>> getter, BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
+					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
+				dependencies.add(addOn);
+				for (Class<? extends ExAddOn.Def<?, ?>> depType : addOn.getDependencies()) {
+					ExAddOn.Def<?, ?> dep = getter.apply(depType);
+					if (dep == null || sequence.contains(dep)) {// Nothing to do
+					} else if (dependencies.contains(dep)) {
+						reporting.error("An add-on dependency cycle has been detected: "
+							+ StringUtils.print("<-", dependencies, ao -> ao.getClass().getName()) + "<-" + depType.getName());
+					} else
+						addWithDependencies((ExAddOn.Def<? super E, ?>) dep, getter, dependencies, sequence, reporting);
+				}
+				dependencies.removeLast();
+				sequence.add(addOn);
 			}
 		}
 	}
@@ -1036,13 +1040,25 @@ public interface ExElement extends Identifiable {
 
 		Interpreted<E> persistModelInstances(boolean persist);
 
-		<M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-			throws ExpressoInterpretationException;
+		default <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
+			throws ExpressoInterpretationException {
+			if (expression == null)
+				return null;
+			InterpretedExpressoEnv env = getEnvironmentFor(expression);
+			return expression.interpret(type, env);
+		}
 
-		public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
+		default <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
 			LocatedExpression expression, ModelInstanceType<M, MV> type,
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-				throws ExpressoInterpretationException, X1, X2;
+				throws ExpressoInterpretationException, X1, X2 {
+			if (expression == null)
+				return null;
+			InterpretedExpressoEnv env = getEnvironmentFor(expression);
+			return expression.interpret(type, env, handler);
+		}
+
+		InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env);
 
 		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
 			ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
@@ -1084,17 +1100,17 @@ public interface ExElement extends Identifiable {
 		 */
 		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
 			private final Def.Abstract<? super E> theDefinition;
-			private Interpreted<?> theParent;
+			private Interpreted.Abstract<?> theParent;
 			private QonfigPromise.Interpreted<?> thePromise;
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
+			private final Set<ExAddOn.Interpreted<? super E, ?>> theAddOnSequence;
 			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedExpressoEnv theExpressoEnv;
-			private InterpretedModelSet theUnifiedModel;
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
 			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
 
-			private ExtElementView theExternalView;
+			private final ExtElementView theExternalView;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -1105,15 +1121,38 @@ public interface ExElement extends Identifiable {
 				if (parent != null)
 					setParentElement(parent);
 				theAddOns = new ClassMap<>();
-				for (ExAddOn.Def<? super E, ?> addOn : theDefinition.theAddOns.getAllValues()) {
-					ExAddOn.Interpreted<? super E, ?> interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
-					if (interp != null) // It is allowed for add-on definitions not to produce interpretations
-						theAddOns.put(interp.getClass(), interp);
-				}
+				theAddOnSequence = new LinkedHashSet<>();
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
 
 				if (theDefinition.theExternalView != null)
 					theExternalView = new ExtElementView();
+				else
+					theExternalView = null;
+
+				Map<ExAddOn.Def<? super E, ?>, ExAddOn.Interpreted<? super E, ?>> addOns = theExternalView == null ? null : new HashMap<>();
+				for (ExAddOn.Def<? super E, ?> addOn : theDefinition.getAddOns()) {
+					ExAddOn.Interpreted<? super E, ?> interp;
+					if (addOn.getElement() == theDefinition)
+						interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
+					else
+						interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(theExternalView);
+					if (interp != null) {// It is allowed for add-on definitions not to produce interpretations
+						theAddOnSequence.add(interp);
+						if (addOn.getElement() == theDefinition)
+							theAddOns.put(interp.getClass(), interp);
+						else
+							theExternalView.theExtAddOns.put(interp.getClass(), interp);
+						if (addOns != null)
+							addOns.put(addOn, interp);
+					}
+				}
+				if (theExternalView != null) {
+					for (ExAddOn.Def<? super E, ?> addOn : theDefinition.theExternalView.getAddOns()) {
+						ExAddOn.Interpreted<? super E, ?> interp = addOns.get(addOn);
+						if (interp != null)
+							theExternalView.theExtAddOnSequence.add(interp);
+					}
+				}
 			}
 
 			@Override
@@ -1144,7 +1183,7 @@ public interface ExElement extends Identifiable {
 			protected Abstract<E> setParentElement(Interpreted<?> parent) {
 				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement())
 					throw new IllegalArgumentException(parent + " is not the parent of " + this);
-				theParent = parent;
+				theParent = (Interpreted.Abstract<?>) parent;
 				return this;
 			}
 
@@ -1173,10 +1212,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public Collection<ExAddOn.Interpreted<? super E, ?>> getAddOns() {
-				if (thePromise != null)
-					return new Def.Abstract.JoinedCollection<>(theAddOns.getAllValues(), theExternalView.theExtAddOns.getAllValues());
-				else
-					return theAddOns.getAllValues();
+				return Collections.unmodifiableSet(theAddOnSequence);
 			}
 
 			@Override
@@ -1214,33 +1250,12 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-				throws ExpressoInterpretationException {
-				if (expression == null)
-					return null;
-				InterpretedExpressoEnv env;
+			public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression expression) {
 				if (thePromise == null || documentsMatch(expression.getFilePosition().getFileLocation(),
 					theDefinition.getPromise().getElement().getDocument().getLocation()))
-					env = theExpressoEnv;
+					return theExpressoEnv;
 				else
-					env = thePromise.getExternalExpressoEnv();
-				return expression.interpret(type, env);
-			}
-
-			@Override
-			public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
-				LocatedExpression expression, ModelInstanceType<M, MV> type,
-				ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-					throws ExpressoInterpretationException, X1, X2 {
-				if (expression == null)
-					return null;
-				InterpretedExpressoEnv env;
-				if (thePromise == null || documentsMatch(expression.getFilePosition().getFileLocation(),
-					theDefinition.getPromise().getElement().getDocument().getLocation()))
-					env = theExpressoEnv;
-				else
-					env = thePromise.getExternalExpressoEnv();
-				return expression.interpret(type, env, handler);
+					return thePromise.getExternalExpressoEnv();
 			}
 
 			@Override
@@ -1335,9 +1350,14 @@ public interface ExElement extends Identifiable {
 			public void destroy() {
 				for (ExElement.Interpreted<?> child : getDefinition().getAllInterpretedChildren(this))
 					child.destroy();
-				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+				for (ExAddOn.Interpreted<?, ?> addOn : theAddOnSequence)
 					addOn.destroy();
 				theAddOns.clear();
+				theAddOnSequence.clear();
+				if (theExternalView != null) {
+					theExternalView.theExtAddOns.clear();
+					theExternalView.theExtAddOnSequence.clear();
+				}
 				if (!isDestroyed.get().booleanValue())
 					isDestroyed.set(true, null);
 			}
@@ -1353,10 +1373,8 @@ public interface ExElement extends Identifiable {
 					return;
 				isInterpreting = true;
 				try {
-					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
+					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 						addOn.preUpdate(this);
-					if (theExternalView != null)
-						theExternalView.preUpdateAddOns();
 
 					if (thePromise != null && (getDefinition().getPromise() == null
 						|| thePromise.getIdentity() != getDefinition().getPromise().getIdentity())) {
@@ -1375,10 +1393,8 @@ public interface ExElement extends Identifiable {
 						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels();
 					if (hasUniqueModels)
 						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
-					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
+					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 						addOn.postUpdate(this);
-					if (theExternalView != null)
-						theExternalView.postUpdateAddOns();
 					postUpdate();
 				} catch (RuntimeException | Error e) {
 					reporting().error(e.getMessage(), e);
@@ -1388,36 +1404,18 @@ public interface ExElement extends Identifiable {
 			}
 
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				theExpressoEnv = expressoEnv;
+				setExpressoEnv(expressoEnv);
 				if (thePromise != null) {
 					thePromise.update(theExpressoEnv, this);
-					theExpressoEnv = thePromise.getExpressoEnv();
+					// setExpressoEnv(thePromise.getExpressoEnv());
 				}
-				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOns.getAllValues())
+				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 					addOn.update(this);
-				if (theExternalView != null)
-					theExternalView.updateAddOns();
+				if (thePromise != null)
+					thePromise.getExternalExpressoEnv().getModels().interpret(thePromise.getExternalExpressoEnv());
 			}
 
 			protected void postUpdate() throws ExpressoInterpretationException {}
-
-			InterpretedModelSet getUnifiedModel() {
-				if (thePromise == null)
-					return theExpressoEnv.getModels();
-				else if (theUnifiedModel == null) {
-					ObservableModelSet.Builder modelBuilder = ObservableModelSet.build(toString() + ".unified",
-						theExpressoEnv.getModels().getNameChecker());
-					modelBuilder.withAll(theExpressoEnv.getModels());
-					modelBuilder.withAll(thePromise.getExternalExpressoEnv().getModels());
-					try {
-						theUnifiedModel = modelBuilder.build().createInterpreted(theExpressoEnv);
-						theUnifiedModel.interpret(theExpressoEnv);
-					} catch (ExpressoInterpretationException e) {
-						throw new IllegalStateException("This should not happen--should have been 100% interpreted already", e);
-					}
-				}
-				return theUnifiedModel;
-			}
 
 			@Override
 			public String toString() {
@@ -1427,16 +1425,12 @@ public interface ExElement extends Identifiable {
 			class ExtElementView implements Interpreted<ExElement> {
 				private final Def.Abstract<?>.ExtElementView theExtDefinition;
 				private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theExtAddOns;
+				private final Set<ExAddOn.Interpreted<? super E, ?>> theExtAddOnSequence;
 
 				ExtElementView() {
 					theExtDefinition = ((Def.Abstract<?>) theDefinition).theExternalView;
 					theExtAddOns = new ClassMap<>();
-
-					for (ExAddOn.Def<? super E, ?> addOn : theExtDefinition.theExtAddOns.getAllValues()) {
-						ExAddOn.Interpreted<? super E, ?> interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
-						if (interp != null) // It is allowed for add-on definitions not to produce interpretations
-							theExtAddOns.put(interp.getClass(), interp);
-					}
+					theExtAddOnSequence = new LinkedHashSet<>();
 				}
 
 				@Override
@@ -1479,8 +1473,7 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public Collection<ExAddOn.Interpreted<? super ExElement, ?>> getAddOns() {
-					return (Collection<ExAddOn.Interpreted<? super ExElement, ?>>) (Collection<?>) new JoinedCollection<>(
-						theExtAddOns.getAllValues(), theAddOns.getAllValues());
+					return (Set<ExAddOn.Interpreted<? super ExElement, ?>>) (Set<?>) Collections.unmodifiableSet(theExtAddOnSequence);
 				}
 
 				@Override
@@ -1494,17 +1487,8 @@ public interface ExElement extends Identifiable {
 				}
 
 				@Override
-				public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
-					throws ExpressoInterpretationException {
-					return Abstract.this.interpret(expression, type);
-				}
-
-				@Override
-				public <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
-					LocatedExpression expression, ModelInstanceType<M, MV> type,
-					ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
-						throws ExpressoInterpretationException, X1, X2 {
-					return Abstract.this.interpret(expression, type, handler);
+				public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env) {
+					return Abstract.this.getEnvironmentFor(env);
 				}
 
 				@Override
@@ -1523,21 +1507,6 @@ public interface ExElement extends Identifiable {
 					Abstract.this.syncChildren(definitions, existing, interpret, update);
 				}
 
-				void preUpdateAddOns() throws ExpressoInterpretationException {
-					for (ExAddOn.Interpreted<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.preUpdate(Abstract.this);
-				}
-
-				void updateAddOns() throws ExpressoInterpretationException {
-					for (ExAddOn.Interpreted<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.update(Abstract.this);
-				}
-
-				void postUpdateAddOns() throws ExpressoInterpretationException {
-					for (ExAddOn.Interpreted<? super E, ?> addOn : theExtAddOns.getAllValues())
-						addOn.postUpdate(Abstract.this);
-				}
-
 				@Override
 				public Runnable onInstantiation(ExConsumer<? super ExElement, ModelInstantiationException> task) {
 					return Abstract.this.onInstantiation(task);
@@ -1550,6 +1519,11 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public void destroy() {}
+
+				@Override
+				public String toString() {
+					return theExtDefinition.toString();
+				}
 			}
 		}
 	}
@@ -1645,9 +1619,9 @@ public interface ExElement extends Identifiable {
 		private final Object theId;
 		private ExElement theParent;
 		private ModelInstantiator theLocalModel;
-		private ModelInstantiator theUnifiedModel;
 		private boolean isModelPersistent;
 		private ClassMap<ExAddOn<?>> theAddOns;
+		private Set<ExAddOn<?>> theAddOnSequence;
 		private ErrorReporting theReporting;
 		private String theTypeName;
 		private SettableValue<Boolean> isDestroyed;
@@ -1662,6 +1636,7 @@ public interface ExElement extends Identifiable {
 				throw new NullPointerException();
 			theId = id;
 			theAddOns = new ClassMap<>();
+			theAddOnSequence = new LinkedHashSet<>();
 			isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
 		}
 
@@ -1698,9 +1673,7 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public ModelInstantiator getModels() {
-			if (theUnifiedModel != null)
-				return theUnifiedModel;
-			else if (theLocalModel != null)
+			if (theLocalModel != null)
 				return theLocalModel;
 			else if (theParent != null)
 				return theParent.getModels();
@@ -1734,9 +1707,19 @@ public interface ExElement extends Identifiable {
 			theParent = parent;
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
 
+			Interpreted.Abstract<?> myInterpreted = (Interpreted.Abstract<?>) interpreted;
+			if (myInterpreted.theExternalView != null) {
+				if (theExternalView == null)
+					theExternalView = new ExtElementView(myInterpreted.theExternalView);
+			} else
+				theExternalView = null;
+
 			// Create add-ons
+			List<ExAddOn<?>> addOns = new ArrayList<>(theAddOnSequence);
+			Map<ExAddOn.Interpreted<?, ?>, ExAddOn<?>> addOnsByInterp = theExternalView == null ? null : new HashMap<>();
+			theAddOnSequence.clear();
 			CollectionUtils
-			.synchronize(new ArrayList<>(theAddOns.getAllValues()), new ArrayList<>(interpreted.getAddOns()),
+			.synchronize(addOns, new ArrayList<>(interpreted.getAddOns()),
 				(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
 			.adjust(new CollectionUtils.CollectionSynchronizer<ExAddOn<?>, ExAddOn.Interpreted<?, ?>>() {
 				@Override
@@ -1746,15 +1729,25 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public ElementSyncAction leftOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-					theAddOns.compute(element.getLeftValue().getClass(), __ -> null);
+					if (element.getRightValue().getElement() == interpreted)
+						theAddOns.compute(element.getLeftValue().getClass(), __ -> null);
+					else
+						theExternalView.theExtAddOns.compute(element.getLeftValue().getClass(), __ -> null);
 					return element.remove();
 				}
 
 				@Override
 				public ElementSyncAction rightOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-					ExAddOn<?> instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(ExElement.Abstract.this);
+					ExAddOn<?> instance;
+					if (element.getRightValue().getElement() == interpreted)
+						instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(ExElement.Abstract.this);
+					else
+						instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(theExternalView);
 					if (instance != null) {
-						theAddOns.put(instance.getClass(), instance);
+						if (element.getRightValue().getElement() == interpreted)
+							theAddOns.put(instance.getClass(), instance);
+						else
+							theExternalView.theExtAddOns.put(instance.getClass(), instance);
 						return element.useValue(instance);
 					} else
 						return element.preserve();
@@ -1765,8 +1758,15 @@ public interface ExElement extends Identifiable {
 					return element.preserve();
 				}
 			}, CollectionUtils.AdjustmentOrder.RightOrder);
+			theAddOnSequence.addAll(addOns);
+			if (theExternalView != null) {
+				for (ExAddOn.Interpreted<?, ?> addOn : myInterpreted.theExternalView.getAddOns()) {
+					ExAddOn<?> interp = addOnsByInterp.get(addOn);
+					if (interp != null)
+						theExternalView.theExtAddOnSequence.add(interp);
+				}
+			}
 
-			Interpreted.Abstract<?> myInterpreted = (Interpreted.Abstract<?>) interpreted;
 			if (thePromise != null
 				&& (interpreted.getPromise() == null || thePromise.getIdentity() != interpreted.getPromise().getIdentity())) {
 				thePromise.destroy();
@@ -1784,32 +1784,24 @@ public interface ExElement extends Identifiable {
 				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
 			else
 				theLocalModel = null;
-			if (interpreted.getPromise() != null)
-				theUnifiedModel = myInterpreted.getUnifiedModel().instantiate();
-			else
-				theUnifiedModel = null;
 			isModelPersistent = interpreted.isModelInstancePersistent();
 			try {
-				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				for (ExAddOn<?> addOn : theAddOnSequence)
 					((ExAddOn<ExElement>) addOn).preUpdate(
 						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
-				if (theExternalView != null)
-					theExternalView.preUpdateAddOns(myInterpreted.theExternalView);
 
 				doUpdate(interpreted);
 
-				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				for (ExAddOn<?> addOn : theAddOnSequence)
 					((ExAddOn<ExElement>) addOn).postUpdate(
 						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
-				if (theExternalView != null)
-					theExternalView.postUpdateAddOns(myInterpreted.theExternalView);
 			} catch (RuntimeException | Error e) {
 				reporting().error(e.getMessage(), e);
 			}
 		}
 
 		protected void doUpdate(Interpreted<?> interpreted) {
-			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+			for (ExAddOn<?> addOn : theAddOnSequence)
 				((ExAddOn<ExElement>) addOn)
 				.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 			if (theExternalView != null)
@@ -1818,11 +1810,11 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public void instantiated() {
+			for (ExAddOn<?> addOn : theAddOnSequence)
+				addOn.preInstantiated();
 			if (theLocalModel != null)
 				theLocalModel.instantiate();
-			if (theUnifiedModel != null)
-				theUnifiedModel.instantiate();
-			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.instantiated();
 			if (theExternalView != null)
 				theExternalView.instantiated();
@@ -1832,7 +1824,7 @@ public interface ExElement extends Identifiable {
 		public final ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
 			ModelSetInstance myModels = null;
 			try {
-				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				for (ExAddOn<?> addOn : theAddOnSequence)
 					addOn.preInstantiate();
 
 				myModels = createElementModel(models);
@@ -1841,10 +1833,11 @@ public interface ExElement extends Identifiable {
 						thePromise.instantiate(models);
 					doInstantiate(myModels);
 
-					for (ExAddOn<?> addOn : theAddOns.getAllValues())
-						addOn.postInstantiate(myModels);
+					for (ExAddOn<?> addOn : theAddOnSequence)
+						addOn.postInstantiate(theUpdatingModels);
 					if (theExternalView != null)
-						theExternalView.postInstantiateAddOns(myModels);
+						theExternalView.postInstantiateAddOns(theUpdatingModels);
+					myModels = theUpdatingModels;
 				} finally {
 					if (!isModelPersistent)
 						theUpdatingModels = null;
@@ -1855,44 +1848,38 @@ public interface ExElement extends Identifiable {
 			return myModels;
 		}
 
+		protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels)
+			throws ModelInstantiationException {
+			for (ExAddOn<?> addOn : theAddOnSequence)
+				addOn.addRuntimeModels(builder, elementModels);
+			if (thePromise != null)
+				((ExElement.Abstract) thePromise).addRuntimeModels(builder, elementModels);
+		}
+
 		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
-			if (theLocalModel == null && theUnifiedModel == null) {
-				theUpdatingModels = parentModels;
-				return theUpdatingModels;
-			}
-
-			ModelSetInstance localModels;
+			// Construct a model instance containing the parent models, this element's local models,
+			// and any models required by the runtime environment
 			Observable<?> modelUntil = Observable.or(parentModels.getUntil(), onDestroy());
+			ModelSetInstanceBuilder runtimeModels = ObservableModelSet.createMultiModelInstanceBag(modelUntil)//
+				.withAll(parentModels);
+			ModelSetInstance elementModels;
 			if (theLocalModel != null) {
-				ObservableModelSet.ModelSetInstanceBuilder builder = theLocalModel.createInstance(modelUntil);
-				if (theLocalModel.getInheritance().contains(parentModels.getModel().getIdentity())) {
-					builder.withAll(parentModels);
-				} else {
-					// The parent models are unified, which is an instantiation construct.
-					// The above statement would fail because this element's models were not constructed with unification in mind.
-					// Therefore we have to dissect it and take what we need.
-					for (ModelComponentId inh : theLocalModel.getInheritance()) {
-						if (parentModels.getModel().getInheritance().contains(inh))
-							builder.withAll(parentModels.getInherited(inh));
-					}
-				}
-				localModels = builder.build();
+				elementModels = theLocalModel.createInstance(modelUntil)//
+					.withAll(parentModels)//
+					.build();
+				runtimeModels.withAll(elementModels);
 			} else
-				localModels = parentModels;
-
-			if (theUnifiedModel != null) {
-				ModelSetInstanceBuilder builder = theUnifiedModel.createInstance(modelUntil);
-				builder.withAll(localModels);
-				builder.withAll(thePromise.getExternalModels(parentModels, modelUntil));
-				theUpdatingModels = builder.build();
-			} else
-				theUpdatingModels = localModels;
-			return theUpdatingModels;
+				elementModels = parentModels;
+			addRuntimeModels(runtimeModels, elementModels);
+			if (runtimeModels.getTopLevelModels().size() == 1)
+				return runtimeModels.getInherited(runtimeModels.getTopLevelModels().iterator().next());
+			else
+				return runtimeModels.build();
 		}
 
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			theUpdatingModels = myModels;
-			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.instantiate(myModels);
 			if (theExternalView != null)
 				theExternalView.instantiate(myModels);
@@ -1903,16 +1890,28 @@ public interface ExElement extends Identifiable {
 			Abstract copy = clone();
 			copy.theParent = parent;
 			copy.theAddOns = new ClassMap<>();
+			copy.theAddOnSequence = new LinkedHashSet<>();
 			copy.isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
-			for (ExAddOn<?> addOn : theAddOns.getAllValues()) {
-				ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(copy);
-				copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);
-			}
-			if (thePromise != null)
-				copy.thePromise = thePromise.copy(copy);
 
 			if (theExternalView != null)
 				copy.theExternalView = theExternalView.copy(this);
+
+			Map<ExAddOn<?>, ExAddOn<?>> addOns = new HashMap<>();
+			for (ExAddOn<?> addOn : theAddOnSequence) {
+				ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(copy);
+				addOns.put(addOn, addOnCopy);
+				copy.theAddOnSequence.add(addOnCopy);
+				if (addOn.getElement() == this)
+					copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);
+				else
+					copy.theExternalView.theExtAddOns.put(addOnCopy.getClass(), addOnCopy);
+			}
+			if (theExternalView != null) {
+				for (ExAddOn<?> addOn : theExternalView.theExtAddOnSequence)
+					copy.theExternalView.theExtAddOnSequence.add(addOns.get(addOn));
+			}
+			if (thePromise != null)
+				copy.thePromise = thePromise.copy(copy);
 
 			return copy;
 		}
@@ -1933,7 +1932,16 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public void destroy() {
-			isDestroyed.set(true, null);
+			for (ExAddOn<?> addOn : theAddOnSequence)
+				addOn.destroy();
+			theAddOns.clear();
+			theAddOnSequence.clear();
+			if (theExternalView != null) {
+				theExternalView.theExtAddOns.clear();
+				theExternalView.theExtAddOnSequence.clear();
+			}
+			if (!isDestroyed.get().booleanValue())
+				isDestroyed.set(true, null);
 		}
 
 		@Override
@@ -1942,25 +1950,24 @@ public interface ExElement extends Identifiable {
 		}
 
 		private class ExtElementView implements ExElement, Cloneable {
-			private final Object theExtId;
 			private final ErrorReporting theExtReporting;
 			private ClassMap<ExAddOn<?>> theExtAddOns;
+			private Set<ExAddOn<?>> theExtAddOnSequence;
 
 			ExtElementView(Interpreted.Abstract<?>.ExtElementView interpreted) {
-				theExtId = interpreted.getIdentity();
 				theExtReporting = interpreted.reporting();
 				theExtAddOns = new ClassMap<>();
+				theExtAddOnSequence = new LinkedHashSet<>();
 			}
 
 			ExtElementView(Abstract.ExtElementView toCopy) {
-				theExtId = toCopy.getIdentity();
 				theExtReporting = toCopy.reporting();
 				theExtAddOns = new ClassMap<>();
 			}
 
 			@Override
 			public Object getIdentity() {
-				return theExtId;
+				return Abstract.this.getIdentity();
 			}
 
 			@Override
@@ -2004,57 +2011,8 @@ public interface ExElement extends Identifiable {
 			@Override
 			public void update(Interpreted<?> interpreted, ExElement parent) {
 				Interpreted.Abstract<?> owner = (Interpreted.Abstract<?>) interpreted;
-				Interpreted.Abstract<?>.ExtElementView myInterpreted = owner.theExternalView;
-				// Create add-ons
-				CollectionUtils
-				.synchronize(new ArrayList<>(theExtAddOns.getAllValues()), new ArrayList<>(myInterpreted.theExtAddOns.getAllValues()),
-					(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
-				.adjust(new CollectionUtils.CollectionSynchronizer<ExAddOn<?>, ExAddOn.Interpreted<?, ?>>() {
-					@Override
-					public boolean getOrder(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-						return true;
-					}
-
-					@Override
-					public ElementSyncAction leftOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-						theExtAddOns.compute(element.getLeftValue().getClass(), __ -> null);
-						return element.remove();
-					}
-
-					@Override
-					public ElementSyncAction rightOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-						ExAddOn<?> instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue())
-							.create(ExElement.Abstract.this);
-						if (instance != null) {
-							theExtAddOns.put(instance.getClass(), instance);
-							return element.useValue(instance);
-						} else
-							return element.preserve();
-					}
-
-					@Override
-					public ElementSyncAction common(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-						return element.preserve();
-					}
-				}, CollectionUtils.AdjustmentOrder.RightOrder);
-
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).update(
-						myInterpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 
 				thePromise.update(owner.getPromise());
-			}
-
-			void preUpdateAddOns(Interpreted.Abstract<?>.ExtElementView interpreted) {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).preUpdate(
-						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
-			}
-
-			void postUpdateAddOns(Interpreted.Abstract<?>.ExtElementView interpreted) {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).postUpdate(
-						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 			}
 
 			@Override
@@ -2064,15 +2022,8 @@ public interface ExElement extends Identifiable {
 				thePromise.instantiated();
 			}
 
-			void preInstantiateAddOns() {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).preInstantiate();
-			}
-
 			@Override
 			public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).instantiate(models);
 				return models;
 			}
 
@@ -2083,13 +2034,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public ExtElementView copy(ExElement element) {
-				ExtElementView copy = ((Abstract) element).new ExtElementView(this);
-
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues()) {
-					ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(copy);
-					copy.theExtAddOns.put(addOnCopy.getClass(), addOnCopy);
-				}
-				return copy;
+				return ((Abstract) element).new ExtElementView(this);
 			}
 
 			@Override
@@ -2099,6 +2044,11 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public void destroy() {}
+
+			@Override
+			public String toString() {
+				return Abstract.this.toString() + ".extView";
+			}
 		}
 	}
 

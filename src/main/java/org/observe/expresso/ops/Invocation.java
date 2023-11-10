@@ -169,7 +169,7 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			}
 			// Not found, try to evaluate it
-			int argOffset = 0;
+			int argOffset = getInitialArgOffset();
 			for (int i = 0; i < arg; i++)
 				argOffset += theArguments.get(i).getExpressionLength() + 1;
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler

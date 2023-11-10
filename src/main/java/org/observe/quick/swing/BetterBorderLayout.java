@@ -18,7 +18,7 @@ import org.observe.quick.base.QuickBorderLayout.Region;
 import org.observe.quick.base.QuickSize;
 import org.qommons.LambdaUtils;
 
-public class BorderLayout implements LayoutManager2 {
+public class BetterBorderLayout implements LayoutManager2 {
 	public static class Constraints {
 		public final QuickBorderLayout.Region region;
 		public final Supplier<QuickSize> size;

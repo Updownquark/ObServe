@@ -62,6 +62,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExAddOn.creator(ModelValueElement.Def.class, ExElementModelValue.Def::new));
 		interpreter.createWith("with-local-model", ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
 		interpreter.createWith("with-required-models", ExWithRequiredModels.Def.class, ExAddOn.creator(ExWithRequiredModels.Def::new));
+		interpreter.createWith(ExpressoDocument.EXPRESSO_DOCUMENT, ExpressoDocument.Def.class, ExAddOn.creator(ExpressoDocument.Def::new));
 
 		// To support external content
 		interpreter.createWith(ExpressoExternalContent.EXPRESSO_EXTERNAL_CONTENT, ExpressoExternalContent.Def.class,
@@ -115,7 +116,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("import", ClassViewElement.ImportElement.class, ExElement.creator(ClassViewElement.ImportElement::new));
 		interpreter.createWith("models", ObservableModelElement.ModelSetElement.Def.class,
 			ExElement.creator(ObservableModelElement.ModelSetElement.Def::new));
-		interpreter.createWith("expresso", Expresso.Def.class, ExElement.creator(Expresso.Def::new));
+		interpreter.createWith(ExpressoHeadSection.HEAD, ExpressoHeadSection.Def.class, ExElement.creator(ExpressoHeadSection.Def::new));
 		interpreter.modifyWith("map", Object.class, new QonfigValueModifier<Object>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {

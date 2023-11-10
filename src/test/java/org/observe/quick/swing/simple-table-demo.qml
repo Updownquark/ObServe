@@ -36,12 +36,12 @@
 			</model>
 		</models>
 		<style-sheet>
-			<import-style-sheet name="tests" ref="quick-tests.qss" />
-			<import-style-sheet name="qwysiwyg" ref="../../../../../../src/main/java/org/observe/quick/qwysiwyg/qwysiwyg-default.qss" />
+			<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
+			<import-style-sheet name="qwysiwyg" ref="classpath://org/observe/quick/qwysiwyg/qwysiwyg-default.qss" />
 		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
-		<table rows="app.values" name="Simple Table" selection="app.selected" multi-selection="app.allSelected">
+		<table rows="app.values" name="`Simple Table`" selection="app.selected" multi-selection="app.allSelected">
 			<titled-border title="`Factored Values`">
 				<style attr="border-color" if="hovered">`green`</style>
 				<style if="pressed">

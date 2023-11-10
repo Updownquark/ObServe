@@ -46,7 +46,7 @@
 		Test external models
 		In new file, test Expresso-Config
 	-->
-	<expresso>
+	<head>
 		<imports>
 			<import>org.observe.expresso.ExpressoTestEntity</import>
 			<import>org.observe.expresso.ExpressoReflectTester</import>
@@ -123,7 +123,7 @@
 				</transform>
 			</model>
 		</models>
-	</expresso>
+	</head>
 	<test name="constant">
 		<model>
 			<value name="initInt" init="models.anyInt" />

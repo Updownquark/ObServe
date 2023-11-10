@@ -14,7 +14,6 @@ import java.util.function.Consumer;
 import javax.swing.JPanel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
-import org.jdesktop.swingx.JXPanel;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -22,19 +21,22 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.quick.Iconized;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
-import org.observe.quick.base.CollapsePane;
 import org.observe.quick.base.MultiValueRenderable;
-import org.observe.quick.base.QuickComboButton;
-import org.observe.quick.base.QuickMultiSlider;
-import org.observe.quick.base.QuickMultiSlider.SliderBgRenderer;
-import org.observe.quick.base.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.base.QuickTableColumn;
-import org.observe.quick.base.QuickTreeTable;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.ValueAction;
+import org.observe.quick.ext.QuickCollapsePane;
+import org.observe.quick.ext.QuickComboButton;
+import org.observe.quick.ext.QuickMultiSlider;
+import org.observe.quick.ext.QuickMultiSlider.SliderBgRenderer;
+import org.observe.quick.ext.QuickMultiSlider.SliderHandleRenderer;
+import org.observe.quick.ext.QuickShaded;
+import org.observe.quick.ext.QuickShading;
+import org.observe.quick.ext.QuickTreeTable;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
@@ -48,6 +50,7 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.Shading;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -63,35 +66,55 @@ import com.google.common.reflect.TypeToken;
 public class QuickXSwing implements QuickInterpretation {
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
-		tx.with(CollapsePane.Interpreted.class, QuickSwingContainerPopulator.class, SwingCollapsePane::new);
+		QuickSwingPopulator.<QuickWidget, QuickShaded, QuickShaded.Interpreted> modifyForAddOn(tx, QuickShaded.Interpreted.class,
+			(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
+				qsp.addModifier((comp, w) -> {
+					QuickShaded shaded = w.getAddOn(QuickShaded.class);
+					ObservableValue<QuickShading> shading = shaded.getShading();
+					if (comp instanceof PanelPopulator) {
+						PanelPopulator<?, ?> p = (PanelPopulator<?, ?>) comp;
+						shading.changes().takeUntil(p.getUntil()).act(evt -> {
+							try {
+								p.withShading(
+									evt.getNewValue() == null ? null : evt.getNewValue().createShading(w, () -> p.getEditor().repaint()));
+							} catch (ModelInstantiationException e) {
+								w.reporting().error(e.getMessage(), e);
+							}
+						});
+					}
+				});
+			});
+		tx.with(QuickCollapsePane.Interpreted.class, QuickSwingContainerPopulator.class, SwingCollapsePane::new);
 		tx.with(QuickComboButton.Interpreted.class, QuickSwingPopulator.class, SwingComboButton::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
 	}
 
-	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<CollapsePane> {
+	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
 		QuickSwingPopulator<QuickWidget> header;
 		QuickSwingPopulator<QuickWidget> content;
 
-		SwingCollapsePane(CollapsePane.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingCollapsePane(QuickCollapsePane.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			header = interpreted.getHeader() == null ? null : tx.transform(interpreted.getHeader(), QuickSwingPopulator.class);
 			content = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
 		}
 
 		@Override
-		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, CollapsePane quick, Consumer<ComponentEditor<?, ?>> component)
-			throws ModelInstantiationException {
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickCollapsePane quick,
+			Consumer<ComponentEditor<?, ?>> component)
+				throws ModelInstantiationException {
 			content.populate(new CollapsePanePopulator(panel, quick, header, component), quick.getContents().getFirst());
 		}
 
 		private static class CollapsePanePopulator extends AbstractQuickContainerPopulator {
 			private ContainerPopulator<?, ?> thePopulator;
-			private CollapsePane theCollapsePane;
+			private QuickCollapsePane theCollapsePane;
 			private QuickSwingPopulator<QuickWidget> theInterpretedHeader;
 			private Consumer<ComponentEditor<?, ?>> theComponent;
+			private Shading theShading;
 
-			public CollapsePanePopulator(ContainerPopulator<?, ?> populator, CollapsePane collapsePane,
+			public CollapsePanePopulator(ContainerPopulator<?, ?> populator, QuickCollapsePane collapsePane,
 				QuickSwingPopulator<QuickWidget> interpretedHeader, Consumer<ComponentEditor<?, ?>> component) {
 				thePopulator = populator;
 				theCollapsePane = collapsePane;
@@ -105,37 +128,97 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			@Override
+			public boolean supportsShading() {
+				return true;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				theShading = shading;
+				return this;
+			}
+
+			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(cp, panel, false));
+				thePopulator.addCollapsePanel(false, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+					cp -> populateCollapsePane(cp, panel, layout, false));
 				return this;
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.addCollapsePanel(false, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-					cp -> populateCollapsePane(cp, panel, true));
+				thePopulator.addCollapsePanel(true, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+					cp -> populateCollapsePane(cp, panel, null, true));
 				return this;
 			}
 
-			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel,
-				boolean verticalLayout) {
+			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel,
+				LayoutManager layout, boolean verticalLayout) {
 				theComponent.accept(cp);
+				cp.animated(theCollapsePane.isAnimated());
+				if (theShading != null)
+					cp.withShading(theShading);
 				if (theInterpretedHeader != null) {
-					cp.withHeader(hp -> {
-						try {
-							theInterpretedHeader.populate(hp, theCollapsePane.getHeader());
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
-					});
+					try {
+						theInterpretedHeader.populate(new CollapsePaneHeaderPopulator(cp),
+							theCollapsePane.getHeader());
+					} catch (ModelInstantiationException e) {
+						throw new CheckedExceptionWrapper(e);
+					}
 				}
 				if (theCollapsePane.isCollapsed() != null)
 					cp.withCollapsed(theCollapsePane.isCollapsed());
 				if (verticalLayout)
 					cp.addVPanel(panel);
 				else
-					panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
+					cp.addHPanel(null, layout, panel);
+			}
+		}
+
+		private static class CollapsePaneHeaderPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.CollapsePanel<?, ?, ?> thePopulator;
+			private Shading theShading;
+
+			CollapsePaneHeaderPopulator(PanelPopulation.CollapsePanel<?, ?, ?> populator) {
+				thePopulator = populator;
+			}
+
+			@Override
+			public boolean supportsShading() {
+				return true;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator withShading(Shading shading) {
+				theShading = shading;
+				return this;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return thePopulator.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.withHeader(p -> {
+					if (theShading != null)
+						p.withShading(theShading);
+					panel.accept(p);
+				});
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.withHeader(p -> p.addVPanel(p2 -> {
+					if (theShading != null)
+						p2.withShading(theShading);
+					panel.accept(p2);
+				}));
+				return this;
 			}
 		}
 	}
@@ -192,7 +275,7 @@ public class QuickXSwing implements QuickInterpretation {
 				combo[0] = cb;
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
 				if (theRenderer != null) {
 					cb.renderWith(renderer);
 					cb.withValueTooltip(v -> renderer.getTooltip(v, v));
@@ -477,7 +560,7 @@ public class QuickXSwing implements QuickInterpretation {
 			@Override
 			public Cursor getCursor(CollectionElement<Range> range, RangePoint point, boolean focused) {
 				Cursor cursor = theCursor.get();
-				if(cursor!=null)
+				if (cursor != null)
 					return cursor;
 				return super.getCursor(range, point, focused);
 			}

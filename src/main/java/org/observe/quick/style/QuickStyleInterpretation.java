@@ -8,7 +8,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExtModelValueElement;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
-import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -38,8 +37,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 	}
 
 	@Override
-	public void init(QonfigToolkit toolkit) {
-	}
+	public void init(QonfigToolkit toolkit) {}
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -61,8 +59,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				return value;
 			}
 		});
-		interpreter.createWith("with-style-sheet", ExAddOn.Def.class, session -> new ExWithStyleSheet((QonfigAddOn) session.getFocusType(),
-			session.as(ExpressoQIS.class).getElementRepresentation()));
+		interpreter.createWith("with-style-sheet", ExWithStyleSheet.Def.class, ExAddOn.creator(ExWithStyleSheet.Def::new));
 		interpreter.modifyWith("with-style-sheet", Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
