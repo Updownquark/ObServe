@@ -6,6 +6,7 @@ import java.util.LinkedList;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
@@ -179,8 +180,8 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	/**
-	 * Causes this observable to fire all its listeners' {@link Observer#onCompleted(Object)} methods. Calls to {@link #set(Object, Object)}
-	 * after this call will throw {@link UnsupportedOperationException}s.
+	 * Causes this observable to fire all its listeners' {@link Observer#onCompleted(Causable)} methods. Calls to
+	 * {@link #set(Object, Object)} after this call will throw {@link UnsupportedOperationException}s.
 	 *
 	 * @param cause The cause of the death
 	 */

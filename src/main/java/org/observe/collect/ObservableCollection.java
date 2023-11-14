@@ -748,11 +748,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	/**
-	 * Turns an observable value containing an observable collection into the contents of the value
+	 * Turns a settable value containing a non-observable collection into the contents of the value
 	 *
 	 * @param <E> The type for the collection
 	 * @param type The type for the collection
-	 * @param collectionObservable The observable value
+	 * @param collectionObservable The settable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	static <E> ObservableCollection<E> flattenSimpleCollectionValue(TypeToken<E> type,

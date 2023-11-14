@@ -3883,6 +3883,11 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableCollection#flattenSimpleCollectionValue(TypeToken, SettableValue)}.
+	 *
+	 * @param <T> The type of the collection
+	 */
 	public static class SimpleCollectionBackedObservable<T> implements ObservableCollection<T> {
 		private final ObservableCollection<T> theCollection;
 		private final List<ElementId> theBackingElements;
@@ -3892,6 +3897,10 @@ public final class ObservableCollectionImpl {
 		private long theStampCopy;
 		private boolean isModifying;
 
+		/**
+		 * @param collection The collection to back this observable collection
+		 * @param collectionValue The settable value containing the collection contents
+		 */
 		protected SimpleCollectionBackedObservable(ObservableCollection<T> collection,
 			SettableValue<? extends Collection<T>> collectionValue) {
 			theCollection = collection;
@@ -4264,12 +4273,20 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
+		/**
+		 * @param localElement The element in this collection
+		 * @return The same element in the backing collection
+		 */
 		protected ElementId getBackingElement(ElementId localElement) {
 			if (localElement == null || !localElement.isPresent())
 				return null;
 			return theBackingElements.get(theCollection.getElementsBefore(localElement));
 		}
 
+		/**
+		 * @param backingElement The element in the backing collection
+		 * @return The same element in this collection
+		 */
 		protected ElementId getFrontedElement(ElementId backingElement) {
 			int index = Collections.binarySearch(theBackingElements, backingElement);
 			return theCollection.getElement(index).getElementId();
@@ -4286,6 +4303,7 @@ public final class ObservableCollectionImpl {
 			theBackingElements.remove(index);
 		}
 
+		/** If the observable value has changed, synchronizes its contents with this collection */
 		protected void update() {
 			long stamp = getBackingStamp();
 			if (stamp != theStampCopy) {

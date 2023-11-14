@@ -361,7 +361,7 @@ public interface ObservableConfigFormat<E> {
 		 * @return This builder
 		 */
 		public <F> ReferenceFormatBuilder<T> withField(String childName, Function<? super T, F> field, ObservableConfigFormat<F> format) {
-			if (theFields.put(childName, new Impl.ReferenceFormat.FormattedField<T, F>(field, format)) != null)
+			if (theFields.put(childName, new Impl.ReferenceFormat.FormattedField<>(field, format)) != null)
 				throw new IllegalArgumentException("Multiple fields named " + childName + " are not supported");
 			return this;
 		}

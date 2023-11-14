@@ -50,6 +50,7 @@ public class TypeTokens implements TypeParser {
 		private TypeToken<?> parameterizedType;
 		/** Whether this type is extends {@link Comparable} */
 		public final boolean comparable;
+		/** The unity type converter for this type (do-nothing) */
 		public final TypeConverter<T, T, T, T> unity;
 		private int theComplexity = -1;
 		private Map<List<TypeToken<?>>, TypeToken<? extends T>> theCompoundTypes;
@@ -174,17 +175,33 @@ public class TypeTokens implements TypeParser {
 
 	private static final Function<Object, String> ALWAYS_NULL = LambdaUtils.constantFn(null, "null", null);
 
+	/**
+	 * A type key for a primitive/wrapper type
+	 *
+	 * @param <T> The wrapper type
+	 */
 	public class PrimitiveTypeData<T> extends TypeKey<T> {
+		/** The primitive class for this type */
 		public final Class<T> primitiveClass;
+		/** The primitive TypeToken for this type */
 		public final TypeToken<T> primitiveType;
+		/** The primitive unity converter for this type */
 		public final TypeConverter<T, T, T, T> primitiveUnity;
+		/** Whether this type is a number (byte, short, int, long, float, double) */
 		public final boolean number;
+		/** Whether this type is for <code>boolean</code> */
 		public final boolean bool;
+		/** Whether this type is for <code>void</code> */
 		public final boolean isVoid;
+		/** Whether this type is for <code>char</code> */
 		public final boolean isChar;
+		/** The number of bytes of space an instance of this type uses */
 		public final int size;
+		/** The default value of this type (number=0, boolean=false, char='0', void=null) */
 		public final T defaultValue;
+		/** A unity converter from the wrapper type to the primitive type that supplies the {@link #defaultValue} in place of null */
 		public final TypeConverter<T, T, T, T> safeCast;
+		/** A unity converter from the wrapper type to the primitive type that does not accept nulls */
 		public final TypeConverter<T, T, T, T> unsafeCast;
 
 		private final Map<Class<?>, TypeConverter<?, ?, T, T>> thePrimitiveCasts;
@@ -236,8 +253,13 @@ public class TypeTokens implements TypeParser {
 				throw new IllegalStateException("Unaccounted primitive " + clazz);
 		}
 
-		public <S> TypeConverter<S, S, T, T> getPrimitiveCast(Class<S> primitiveType) {
-			return (TypeConverter<S, S, T, T>) thePrimitiveCasts.get(primitiveType);
+		/**
+		 * @param <S> The source type to cast from
+		 * @param primitiveSourceType The source type to cast from
+		 * @return The primitive cast operation from the given source type to this type
+		 */
+		public <S> TypeConverter<S, S, T, T> getPrimitiveCast(Class<S> primitiveSourceType) {
+			return (TypeConverter<S, S, T, T>) thePrimitiveCasts.get(primitiveSourceType);
 		}
 
 		<S> void populatePrimitiveCast(PrimitiveTypeData<S> typeData, TypeConverter<S, S, T, T> converter) {
@@ -246,14 +268,20 @@ public class TypeTokens implements TypeParser {
 		}
 	}
 
+	/**
+	 * A {@link TypeKey} extension for primitive number types
+	 *
+	 * @param <T> The type that this key is for
+	 */
 	public class NumberTypeData<T extends Number> extends PrimitiveTypeData<T> {
 		private final boolean isFloatingPoint;
 
-		public NumberTypeData(Class<T> wrapper, Class<T> primitive, int size, T defaultValue, boolean floatingPoint) {
+		NumberTypeData(Class<T> wrapper, Class<T> primitive, int size, T defaultValue, boolean floatingPoint) {
 			super(wrapper, primitive, true, false, false, false, size, defaultValue);
 			isFloatingPoint = floatingPoint;
 		}
 
+		/** @return Whether this number type is a floating-point type (float, double) */
 		public boolean isFloatingPoint() {
 			return isFloatingPoint;
 		}
@@ -293,8 +321,13 @@ public class TypeTokens implements TypeParser {
 		 */
 		T cast(S source);
 
+		/** @return Whether this cast is always safe for any input (i.e. {@link #canCast(Object)} will always return null) */
 		boolean isSafe();
 
+		/**
+		 * @param source The source value to test
+		 * @return Null if the given source value can be cast with this cast, or a reason why it can't
+		 */
 		String canCast(S source);
 	}
 
@@ -684,14 +717,26 @@ public class TypeTokens implements TypeParser {
 		return (TypeKey<T>) TYPES.computeIfAbsent(type, this::createKey);
 	}
 
-	public <T> PrimitiveTypeData<T> primitiveKeyFor(Class<T> type) {
+	/**
+	 * @param <T> The wrapper type of the data to get
+	 * @param type The primitive or wrapper type to get data for
+	 * @return The primitive type data for the given type
+	 * @throws IllegalArgumentException If the given type is not primitive or a wrapper type
+	 */
+	public <T> PrimitiveTypeData<T> primitiveKeyFor(Class<T> type) throws IllegalArgumentException {
 		TypeKey<T> key = keyFor(type);
 		if (!(key instanceof PrimitiveTypeData))
 			throw new IllegalArgumentException(type.getName() + " is not a primitive type or wrapper");
 		return (PrimitiveTypeData<T>) key;
 	}
 
-	public <N extends Number> NumberTypeData<N> numberKeyFor(Class<N> type) {
+	/**
+	 * @param <N> The wrapper type of the data to get
+	 * @param type The primitive or wrapper number type to get data for
+	 * @return The primitive number type data for the given type
+	 * @throws IllegalArgumentException If the given type is not primitive or a wrapper number type
+	 */
+	public <N extends Number> NumberTypeData<N> numberKeyFor(Class<N> type) throws IllegalArgumentException {
 		TypeKey<N> key = keyFor(type);
 		if (key instanceof NumberTypeData)
 			return (NumberTypeData<N>) key;
@@ -1155,10 +1200,10 @@ public class TypeTokens implements TypeParser {
 	/**
 	 * Converts from one type to another
 	 *
-	 * @param <S> The super type of all values that this converter can convert
-	 * @param <R> The super type which all reversed values will extend
-	 * @param <TR> The super type of all values that this converter can {@link #reverse(Object target)}
-	 * @param <T> The super type which all converted values will extend
+	 * @param <S> The super-type of all values that this converter can {@link #apply(Object) convert}
+	 * @param <R> The super-type which all {@link #reverse(Object) reversed} values will extend
+	 * @param <TR> The super-type of all values that this converter can {@link #reverse(Object) reverse}
+	 * @param <T> The super-type of all values that this converter can produce
 	 */
 	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T> {
 		private final String theName;
@@ -1172,6 +1217,16 @@ public class TypeTokens implements TypeParser {
 
 		private TypeConverter<TR, T, S, R> theReversed;
 
+		/**
+		 * @param name The name for the converter
+		 * @param reverseName The name of the {@link #reverse() reverse} of this converter
+		 * @param sourceType The super-type of all values that may be converted by this converter
+		 * @param convertedType The super-type of all values that may be produced by this converter
+		 * @param applicability The implementation for {@link #isApplicable(Object)}
+		 * @param converter The implementation for {@link #apply(Object)}
+		 * @param reversibility The implementation for {@link #isReversible(Object)}
+		 * @param reverse The implementation for {@link #reverse(Object)}
+		 */
 		public TypeConverter(String name, String reverseName, //
 			TypeToken<R> sourceType, TypeToken<T> convertedType, //
 			Function<? super S, String> applicability, Function<? super S, T> converter, //
@@ -1186,23 +1241,43 @@ public class TypeTokens implements TypeParser {
 			theReverse = reverse;
 		}
 
+		/** @return The name of this converter */
 		public String getName() {
 			return theName;
 		}
 
+		/** @return The name of the {@link #reverse() reverse} of this converter */
 		public String getReverseName() {
 			return theReverseName;
 		}
 
-		/** @return The {@link TypeToken} of the target type */
+		/**
+		 * @return The super-{@link TypeToken type} of all values that can be produced by this converter's {@link #reverse(Object) reverse}
+		 *         method
+		 */
+		public TypeToken<R> getReverseType() {
+			return theReverseType;
+		}
+
+		/** @return The super-{@link TypeToken type} of all values that may be produced by this converter */
 		public TypeToken<T> getConvertedType() {
 			return theConvertedType;
 		}
 
+		/**
+		 * @param source The source value to test
+		 * @return Null if the given source value can be converted to the {@link #getConvertedType() converted type} by this converter, or a
+		 *         reason why it can't
+		 */
 		public String isApplicable(S source) {
 			return theApplicability == null ? null : theApplicability.apply(source);
 		}
 
+		/**
+		 * Converts the given source value to the {@link #getConvertedType() converted type}
+		 *
+		 * @see Function#apply(java.lang.Object)
+		 */
 		@Override
 		public T apply(S source) {
 			String app = isApplicable(source);
@@ -1211,10 +1286,18 @@ public class TypeTokens implements TypeParser {
 			return theConverter.apply(source);
 		}
 
+		/**
+		 * @param target The target value to test
+		 * @return Null if the given target value can be converted to the #g
+		 */
 		public String isReversible(TR target) {
 			return theReversibility == null ? null : theReversibility.apply(target);
 		}
 
+		/**
+		 * @param target The target value to reverse
+		 * @return The source value which would be {@link #apply(Object) converted} to a value equivalent to the given value
+		 */
 		public R reverse(TR target) {
 			String app = isReversible(target);
 			if (app != null)
@@ -1222,26 +1305,44 @@ public class TypeTokens implements TypeParser {
 			return theReverse.apply(target);
 		}
 
+		/**
+		 * @return Whether this converter simply returns the value given it for both the {@link #apply(Object)} and {@link #reverse(Object)}
+		 *         methods
+		 */
 		public boolean isTrivial() {
 			return theConverter == LambdaUtils.identity() && theReverse == LambdaUtils.identity();
 		}
 
+		/**
+		 * @return Whether this converter can {@link #apply(Object) convert} any value (i.e. {@link #isApplicable(Object)} always returns
+		 *         null)
+		 */
 		public boolean isSafe() {
 			return theApplicability == null;
 		}
 
+		/**
+		 * @return Whether this converter can {@link #reverse(Object) reverse} any value (i.e. {@link #isReversible(Object)} always returns
+		 *         null)
+		 */
 		public boolean isReverseSafe() {
 			return theReversibility == null;
 		}
 
+		/** @return The implementation function for {@link #isApplicable(Object)} */
 		public Function<? super S, String> getApplicability() {
 			return theApplicability;
 		}
 
+		/** @return The implementation function for {@link #isReversible(Object)} */
 		public Function<? super T, String> getReversibility() {
 			return theReversibility;
 		}
 
+		/**
+		 * @return A TypeConverter that converts from this converter's {@link #getConvertedType() converted type} to its
+		 *         {@link #getReverseType() reverse type}
+		 */
 		public TypeConverter<TR, T, S, R> reverse() {
 			if (theReversed == null) {
 				theReversed = new TypeConverter<>(theReverseName, theName, theConvertedType, theReverseType, //
@@ -1251,6 +1352,13 @@ public class TypeTokens implements TypeParser {
 			return theReversed;
 		}
 
+		/**
+		 * @param <TR2> The super-type of all values that the other converter can {@link #reverse(Object) reverse}
+		 * @param <T2> The super-type of all values that can be produced by the other converter
+		 * @param other The other converter
+		 * @return A converter that converts from this converter's source type to the other converter's {@link #getConvertedType() converted
+		 *         type}
+		 */
 		public <TR2, T2 extends TR2> TypeConverter<S, R, TR2, T2> andThen(TypeConverter<? super T, ? extends T, TR2, T2> other) {
 			if (other instanceof NoOpTypeConverter)
 				return (TypeConverter<S, R, TR2, T2>) this;
@@ -1321,9 +1429,22 @@ public class TypeTokens implements TypeParser {
 		}
 	}
 
+	/**
+	 * A {@link TypeConverter} that performs no action, but is needed to for type conversions
+	 *
+	 * @param <S> The super-type of all values that this converter can {@link #apply(Object) convert}
+	 * @param <R> The super-type which all {@link #reverse(Object) reversed} values will extend
+	 * @param <TR> The super-type of all values that this converter can {@link #reverse(Object) reverse}
+	 * @param <T> The super-type of all values that this converter can produce
+	 */
 	public static class NoOpTypeConverter<S, R extends S, TR, T extends TR> extends TypeConverter<S, R, TR, T> {
+		/** The name for all {@link NoOpTypeConverter}s */
 		public static final String NAME = "no-op";
 
+		/**
+		 * @param sourceType The super-type of all values that may be converted by this converter
+		 * @param convertedType The super-type of all values that may be produced by this converter
+		 */
 		public NoOpTypeConverter(TypeToken<R> sourceType, TypeToken<T> convertedType) {
 			super(NAME, NAME, sourceType, convertedType, null, LambdaUtils.unenforcedCast(), null, LambdaUtils.unenforcedCast());
 		}
@@ -1406,18 +1527,21 @@ public class TypeTokens implements TypeParser {
 	/**
 	 * @param <S> The compile-time type to cast from
 	 * @param <T> The compile-time type to cast to
+	 * @param <TX> The type of exception thrown by the {@link ExceptionHandler}
 	 * @param target The type to cast to
 	 * @param source The type to cast from
 	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
 	 *        {@link NullPointerException}
 	 * @param downCastOnly Whether to only allow down casts (e.g. int->double) or to also facilitate upcasts (e.g. double->int)
+	 * @param exHandler An {@link ExceptionHandler} to handle the error if the type is not convertible
 	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
-	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
+	 * @throws TX If values of the right type cannot be cast to the left type in general and the {@link ExceptionHandler} throws an
+	 *         exception
 	 */
 	public <S, T, TX extends Throwable> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target,
 		TypeToken<S> source, boolean safe, boolean downCastOnly, ExceptionHandler.Single<IllegalArgumentException, TX> exHandler)
-			throws IllegalArgumentException, TX {
+		throws TX {
 		Class<S> rawSource = getRawType(source);
 		TypeKey<S> sourceKey = keyFor(rawSource);
 		if (target.equals(source)) {
