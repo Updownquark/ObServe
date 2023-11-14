@@ -12,22 +12,11 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
+import org.qommons.ReversedComparator;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterHashSet;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.MutableMapEntryHandle;
-import org.qommons.collect.ValueStoredCollection;
+import org.qommons.collect.*;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -281,7 +270,7 @@ public interface Equivalence<E> {
 
 		@Override
 		public SortedEquivalence<E> reverse() {
-			return new ComparatorEquivalence<>(theParentEquivalence, type, nullable, BetterSortedSet.ReversedSortedSet.reverse(compare));
+			return new ComparatorEquivalence<>(theParentEquivalence, type, nullable, ReversedComparator.reverse(compare));
 		}
 
 		@Override

@@ -29,6 +29,7 @@ import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.ReversedComparator;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
@@ -270,8 +271,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, T, T> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(),
-				BetterSortedSet.ReversedSortedSet.reverse(comparator()));
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), ReversedComparator.reverse(comparator()));
 		}
 
 		@Override
@@ -426,8 +426,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, T, T> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(),
-				BetterSortedSet.ReversedSortedSet.reverse(comparator()));
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), ReversedComparator.reverse(comparator()));
 		}
 
 		@Override
@@ -524,8 +523,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public DistinctSortedDataFlow<E, E, E> reverse() {
-			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(),
-				BetterSortedSet.ReversedSortedSet.reverse(comparator()));
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), ReversedComparator.reverse(comparator()));
 		}
 
 		@Override

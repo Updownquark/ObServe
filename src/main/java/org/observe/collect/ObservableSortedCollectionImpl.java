@@ -31,6 +31,7 @@ import org.observe.collect.ObservableSetImpl.ValueStoredBaseManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.ReversedComparator;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -540,7 +541,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public SortedDataFlow<E, T, T> reverse() {
-			return new SortedDataFlowWrapper<>(getSource(), super.reverse(), BetterSortedList.ReversedSortedList.reverse(comparator()));
+			return new SortedDataFlowWrapper<>(getSource(), super.reverse(), ReversedComparator.reverse(comparator()));
 		}
 
 		@Override
@@ -627,7 +628,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public SortedDataFlow<E, E, E> reverse() {
-			return new SortedDataFlowWrapper<>(getSource(), super.reverse(), BetterSortedList.ReversedSortedList.reverse(comparator()));
+			return new SortedDataFlowWrapper<>(getSource(), super.reverse(), ReversedComparator.reverse(comparator()));
 		}
 
 		@Override
