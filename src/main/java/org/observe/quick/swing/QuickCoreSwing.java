@@ -202,7 +202,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 							return;
 
 						component[0] = c;
-						c.setCursor(cursor.get());
+						Cursor cursorV = cursor.get();
+						if (cursorV == null)
+							cursorV = Cursor.getDefaultCursor();
+						if (c.getCursor() != cursorV)
+							c.setCursor(cursorV);
 						if (propertyManagers.isEmpty() || propertyManagers.get(0) != scd.propertyMgr)
 							propertyManagers.add(0, scd.propertyMgr);
 						adjustFont(pmDecorator.reset(), w.getStyle());
@@ -254,7 +258,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 						pm.setBackground(bg);
 						pm.setOpaque(bg == null ? null : true);
 					});
-					if (w.getTooltip() != null)
+					if (!renderer && w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
 					if (!renderer)
 						comp.visibleWhen(w.isVisible());

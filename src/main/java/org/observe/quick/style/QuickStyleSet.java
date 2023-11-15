@@ -63,12 +63,12 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		session.put(STYLE_SET_SESSION_KEY, this);
 		try {
 			super.doUpdate(session);
+
+			theName = session.getAttributeText("name");
+			syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 		} finally {
 			session.put(STYLE_SET_SESSION_KEY, null);
 		}
-
-		theName = session.getAttributeText("name");
-		syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 	}
 
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {

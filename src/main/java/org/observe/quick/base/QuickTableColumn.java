@@ -358,7 +358,7 @@ public interface QuickTableColumn<R, C> {
 				C defValue = TypeTokens.get().getDefaultValue(columnType);
 				theRawColumnEditValue = SettableValue.build(columnType).withValue(defValue).build();
 				theFilteredColumnEditValue = SettableValue.build(columnType).withValue(defValue).build()//
-					.disableWith(SettableValue.flatten(isEditable))//
+					// .disableWith(SettableValue.flatten(isEditable))//
 					.filterAccept(v -> {
 						SettableValue<String> accept = isAcceptable.get();
 						if (accept == null)
@@ -401,77 +401,22 @@ public interface QuickTableColumn<R, C> {
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
 
-			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, myModels,
-				SettableValue.flatten(theEditColumnValue));
+			// isEditable is called from rendering
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
 
-			ExElement owner = getParentElement().getParentElement();
-			ModelSetInstanceBuilder editorModelBuilder = myModels.copy();
-			ModelComponentId ownerModelId;
-			ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
-			if (ownerElModels != null)
-				ownerModelId = findOwnerModelId(ownerElModels.getElement().getModels(), owner);
-			else
-				ownerModelId = null;
-			if (ownerModelId != null)
-				editorModelBuilder.withAll(myModels.getInherited(ownerModelId).copy(myModels.getUntil()).build());
-			ModelSetInstance editorModels = editorModelBuilder.build();
+			MultiValueRenderable<R> owner = getOwner(getParentElement());
+			ModelSetInstance editorModels = copyTableModels(myModels, owner);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, editorModels,
+				SettableValue.flatten(theEditColumnValue));
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
-			if (editing != null && owner instanceof MultiValueRenderable) {
-				// Not enough to copy the editor models, because I also need to replace values table models
-				MultiValueRenderable<R> mvr = (MultiValueRenderable<R>) owner;
-				if (mvr.getActiveValueVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(mvr.getActiveValueVariable(), editorModels,
-						SettableValue.flatten(theEditRowValue), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				if (mvr.getSelectedVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(mvr.getSelectedVariable(), editorModels,
-						SettableValue.flatten(isSelected), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				if (owner instanceof TabularWidget) {
-					TabularWidget<R> table = (TabularWidget<R>) owner;
-					if (table.getRowIndexVariable() != null)
-						ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), editorModels,
-							SettableValue.flatten(theRowIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-					if (table.getColumnIndexVariable() != null)
-						ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), editorModels,
-							SettableValue.flatten(theColumnIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				}
-				if (theEditor != null)
-					theEditor.instantiate(editorModels);
+			if (owner != null)
+				replaceTableValues(editorModels, owner, SettableValue.flatten(theEditRowValue), SettableValue.flatten(isSelected),
+					SettableValue.flatten(theRowIndex), SettableValue.flatten(theColumnIndex));
+			if (theEditor != null)
+				theEditor.instantiate(editorModels);
+			if (editing != null)
 				editing.instantiateEditor(editorModels);
-			}
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
-		}
-
-		private ModelComponentId findOwnerModelId(ModelInstantiator models, ExElement owner) {
-			if (models.getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
-				return models.getIdentity();
-			for (ModelComponentId inh : models.getInheritance()) {
-				if (models.getInheritance(inh).getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
-					return inh;
-			}
-			return null;
-		}
-
-		private void populateEditorModels(ModelSetInstanceBuilder builder, ModelSetInstance myModels, ModelInstantiator ownerModels)
-			throws ModelInstantiationException, IllegalArgumentException {
-			if (myModels.getInheritance().contains(ownerModels.getIdentity()))
-				builder.withAll(myModels.getInherited(ownerModels.getIdentity()).copy(myModels.getUntil()).build());
-			else {
-				// We don't directly extend our owner's model
-				// This is likely because the owner element is the result of a Qonfig promise, so its model instance is a unified model
-				// composed of the loading content models and the external content models
-				// So we need to find the most specific component of the owner models that we recognize and copy that instead
-				ModelInstantiator target = null;
-				for (ModelComponentId inh : ownerModels.getInheritance()) {
-					if (myModels.getInheritance().contains(inh)) {
-						ModelInstantiator myInh = myModels.getModel(inh);
-						if (target == null || myInh.getInheritance().contains(target.getIdentity()))
-							target = myInh;
-					}
-				}
-				if (target != null)
-					builder.withAll(myModels.getInherited(target.getIdentity()).copy(myModels.getUntil()).build());
-			}
 		}
 
 		@Override
@@ -483,9 +428,9 @@ public interface QuickTableColumn<R, C> {
 			copy.isAcceptable = SettableValue.build(isAcceptable.getType()).build();
 			copy.theRawColumnEditValue = SettableValue.build(theRawColumnEditValue.getType()).withValue(defValue).build();
 			copy.theFilteredColumnEditValue = SettableValue.build(theRawColumnEditValue.getType()).withValue(defValue).build()//
-				.disableWith(SettableValue.flatten(isEditable))//
+				// .disableWith(SettableValue.flatten(copy.isEditable))//
 				.filterAccept(v -> {
-					SettableValue<String> accept = isAcceptable.get();
+					SettableValue<String> accept = copy.isAcceptable.get();
 					if (accept == null)
 						return null;
 					copy.theRawColumnEditValue.set(v, null);
@@ -500,6 +445,58 @@ public interface QuickTableColumn<R, C> {
 			copy.theEditor = theEditor.copy(copy);
 
 			return copy;
+		}
+	}
+
+	static <R> MultiValueRenderable<R> getOwner(TableColumnSet<R> columns) {
+		ExElement parent = columns.getParentElement();
+		while (parent != null && !(parent instanceof MultiValueRenderable))
+			parent = parent.getParentElement();
+		return (MultiValueRenderable<R>) parent;
+	}
+
+	static ModelSetInstance copyTableModels(ModelSetInstance columnModels, MultiValueRenderable<?> owner)
+		throws ModelInstantiationException {
+		if (owner == null)
+			return columnModels.copy().build();
+		ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
+		ModelInstantiator ownerModels = ownerElModels.getElement().getModels();
+		ModelComponentId ownerModelId;
+		if (ownerModels.getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
+			ownerModelId = ownerModels.getIdentity();
+		else {
+			ownerModelId = null;
+			for (ModelComponentId inh : ownerModels.getInheritance()) {
+				if (ownerModels.getInheritance(inh).getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity()) {
+					ownerModelId = inh;
+					break;
+				}
+			}
+		}
+		ModelSetInstanceBuilder columnModelBuilder = columnModels.copy();
+		if (ownerModelId != null)
+			columnModelBuilder.withAll(columnModels.getInherited(ownerModelId).copy(columnModels.getUntil()).build());
+
+		return columnModelBuilder.build();
+	}
+
+	static <R> void replaceTableValues(ModelSetInstance columnModels, MultiValueRenderable<R> owner, SettableValue<R> rowValue,
+		SettableValue<Boolean> selected, SettableValue<Integer> rowIndex, SettableValue<Integer> columnIndex)
+			throws ModelInstantiationException {
+		if (rowValue != null && owner.getActiveValueVariable() != null)
+			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getActiveValueVariable(), columnModels, rowValue,
+				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		if (selected != null && owner.getSelectedVariable() != null)
+			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getSelectedVariable(), columnModels, selected,
+				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		if (owner instanceof TabularWidget) {
+			TabularWidget<R> table = (TabularWidget<R>) owner;
+			if (rowIndex != null && table.getRowIndexVariable() != null)
+				ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), columnModels, rowIndex,
+					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+			if (columnIndex != null && table.getColumnIndexVariable() != null)
+				ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), columnModels, columnIndex,
+					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 		}
 	}
 
@@ -1001,6 +998,7 @@ public interface QuickTableColumn<R, C> {
 		private ModelComponentId theColumnValueVariable;
 		private SettableValue<SettableValue<C>> theValue;
 		private SettableValue<SettableValue<String>> theHeaderTooltip;
+		private ModelSetInstance theRenderModels;
 		private QuickWidget theRenderer;
 		private ColumnEditing<R, C> theEditing;
 

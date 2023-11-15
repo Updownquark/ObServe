@@ -16,13 +16,10 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
-import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickInterpretedStyle.QuickStyleAttributeInstantiator;
@@ -56,8 +53,6 @@ public interface QuickStyledElement extends ExElement {
 		@QonfigChildGetter("style")
 		List<QuickStyleElement.Def> getStyleElements();
 
-		ModelComponentId getParentStyleValue();
-
 		/**
 		 * An abstract {@link Def} implementation
 		 *
@@ -66,7 +61,6 @@ public interface QuickStyledElement extends ExElement {
 		public abstract class Abstract<S extends QuickStyledElement> extends ExElement.Def.Abstract<S> implements Def<S> {
 			private final List<QuickStyleElement.Def> theStyleElements;
 			private QuickInstanceStyle.Def theStyle;
-			private ModelComponentId theParentStyleValue;
 
 			/**
 			 * @param parent The parent container definition
@@ -88,15 +82,8 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
-			public ModelComponentId getParentStyleValue() {
-				return theParentStyleValue;
-			}
-
-			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theParentStyleValue = getAddOn(ExWithElementModel.Def.class)
-					.getElementValueModelId(InterpretedStyleApplication.PARENT_MODEL_NAME);
 
 				ObservableModelSet.Builder builder;
 				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
@@ -150,7 +137,7 @@ public interface QuickStyledElement extends ExElement {
 
 					theStyle = wrap(parentStyle, rootStyle);
 				}
-				theStyle.update(declaredValues, styleSheetValues);
+				theStyle.update(declaredValues, styleSheetValues, getExpressoEnv());
 			}
 
 			/**
@@ -261,7 +248,6 @@ public interface QuickStyledElement extends ExElement {
 	public abstract class Abstract extends ExElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
 		private final List<QuickStyleElement<?>> theStyleElements;
-		private ModelComponentId theParentStyleValue;
 
 		protected Abstract(Object id) {
 			super(id);
@@ -283,7 +269,6 @@ public interface QuickStyledElement extends ExElement {
 			super.doUpdate(interpreted);
 
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
-			theParentStyleValue = myInterpreted.getDefinition().getParentStyleValue();
 
 			ExElement parent = getParentElement();
 			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
@@ -317,10 +302,6 @@ public interface QuickStyledElement extends ExElement {
 			ExElement parent = getParentElement();
 			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
 				parent = parent.getParentElement();
-			ModelSetInstance parentModels = parent == null ? null : ((QuickStyledElement.Abstract) parent).getUpdatingModels();
-			ExFlexibleElementModelAddOn.satisfyElementValue(theParentStyleValue, getUpdatingModels(),
-				SettableValue.of(ModelSetInstance.class, parentModels, "Not settable"),
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 
 			theStyle.instantiate(myModels);
 

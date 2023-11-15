@@ -3,12 +3,16 @@ package org.observe.quick.style;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
@@ -45,6 +49,9 @@ public interface QuickCompiledStyle {
 	/** @return A multi-map of all style values applicable to this style, keyed by name */
 	BetterMultiMap<String, QuickStyleAttributeDef> getAttributesByName();
 
+	/** @return All style attributes for which this style has values */
+	Set<QuickStyleAttributeDef> getAttributesWithValues();
+
 	QuickCompiledStyleAttribute getValues(QuickStyleAttributeDef attribute);
 
 	/**
@@ -66,7 +73,8 @@ public interface QuickCompiledStyle {
 		return attrs.iterator().next();
 	}
 
-	void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues) throws QonfigInterpretationException;
+	void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues, CompiledExpressoEnv env)
+		throws QonfigInterpretationException;
 
 	/**
 	 * Interprets this compiled structure
@@ -86,6 +94,7 @@ public interface QuickCompiledStyle {
 		private final QuickCompiledStyle theParent;
 		private final List<QuickStyleValue> theDeclaredValues;
 		private final Map<QuickStyleAttributeDef, QuickCompiledStyleAttribute> theValues;
+		private final Set<QuickStyleAttributeDef> theAttributes;
 		private final BetterMultiMap<String, QuickStyleAttributeDef> theAttributesByName;
 
 		/**
@@ -114,24 +123,68 @@ public interface QuickCompiledStyle {
 					attrsByName.putAll(inhStyle.getAttributes());
 			}
 			theAttributesByName = BetterCollections.unmodifiableMultiMap(attrsByName);
+			Set<QuickStyleAttributeDef> attrs = new LinkedHashSet<>();
+			attrs.addAll(theAttributesByName.values());
+			theAttributes = Collections.unmodifiableSet(attrs);
 		}
 
 		@Override
-		public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues) throws QonfigInterpretationException {
+		public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues, CompiledExpressoEnv env)
+			throws QonfigInterpretationException {
 			theDeclaredValues.clear();
 			theDeclaredValues.addAll(declaredValues);
 
 			theValues.clear();
 			Map<QuickStyleAttributeDef, BetterSortedList<QuickStyleValue>> values = new HashMap<>();
 			for (QuickStyleValue sv : theDeclaredValues)
-				values.computeIfAbsent(sv.getAttribute(),
-					__ -> SortedTreeList.<QuickStyleValue> buildTreeList(QuickStyleValue::compareTo).build()).add(sv);
+				values.computeIfAbsent(sv.getAttribute(), __ -> createStyleValueList()).add(sv);
 			for (QuickStyleValue sv : otherValues)
-				values.computeIfAbsent(sv.getAttribute(),
-					__ -> SortedTreeList.<QuickStyleValue> buildTreeList(QuickStyleValue::compareTo).build()).add(sv);
+				values.computeIfAbsent(sv.getAttribute(), __ -> createStyleValueList()).add(sv);
+			if (theParent != null)
+				addInheritedStyleValues(theParent, values, env.getModels());
 			for (Map.Entry<QuickStyleAttributeDef, BetterSortedList<QuickStyleValue>> v : values.entrySet()) {
 				QuickStyleAttributeDef attr = v.getKey();
 				theValues.put(attr, new QuickCompiledStyleAttribute(attr, this, QommonsUtils.unmodifiableCopy(v.getValue())));
+			}
+		}
+
+		private static BetterSortedList<QuickStyleValue> createStyleValueList() {
+			return SortedTreeList.<QuickStyleValue> buildTreeList(QuickStyleValue::compareTo).build();
+		}
+
+		private void addInheritedStyleValues(QuickCompiledStyle parent,
+			Map<QuickStyleAttributeDef, BetterSortedList<QuickStyleValue>> values, ObservableModelSet models) {
+			/* This part is a little confusing, but hear me out:
+			 * If the attribute is marked trickle down, then it should inherit from the nearest ancestor for which the attribute has a value.
+			 *
+			 * So far, so good.
+			 *
+			 * But there is another more subtle case where an attribute that is *not* marked trickle-down should inherit from an ancestor.
+			 * If a value for the attribute is defined on an ancestor to which the attribute doesn't actually apply,
+			 * this is obviously intended to apply to the descendants of the element, since otherwise the value could never apply to anything.
+			 *
+			 * An example use case of this is to set the widget color for a column.  Column has no styles itself, but it inherits styled
+			 * explicitly to support targeting with styles which will be used by its descendants, e.g. the renderer and editor.
+			 */
+			/* I'm glad I only have to do this during the compile stage.
+			 * We can't anticipate what style attributes will be specified, or who they'll apply to, so we have to climb all the way
+			 * to the root looking for style attributes that could potentially apply to us.
+			 */
+			Set<QuickStyleAttributeDef> excludeAttrs = new HashSet<>();
+			while (parent != null) {
+				for (QuickStyleAttributeDef attr : parent.getAttributesWithValues()) {
+					if (!excludeAttrs.contains(attr) && theAttributes.contains(attr)
+						&& (attr.isTrickleDown() || !parent.getAttributes().contains(attr))) {
+						for (QuickStyleValue value : parent.getValues(attr).getValues())
+							values.computeIfAbsent(value.getAttribute(), __ -> createStyleValueList()).add(value.forInherited(models));
+					}
+				}
+				for (QuickStyleAttributeDef attr : parent.getAttributes()) {
+					if (!attr.isTrickleDown())
+						excludeAttrs.add(attr);
+				}
+
+				parent = parent.getParent();
 			}
 		}
 
@@ -157,12 +210,17 @@ public interface QuickCompiledStyle {
 
 		@Override
 		public Set<QuickStyleAttributeDef> getAttributes() {
-			return Collections.unmodifiableSet(theValues.keySet());
+			return theAttributes;
 		}
 
 		@Override
 		public BetterMultiMap<String, QuickStyleAttributeDef> getAttributesByName() {
 			return BetterCollections.unmodifiableMultiMap(theAttributesByName);
+		}
+
+		@Override
+		public Set<QuickStyleAttributeDef> getAttributesWithValues() {
+			return Collections.unmodifiableSet(theValues.keySet());
 		}
 
 		@Override
@@ -236,13 +294,19 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
+		public Set<QuickStyleAttributeDef> getAttributesWithValues() {
+			return theWrapped.getAttributesWithValues();
+		}
+
+		@Override
 		public QuickCompiledStyleAttribute getValues(QuickStyleAttributeDef attribute) {
 			return theWrapped.getValues(attribute);
 		}
 
 		@Override
-		public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues) throws QonfigInterpretationException {
-			theWrapped.update(declaredValues, otherValues);
+		public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues, CompiledExpressoEnv env)
+			throws QonfigInterpretationException {
+			theWrapped.update(declaredValues, otherValues, env);
 		}
 
 		@Override
@@ -291,31 +355,20 @@ public interface QuickCompiledStyle {
 
 		/**
 		 * @param elementStyle The element style to interpret this attribute value into
-		 * @param inherited The inherited style for the attribute
 		 * @param env The expresso environment to use to evaluate the style values
 		 * @param appCache The application cache for re-use of {@link InterpretedStyleApplication}s
 		 * @return The interpreted value for this style attribute on the element
 		 * @throws ExpressoInterpretationException If the condition or the value could not be interpreted
 		 */
-		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, QuickElementStyleAttribute<T> inherited,
-			InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
+		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, InterpretedExpressoEnv env,
+			QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
 				throws ExpressoInterpretationException {
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, env);
 			List<InterpretedStyleValue<T>> values = new ArrayList<>(theValues.size());
-			for (QuickStyleValue v : theValues) {
-				QuickStyleSheet.Interpreted vStyleSheet;
-				if (v.getStyleSheet() != null) {
-					vStyleSheet = styleSheet == null ? null : styleSheet.findInterpretation(v.getStyleSheet());
-					if (vStyleSheet == null)
-						throw new ExpressoInterpretationException("Unable to locate style sheet interpretation for " + v.getStyleSheet(),
-							env.reporting().getFileLocation());
-				} else
-					vStyleSheet = null;
-				InterpretedExpressoEnv vEnv = vStyleSheet == null ? env : vStyleSheet.getExpressoEnv();
-				values.add((InterpretedStyleValue<T>) v.interpret(vEnv, vStyleSheet, appCache));
-			}
-			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values), inherited);
+			for (QuickStyleValue v : theValues)
+				values.add((InterpretedStyleValue<T>) v.interpret(env, styleSheet, appCache));
+			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values));
 		}
 
 		@Override

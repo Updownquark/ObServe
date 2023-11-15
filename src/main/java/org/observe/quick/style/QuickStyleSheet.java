@@ -486,8 +486,14 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 
 		public StyleSheetModels instantiateModels() {
+			ArrayList<ModelInstantiator> styleSetModels = new ArrayList<>(theStyleSets.size());
+			for (QuickStyleSet.Interpreted styleSet : theStyleSets.values()) {
+				if (styleSet.getModels().getIdentity() != getModels().getIdentity())
+					styleSetModels.add(styleSet.getModels().instantiate());
+			}
+			styleSetModels.trimToSize();
 			Map<ModelComponentId, StyleSheetModels> subModels = new LinkedHashMap<>();
-			StyleSheetModels models = new StyleSheetModels(getModels().instantiate(), subModels);
+			StyleSheetModels models = new StyleSheetModels(getModels().instantiate(), styleSetModels, subModels);
 			for (Map.Entry<String, QuickStyleSheet.Interpreted> subSheet : theImportedStyleSheets.entrySet()) {
 				ModelComponentNode<?> component = getModels().getLocalComponent(subSheet.getKey());
 				if (component != null)
@@ -500,15 +506,20 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 	public static class StyleSheetModels {
 		private final ModelInstantiator theStyleSheetModels;
+		private final List<ModelInstantiator> theStyleSetModels;
 		private final Map<ModelComponentId, StyleSheetModels> theSubModels;
 
-		StyleSheetModels(ModelInstantiator styleSheetModels, Map<ModelComponentId, StyleSheetModels> subModels) {
+		StyleSheetModels(ModelInstantiator styleSheetModels, List<ModelInstantiator> styleSetModels,
+			Map<ModelComponentId, StyleSheetModels> subModels) {
 			theStyleSheetModels = styleSheetModels;
+			theStyleSetModels = styleSetModels;
 			theSubModels = subModels;
 		}
 
 		public void instantiate() {
 			theStyleSheetModels.instantiate();
+			for (ModelInstantiator styleSetModel : theStyleSetModels)
+				styleSetModel.instantiate();
 			for (StyleSheetModels subSheet : theSubModels.values())
 				subSheet.instantiate();
 		}
@@ -522,6 +533,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				subModelHolder.set(subModel.getValue().populate(into), null);
 			}
 			ModelSetInstance built = builder.build();
+			for (ModelInstantiator styleSetModel : theStyleSetModels) {
+				into.withAll(//
+					styleSetModel.createInstance(into.getUntil())//
+					.withAll(built)//
+					.build());
+			}
 			into.withAll(built);
 			return built;
 		}

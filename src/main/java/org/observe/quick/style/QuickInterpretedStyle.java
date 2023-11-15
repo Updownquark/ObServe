@@ -11,10 +11,8 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.InterpretedStyleValue.StyleValueInstantiator;
 import org.observe.util.TypeTokens;
@@ -25,7 +23,6 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElementOrAddOn;
 
 import com.google.common.reflect.TypeToken;
 
@@ -127,49 +124,13 @@ public interface QuickInterpretedStyle {
 			for (QuickStyleValue value : getDefinition().getDeclaredValues())
 				theDeclaredValues.add(value.interpret(env, styleSheet, appCache));
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-			for (QuickStyleAttributeDef attr : getDefinition().getAttributes()) {
+			for (QuickStyleAttributeDef attr : getDefinition().getAttributesWithValues()) {
 				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, env);
-				QuickInterpretedStyle.QuickElementStyleAttribute<Object> inherited;
-				inherited = getInherited(theParent, interpretedAttr);
-				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, inherited, env, styleSheet, appCache));
+				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, env, styleSheet, appCache));
 			}
 			theAttributesByName.clear();
 			for (QuickStyleAttribute<?> attr : theValues.keySet())
 				theAttributesByName.add(attr.getName(), attr);
-		}
-
-		private <T> QuickElementStyleAttribute<T> getInherited(QuickInterpretedStyle parent, QuickStyleAttribute<T> attr) {
-			if (parent == null)
-				return null;
-
-			/* This part is a little confusing, but hear me out:
-			 * If the attribute is marked trickle down, then it should inherit from the nearest ancestor for which the attribute has a value.
-			 *
-			 * So far, so good.
-			 *
-			 * But there is another more subtle case where an attribute that is *not* marked trickle-down should inherit from an ancestor.
-			 * If a value for the attribute is defined on an ancestor to which the attribute doesn't actually apply,
-			 * this is obviously intended to apply to the descendants of the element, since otherwise the value could never apply to anything.
-			 *
-			 * An example use case of this is to set the widget color for a column.  Column has no styles itself, but it inherits styled
-			 * explicitly to support targeting with styles which will be used by its descendants, e.g. the renderer and editor.
-			 */
-			QonfigElementOrAddOn testType;
-			if (attr.getDefinition().isTrickleDown())
-				testType = null; // Trickle down, so there's no test--always inherit
-			else
-				testType = attr.getDefinition().getDeclarer().getElement();
-			while (parent != null) {
-				if (testType != null && parent.getDefinition().getElement().isInstance(testType))
-					return null;
-				else if (parent.getAttributes().contains(attr))
-					break;
-				parent = parent.getParent();
-			}
-			if (parent == null)
-				return null;
-			// We have an ancestor for which the attribute has a value
-			return parent == null ? null : parent.get(attr);
 		}
 
 		@Override
@@ -202,7 +163,7 @@ public interface QuickInterpretedStyle {
 			QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
 			if (value != null)
 				return value;
-			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), getInherited(theParent, attr));
+			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList());
 		}
 
 		@Override
@@ -278,20 +239,17 @@ public interface QuickInterpretedStyle {
 		private final QuickStyleAttribute<T> theAttribute;
 		private final QuickInterpretedStyle theStyle;
 		private final List<InterpretedStyleValue<T>> theValues;
-		private final QuickElementStyleAttribute<T> theInherited;
 
 		/**
 		 * @param attribute The attribute this structure is for
 		 * @param style The element style this structure is for
 		 * @param values All style values that may apply to the element for the attribute
-		 * @param inherited The structure for the same attribute for the {@link QuickInterpretedStyle#getParent() parent} style
 		 */
 		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickInterpretedStyle style,
-			List<InterpretedStyleValue<T>> values, QuickElementStyleAttribute<T> inherited) {
+			List<InterpretedStyleValue<T>> values) {
 			theAttribute = attribute;
 			theStyle = style;
 			theValues = values;
-			theInherited = inherited;
 		}
 
 		/** @return The attribute this structure is for */
@@ -309,36 +267,15 @@ public interface QuickInterpretedStyle {
 			return theValues;
 		}
 
-		/** @return The structure for the same attribute for the {@link QuickInterpretedStyle#getParent() parent} style */
-		public QuickElementStyleAttribute<T> getInherited() {
-			return theInherited;
-		}
-
 		public List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> getAllValues() {
 			List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> values = new ArrayList<>();
 			for (InterpretedStyleValue<T> value : theValues)
 				values.add(new BiTuple<>(theStyle, value));
-			if (theInherited != null)
-				values.addAll(theInherited.getAllValues());
 			return values;
 		}
 
 		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) {
-			QuickStyleAttributeInstantiator<T> inherited;
-			ModelComponentId parentModelValue;
-			if (theInherited != null) {
-				try {
-					parentModelValue = models.getComponent(InterpretedStyleApplication.PARENT_MODEL_NAME).getIdentity();
-				} catch (ModelException e) {
-					throw new IllegalStateException("No parent model installed", e);
-				}
-				inherited = theInherited.instantiate(StyleApplicationDef.getParentModel(models));
-			} else {
-				inherited = null;
-				parentModelValue = null;
-			}
-			return new QuickStyleAttributeInstantiator<>(theAttribute, QommonsUtils.map(theValues, v -> v.instantiate(models), true),
-				inherited, parentModelValue);
+			return new QuickStyleAttributeInstantiator<>(theAttribute, QommonsUtils.map(theValues, v -> v.instantiate(models), true));
 		}
 
 		@Override
@@ -350,15 +287,10 @@ public interface QuickInterpretedStyle {
 	public static class QuickStyleAttributeInstantiator<T> {
 		private final QuickStyleAttribute<T> theAttribute;
 		private final List<InterpretedStyleValue.StyleValueInstantiator<T>> theValues;
-		private final QuickStyleAttributeInstantiator<T> theInherited;
-		private final ModelComponentId theParentModelValue;
 
-		public QuickStyleAttributeInstantiator(QuickStyleAttribute<T> attribute, List<StyleValueInstantiator<T>> values,
-			QuickStyleAttributeInstantiator<T> inherited, ModelComponentId parentModelValue) {
+		public QuickStyleAttributeInstantiator(QuickStyleAttribute<T> attribute, List<StyleValueInstantiator<T>> values) {
 			theAttribute = attribute;
 			theValues = values;
-			theInherited = inherited;
-			theParentModelValue = parentModelValue;
 		}
 
 		public QuickStyleAttribute<T> getAttribute() {
@@ -369,15 +301,9 @@ public interface QuickInterpretedStyle {
 			return theValues;
 		}
 
-		public QuickStyleAttributeInstantiator<T> getInherited() {
-			return theInherited;
-		}
-
 		public void instantiate() {
 			for (InterpretedStyleValue.StyleValueInstantiator<T> value : theValues)
 				value.instantiate();
-			if (theInherited != null)
-				theInherited.instantiate();
 		}
 
 		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
@@ -391,8 +317,6 @@ public interface QuickInterpretedStyle {
 				values.add(condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
 					"ifPass(" + value + ")", null)));
 			}
-			if (theInherited != null)
-				values.addAll(theInherited.getConditionalValues(InterpretedStyleApplication.getParentModels(models, theParentModelValue)));
 			return values;
 		}
 

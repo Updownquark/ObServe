@@ -140,8 +140,8 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param lock The lock for this observable
 	 * @param listening Listening options for this observable
 	 */
-	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description, boolean internalState,
-		Function<Object, Transactable> lock, ListenerList.Builder listening) {
+	protected SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description,
+		boolean internalState, Function<Object, Transactable> lock, ListenerList.Builder listening) {
 		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end

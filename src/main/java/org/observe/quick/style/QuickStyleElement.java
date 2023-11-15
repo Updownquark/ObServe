@@ -114,7 +114,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			if (theApplication.applies(element)) {
 				for (QuickStyleValue value : theStyleValues) {
 					if (value.getApplication().applies(element))
-						values.add(value.when(application));
+						values.add(value.when(application).withModelContext(modelContext));
 				}
 				if (theStyleSet != null)
 					theStyleSet.getStyleValues(values, theApplication.and(application), element, env.at(reporting().getFileLocation()),
@@ -122,7 +122,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			} else if (application.equals(StyleApplicationDef.ALL)) {
 				for (QuickStyleValue value : theStyleValues)
 					if (value.getApplication().applies(element))
-						values.add(value);
+						values.add(value.withModelContext(modelContext));
 			}
 			for (QuickStyleElement.Def child : theChildren)
 				child.getStyleValues(values, application, element, env, modelContext);

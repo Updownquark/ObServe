@@ -3,10 +3,7 @@ package org.observe.quick.style;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
@@ -18,10 +15,6 @@ import org.qommons.LambdaUtils;
 public class InterpretedStyleApplication {
 	/** Constant value returning true */
 	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(boolean.class, true);
-
-	public static final String PARENT_MODEL_NAME = "PARENT$MODEL$INSTANCE";
-	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
-		.forType(ModelSetInstance.class);
 
 	private final InterpretedStyleApplication theParent;
 	private final StyleApplicationDef theDefinition;
@@ -59,14 +52,8 @@ public class InterpretedStyleApplication {
 
 	/** @return An instantiator for the condition returning whether and when this applies to the element */
 	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator(InterpretedModelSet models) {
-		ModelComponentId parentModelValue;
-		try {
-			parentModelValue = models.getComponent(PARENT_MODEL_NAME).getIdentity();
-		} catch (ModelException e) {
-			throw new IllegalArgumentException("Could not get parent model value", e);
-		}
-		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(StyleApplicationDef.getParentModel(models)),
-			theCondition == null ? null : theCondition.instantiate(), parentModelValue);
+		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(models),
+			theCondition == null ? null : theCondition.instantiate());
 	}
 
 	@Override
@@ -77,13 +64,11 @@ public class InterpretedStyleApplication {
 	public static class Instantiator implements ModelValueInstantiator<ObservableValue<Boolean>> {
 		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theParentCondition;
 		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theCondition;
-		private final ModelComponentId theParentModelValue;
 
 		public Instantiator(ModelValueInstantiator<? extends ObservableValue<Boolean>> parentCondition,
-			ModelValueInstantiator<? extends ObservableValue<Boolean>> condition, ModelComponentId parentModelValue) {
+			ModelValueInstantiator<? extends ObservableValue<Boolean>> condition) {
 			theParentCondition = parentCondition;
 			theCondition = condition;
-			theParentModelValue = parentModelValue;
 		}
 
 		@Override
@@ -100,7 +85,7 @@ public class InterpretedStyleApplication {
 			if (theParentCondition == null)
 				parentCond = TRUE;
 			else
-				parentCond = theParentCondition.get(getParentModels(models, theParentModelValue));
+				parentCond = theParentCondition.get(models);
 
 			ObservableValue<Boolean> localCond;
 			if (theCondition != null)

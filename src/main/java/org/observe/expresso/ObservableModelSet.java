@@ -3039,14 +3039,12 @@ public interface ObservableModelSet extends Identifiable {
 						addAll(theMSI.getModel(), otherMe);
 					for (ModelComponentId inh : theMSI.getModel().getInheritance())
 						theInheritance.put(inh, other.getInherited(inh));
-				} else { // The other model is not known to us, but it may inherit from the same models
+				} else { // The other model doesn't know of us, but it may inherit from models we need as well
 					for (ModelComponentId inh : getModel().getInheritance()) {
 						if (other.getTopLevelModels().contains(inh) || other.getInheritance().contains(inh)) {
 							ModelSetInstance otherMSI = other.getInherited(inh);
-							if (otherMSI != null) { // May be a builder, which won't expose its unbuilt model
+							if (otherMSI != null) // May be a builder, which won't expose its unbuilt model
 								theInheritance.put(inh, otherMSI);
-								addInheritance(otherMSI);
-							}
 						}
 					}
 				}

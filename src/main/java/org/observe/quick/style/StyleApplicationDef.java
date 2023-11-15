@@ -18,7 +18,6 @@ import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -969,37 +968,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		InterpretedStyleApplication parent;
 		if (theParent == null)
 			parent = null;
-		else {
-			parent = appCache.getApplication(theParent, env.with(getParentModel(env.getModels())));
-		}
+		else
+			parent = appCache.getApplication(theParent, env);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> condition = theCondition == null ? null : //
 			theCondition.interpret(ModelTypes.Value.BOOLEAN, env);
 		return new InterpretedStyleApplication(parent, this, condition);
-	}
-
-	/**
-	 * @param models The models to get the parent of
-	 * @return The models that are the parent of the given model, to get inherited style values from
-	 */
-	public static InterpretedModelSet getParentModel(InterpretedModelSet models) {
-		// Get the models for the most recent styled ancestor element
-		QonfigElement element = models.getTagValue(STYLED_ELEMENT_TAG);
-		if (element == null)
-			return models;
-		InterpretedModelSet inh = models;
-		// Only consider direct descendants for now. See if we need to do better later.
-		while (true) {
-			if (inh.getInheritance().isEmpty())
-				return models;
-			inh = inh.getInheritance().values().iterator().next();
-			QonfigElement parentEl = inh.getTagValue(STYLED_ELEMENT_TAG);
-			if (parentEl == null)
-				return models;
-			else if (parentEl == element)
-				continue;
-			else
-				return inh;
-		}
 	}
 
 	@Override

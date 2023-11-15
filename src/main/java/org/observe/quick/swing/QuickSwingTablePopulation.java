@@ -21,7 +21,6 @@ import javax.swing.text.StyledDocument;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
@@ -34,6 +33,7 @@ import org.observe.quick.QuickKeyListener;
 import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
@@ -98,6 +98,7 @@ class QuickSwingTablePopulation {
 			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
 			 * different cells.  So if we blindly listen for changes, this will keep re-rendering forever.
 			 */
+			/*
 			Observable<ObservableValueEvent<?>> reRender;
 			if (theColumn.getRenderer() != null) {
 				if (theColumn.getEditing() != null && theColumn.getEditing().getEditor() != null)
@@ -113,7 +114,7 @@ class QuickSwingTablePopulation {
 				Observable.onRootFinish(reRender).takeUntil(until).act(evt -> {
 					refresh();
 				});
-			}
+			}*/
 			Integer width = column.getWidth();
 			if (column.getMinWidth() != null)
 				theCRS.withWidth("min", column.getMinWidth());
@@ -172,7 +173,7 @@ class QuickSwingTablePopulation {
 		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
 		private final QuickWidget theRenderer;
 		private final SimpleObservable<Void> theRenderUntil;
-		private final QuickWidget.BackgroundContext theRendererContext;
+		private final QuickWithBackground.BackgroundContext theRendererContext;
 		protected final TabularWidget.TabularContext<R> theRenderTableContext;
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
@@ -205,7 +206,7 @@ class QuickSwingTablePopulation {
 					});
 				});
 
-				theRendererContext = new QuickWidget.BackgroundContext.Default();
+				theRendererContext = new QuickWithBackground.BackgroundContext.Default();
 				theRenderer.setContext(theRendererContext);
 			} else {
 				renderPopulator = null;
@@ -406,12 +407,10 @@ class QuickSwingTablePopulation {
 				if (theColumn.getEditing().isEditable() != null) {
 					mutation.editableIf((rowValue, colValue) -> {
 						try (Transaction t = QuickCoreSwing.rendering()) {
-							if (theEditContext.getActiveValue().get() != rowValue)
-								theEditContext.getActiveValue().set(rowValue, null);
-							if (theEditContext.getEditColumnValue() != colValue)
-								theEditContext.getEditColumnValue().set(colValue, null);
-							theEditContext.getRowIndex().set(0, null);
-							theEditContext.getColumnIndex().set(0, null);
+							theRenderTableContext.getActiveValue().set(rowValue, null);
+							theRenderTableContext.getRowIndex().set(0, null);
+							theRenderTableContext.getColumnIndex().set(0, null);
+							theRenderTableContext.isSelected().set(false, null);
 							return theColumn.getEditing().isEditable().get() == null;
 						}
 					});

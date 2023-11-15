@@ -12,6 +12,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.Builder;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
@@ -50,7 +51,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 					throws QonfigInterpretationException {
 					String name = value.getAddOn(ExNamed.Def.class).getName();
 					PlaceholderExtValue<?> placeholder = new PlaceholderExtValue<>(name, value);
-					addElementValue(name, placeholder, builder, value.getFilePosition());
+					placeholder.setModelId(addElementValue(name, placeholder, builder, value.getFilePosition()).getIdentity());
 				}
 			});
 			if (!session.children().get("required").get().isEmpty())
@@ -123,24 +124,24 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 
 		public InterpretedRequiredModelContext getContextConverter(RequiredModelContext context, InterpretedExpressoEnv contextEnv)
 			throws ExpressoInterpretationException {
-			if (theRequiredModelElement == null || context == null)
+			if (getDefinition().getRequiredModelElement() == null || context == null)
 				return null;
 			Map<ModelComponentId, ContextValueConverter<?>> contextValues = new LinkedHashMap<>();
-			populateContextValues(contextValues, theRequiredModelElement, context.getContextValues(), contextEnv);
+			populateContextValues(contextValues, getDefinition().getRequiredModelElement(), context.getContextValues(), contextEnv);
 			return new InterpretedRequiredModelContext(contextValues);
 		}
 
 		private void populateContextValues(Map<ModelComponentId, ContextValueConverter<?>> contextValues,
-			ObservableModelElement.ExtModelElement.Interpreted<?> required, Map<ModelComponentId, ModelComponentId> compiledContextValues,
+			ObservableModelElement.ExtModelElement.Def<?> required, Map<ModelComponentId, ModelComponentId> compiledContextValues,
 			InterpretedExpressoEnv contextEnv) throws ExpressoInterpretationException {
-			for (ExtModelValueElement.Interpreted<?, ?> value : required.getValues()) {
-				ModelInstanceType<?, ?> type = value.getType();
-				ModelComponentId internalValue = getElementValue(value.getDefinition().getModelPath()).getIdentity();
+			for (ExtModelValueElement.Def<?> value : required.getValues()) {
+				ModelInstanceType<?, ?> type = value.getType(contextEnv);
+				ModelComponentId internalValue = getElementValue(value.getModelPath()).getIdentity();
 				ModelComponentId contextValue = compiledContextValues.get(internalValue);
 				contextValues.put(contextValue, new ContextValueConverter<>(internalValue,
 					contextEnv.getModels().getComponent(contextValue).interpret(contextEnv).getType().convert(type, contextEnv)));
 			}
-			for (ObservableModelElement.ExtModelElement.Interpreted<?> subModel : theRequiredModelElement.getSubModels())
+			for (ObservableModelElement.ExtModelElement.Def<?> subModel : required.getSubModels())
 				populateContextValues(contextValues, subModel, compiledContextValues, contextEnv);
 		}
 
@@ -150,7 +151,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 	}
 
-	private ObservableModelElement.ExtModelElement theLocalModelElement;
+	private ObservableModelElement.ExtModelElement theExtModelElement;
 
 	public ExWithRequiredModels(ExElement element) {
 		super(element);
@@ -162,7 +163,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 	}
 
 	public ObservableModelElement.ExtModelElement getLocalModelElement() {
-		return theLocalModelElement;
+		return theExtModelElement;
 	}
 
 	@Override
@@ -171,26 +172,26 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		if (myInterpreted.getLocalModelElement() == null)
-			theLocalModelElement = null;
-		else if (theLocalModelElement == null
-			|| theLocalModelElement.getIdentity() != myInterpreted.getLocalModelElement().getDefinition().getIdentity())
-			theLocalModelElement = myInterpreted.getLocalModelElement().create(getElement());
-		if (theLocalModelElement != null)
-			theLocalModelElement.update(myInterpreted.getLocalModelElement(), getElement());
+			theExtModelElement = null;
+		else if (theExtModelElement == null
+			|| theExtModelElement.getIdentity() != myInterpreted.getLocalModelElement().getDefinition().getIdentity())
+			theExtModelElement = myInterpreted.getLocalModelElement().create(getElement());
+		if (theExtModelElement != null)
+			theExtModelElement.update(myInterpreted.getLocalModelElement(), getElement());
 	}
 
 	@Override
 	public void instantiated() {
 		super.instantiated();
-		if (theLocalModelElement != null)
-			theLocalModelElement.instantiated();
+		if (theExtModelElement != null)
+			theExtModelElement.instantiated();
 	}
 
 	@Override
 	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 		super.instantiate(models);
-		if (theLocalModelElement != null)
-			theLocalModelElement.instantiate(models);
+		if (theExtModelElement != null)
+			theExtModelElement.instantiate(models);
 	}
 
 	static class PlaceholderExtValue<M> extends ExFlexibleElementModelAddOn.PlaceholderModelValue<M> {
@@ -226,6 +227,29 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 
 		RequiredModelContext(Map<ModelComponentId, ModelComponentId> contextValues) {
 			theContextValues = contextValues;
+		}
+
+		public RequiredModelContext forInherited(ObservableModelSet inherited) {
+			Map<ModelComponentId, ModelComponentId> inhCtxValues = null;
+			for (Map.Entry<ModelComponentId, ModelComponentId> ctxValue : theContextValues.entrySet()) {
+				ModelComponentId inhComponent;
+				try {
+					inhComponent = inherited.getComponent(ctxValue.getValue().getName()).getIdentity();
+				} catch (ModelException e) {
+					throw new IllegalArgumentException(
+						"Given models (" + inherited.getIdentity() + ") does not inherit source model " + ctxValue.getKey().getRootId(), e);
+				}
+				if (inhComponent != ctxValue.getValue()) {
+					if (inhCtxValues == null) {
+						inhCtxValues = new LinkedHashMap<>(theContextValues.size() * 3 / 2 + 1);
+						inhCtxValues.putAll(theContextValues);
+					}
+					inhCtxValues.put(ctxValue.getKey(), inhComponent);
+				}
+			}
+			if (inhCtxValues == null)
+				return this;
+			return new RequiredModelContext(inhCtxValues);
 		}
 
 		public Map<ModelComponentId, ModelComponentId> getContextValues() {

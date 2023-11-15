@@ -1,7 +1,6 @@
 package org.observe.quick;
 
 import java.awt.Color;
-import java.util.List;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -24,7 +23,6 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.QuickStyleValue;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
@@ -267,12 +265,6 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues)
-					throws QonfigInterpretationException {
-					super.update(declaredValues, otherValues);
-				}
-
-				@Override
 				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (TitledBorder.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
@@ -388,12 +380,6 @@ public interface QuickBorder extends QuickStyledElement {
 				@Override
 				public QuickStyleAttributeDef getBorderThickness() {
 					return theBorderThickness;
-				}
-
-				@Override
-				public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues)
-					throws QonfigInterpretationException {
-					super.update(declaredValues, otherValues);
 				}
 
 				@Override

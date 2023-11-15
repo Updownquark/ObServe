@@ -8,6 +8,7 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.LocatedExpression;
@@ -71,6 +72,15 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 		return new QuickStyleValue(theStyleSheet, theStyleSet, theApplication, theAttribute, theValueExpression, modelContext);
 	}
 
+	public QuickStyleValue forInherited(ObservableModelSet inherited) {
+		if (theModelContext == null)
+			return this;
+		ExWithRequiredModels.RequiredModelContext inhCtx = theModelContext.forInherited(inherited);
+		if (inhCtx == theModelContext)
+			return this;
+		return new QuickStyleValue(theStyleSheet, theStyleSet, theApplication, theAttribute, theValueExpression, inhCtx);
+	}
+
 	/** @return The style sheet that defined this value */
 	public QuickStyleSheet getStyleSheet() {
 		return theStyleSheet;
@@ -127,31 +137,45 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	 */
 	public InterpretedStyleValue<?> interpret(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
 		QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-		InterpretedStyleApplication application = appCache.getApplication(theApplication, env);
-		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, env);
-		return _interpret(application, attribute, styleSheet, env);
+		if (theStyleSheet == null)
+			styleSheet = null;
+		else
+			styleSheet = styleSheet.findInterpretation(theStyleSheet);
+		QuickStyleSet.Interpreted styleSet = theStyleSet == null ? null : styleSheet.getStyleSets().get(theStyleSet.getName());
+		InterpretedExpressoEnv styleEnv;
+		if (styleSet != null)
+			styleEnv = styleSet.getExpressoEnv();
+		else if (styleSheet != null)
+			styleEnv = styleSheet.getExpressoEnv();
+		else
+			styleEnv = env;
+		InterpretedStyleApplication application = appCache.getApplication(theApplication, styleEnv);
+		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(styleEnv);
+		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, styleEnv);
+		return _interpret(application, attribute, styleSheet, styleEnv, env);
 	}
 
 	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
-		QuickStyleSheet.Interpreted styleSheet, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		QuickStyleSheet.Interpreted styleSheet, InterpretedExpressoEnv styleEnv, InterpretedExpressoEnv contextEnv)
+			throws ExpressoInterpretationException {
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = interpretStyleValue(theValueExpression,
-			ModelTypes.Value.forType(attribute.getType()), env);
+			ModelTypes.Value.forType(attribute.getType()), styleEnv);
 		ExWithRequiredModels.InterpretedRequiredModelContext modelContext = null;
 		if (theModelContext == null)
 			modelContext = null;
 		else {
+			if (theStyleSheet != null) {
+				styleSheet = styleSheet.findInterpretation(theStyleSheet);
+				ExWithRequiredModels.Interpreted reqModels = styleSheet.getAddOn(ExWithRequiredModels.Interpreted.class);
+				modelContext = reqModels.getContextConverter(theModelContext, contextEnv);
+			}
 			if (theStyleSet != null) {
 				QuickStyleSet.Interpreted styleSet = styleSheet.getStyleSets().get(theStyleSet.getName());
 				ExWithRequiredModels.Interpreted reqModels = styleSet.getAddOn(ExWithRequiredModels.Interpreted.class);
-				modelContext = reqModels.getContextConverter(theModelContext, env);
-			}
-			if (theStyleSheet != null) {
-				ExWithRequiredModels.Interpreted reqModels = styleSheet.getAddOn(ExWithRequiredModels.Interpreted.class);
 				if (modelContext == null)
-					modelContext = reqModels.getContextConverter(theModelContext, env);
+					modelContext = reqModels.getContextConverter(theModelContext, contextEnv);
 				else
-					modelContext = modelContext.and(reqModels.getContextConverter(theModelContext, env));
+					modelContext = modelContext.and(reqModels.getContextConverter(theModelContext, contextEnv));
 			}
 		}
 		return new InterpretedStyleValue<>(this, application, attribute, value, modelContext);
