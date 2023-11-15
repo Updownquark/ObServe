@@ -274,8 +274,9 @@ public interface QuickInterpretedStyle {
 			return values;
 		}
 
-		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) {
-			return new QuickStyleAttributeInstantiator<>(theAttribute, QommonsUtils.map(theValues, v -> v.instantiate(models), true));
+		public QuickStyleAttributeInstantiator<T> instantiate(QuickStyledElement owner, InterpretedModelSet models) {
+			return new QuickStyleAttributeInstantiator<>(owner, theAttribute,
+				QommonsUtils.map(theValues, v -> v.instantiate(models), true));
 		}
 
 		@Override
@@ -285,12 +286,19 @@ public interface QuickInterpretedStyle {
 	}
 
 	public static class QuickStyleAttributeInstantiator<T> {
+		private final QuickStyledElement theOwner;
 		private final QuickStyleAttribute<T> theAttribute;
 		private final List<InterpretedStyleValue.StyleValueInstantiator<T>> theValues;
 
-		public QuickStyleAttributeInstantiator(QuickStyleAttribute<T> attribute, List<StyleValueInstantiator<T>> values) {
+		public QuickStyleAttributeInstantiator(QuickStyledElement owner, QuickStyleAttribute<T> attribute,
+			List<StyleValueInstantiator<T>> values) {
+			theOwner = owner;
 			theAttribute = attribute;
 			theValues = values;
+		}
+
+		public QuickStyledElement getOwner() {
+			return theOwner;
 		}
 
 		public QuickStyleAttribute<T> getAttribute() {

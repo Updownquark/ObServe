@@ -2,6 +2,7 @@ package org.observe.quick.style;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,7 +17,9 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -248,10 +251,12 @@ public interface QuickStyledElement extends ExElement {
 	public abstract class Abstract extends ExElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
 		private final List<QuickStyleElement<?>> theStyleElements;
+		private final Set<ModelComponentId> theStyleSheetModels;
 
 		protected Abstract(Object id) {
 			super(id);
 			theStyleElements = new ArrayList<>();
+			theStyleSheetModels = new HashSet<>();
 		}
 
 		@Override
@@ -276,6 +281,13 @@ public interface QuickStyledElement extends ExElement {
 			if (theStyle == null)
 				theStyle = myInterpreted.getStyle().create(this);
 			theStyle.update(myInterpreted.getStyle(), (QuickStyledElement) parent);
+			theStyleSheetModels.clear();
+			for (QuickStyleAttribute<?> attr : myInterpreted.getStyle().getAttributes()) {
+				for (InterpretedStyleValue<?> value : myInterpreted.getStyle().get(attr).getValues()) {
+					if (value.getModelContext() != null)
+						theStyleSheetModels.add(value.getModelContext().getModel());
+				}
+			}
 
 			CollectionUtils
 			.synchronize(theStyleElements, myInterpreted.getStyleElements(),
@@ -293,6 +305,15 @@ public interface QuickStyledElement extends ExElement {
 
 			for (QuickStyleElement<?> styleEl : theStyleElements)
 				styleEl.instantiated();
+		}
+
+		@Override
+		protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels)
+			throws ModelInstantiationException {
+			super.addRuntimeModels(builder, elementModels);
+			for (ModelComponentId styleSheetModel : theStyleSheetModels)
+				builder.withAll(//
+					builder.getInherited(styleSheetModel).copy(builder.getUntil()).build());
 		}
 
 		@Override
@@ -502,7 +523,7 @@ public interface QuickStyledElement extends ExElement {
 
 			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different) {
 				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr)
-					.instantiate(interpreted.getStyledElement().getModels());
+					.instantiate(theStyledElement, interpreted.getStyledElement().getModels());
 				theApplicableAttributes.computeIfAbsent(attr, __ -> {
 					different[0] = true;
 					return new StyleAttributeData<>(instantiator);

@@ -55,6 +55,10 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theValue;
 	}
 
+	public ExWithRequiredModels.InterpretedRequiredModelContext getModelContext() {
+		return theModelContext;
+	}
+
 	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) {
 		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(models), theValue.instantiate(), theModelContext);
 	}

@@ -273,6 +273,10 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 			theContextValues = contextValues;
 		}
 
+		public ModelComponentId getModel() {
+			return theContextValues.values().iterator().next().theInternalValue.getRootId();
+		}
+
 		public InterpretedRequiredModelContext and(InterpretedRequiredModelContext other) {
 			if (other == null)
 				return this;
@@ -303,10 +307,11 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 
 		void installInternalValue(ModelSetInstance model, M externalValue) throws ModelInstantiationException {
-			if (!ExFlexibleElementModelAddOn.isElementValueSatisfied(theInternalValue, model)) {
-				ExFlexibleElementModelAddOn.satisfyElementValue(theInternalValue, model, //
-					theConverter == null ? externalValue : theConverter.convert(externalValue));
-			}
+			// if (!ExFlexibleElementModelAddOn.isElementValueSatisfied(theInternalValue, model)) {
+			ExFlexibleElementModelAddOn.satisfyElementValue(theInternalValue, model, //
+				theConverter == null ? externalValue : theConverter.convert(externalValue), //
+					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+			// }
 		}
 	}
 }
