@@ -94,27 +94,9 @@ class QuickSwingTablePopulation {
 			});
 			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, parent, swingRenderer,
 				swingEditor);
-			/* We need to listen to the style so external changes will re-render the table.
-			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
-			 * different cells.  So if we blindly listen for changes, this will keep re-rendering forever.
-			 */
-			/*
-			Observable<ObservableValueEvent<?>> reRender;
-			if (theColumn.getRenderer() != null) {
-				if (theColumn.getEditing() != null && theColumn.getEditing().getEditor() != null)
-					reRender = Observable.or(theColumn.getRenderer().getStyle().changes(),
-						theColumn.getEditing().getEditor().getStyle().changes());
-				else
-					reRender = theColumn.getRenderer().getStyle().changes();
-			} else if (theColumn.getEditing() != null && theColumn.getEditing().getEditor() != null)
-				reRender = theColumn.getEditing().getEditor().getStyle().changes();
-			else
-				reRender = null;
-			if (reRender != null) {
-				Observable.onRootFinish(reRender).takeUntil(until).act(evt -> {
-					refresh();
-				});
-			}*/
+			Observable.onRootFinish(theColumn.getRenderStyleChanges()).takeUntil(until).act(evt -> {
+				refresh();
+			});
 			Integer width = column.getWidth();
 			if (column.getMinWidth() != null)
 				theCRS.withWidth("min", column.getMinWidth());

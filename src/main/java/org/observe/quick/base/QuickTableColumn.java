@@ -1,5 +1,6 @@
 package org.observe.quick.base;
 
+import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -23,6 +24,7 @@ import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -85,6 +87,16 @@ public interface QuickTableColumn<R, C> {
 	Integer getWidth();
 
 	QuickWidget getRenderer();
+
+	/**
+	 * Returns an observable that fires when OUTSIDE INFLUENCES to the render style change. This is an important distinction, because if the
+	 * proper render style was listened to, that would change multiple times for every cell that is rendered (because row value, row index,
+	 * etc. are set independently). That style should NEVER be listened to, because the act of listening to it is expensive given how often
+	 * it may change. Use this observable instead.
+	 *
+	 * @return An observable that fires when OUTSIDE INFLUENCES to the render style change.
+	 */
+	Observable<? extends Causable> getRenderStyleChanges();
 
 	ColumnEditing<R, C> getEditing();
 
@@ -405,7 +417,7 @@ public interface QuickTableColumn<R, C> {
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
 
 			MultiValueRenderable<R> owner = getOwner(getParentElement());
-			ModelSetInstance editorModels = copyTableModels(myModels, owner);
+			ModelSetInstance editorModels = copyTableModels(myModels.copy(), owner).build();
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, editorModels,
 				SettableValue.flatten(theEditColumnValue));
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
@@ -455,10 +467,10 @@ public interface QuickTableColumn<R, C> {
 		return (MultiValueRenderable<R>) parent;
 	}
 
-	static ModelSetInstance copyTableModels(ModelSetInstance columnModels, MultiValueRenderable<?> owner)
+	static ModelSetInstanceBuilder copyTableModels(ModelSetInstanceBuilder columnModels, MultiValueRenderable<?> owner)
 		throws ModelInstantiationException {
 		if (owner == null)
-			return columnModels.copy().build();
+			return columnModels;
 		ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
 		ModelInstantiator ownerModels = ownerElModels.getElement().getModels();
 		ModelComponentId ownerModelId;
@@ -473,11 +485,11 @@ public interface QuickTableColumn<R, C> {
 				}
 			}
 		}
-		ModelSetInstanceBuilder columnModelBuilder = columnModels.copy();
+		ModelSetInstanceBuilder columnModelBuilder = columnModels;
 		if (ownerModelId != null)
 			columnModelBuilder.withAll(columnModels.getInherited(ownerModelId).copy(columnModels.getUntil()).build());
 
-		return columnModelBuilder.build();
+		return columnModelBuilder;
 	}
 
 	static <R> void replaceTableValues(ModelSetInstance columnModels, MultiValueRenderable<R> owner, SettableValue<R> rowValue,
@@ -998,9 +1010,10 @@ public interface QuickTableColumn<R, C> {
 		private ModelComponentId theColumnValueVariable;
 		private SettableValue<SettableValue<C>> theValue;
 		private SettableValue<SettableValue<String>> theHeaderTooltip;
-		private ModelSetInstance theRenderModels;
 		private QuickWidget theRenderer;
 		private ColumnEditing<R, C> theEditing;
+
+		private Observable<? extends Causable> theRenderStyleChanges;
 
 		public SingleColumnSet(Object id) {
 			super(id);
@@ -1121,8 +1134,27 @@ public interface QuickTableColumn<R, C> {
 			theValue.set(theValueInstantiator.get(myModels), null);
 			theHeaderTooltip.set(theHeaderTooltipInstantiator == null ? null : theHeaderTooltipInstantiator.get(myModels), null);
 
-			if (theRenderer != null)
-				theRenderer.instantiate(myModels);
+			if (theRenderer != null) {
+				// Can't get this working. It causes the table to render blank rows and causes errors on selection.
+				// ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
+				// MultiValueRenderable<R> owner = getOwner(this);
+				// QuickInstanceStyle styleCopy = theRenderer.getStyle().copy(theRenderer);
+				// rendererModels = copyTableModels(rendererModels.copy()//
+				// .withAll(myModels.copy().build()), owner)//
+				// .build();
+				// ExFlexibleElementModelAddOn.satisfyElementValue(theColumnValueVariable, rendererModels, //
+				// SettableValue.of(theColumnType, TypeTokens.get().getDefaultValue(theColumnType), "Immutable"),
+				// ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				// replaceTableValues(rendererModels, owner, //
+				// SettableValue.of(theRowType, TypeTokens.get().getDefaultValue(theRowType), "Immutable"), //
+				// SettableValue.of(boolean.class, false, "Immutable"), //
+				// SettableValue.of(int.class, 0, "Immutable"), //
+				// SettableValue.of(int.class, 0, "Immutable"));
+				// styleCopy.instantiate(rendererModels);
+				// theRenderStyleChanges = styleCopy.changes();
+				theRenderStyleChanges = Observable.empty();
+			} else
+				theRenderStyleChanges = Observable.empty();
 			if (theEditing != null)
 				theEditing.instantiate(myModels);
 		}
@@ -1194,6 +1226,11 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public QuickWidget getRenderer() {
 				return theRenderer;
+			}
+
+			@Override
+			public Observable<? extends Causable> getRenderStyleChanges() {
+				return theRenderStyleChanges;
 			}
 
 			@Override
