@@ -1135,23 +1135,28 @@ public interface QuickTableColumn<R, C> {
 			theHeaderTooltip.set(theHeaderTooltipInstantiator == null ? null : theHeaderTooltipInstantiator.get(myModels), null);
 
 			if (theRenderer != null) {
-				// Can't get this working. It causes the table to render blank rows and causes errors on selection.
-				// ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
+				ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
+				/* Create a copy of the renderer with table context values that don't change.
+				 * This will enable the table to be rendered when outside influences on the style change
+				 * without incurring the performance hit of all the style update eventing for every table cell rendered.
+				 */
+				// This still doesn't work. The rendererCopy.instantiate(MSI) method throws an exception satisfying widget element values
+				// because these have already been satisfied.
 				// MultiValueRenderable<R> owner = getOwner(this);
-				// QuickInstanceStyle styleCopy = theRenderer.getStyle().copy(theRenderer);
-				// rendererModels = copyTableModels(rendererModels.copy()//
-				// .withAll(myModels.copy().build()), owner)//
+				// ModelSetInstance rendererModelsCopy = copyTableModels(rendererModels.copy(), owner)//
+				// .with(myModels.getInherited(getModels().getIdentity()).copy().build())//
 				// .build();
-				// ExFlexibleElementModelAddOn.satisfyElementValue(theColumnValueVariable, rendererModels, //
+				// ExFlexibleElementModelAddOn.satisfyElementValue(theColumnValueVariable, rendererModelsCopy, //
 				// SettableValue.of(theColumnType, TypeTokens.get().getDefaultValue(theColumnType), "Immutable"),
 				// ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				// replaceTableValues(rendererModels, owner, //
+				// replaceTableValues(rendererModelsCopy, owner, //
 				// SettableValue.of(theRowType, TypeTokens.get().getDefaultValue(theRowType), "Immutable"), //
 				// SettableValue.of(boolean.class, false, "Immutable"), //
 				// SettableValue.of(int.class, 0, "Immutable"), //
 				// SettableValue.of(int.class, 0, "Immutable"));
-				// styleCopy.instantiate(rendererModels);
-				// theRenderStyleChanges = styleCopy.changes();
+				// QuickWidget rendererCopy = theRenderer.copy(this);
+				// rendererCopy.instantiate(rendererModelsCopy);
+				// theRenderStyleChanges = rendererCopy.getStyle().changes();
 				theRenderStyleChanges = Observable.empty();
 			} else
 				theRenderStyleChanges = Observable.empty();

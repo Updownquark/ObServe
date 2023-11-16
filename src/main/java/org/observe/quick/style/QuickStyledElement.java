@@ -569,7 +569,7 @@ public interface QuickStyledElement extends ExElement {
 
 			@Override
 			public String toString() {
-				StringBuilder str = new StringBuilder(theStyledElement.getTypeName()).append(".style{");
+				StringBuilder str = new StringBuilder(theStyledElement.toString()).append(".style{");
 				boolean any = false;
 				for (Map.Entry<QuickStyleAttribute<?>, StyleAttributeData<?>> attr : theApplicableAttributes.entrySet()) {
 					Object value = attr.getValue().flatValue.get();

@@ -1650,11 +1650,19 @@ public interface ObservableModelSet extends Identifiable {
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder extends ModelInstance {
 		/**
-		 * Satisfies inherited models in this instance builder.
+		 * Satisfies inherited models in this instance builder. The inherited models of the given model instance will not be used, but only
+		 * the given model instance.
 		 *
-		 * @param other The model instance set created for one of the {@link ObservableModelSet#getInheritance() inherited} models of the
-		 *        model that this instance set is being built for, or an instance of a model that may inherit models also inherited by this
-		 *        model.
+		 * @param other The model instance set created for one of the models in this builder
+		 * @return This builder
+		 */
+		ModelSetInstanceBuilder with(ModelInstance other);
+
+		/**
+		 * Satisfies inherited models in this instance builder. The inherited models of the given model instance will also be used.
+		 *
+		 * @param other The model instance set created for one of the models in this builder, or an instance of a model that may inherit
+		 *        models also inherited by this model.
 		 * @return This builder
 		 */
 		ModelSetInstanceBuilder withAll(ModelInstance other);
@@ -3030,15 +3038,26 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public ModelSetInstanceBuilder with(ModelInstance other) {
+				return with(other, false);
+			}
+
+			@Override
 			public ModelSetInstanceBuilder withAll(ModelInstance other) {
+				return with(other, true);
+			}
+
+			private ModelSetInstanceBuilder with(ModelInstance other, boolean withInheritance) {
 				if (other.getTopLevelModels().contains(theMSI.getModel().getIdentity())//
 					|| other.getInheritance().contains(theMSI.getModel().getIdentity())) {
 					// The model knows about us. Grab its contents
 					ModelSetInstance otherMe = other.getInherited(getModel().getIdentity());
 					if (otherMe != null)
 						addAll(theMSI.getModel(), otherMe);
-					for (ModelComponentId inh : theMSI.getModel().getInheritance())
-						theInheritance.put(inh, other.getInherited(inh));
+					if (withInheritance) {
+						for (ModelComponentId inh : theMSI.getModel().getInheritance())
+							theInheritance.put(inh, other.getInherited(inh));
+					}
 				} else { // The other model doesn't know of us, but it may inherit from models we need as well
 					for (ModelComponentId inh : getModel().getInheritance()) {
 						if (other.getTopLevelModels().contains(inh) || other.getInheritance().contains(inh)) {
@@ -3298,7 +3317,16 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public ModelSetInstanceBuilder with(ModelInstance other) {
+				return with(other, false);
+			}
+
+			@Override
 			public ModelSetInstanceBuilder withAll(ModelInstance other) {
+				return with(other, true);
+			}
+
+			private ModelSetInstanceBuilder with(ModelInstance other, boolean withInheritance) {
 				if (isBuilt)
 					throw new IllegalStateException("This model instance is built and cannot be modified");
 				for (ModelComponentId model : other.getTopLevelModels()) {
@@ -3320,9 +3348,11 @@ public interface ObservableModelSet extends Identifiable {
 							theTopLevelModels.put(model, instance);
 						}
 
-						// Add the inheritance too, which we know is not top-level
-						for (ModelComponentId inh : other.getInheritance())
-							theInheritance.put(inh, other.getInherited(inh));
+						if (withInheritance) {
+							// Add the inheritance too, which we know is not top-level
+							for (ModelComponentId inh : other.getInheritance())
+								theInheritance.put(inh, other.getInherited(inh));
+						}
 
 						theComponentsByValueId.putAll(instance.getComponentsByValueId());
 					}
