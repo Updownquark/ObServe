@@ -87,6 +87,8 @@ public interface ExElement extends Identifiable {
 		 */
 		<AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn);
 
+		<AO extends ExAddOn.Def<? super E, ?>> Collection<AO> getAddOns(Class<AO> addOn);
+
 		/** @return All add-ons on this element definition */
 		Collection<ExAddOn.Def<? super E, ?>> getAddOns();
 
@@ -361,6 +363,15 @@ public interface ExElement extends Identifiable {
 				AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 				if (ao == null && theExternalView != null)
 					ao = (AO) theExternalView.theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+				return ao;
+			}
+
+			@Override
+			public <AO extends ExAddOn.Def<? super E, ?>> Collection<AO> getAddOns(Class<AO> addOn) {
+				Collection<AO> ao = (Collection<AO>) theAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE);
+				if (theExternalView != null)
+					ao = new JoinedCollection<>(ao,
+						(Collection<AO>) theExternalView.theExtAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE));
 				return ao;
 			}
 
@@ -647,10 +658,10 @@ public interface ExElement extends Identifiable {
 					}
 					makeAddOnSequence(theAddOns.getAllValues(),
 						theExternalView == null ? null : theExternalView.theExtAddOns.getAllValues(),
-							ao -> getAddOn((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
+						ao -> getAddOns((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
 					if (theExternalView != null)
 						makeAddOnSequence(theExternalView.theExtAddOns.getAllValues(), theAddOns.getAllValues(),
-							ao -> theExternalView.getAddOn((Class<ExAddOn.Def<? super ExElement, ?>>) ao),
+							ao -> theExternalView.getAddOns((Class<ExAddOn.Def<? super ExElement, ?>>) ao),
 							theExternalView.theExtAddOnSequence, theExternalView.reporting());
 				}
 
@@ -799,9 +810,16 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public <AO extends ExAddOn.Def<? super ExElement, ?>> AO getAddOn(Class<AO> addOn) {
-					AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					if (ao == null && thePromise != null)
-						ao = (AO) theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+					AO ao = (AO) theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+					if (ao == null)
+						ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+					return ao;
+				}
+
+				@Override
+				public <AO extends ExAddOn.Def<? super ExElement, ?>> Collection<AO> getAddOns(Class<AO> addOn) {
+					Collection<AO> ao = (Collection<AO>) theExtAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE);
+					ao = new JoinedCollection<>(ao, (Collection<AO>) theAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE));
 					return ao;
 				}
 
@@ -947,7 +965,8 @@ public interface ExElement extends Identifiable {
 			}
 
 			static <E extends ExElement> void makeAddOnSequence(Collection<ExAddOn.Def<? super E, ?>> addOns1,
-				Collection<ExAddOn.Def<? super E, ?>> addOns2, Function<Class<? extends ExAddOn.Def<?, ?>>, ExAddOn.Def<?, ?>> getter,
+				Collection<ExAddOn.Def<? super E, ?>> addOns2,
+				Function<Class<? extends ExAddOn.Def<?, ?>>, Collection<? extends ExAddOn.Def<?, ?>>> getter,
 					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
 				BetterSet<ExAddOn.Def<? super E, ?>> dependencies = BetterHashSet.build().build();
 				for (ExAddOn.Def<? super E, ?> addOn : addOns1) {
@@ -965,17 +984,19 @@ public interface ExElement extends Identifiable {
 			}
 
 			private static <E extends ExElement> void addWithDependencies(ExAddOn.Def<? super E, ?> addOn,
-				Function<Class<? extends ExAddOn.Def<?, ?>>, ExAddOn.Def<?, ?>> getter, BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
+				Function<Class<? extends ExAddOn.Def<?, ?>>, Collection<? extends ExAddOn.Def<?, ?>>> getter,
+				BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
 					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
 				dependencies.add(addOn);
 				for (Class<? extends ExAddOn.Def<?, ?>> depType : addOn.getDependencies()) {
-					ExAddOn.Def<?, ?> dep = getter.apply(depType);
-					if (dep == null || sequence.contains(dep)) {// Nothing to do
-					} else if (dependencies.contains(dep)) {
-						reporting.error("An add-on dependency cycle has been detected: "
-							+ StringUtils.print("<-", dependencies, ao -> ao.getClass().getName()) + "<-" + depType.getName());
-					} else
-						addWithDependencies((ExAddOn.Def<? super E, ?>) dep, getter, dependencies, sequence, reporting);
+					for (ExAddOn.Def<?, ?> dep : getter.apply(depType)) {
+						if (sequence.contains(dep)) {// Nothing to do
+						} else if (dependencies.contains(dep)) {
+							reporting.error("An add-on dependency cycle has been detected: "
+								+ StringUtils.print("<-", dependencies, ao -> ao.getClass().getName()) + "<-" + depType.getName());
+						} else
+							addWithDependencies((ExAddOn.Def<? super E, ?>) dep, getter, dependencies, sequence, reporting);
+					}
 				}
 				dependencies.removeLast();
 				sequence.add(addOn);

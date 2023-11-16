@@ -452,6 +452,8 @@ public interface QuickStyledElement extends ExElement {
 			}
 		}
 
+		QuickStyledElement getStyledElement();
+
 		Set<QuickStyleAttribute<?>> getApplicableAttributes();
 
 		<T> ObservableValue<T> getApplicableAttribute(QuickStyleAttribute<T> attribute);
@@ -478,6 +480,7 @@ public interface QuickStyledElement extends ExElement {
 				theFlatChanges = ObservableValue.flattenObservableValue(theChanges);
 			}
 
+			@Override
 			public QuickStyledElement getStyledElement() {
 				return theStyledElement;
 			}
@@ -523,7 +526,7 @@ public interface QuickStyledElement extends ExElement {
 
 			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different) {
 				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr)
-					.instantiate(theStyledElement, interpreted.getStyledElement().getModels());
+					.instantiate(interpreted.getStyledElement().getModels());
 				theApplicableAttributes.computeIfAbsent(attr, __ -> {
 					different[0] = true;
 					return new StyleAttributeData<>(instantiator);

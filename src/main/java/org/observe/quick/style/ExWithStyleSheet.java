@@ -1,5 +1,8 @@
 package org.observe.quick.style;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -7,6 +10,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.base.MultiValueWidget;
@@ -25,6 +29,11 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
+		}
+
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return Collections.singleton((Class<? extends ExAddOn.Def<?, ?>>) ExModelAugmentation.Def.class);
 		}
 
 		@QonfigChildGetter("style-sheet")
