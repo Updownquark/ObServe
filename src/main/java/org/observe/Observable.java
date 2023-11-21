@@ -813,35 +813,74 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			Subscription outerSub = theWrapped.subscribe(observer);
-			boolean[] complete = new boolean[1];
-			Subscription[] untilSub = new Subscription[1];
-			untilSub[0] = theUntil.subscribe(new Observer<Object>() {
-				@Override
-				public void onNext(Object value) {
-					if (complete[0])
-						return;
-					complete[0] = true;
-					outerSub.unsubscribe();
-					if (isTerminating) {
-						try (Causable.CausableInUse cause = Causable.cause()) {
-							observer.onCompleted(cause);
+			TakenUntilObserver untilObserver = new TakenUntilObserver(observer, theWrapped);
+			return untilObserver.withUntilSubscription(theUntil.subscribe(untilObserver));
+		}
+
+		class TakenUntilObserver implements Observer<Object>, Subscription {
+			private final Observer<? super T> theWrappedObserver;
+			private Subscription theTargetSub;
+			private Subscription theUntilSub;
+
+			TakenUntilObserver(Observer<? super T> wrappedObserver, Observable<T> wrapped) {
+				theWrappedObserver = wrappedObserver;
+				theTargetSub = wrapped.subscribe(new Observer<T>() {
+					@Override
+					public <V extends T> void onNext(V value) {
+						wrappedObserver.onNext(value);
+					}
+
+					@Override
+					public void onCompleted(Causable cause) {
+						unsubscribe();
+						wrappedObserver.onCompleted(cause);
+					}
+				});
+			}
+
+			Subscription withUntilSubscription(Subscription untilSub) {
+				theUntilSub = untilSub;
+				if (theTargetSub == null) {
+					untilSub.unsubscribe();
+					theUntilSub = null;
+					return Subscription.NONE;
+				} else
+					return this;
+			}
+
+			@Override
+			public <V> void onNext(V value) {
+				boolean fireComplete = isTerminating && theTargetSub != null;
+				unsubscribe();
+				if (fireComplete) {
+					if (value instanceof Causable)
+						theWrappedObserver.onCompleted((Causable) value);
+					else {
+						try (Causable.CausableInUse cause = Causable.cause(value)) {
+							theWrappedObserver.onCompleted(cause);
 						}
 					}
 				}
+			}
 
-				@Override
-				public void onCompleted(Causable cause) {
-					// A completed until shouldn't affect things
-				}
-			});
-			return () -> {
-				if (complete[0])
-					return;
-				complete[0] = true;
-				outerSub.unsubscribe();
-				untilSub[0].unsubscribe();
-			};
+			@Override
+			public void onCompleted(Causable cause) {
+				// A terminated until just means we'll listen to the target forever
+				theUntilSub = null;
+			}
+
+			@Override
+			public void unsubscribe() {
+				Subscription sub = theTargetSub;
+				theTargetSub = null;
+				if (sub != null)
+					sub.unsubscribe();
+
+				sub = theUntilSub;
+				theUntilSub = null;
+				if (sub != null)
+					sub.unsubscribe();
+			}
 		}
 	}
 
@@ -869,44 +908,61 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			Subscription[] wrapSub = new Subscription[1];
-			boolean[] completed = new boolean[1];
-			wrapSub[0] = theWrapped.subscribe(new Observer<T>() {
-				private final AtomicInteger theCounter = new AtomicInteger();
+			TakenTimesObserver wrapper = new TakenTimesObserver(observer);
+			return wrapper.withSubscription(theWrapped.subscribe(wrapper));
+		}
 
-				@Override
-				public <V extends T> void onNext(V value) {
-					int count = theCounter.getAndIncrement();
-					if (count < theTimes)
-						observer.onNext(value);
-					if (count == theTimes - 1) {
-						if (value instanceof Causable)
-							observer.onCompleted((Causable) value);
-						else {
-							try (Causable.CausableInUse cause = Causable.cause(value)) {
-								observer.onCompleted(cause);
-							}
+		class TakenTimesObserver implements Observer<T>, Subscription {
+			private final Observer<? super T> theWrappedObserver;
+			private final AtomicInteger theCounter = new AtomicInteger();
+			private Subscription theSubscription;
+
+			TakenTimesObserver(Observer<? super T> wrapped) {
+				theWrappedObserver = wrapped;
+			}
+
+			Subscription withSubscription(Subscription sub) {
+				theSubscription = sub;
+				if (theCounter.get() >= theTimes) {
+					unsubscribe();
+					return Subscription.NONE;
+				} else
+					return this;
+			}
+
+			@Override
+			public <V extends T> void onNext(V value) {
+				int count = theCounter.incrementAndGet();
+				if (count < theTimes)
+					theWrappedObserver.onNext(value);
+				else if (count == theTimes) {
+					unsubscribe();
+
+					theWrappedObserver.onNext(value);
+
+					if (value instanceof Causable)
+						theWrappedObserver.onCompleted((Causable) value);
+					else {
+						try (Causable.CausableInUse cause = Causable.cause(value)) {
+							theWrappedObserver.onCompleted(cause);
 						}
-						if (wrapSub[0] != null)
-							wrapSub[0].unsubscribe();
-						completed[0] = true;
 					}
 				}
+			}
 
-				@Override
-				public void onCompleted(Causable cause) {
-					if (theCounter.get() < theTimes)
-						observer.onCompleted(cause);
-				}
-			});
-			if (completed[0])
-				wrapSub[0].unsubscribe();
-			return () -> {
-				if (!completed[0]) {
-					completed[0] = true;
-					wrapSub[0].unsubscribe();
-				}
-			};
+			@Override
+			public void onCompleted(Causable cause) {
+				theSubscription = null;
+				theWrappedObserver.onCompleted(cause);
+			}
+
+			@Override
+			public void unsubscribe() {
+				Subscription sub = theSubscription;
+				theSubscription = null;
+				if (sub != null)
+					sub.unsubscribe();
+			}
 		}
 	}
 
@@ -1170,9 +1226,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				@Override
 				public <O extends Observable<? extends T>> void onNext(O innerObs) {
 					if (innerObs != null) {
-						theWrapper.noInit().act(__ -> {
-							System.out.println("flat until");
-						});
 						innerObs.takeUntil(theWrapper.noInit()).subscribe(new Observer<T>() {
 							@Override
 							public <V extends T> void onNext(V value) {
