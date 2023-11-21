@@ -17,7 +17,7 @@ import org.qommons.collect.ListenerList;
  *
  * @param <T> The type of values from this observable
  */
-public class SimpleObservable<T> implements Observable<T>, Observer<T> {
+public class SimpleObservable<T> extends LightWeightObservable<T> {
 	/** @return A builder for a {@link SimpleObservable} */
 	public static Builder build() {
 		return new Builder();
@@ -94,8 +94,6 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 	private final Consumer<? super Observer<? super T>> theOnSubscribe;
 	private final Object theIdentity;
-	private boolean isAlive = true;
-	private final ListenerList<Observer<? super T>> theListeners;
 	private final boolean isInternalState;
 	private final Transactable theLock;
 
@@ -142,20 +140,8 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 */
 	protected SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description,
 		boolean internalState, Function<Object, Transactable> lock, ListenerList.Builder listening) {
+		super((listening == null ? ListenerList.build() : listening).build());
 		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
-		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
-		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
-		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the
-		 * listener adding the new listener was previously the last listener in the queue.  ConcurrentLinkedQueue's iterator looks ahead in
-		 * the next() method, not hasNext(); so if a listener returned by that iterator adds another value to the queue, that iterator will
-		 * not see it.
-		 * That's why the following line is commented out and replaced with a possibly less efficient but more predictable implementation of
-		 * mine.
-		 */
-		// theListeners = new ConcurrentLinkedQueue<>();
-		if (listening == null)
-			listening = ListenerList.build();
-		theListeners = listening.build();
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
 		theLock = lock == null ? null : lock.apply(this);
@@ -172,47 +158,34 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
-	public boolean isEventing() {
-		return theListeners.isFiring();
-	}
-
-	@Override
 	public Object getIdentity() {
 		return theIdentity;
 	}
 
 	@Override
+	protected boolean isInternalState() {
+		return isInternalState;
+	}
+
+	@Override
 	public Subscription subscribe(Observer<? super T> observer) {
-		if (!isAlive) {
-			observer.onCompleted(null);
-			return () -> {};
-		} else {
-			Runnable unsub = theListeners.add(observer, isInternalState);
-			if (theOnSubscribe != null)
-				theOnSubscribe.accept(observer);
-			return unsub::run;
-		}
+		Subscription sub = super.subscribe(observer);
+		if (theOnSubscribe != null && isAlive())
+			theOnSubscribe.accept(observer);
+		return sub;
 	}
 
 	@Override
 	public <V extends T> void onNext(V value) {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
-			if (!isAlive)
-				throw new IllegalStateException("Firing a value on a completed observable");
-			theListeners.forEach(//
-				observer -> observer.onNext(value));
+			super.onNext(value);
 		}
 	}
 
 	@Override
 	public void onCompleted(Causable cause) {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
-			if (!isAlive)
-				return;
-			isAlive = false;
-			theListeners.forEach(//
-				observer -> observer.onCompleted(cause));
-			theListeners.clear();
+			super.onCompleted(cause);
 		}
 	}
 
@@ -244,77 +217,5 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	@Override
 	public CoreId getCoreId() {
 		return theLock == null ? CoreId.EMPTY : theLock.getCoreId();
-	}
-
-	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */
-	public Observable<T> readOnly() {
-		return new ReadOnlyObservable<>(this);
-	}
-
-	static class ReadOnlyObservable<T> implements Observable<T> {
-		private final SimpleObservable<T> theWrapped;
-
-		ReadOnlyObservable(SimpleObservable<T> wrap) {
-			theWrapped = wrap;
-		}
-
-		@Override
-		public Object getIdentity() {
-			return theWrapped.getIdentity();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super T> observer) {
-			return theWrapped.subscribe(observer);
-		}
-
-		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return theWrapped.getThreadConstraint();
-		}
-
-		@Override
-		public boolean isEventing() {
-			return theWrapped.isEventing();
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theWrapped.getCoreId();
-		}
-
-		@Override
-		public int hashCode() {
-			return theWrapped.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (!(obj instanceof ReadOnlyObservable))
-				return false;
-			return theWrapped.equals(((ReadOnlyObservable<?>) obj).theWrapped);
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped.toString();
-		}
 	}
 }
