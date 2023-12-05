@@ -27,7 +27,13 @@ import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.BetterFile;
 
 /**
- * An easy way of parsing command-line arguments as an entity structure
+ * <p>
+ * An easy way of parsing command-line arguments as an entity structure.
+ * </p>
+ *
+ * <p>
+ * Typical usage is simply <code>new EntityArguments<>(MyArgInterface.class).parse(args)</code>
+ * </p>
  *
  * @param <E> The type of the entity to parse
  */
@@ -40,20 +46,20 @@ public class EntityArguments<E> {
 		String description() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
-		 * use for {@link Flag flag} arguments by default
+		 * The name of a static field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern}
+		 * to use for {@link Flag flag} arguments by default
 		 */
 		String flagPattern() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
-		 * use for single-valued arguments by default
+		 * The name of a static field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern}
+		 * to use for single-valued arguments by default
 		 */
 		String singleValuePattern() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
-		 * use for multi-valued arguments by default
+		 * The name of a static field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern}
+		 * to use for multi-valued arguments by default
 		 */
 		String multiValuePattern() default "";
 	}
@@ -84,8 +90,8 @@ public class EntityArguments<E> {
 		String maxValue() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
-		 * use for this argument
+		 * The name of a static field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern}
+		 * to use for this argument
 		 */
 		String argPattern() default "";
 
