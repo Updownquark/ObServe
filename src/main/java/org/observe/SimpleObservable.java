@@ -133,6 +133,7 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 
 	/**
 	 * @param onSubscribe The function to notify when a subscription is added to this observable
+	 * @param identity The identity for this observable
 	 * @param description A description of this observable's purpose
 	 * @param internalState Whether this observable is firing changes for some valued state
 	 * @param lock The lock for this observable

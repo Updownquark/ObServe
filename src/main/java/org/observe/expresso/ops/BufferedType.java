@@ -39,6 +39,7 @@ public class BufferedType {
 		return length;
 	}
 
+	/** @return The length of this type with white space included */
 	public int getFullLength() {
 		int length = 0;
 		if (theNames.size() > 1)
@@ -48,6 +49,11 @@ public class BufferedType {
 		return length;
 	}
 
+	/**
+	 * @param before The number of white space characters to add before this type
+	 * @param after The number of white space characters to add after this type
+	 * @return The type name that is the same as this, but with the given additional buffer
+	 */
 	public BufferedType buffer(int before, int after) {
 		if (before <= 0 && after <= 0)
 			return this;

@@ -40,6 +40,7 @@ public class BinaryOperatorSet {
 		 * @param rightOpType The type of the right operand
 		 * @param position The position of the operator in the file
 		 * @param length The length of the expression
+		 * @param exHandler A handler for interpretation exceptions that might occur
 		 * @return The type of output produced by this operator for the given operand types
 		 * @throws EX If this operation cannot be used for the combination of the given operand types
 		 */

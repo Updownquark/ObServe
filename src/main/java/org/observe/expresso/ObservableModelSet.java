@@ -189,6 +189,7 @@ public interface ObservableModelSet extends Identifiable {
 			return BetterList.of(components.stream(), v -> v.getCores().stream());
 		}
 
+		/** @return An instantiator for this interpreted model value */
 		ModelValueInstantiator<MV> instantiate();
 
 		/**
@@ -198,6 +199,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV2> The instance type to convert to
 		 * @param type The type to convert to
 		 * @param env The interpreted environment which may be needed for the conversion
+		 * @param exHandler A handler for type conversion exceptions that may be encountered
 		 * @return The converted value
 		 * @throws TX If the conversion could not be made
 		 */
@@ -218,6 +220,13 @@ public interface ObservableModelSet extends Identifiable {
 			return new MappedIVC<>(this, type, map);
 		}
 
+		/**
+		 * @param <M2> The model type of the new value
+		 * @param <MV2> The instance type of the new value
+		 * @param type The instance type of the new value
+		 * @param map The map to produce values for the new model value from this value
+		 * @return The mapped, interpreted model value
+		 */
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> mapValue(ModelInstanceType<M2, MV2> type,
 			ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
 			return new MappedIVC<>(this, type, LambdaUtils.printableFn(inst -> inst.map(map), map::toString, map));
@@ -368,6 +377,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type for the value
 		 * @param type The type for the value
 		 * @param value Produces the value from a model instance set
+		 * @param text The text for the literal
 		 * @param components The components of the model value
 		 * @return A value container with the given type, implemented by the given function
 		 */
@@ -403,7 +413,13 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/**
+	 * Instantiates actual values for a model value
+	 *
+	 * @param <MV> The type of values that this instantiator produces
+	 */
 	public interface ModelValueInstantiator<MV> {
+		/** Must be called once on this object after it is created. Initializes internal structures. */
 		void instantiate();
 
 		/**
@@ -425,15 +441,32 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
+		/**
+		 * @param <MV2> The type of the mapped instantiator
+		 * @param map The function to produce values for the new instantiator from this instantiator's values
+		 * @return The mapped instatiator
+		 */
 		default <MV2> ModelValueInstantiator<MV2> map(ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
 			return map(LambdaUtils.printableExBiFn((src, msi) -> map.apply(src), map::toString, map));
 		}
 
+		/**
+		 * @param <MV2> The type of the mapped instantiator
+		 * @param map The function to produce values for the new instantiator from this instantiator's values and the
+		 *        {@link ModelSetInstance} it was created with
+		 * @return The mapped instatiator
+		 */
 		default <MV2> ModelValueInstantiator<MV2> map(
 			ExBiFunction<? super MV, ModelSetInstance, ? extends MV2, ModelInstantiationException> map) {
 			return new MappedMVI<>(this, map);
 		}
 
+		/**
+		 * Implements {@link ModelValueInstantiator#map(ExBiFunction)}
+		 *
+		 * @param <MV> The type of the source instantiator
+		 * @param <MV2> The type of this instantiator
+		 */
 		class MappedMVI<MV, MV2> implements ModelValueInstantiator<MV2> {
 			private final ModelValueInstantiator<MV> theSource;
 			private final ExBiFunction<? super MV, ModelSetInstance, ? extends MV2, ModelInstantiationException> theMap;
@@ -471,6 +504,12 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		/**
+		 * @param <MV> The type of the instantiator
+		 * @param value The value to return from {@link #get(ModelSetInstance)}
+		 * @param text The text to represent the literal
+		 * @return The literal instantiator
+		 */
 		static <MV> ModelValueInstantiator<MV> literal(MV value, String text) {
 			return new ModelValueInstantiator<MV>() {
 				@Override
@@ -718,6 +757,11 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/**
+	 * An instantiator for an {@link InterpretableModelComponentNode}
+	 *
+	 * @param <MV> The type of this instantiator
+	 */
 	public interface ModelComponentInstantiator<MV> extends ModelValueInstantiator<MV>, Identifiable {
 		@Override
 		ModelComponentId getIdentity();
@@ -1247,6 +1291,10 @@ public interface ObservableModelSet extends Identifiable {
 		return new ExternalModelSetBuilder(null, "", nameChecker);
 	}
 
+	/**
+	 * @param until The until observable that will destroy any derived instances owned by the new instance set
+	 * @return A builder for a {@link ModelSetInstance} that may contain values from any number of {@link ObservableModelSet models}
+	 */
 	public static ModelSetInstanceBuilder createMultiModelInstanceBag(Observable<?> until) {
 		return new DefaultModelSet.MultipleModelInstanceBuilder(until);
 	}
@@ -1467,6 +1515,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		void interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/** @return An instantiator for this interpreted model */
 		ModelInstantiator instantiate();
 
 		/**
@@ -1483,6 +1532,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/** A structure holding instantiators for a {@link ObservableModelSet model} */
 	public interface ModelInstantiator extends Identifiable {
 		@Override
 		ModelComponentId getIdentity();
@@ -1511,8 +1561,10 @@ public interface ObservableModelSet extends Identifiable {
 			return value;
 		}
 
+		/** @return The model identifiers of all components in this structure */
 		Set<ModelComponentId> getComponents();
 
+		/** @return The IDs of all {@link IdentifiableCompiledValue identified} components in this structure */
 		Set<Object> getComponentIdentifiers();
 
 		/**
@@ -1521,10 +1573,16 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelValueInstantiator<?> getComponent(ModelComponentId component);
 
+		/** @return The IDs of all models that this instantiator's models inherit */
 		Set<ModelComponentId> getInheritance();
 
+		/**
+		 * @param inherited The model ID of a model that one of this structure's models inherits from
+		 * @return The instantiator that this structure inherits for the given inherited model
+		 */
 		ModelInstantiator getInheritance(ModelComponentId inherited);
 
+		/** Must be called once after creation. Creates internal structures. */
 		void instantiate();
 
 		/**
@@ -1536,6 +1594,11 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelSetInstanceBuilder createInstance(Observable<?> until);
 
+		/**
+		 * @param models The model instance to wrap
+		 * @return A new model instance for this structure's models containing all data in the given model instance set
+		 * @throws ModelInstantiationException If any of this structure's models could not be instantiated
+		 */
 		default ModelSetInstance wrap(ModelSetInstance models) throws ModelInstantiationException {
 			if (models.getTopLevelModels().contains(getIdentity()) || models.getInheritance().contains(getIdentity()))
 				return models;
@@ -1543,6 +1606,12 @@ public interface ObservableModelSet extends Identifiable {
 				return createInstance(models.getUntil()).withAll(models).build();
 		}
 
+		/**
+		 * @param updatingModels The models to copy
+		 * @param until The until observable to destroy instances created for the resulting instance set
+		 * @return A copy of the given models populated with instances for this structure's model values
+		 * @throws ModelInstantiationException If any of model values could not be copied or instantiated
+		 */
 		default ModelSetInstanceBuilder createCopy(ModelSetInstance updatingModels, Observable<?> until)
 			throws ModelInstantiationException {
 			ModelSetInstanceBuilder copy = updatingModels.copy(until);
@@ -1554,6 +1623,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/** A structure holding model value instances for one or more {@link ObservableModelSet model}s */
 	public interface ModelInstance {
 		/**
 		 * @return The identities of all models that this instance contains values for which are not inherited by any other models in this
@@ -1582,6 +1652,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
+		/** @return A map containing all components of all models in this structure that are {@link IdentifiableCompiledValue identified} */
 		Map<Object, ModelComponentId> getComponentsByValueId();
 
 		/**

@@ -449,6 +449,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param source The source value of this type
 		 * @param targetType The type to convert to
 		 * @param env The environment which may contain information needed for the conversion
+		 * @param exHandler The handler for type conversion exceptions that may occur
 		 * @return A value equivalent to this value, but with the given type
 		 * @throws TX If no converter is available for the conversion from this type to the given type
 		 */
@@ -1148,10 +1149,22 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	/**
+	 * A {@link ModelValueInstantiator} for a converted model value
+	 *
+	 * @param <MS> The model type of the source value being converted
+	 * @param <MVS> The instance type of the source value being converted
+	 * @param <MT> The model type of this value
+	 * @param <MVT> The instance type of this value
+	 */
 	public static class ConvertedInstantiator<MS, MVS extends MS, MT, MVT extends MT> implements ModelValueInstantiator<MVT> {
 		private final ModelValueInstantiator<MVS> theSource;
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
+		/**
+		 * @param source The source value to convert
+		 * @param converter The converter
+		 */
 		public ConvertedInstantiator(ModelValueInstantiator<MVS> source, ModelType.ModelInstanceConverter<MS, MT> converter) {
 			theSource = source;
 			theConverter = converter;
@@ -1194,6 +1207,7 @@ public abstract class ModelType<M> implements Named {
 	 * @param <MV> The type of the value
 	 */
 	public interface HollowModelValue<M, MV extends M> {
+		/** @return The instance type of this hollow model value */
 		ModelInstanceType<M, MV> getModelType();
 
 		/**

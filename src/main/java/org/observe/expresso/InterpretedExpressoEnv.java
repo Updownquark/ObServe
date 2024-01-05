@@ -16,8 +16,8 @@ import org.qommons.io.LocatedPositionedContent;
 
 /**
  * An environment in which to
- * {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int) evaluate}
- * {@link ObservableExpression}s
+ * {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
+ * evaluate} {@link ObservableExpression}s
  */
 public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	/**

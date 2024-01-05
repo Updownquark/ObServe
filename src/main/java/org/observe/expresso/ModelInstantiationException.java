@@ -4,8 +4,8 @@ import org.qommons.config.QonfigException;
 import org.qommons.io.LocatedFilePosition;
 
 /**
- * Thrown from {@link ObservableModelSet.InterpretedValueSynth#get(ObservableModelSet.ModelSetInstance)} if an instance of the model value
- * could not be created
+ * Thrown from {@link ObservableModelSet.ModelInstance#get(org.observe.expresso.ObservableModelSet.ModelComponentId)} if an instance of the
+ * model value could not be created
  */
 public class ModelInstantiationException extends QonfigException {
 	/**

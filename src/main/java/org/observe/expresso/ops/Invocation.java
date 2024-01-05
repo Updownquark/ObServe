@@ -110,7 +110,7 @@ public abstract class Invocation implements ObservableExpression {
 
 	/**
 	 * Represents an argument option supplied to
-	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int)}
+	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int, org.qommons.ex.ExceptionHandler.Single)}
 	 */
 	public interface Args {
 		/** @return The number of arguments in the option */
@@ -120,16 +120,26 @@ public abstract class Invocation implements ObservableExpression {
 		 * @param arg The index of the argument to check
 		 * @param paramType The type of the input parameter
 		 * @return Null if the given parameter can be matched to the given argument, or the type conversion error if it can't
+		 * @throws ExpressoInterpretationException If the argument cannot be evaluated
 		 */
 		ExpressoInterpretationException matchesType(int arg, TypeToken<?> paramType) throws ExpressoInterpretationException;
 
 		/**
+		 * @param <EX> The type of exception that the handler may throw
 		 * @param arg The argument index
+		 * @param exHandler
 		 * @return The argument type at the given index
+		 * @throws ExpressoInterpretationException If the argument cannot be interpreted
+		 * @throws EX If the handler throws it in response to an error that occurred from a {@link TypeConversionException} in the argument
+		 *         evaluation
 		 */
 		<EX extends Throwable> TypeToken<?> resolve(int arg, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX;
 
+		/**
+		 * @param arg The argument index
+		 * @return The offset of the given argument from the start of the arguments list in the expression text
+		 */
 		int getArgOffset(int arg);
 	}
 
@@ -282,11 +292,16 @@ public abstract class Invocation implements ObservableExpression {
 	/**
 	 * @param <M> The model type
 	 * @param <MV> The model instance type
+	 * @param <EX> If the handler throws it
 	 * @param type The model instance type of the value container to create
 	 * @param env The expresso environment to use to evaluate this invocation
 	 * @param args The argument option to use to invoke
 	 * @param expressionOffset The offset of this expression in the evaluated root
+	 * @param exHandler The exception handler
 	 * @return The result definition
+	 * @throws ExpressoInterpretationException If the expression cannot be interpreted at all
+	 * @throws EX If the handler throws it in response to an error that occurred from a {@link TypeConversionException} in the argument
+	 *         evaluation
 	 */
 	protected abstract <M, MV extends M, EX extends Throwable> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, ArgOption args, int expressionOffset,
@@ -337,6 +352,7 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param <X> The type of the invokable to find
 	 * @param <M> The model type of the target result
 	 * @param <MV> The type of the target result
+	 * @param <EX> If the handler throws it
 	 * @param methods The invokables to search through
 	 * @param methodName The name of the invokable to find
 	 * @param contextType The type that the invocation's context was evaluated to
@@ -347,7 +363,11 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param impl The executable implementation corresponding to the invokable type
 	 * @param invocation The expression that this is being called from, just for inclusion in an error message
 	 * @param expressionOffset The offset of this expression in the evaluated root
+	 * @param exHandler The exception handler
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
+	 * @throws ExpressoInterpretationException If the expression cannot be interpreted at all
+	 * @throws EX If the handler throws it in response to an error that occurred from a {@link TypeConversionException} in the argument
+	 *         evaluation
 	 */
 	public static <X extends Executable, M, MV extends M, EX extends Throwable> MethodResult<X, MV> findMethod(X[] methods,
 		String methodName, TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions,
@@ -1067,7 +1087,7 @@ public abstract class Invocation implements ObservableExpression {
 		public final M method;
 		/**
 		 * The index of the option passed to
-		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int)}
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int, org.qommons.ex.ExceptionHandler.Single)}
 		 * whose arguments match this invocation
 		 */
 		public final int argListOption;

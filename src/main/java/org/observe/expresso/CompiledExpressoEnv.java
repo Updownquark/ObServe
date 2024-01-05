@@ -57,7 +57,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param unaryOperators The set of unary operators available for expressions
 	 * @param binaryOperators The set of binary operators available for expressions
 	 * @param reporting The error reporting for the environment
-	 * @param properties
+	 * @param properties The properties for this environment
 	 */
 	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
 		ErrorReporting reporting, SessionValues properties) {
@@ -71,7 +71,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 * @param reporting The error reporting for the environment
-	 * @param properties
+	 * @param properties The properties for this environment
 	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
@@ -93,7 +93,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
-	 * @param properties
+	 * @param reporting The error reporting for the new environment
+	 * @param properties The properties for the new environment
 	 * @return A copy of this environment with the given information
 	 */
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
@@ -122,10 +123,14 @@ public class CompiledExpressoEnv implements SessionValues {
 		return theNonStructuredParsers;
 	}
 
+	/** @return This environment's properties */
 	protected SessionValues getProperties() {
 		return theProperties;
 	}
 
+	/**
+	 * @return A new properties set that inherits this environment's properties
+	 */
 	protected SessionValues createChildProperties() {
 		if (theProperties instanceof SessionValues.Default)
 			return ((SessionValues.Default) theProperties).createChild();

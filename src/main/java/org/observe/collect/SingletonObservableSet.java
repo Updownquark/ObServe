@@ -20,12 +20,20 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An {@link ObservableSet} whose size is always 1 and whose only element is backed by a {@link SettableValue}
+ *
+ * @param <T> The type of value in the collection
+ */
 public class SingletonObservableSet<T> implements ObservableSet<T> {
 	private final SettableValue<T> theValue;
 	private final ElementId theId;
 	private final CollectionElement<T> theElement;
 	private final MutableCollectionElement<T> theMutableElement;
 
+	/**
+	 * @param value The value for the set's element
+	 */
 	public SingletonObservableSet(SettableValue<T> value) {
 		theValue = value;
 		theId = new ElementId() {
@@ -48,6 +56,7 @@ public class SingletonObservableSet<T> implements ObservableSet<T> {
 		theMutableElement = new MutableValueElement();
 	}
 
+	/** @return The value backing this set's element */
 	public SettableValue<T> getValue() {
 		return theValue;
 	}

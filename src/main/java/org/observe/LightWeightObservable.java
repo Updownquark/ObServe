@@ -19,6 +19,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		this(ListenerList.build().build());
 	}
 
+	/** @param listeners The listeners for this observable */
 	public LightWeightObservable(ListenerList<Observer<? super T>> listeners) {
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
@@ -63,10 +64,12 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		return null;
 	}
 
+	/** @return Whether this observable is still alive */
 	public boolean isAlive() {
 		return isAlive;
 	}
 
+	/** @return Whether this observable reflects an internal state, such as a value */
 	protected boolean isInternalState() {
 		return false;
 	}

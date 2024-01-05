@@ -58,6 +58,10 @@ public interface NonStructuredParser extends SelfDescribed {
 				return false;
 		}
 
+		/**
+		 * @param text The text to check
+		 * @return Whether this parser can parse the given text
+		 */
 		public abstract boolean checkText(String text);
 
 		@Override
