@@ -418,6 +418,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theSource.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theSource.getCoreId();
 		}
@@ -641,6 +646,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override
@@ -1047,9 +1057,9 @@ public class ObservableCollectionActiveManagers {
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-					? ((SortedElement) before).theParentEl : null;
-					return getParent().canAdd(toAdd, requiredAfter, requiredBefore);
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+				? ((SortedElement) before).theParentEl : null;
+			return getParent().canAdd(toAdd, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -1063,21 +1073,21 @@ public class ObservableCollectionActiveManagers {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-					? ((SortedElement) before).theParentEl : null;
-					// Try to add relative to the specified elements if possible,
-					// but if such a positional add is unsupported by the parent, we need to ensure
-					// that a position-less add will insert the new element in the right spot
-					DerivedCollectionElement<T> parentEl;
-					if (requiredAfter != null || requiredBefore != null)
-						parentEl = getParent().addElement(value, requiredAfter, requiredBefore, first);
-					else if (first && after != null && getParent().canAdd(value, ((SortedElement) after).theParentEl, null) == null)
-						parentEl = getParent().addElement(value, ((SortedElement) after).theParentEl, null, true);
-					else if (!first && before != null && getParent().canAdd(value, null, ((SortedElement) before).theParentEl) == null)
-						parentEl = getParent().addElement(value, null, ((SortedElement) before).theParentEl, false);
-					else
-						parentEl = getParent().addElement(value, null, null, first);
-					return parentEl == null ? null : new SortedElement(parentEl, true);
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+				? ((SortedElement) before).theParentEl : null;
+			// Try to add relative to the specified elements if possible,
+			// but if such a positional add is unsupported by the parent, we need to ensure
+			// that a position-less add will insert the new element in the right spot
+			DerivedCollectionElement<T> parentEl;
+			if (requiredAfter != null || requiredBefore != null)
+				parentEl = getParent().addElement(value, requiredAfter, requiredBefore, first);
+			else if (first && after != null && getParent().canAdd(value, ((SortedElement) after).theParentEl, null) == null)
+				parentEl = getParent().addElement(value, ((SortedElement) after).theParentEl, null, true);
+			else if (!first && before != null && getParent().canAdd(value, null, ((SortedElement) before).theParentEl) == null)
+				parentEl = getParent().addElement(value, null, ((SortedElement) before).theParentEl, false);
+			else
+				parentEl = getParent().addElement(value, null, null, first);
+			return parentEl == null ? null : new SortedElement(parentEl, true);
 		}
 
 		@Override
@@ -1090,9 +1100,9 @@ public class ObservableCollectionActiveManagers {
 				return StdMsg.ILLEGAL_ELEMENT_POSITION;
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-					? ((SortedElement) before).theParentEl : null;
-					return getParent().canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+				? ((SortedElement) before).theParentEl : null;
+			return getParent().canMove(((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore);
 		}
 
 		@Override
@@ -1106,10 +1116,10 @@ public class ObservableCollectionActiveManagers {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
 			DerivedCollectionElement<T> requiredAfter = (after != null && afterComp == 0)
 				? ((SortedElement) after).theParentEl : null;
-				DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
-					? ((SortedElement) before).theParentEl : null;
-					return new SortedElement(getParent().move(//
-						((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
+			DerivedCollectionElement<T> requiredBefore = (before != null && beforeComp == 0)
+				? ((SortedElement) before).theParentEl : null;
+			return new SortedElement(getParent().move(//
+				((SortedElement) valueEl).theParentEl, requiredAfter, requiredBefore, first, afterRemove), true);
 		}
 
 		@Override

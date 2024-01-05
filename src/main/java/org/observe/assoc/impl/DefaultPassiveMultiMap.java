@@ -1,5 +1,6 @@
 package org.observe.assoc.impl;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.function.Consumer;
@@ -20,11 +21,11 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -92,7 +93,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	}
 
 	@Override
-	protected Transactable getKeyLocker() {
+	protected CausalLock getKeyLocker() {
 		return theKeySet;
 	}
 
@@ -279,6 +280,11 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theSourceValues.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theSourceValues.getCurrentCauses();
 		}
 
 		@Override

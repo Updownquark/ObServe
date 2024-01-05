@@ -182,6 +182,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theSource.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theSource.getCoreId();
 		}
@@ -305,6 +310,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
 		}
@@ -414,6 +424,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override
@@ -712,6 +727,11 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
 		}
@@ -819,6 +839,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override

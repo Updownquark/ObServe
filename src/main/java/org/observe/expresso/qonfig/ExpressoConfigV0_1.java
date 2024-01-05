@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1135,6 +1136,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public Transaction tryLock(boolean write, Object cause) {
 				return theSourceFormat.tryLock(write, cause);
+			}
+
+			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return theSourceFormat.getCurrentCauses();
 			}
 
 			@Override
@@ -2457,7 +2463,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				fields = new ArrayList<>(theFields.values());
 				syncChildren(defFields, fields,
 					f -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>) f
-						.interpretValue(this),
+					.interpretValue(this),
 					(i, mEnv) -> {
 						String fieldName = i.getDefinition().getAddOn(EntityConfigField.class).getFieldName();
 						mEnv.putLocal(ExTyped.VALUE_TYPE_KEY, reflector.getFields().get(fieldName).getType());

@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -16,14 +18,17 @@ import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -34,7 +39,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public interface SettableValue<T> extends ObservableValue<T>, Transactable {
+public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<SettableValue<?>> TYPE = TypeTokens.get().keyFor(SettableValue.class).wildCard();
 
@@ -665,6 +670,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theWrapped.getCurrentCauses();
+		}
+
+		@Override
 		public T get() {
 			return theWrapped.get();
 		}
@@ -745,6 +755,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(Lockable.lockable(getSource(), write, cause), getEngine());
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getSource().getCurrentCauses();
 		}
 
 		@Override
@@ -848,6 +863,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getWrapped().getCurrentCauses();
+		}
+
+		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 			return getWrapped().set(value, cause);
 		}
@@ -891,6 +911,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return getWrapped().tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getWrapped().getCurrentCauses();
 		}
 
 		@Override
@@ -945,6 +970,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public boolean isLockSupported() {
 			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getWrapped().getCurrentCauses();
 		}
 
 		@Override
@@ -1066,6 +1096,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			ObservableValue<? extends T> value = getWrapped().get();
+			return value instanceof SettableValue ? ((SettableValue<?>) value).getCurrentCauses() : Collections.emptyList();
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
 			ObservableValue<ObservableValue<String>> wrapE = getWrapped().map(sv -> {
 				if (sv == null)
@@ -1141,6 +1177,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theValue.tryLock();
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
 		}
 
 		@Override
@@ -1265,6 +1306,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Transactable.combine(getValues()).tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return CollectionUtils.concat(QommonsUtils.filterMap(getValues(), null, v -> v.getCurrentCauses()));
 		}
 
 		@Override

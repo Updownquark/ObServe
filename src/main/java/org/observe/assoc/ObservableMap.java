@@ -193,6 +193,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return ObservableMap.this.getCurrentCauses();
+			}
+
+			@Override
 			public V get() {
 				try (Transaction t = ObservableMap.this.lock(false, null)) {
 					MapEntryHandle<K, V> entry;

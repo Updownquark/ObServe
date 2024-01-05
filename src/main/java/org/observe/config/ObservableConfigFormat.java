@@ -36,11 +36,11 @@ import org.observe.util.EntityReflector.FieldChange;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Causable.AbstractCausable;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MultiEntryHandle;
@@ -140,7 +140,7 @@ public interface ObservableConfigFormat<E> {
 	 */
 	interface ObservableConfigParseContext<E> extends ConfigGetter {
 		/** @return The lock enabling parsed values to interact with the config locking */
-		Transactable getLock();
+		CausalLock getLock();
 
 		/** @return The session to associate values with */
 		ObservableConfigParseSession getSession();
@@ -292,7 +292,7 @@ public interface ObservableConfigFormat<E> {
 	 * @param delayedAccept Accepts the parsed value before it is returned. Also used for reference parsing
 	 * @return The context to pass to {@link #parse(ObservableConfigParseContext)}
 	 */
-	static <E> ObservableConfigParseContext<E> ctxFor(Transactable lock, ObservableConfigParseSession session,
+	static <E> ObservableConfigParseContext<E> ctxFor(CausalLock lock, ObservableConfigParseSession session,
 		ObservableValue<? extends ObservableConfig> config, Function<Boolean, ? extends ObservableConfig> create,
 		ObservableConfigEvent change, Observable<?> until, E previousValue, Observable<?> findReferences, Consumer<E> delayedAccept) {
 		return new Impl.DefaultOCParseContext<>(lock, session, config, create, change, until, previousValue, findReferences, delayedAccept);
@@ -1389,7 +1389,7 @@ public interface ObservableConfigFormat<E> {
 	/** Implementations used by static factory methods in {@link ObservableConfigFormat} */
 	static class Impl {
 		static class DefaultOCParseContext<E> implements ObservableConfigParseContext<E> {
-			private final Transactable theLock;
+			private final CausalLock theLock;
 			private final ObservableConfigParseSession theSession;
 			private final ObservableValue<? extends ObservableConfig> theConfig;
 			private final Function<Boolean, ? extends ObservableConfig> theCreate;
@@ -1399,7 +1399,7 @@ public interface ObservableConfigFormat<E> {
 			private final Observable<?> findReferences;
 			private final Consumer<E> theDelayedAccept;
 
-			public DefaultOCParseContext(Transactable lock, ObservableConfigParseSession session,
+			public DefaultOCParseContext(CausalLock lock, ObservableConfigParseSession session,
 				ObservableValue<? extends ObservableConfig> config, Function<Boolean, ? extends ObservableConfig> create,
 				ObservableConfigEvent change, Observable<?> until, E previousValue, Observable<?> findReferences,
 				Consumer<E> delayedAccept) {
@@ -1415,7 +1415,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public Transactable getLock() {
+			public CausalLock getLock() {
 				return theLock;
 			}
 
@@ -2366,7 +2366,7 @@ public interface ObservableConfigFormat<E> {
 				}
 
 				@Override
-				public Transactable getLock(int fieldIndex) {
+				public CausalLock getLock(int fieldIndex) {
 					// If we ever try to support hierarchical locks or anything, this should be the field config's lock
 					return theContext.getLock();
 				}

@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.util.Collection;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
@@ -54,6 +55,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		return theWrapped.tryLock(false, cause);
+	}
+
+	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return theWrapped.getCurrentCauses();
 	}
 
 	@Override
@@ -298,6 +304,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theBacking.tryLock(false, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theBacking.getCurrentCauses();
 		}
 
 		@Override

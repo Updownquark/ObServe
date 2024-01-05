@@ -3,12 +3,9 @@ package org.observe.util.swing;
 import java.awt.EventQueue;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
 import javax.swing.ListModel;
 import javax.swing.event.ListDataEvent;
@@ -224,7 +221,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	/** Allows causable-aware listeners to this class to inspect the causality chain */
 	public static class CausableListEvent extends ListDataEvent implements Causable {
 		private final CollectionChangeEvent<?> theCause;
-		private LinkedHashMap<CausableKey, Supplier<Transaction>> theKeys;
+		private LinkedHashMap<CausableKey, Effect> theKeys;
 		private boolean isStarted;
 		private boolean isFinished;
 		private boolean isTerminated;
@@ -257,8 +254,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 				throw new IllegalStateException("This cause has already terminated");
 			if (theKeys == null)
 				theKeys = new LinkedHashMap<>();
-			theKeys.computeIfAbsent(key, k -> k.use(this));
-			return key.getData();
+			return theKeys.computeIfAbsent(key, Effect::new);
 		}
 
 		@Override
@@ -277,31 +273,8 @@ public class ObservableListModel<E> implements ListModel<E> {
 			if (isFinished)
 				throw new IllegalStateException("A cause may only be finished once");
 			isFinished = true;
-			// The finish actions may use this causable as a cause for events they fire.
-			// These events may trigger onRootFinish calls, which add more actions to this causable
-			// Though this cycle is allowed, care must be taken by callers to ensure it does not become infinite
 			try {
-				if (theKeys != null) {
-					while (!theKeys.isEmpty()) {
-						LinkedList<Transaction> postActions = null;
-						while (!theKeys.isEmpty()) {
-							Iterator<Supplier<Transaction>> keyActionIter = theKeys.values().iterator();
-							Supplier<Transaction> keyAction = keyActionIter.next();
-							keyActionIter.remove();
-							Transaction postAction = keyAction.get();
-							if (postAction != null) {
-								if (postActions == null)
-									postActions = new LinkedList<>();
-								postActions.addFirst(postAction);
-							}
-						}
-						if (postActions != null) {
-							for (Transaction key : postActions)
-								key.close();
-							postActions.clear();
-						}
-					}
-				}
+				Causable.terminateFull(theKeys, this);
 			} finally {
 				isTerminated = true;
 			}

@@ -1,5 +1,6 @@
 package org.observe.assoc;
 
+import java.util.Collection;
 import java.util.Objects;
 
 import org.observe.Eventable;
@@ -72,6 +73,11 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Transaction tryLock(boolean write, Object cause) {
 					return source.tryLock(write, cause);
+				}
+
+				@Override
+				public Collection<Cause> getCurrentCauses() {
+					return source.getCurrentCauses();
 				}
 
 				@Override
@@ -178,6 +184,11 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Transaction tryLock(boolean write, Object cause) {
 					return source.tryLock(write, cause);
+				}
+
+				@Override
+				public Collection<Cause> getCurrentCauses() {
+					return source.getCurrentCauses();
 				}
 
 				@Override

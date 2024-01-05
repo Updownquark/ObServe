@@ -13,17 +13,17 @@ public interface Subscription extends AutoCloseable {
 		unsubscribe();
 	}
 
+	/** @return Generally false, but true if this subscription is just a placeholder that does nothing */
+	default boolean isTrivial() {
+		return false;
+	}
+
 	/**
 	 * @param subs The subscriptions to bundle
 	 * @return A single subscription whose {@link #unsubscribe()} method unsubscribes all of the given subscriptions
 	 */
 	static Subscription forAll(Subscription... subs) {
-		return () -> {
-			for (int s = 0; s < subs.length; s++) {
-				if (unsubscribe(subs[s]))
-					subs[s] = null;
-			}
-		};
+		return new MultiSubscription(subs);
 	}
 
 	/**
@@ -47,5 +47,44 @@ public interface Subscription extends AutoCloseable {
 	}
 
 	/** A subscription that does nothing on {@link #unsubscribe()} */
-	static Subscription NONE = () -> {};
+	static Subscription NONE = new Subscription() {
+		@Override
+		public void unsubscribe() {}
+
+		@Override
+		public boolean isTrivial() {
+			return true;
+		}
+
+		@Override
+		public String toString() {
+			return "NONE";
+		}
+	};
+
+	/** A subscription composed of any number of others */
+	static class MultiSubscription implements Subscription {
+		private final Subscription[] subs;
+
+		MultiSubscription(Subscription[] subs) {
+			this.subs = subs;
+		}
+
+		@Override
+		public void unsubscribe() {
+			for (int s = 0; s < subs.length; s++) {
+				if (Subscription.unsubscribe(subs[s]))
+					subs[s] = null;
+			}
+		}
+
+		@Override
+		public boolean isTrivial() {
+			for (Subscription sub : subs) {
+				if (sub != null && !sub.isTrivial())
+					return false;
+			}
+			return true;
+		}
+	}
 }

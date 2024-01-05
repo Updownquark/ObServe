@@ -43,11 +43,11 @@ import org.observe.config.ObservableConfigFormat.Impl;
 import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.CausalLock;
 import org.qommons.Nameable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
@@ -84,7 +84,7 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public interface ObservableConfig extends Nameable, Transactable, Stamped, Eventable {
+public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventable {
 	/** {@link TypeToken}&lt;ObservableConfig> */
 	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
 

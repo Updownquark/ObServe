@@ -1,5 +1,8 @@
 package org.observe.collect;
 
+import java.util.Collection;
+import java.util.Collections;
+
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -87,6 +90,11 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Transaction.NONE;
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
 		}
 
 		@Override

@@ -6,6 +6,7 @@ import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
+import org.qommons.DefaultCausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -41,7 +42,15 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
 		theIdentity = Identifiable.baseId(description, this);
-		theLock = lock == null ? null : new CausalLock(lock.apply(this));
+		if (lock == null)
+			theLock = null;
+		else {
+			Transactable tLock = lock.apply(this);
+			if (tLock instanceof CausalLock)
+				theLock = (CausalLock) tLock;
+			else
+				theLock = new DefaultCausalLock(tLock);
+		}
 		theEventer = createEventer(theLock, listening);
 		theValue = initialValue;
 	}
@@ -91,7 +100,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return theStamp;
 	}
 
-	private Collection<?> getCurrentCauses() {
+	@Override
+	public Collection<Cause> getCurrentCauses() {
 		return theLock == null ? Collections.emptyList() : theLock.getCurrentCauses();
 	}
 

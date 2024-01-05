@@ -34,6 +34,7 @@ import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.TypeTokens;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
@@ -42,7 +43,6 @@ import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.CollectionElement;
@@ -175,7 +175,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that can use this manager
 	 */
-	public static interface CollectionOperation<E, I, T> extends Identifiable, Transactable {
+	public static interface CollectionOperation<E, I, T> extends Identifiable, CausalLock {
 		/** @return The type of collection that this operation would produce */
 		TypeToken<T> getTargetType();
 
@@ -1350,6 +1350,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theEngine);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override

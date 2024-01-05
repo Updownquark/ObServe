@@ -31,12 +31,14 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -473,6 +475,11 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(null, () -> theValues, //
 				v -> Lockable.lockable(v, write, cause));
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return CollectionUtils.concat(QommonsUtils.filterMap(theValues, null, v -> v.getCurrentCauses()));
 		}
 
 		@Override

@@ -68,7 +68,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
-		theLock = new CausalLock(list);
+		theLock = list;
 		theObservers = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
 		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
@@ -115,7 +115,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		return theLock.getCoreId();
 	}
 
-	Collection<CausalLock.Cause> getCurrentCauses() {
+	@Override
+	public Collection<CausalLock.Cause> getCurrentCauses() {
 		return theLock.getCurrentCauses();
 	}
 

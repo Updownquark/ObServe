@@ -1,6 +1,16 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -306,6 +316,12 @@ public class ObservableCollectionActiveManagers2 {
 		public Transaction tryLock(boolean write, Object cause) {
 			return Lockable.tryLockAll(
 				Lockable.lockable(theParent, write, cause), Lockable.lockable(theFilter));
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			// Yeah, I know, just getting this going
+			return theParent.getCurrentCauses();
 		}
 
 		@Override
@@ -1261,6 +1277,11 @@ public class ObservableCollectionActiveManagers2 {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
 			return Lockable.tryLockAll(Lockable.lockable(theParent), () -> theOuterElements, //
 				oe -> Lockable.lockable(oe.manager, write, cause));
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override

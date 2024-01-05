@@ -339,6 +339,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theWrapped.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theWrapped.getCoreId();
 		}
@@ -692,6 +697,11 @@ public class ObservableSetImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theParent.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theParent.getCurrentCauses();
 		}
 
 		@Override

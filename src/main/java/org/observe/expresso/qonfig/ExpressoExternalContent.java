@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -459,6 +460,11 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 		@Override
 		public boolean isLockSupported() {
 			return false;
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
 		}
 
 		@Override

@@ -14,6 +14,7 @@ import java.awt.font.TextAttribute;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -45,6 +46,8 @@ import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
+import org.observe.quick.QuickWidget;
+import org.observe.quick.QuickWindow;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingEventListener;
@@ -1265,6 +1268,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
+		}
+
+		@Override
 		public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -1423,6 +1431,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Transaction.NONE;
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
 		}
 
 		@Override

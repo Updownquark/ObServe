@@ -1,5 +1,6 @@
 package org.observe.assoc.impl;
 
+import java.util.Collection;
 import java.util.Objects;
 
 import org.observe.assoc.ObservableMultiMap;
@@ -9,11 +10,11 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
+import org.qommons.CausalLock;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.MultiEntryHandle;
@@ -73,7 +74,7 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	}
 
 	/** @return The transactable to use to lock the key flow */
-	protected abstract Transactable getKeyLocker();
+	protected abstract CausalLock getKeyLocker();
 
 	/** @return The manager managing this map's values */
 	protected abstract ObservableCollectionDataFlowImpl.CollectionOperation<?, ?, V> getValueManager();
@@ -110,6 +111,11 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	public Transaction tryLock(boolean write, Object cause) {
 		return Lockable.tryLockAll(//
 			Lockable.lockable(getKeyLocker(), write, cause), Lockable.lockable(getValueManager(), write, cause));
+	}
+
+	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return getKeyLocker().getCurrentCauses();
 	}
 
 	@Override

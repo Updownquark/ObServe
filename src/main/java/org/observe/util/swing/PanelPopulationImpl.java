@@ -12,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -2683,6 +2684,11 @@ class PanelPopulationImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theWrapped.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theWrapped.getCurrentCauses();
 		}
 
 		@Override

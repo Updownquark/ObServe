@@ -175,6 +175,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return getWrapped().getCurrentCauses();
+	}
+
+	@Override
 	public CoreId getCoreId() {
 		return getWrapped().getCoreId();
 	}

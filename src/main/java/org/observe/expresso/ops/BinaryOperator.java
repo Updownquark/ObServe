@@ -1,6 +1,7 @@
 package org.observe.expresso.ops;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -35,6 +36,7 @@ import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
@@ -624,6 +626,11 @@ public class BinaryOperator implements ObservableExpression {
 		@Override
 		public boolean isLockSupported() {
 			return theValue1.isLockSupported() || theValue2.isLockSupported();
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return CollectionUtils.concat(theValue1.getCurrentCauses(), theValue2.getCurrentCauses());
 		}
 
 		@Override

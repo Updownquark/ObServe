@@ -11,7 +11,20 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -24,6 +37,7 @@ import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.config.ParentReference;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
@@ -32,7 +46,6 @@ import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
@@ -665,7 +678,7 @@ public class EntityReflector<E> {
 		 * @param fieldIndex The {@link EntityReflector.ReflectedField#getFieldIndex() index} of the field
 		 * @return The locking mechanism for the field
 		 */
-		Transactable getLock(int fieldIndex);
+		CausalLock getLock(int fieldIndex);
 
 		/**
 		 * @param fieldIndex The index of the field
@@ -813,7 +826,7 @@ public class EntityReflector<E> {
 	static class ObservableFieldImpl<E, F> extends AbstractIdentifiable implements ObservableField<E, F> {
 		private final E theEntity;
 		private final ReflectedField<E, F> theField;
-		private final Transactable theLock;
+		private final CausalLock theLock;
 
 		ObservableFieldImpl(E entity, ReflectedField<E, F> field) {
 			theEntity = entity;
@@ -864,6 +877,11 @@ public class EntityReflector<E> {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theLock.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theLock.getCurrentCauses();
 		}
 
 		@Override

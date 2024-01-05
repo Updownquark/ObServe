@@ -814,7 +814,12 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			TakenUntilObserver untilObserver = new TakenUntilObserver(observer, theWrapped);
-			return untilObserver.withUntilSubscription(theUntil.subscribe(untilObserver));
+			if (untilObserver.isSubscribed())
+				return untilObserver.withUntilSubscription(theUntil.subscribe(untilObserver));
+			else {
+				untilObserver.close(); // This is not necessary, but it fixes a compiler warning
+				return Subscription.NONE;
+			}
 		}
 
 		class TakenUntilObserver implements Observer<Object>, Subscription {
@@ -880,6 +885,10 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				theUntilSub = null;
 				if (sub != null)
 					sub.unsubscribe();
+			}
+
+			boolean isSubscribed() {
+				return theTargetSub != null;
 			}
 		}
 	}

@@ -2,6 +2,7 @@ package org.observe.expresso.ops;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -466,6 +467,11 @@ public class NameExpression implements ObservableExpression, Named {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return Transaction.NONE;
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
 		}
 
 		@Override

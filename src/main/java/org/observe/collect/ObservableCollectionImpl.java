@@ -38,10 +38,25 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
-import org.qommons.*;
+import org.qommons.ArrayUtils;
+import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
+import org.qommons.ConcurrentHashSet;
+import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.IdentityKey;
+import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
+import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
@@ -158,6 +173,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theCollection.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theCollection.getCurrentCauses();
 		}
 
 		@Override
@@ -588,7 +608,7 @@ public final class ObservableCollectionImpl {
 
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
-								Map<Object, Object> causeData = theCollectionCauseKey.getData();
+								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCollectionCauseKey);
 								if (isRefreshNeeded || causeData.containsKey("re-search")) {
 									theLastMatch = null;
 									return; // We've lost track of the current best and will need to find it again later
@@ -641,7 +661,6 @@ public final class ObservableCollectionImpl {
 									}
 								} else
 									refresh = false;
-								causeData = evt.getRootCausable().onFinish(theCollectionCauseKey);
 								if (refresh) {
 									theLastMatch = null;
 									return;
@@ -909,6 +928,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return getCollection().tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getCollection().getCurrentCauses();
 		}
 
 		@Override
@@ -2011,6 +2035,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theFlow.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theFlow.getCoreId();
 		}
@@ -2792,6 +2821,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theFlow.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return theFlow.getCoreId();
 		}
@@ -3212,6 +3246,12 @@ public final class ObservableCollectionImpl {
 			else
 				return Lockable.tryLockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
 					LambdaUtils.identity());
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? Collections.emptyList() : coll.getCurrentCauses();
 		}
 
 		@Override
@@ -3661,7 +3701,7 @@ public final class ObservableCollectionImpl {
 				}
 
 				void unsubscribe(boolean removeAll) {
-					if (collection != null) {
+					if (collection != null && collectionSub != null) {
 						if (removeAll) {
 							// The collection in the value is not changing--we just don't want it to while we're working
 							try (Transaction t = collection.lock(false, null)) {
@@ -3962,6 +4002,11 @@ public final class ObservableCollectionImpl {
 				return null;
 			}
 			return Transaction.and(cvT, cT, collT);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theCollection.getCurrentCauses();
 		}
 
 		@Override

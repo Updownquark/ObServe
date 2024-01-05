@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 
@@ -485,6 +486,11 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return getSource().getCurrentCauses();
+			}
+
+			@Override
 			public ObservableValue<String> isEnabled() {
 				return SettableValue.ALWAYS_DISABLED;
 			}
@@ -581,7 +587,7 @@ public class ObservableValueTransformations {
 		}
 
 		static class Interpreted<S, T> extends Switch.Interpreted<S, T>
-			implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
 			public Interpreted(SwitchValueTransform def, ExElement.Interpreted<?> parent) {
 				super(def, parent);
 			}
@@ -604,7 +610,7 @@ public class ObservableValueTransformations {
 		}
 
 		static class Instantiator<S, T> extends Switch.Instantiator<S, T>
-			implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
+		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
 			public Instantiator(Interpreted<S, T> interpreted) {
 				super(interpreted);
 			}
@@ -640,7 +646,7 @@ public class ObservableValueTransformations {
 		}
 
 		static class Interpreted<S, T> extends Return.Interpreted<S, T>
-			implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement.Void> {
 			public Interpreted(ReturnValueTransform def, ExElement.Interpreted<?> parent) {
 				super(def, parent);
 			}
@@ -663,7 +669,7 @@ public class ObservableValueTransformations {
 		}
 
 		static class Instantiator<S, T> extends Return.Instantiator<S, T>
-			implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
+		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
 			public Instantiator(Interpreted<S, T> interpreted) {
 				super(interpreted);
 			}

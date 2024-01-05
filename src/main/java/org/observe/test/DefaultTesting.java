@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -302,6 +303,11 @@ class DefaultTesting implements InteractiveTesting {
 			@Override
 			public Transaction tryLock(boolean write, Object cause) {
 				return theWrappedValue.tryLock(write, cause);
+			}
+
+			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return theWrappedValue.getCurrentCauses();
 			}
 
 			@Override

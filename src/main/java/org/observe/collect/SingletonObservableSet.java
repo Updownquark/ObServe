@@ -77,6 +77,11 @@ public class SingletonObservableSet<T> implements ObservableSet<T> {
 	}
 
 	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return theValue.getCurrentCauses();
+	}
+
+	@Override
 	public CoreId getCoreId() {
 		return theValue.getCoreId();
 	}

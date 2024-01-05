@@ -1,6 +1,8 @@
 package org.observe.config;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -27,7 +29,7 @@ import org.qommons.tree.BetterTreeList;
 public class DefaultObservableConfig extends AbstractObservableConfig {
 	private ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
-	private List<Object> theCauses;
+	private List<Cause> theCauses;
 	private String theName;
 	private String theValue;
 	private boolean mayBeTrivial;
@@ -137,6 +139,11 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return Collections.unmodifiableList(theCauses);
+	}
+
+	@Override
 	public CoreId getCoreId() {
 		return theContent.getCoreId();
 	}
@@ -158,9 +165,17 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 			}
 			theCauses.add(cause2);
 			return Transaction.and(t, causeT, () -> theCauses.clear());
-		} else if (cause != null) {
-			theCauses.add(cause);
+		} else if (cause instanceof Cause) {
+			theCauses.add((Cause) cause);
 			return Transaction.and(t, () -> theCauses.remove(cause));
+		} else if (cause != null) {
+			Causable realCause = Causable.simpleCause(cause);
+			theCauses.add(realCause);
+			Transaction causeT = realCause.use();
+			return Transaction.and(t, () -> {
+				theCauses.remove(cause);
+				causeT.close();
+			});
 		} else
 			return t;
 	}

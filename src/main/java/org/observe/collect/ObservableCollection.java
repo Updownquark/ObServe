@@ -1089,7 +1089,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @see #withEquivalence(Equivalence)
 		 */
 		default DistinctDataFlow<E, T, T> distinct() {
-			return distinct(options -> {});
+			return distinct(LambdaUtils.consumeDoNothing());
 		}
 
 		/**

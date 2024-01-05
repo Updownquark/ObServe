@@ -35,14 +35,26 @@ import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.*;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterHashMap;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
@@ -161,7 +173,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 	}
 
 	@Override
-	protected Transactable getKeyLocker() {
+	protected CausalLock getKeyLocker() {
 		return theKeyManager;
 	}
 
@@ -832,6 +844,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getValueManager().getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return getValueManager().getCoreId();
 		}
@@ -1216,6 +1233,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return DefaultActiveMultiMap.this.getCurrentCauses();
+		}
+
+		@Override
 		public CoreId getCoreId() {
 			return DefaultActiveMultiMap.this.getCoreId();
 		}
@@ -1497,6 +1519,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return DefaultActiveMultiMap.this.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return DefaultActiveMultiMap.this.getCurrentCauses();
 		}
 
 		@Override

@@ -33,24 +33,35 @@ import org.observe.config.ObservableConfigFormat.Impl;
 import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
+import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
-import org.qommons.collect.*;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MultiEntryValueHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
 
 /** A super class for observable structures backed by an {@link ObservableConfig} */
-public abstract class ObservableConfigTransform implements Transactable, Stamped, Eventable {
-	private final Transactable theLock;
+public abstract class ObservableConfigTransform implements CausalLock, Stamped, Eventable {
+	private final CausalLock theLock;
 	private final ObservableConfigParseSession theSession;
 	private final ObservableValue<? extends ObservableConfig> theParent;
 	private final Consumer<Boolean> theParentCreate;
@@ -68,7 +79,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	 * @param ceCreate Creates the parent config if it does not exist
 	 * @param until The until observable to release resources and listeners for config-backed structures
 	 */
-	public ObservableConfigTransform(Transactable lock, ObservableConfigParseSession session,
+	public ObservableConfigTransform(CausalLock lock, ObservableConfigParseSession session,
 		ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until) {
 		theLock = lock;
 		theSession = session;
@@ -126,7 +137,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	/** @return The lock powering this structure's transactionality */
-	protected Transactable getLock() {
+	protected CausalLock getLock() {
 		return theLock;
 	}
 
@@ -206,6 +217,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	}
 
 	@Override
+	public Collection<Cause> getCurrentCauses() {
+		return theLock.getCurrentCauses();
+	}
+
+	@Override
 	public CoreId getCoreId() {
 		return theLock.getCoreId();
 	}
@@ -245,7 +261,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		ObservableConfigValue(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigValue(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until, TypeToken<E> type,
 			ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
 			super(lock, session, parent, ceCreate, until);
@@ -447,7 +463,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		Consumer<? super ConfigElement> thePreAddAction;
 		E theMovingValue;
 
-		ObservableConfigBackedCollection(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigBackedCollection(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			super(lock, session, collectionElement, ceCreate, until);
@@ -811,6 +827,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			}
 
 			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return ObservableConfigBackedCollection.this.getCurrentCauses();
+			}
+
+			@Override
 			public CoreId getCoreId() {
 				return ObservableConfigBackedCollection.this.getCoreId();
 			}
@@ -988,7 +1009,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	static class ObservableConfigValues<E> extends ObservableCollectionWrapper<E> {
 		private final Backing<E> theBacking;
 
-		ObservableConfigValues(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigValues(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theBacking = new Backing<>(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
@@ -1005,7 +1026,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		}
 
 		static class Backing<E> extends ObservableConfigBackedCollection<E> {
-			Backing(Transactable lock, ObservableConfigParseSession session,
+			Backing(CausalLock lock, ObservableConfigParseSession session,
 				ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
 				ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 				super(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
@@ -1085,7 +1106,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 	 * @param <E> The type of value in the set
 	 */
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements SyncValueSet<E> {
-		ObservableConfigEntityValues(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigEntityValues(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, EntityConfigFormat<E> format,
 			String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			super(lock, session, collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen, findRefs);
@@ -1230,7 +1251,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMap<K, V> theWrapped;
 
-		ObservableConfigMap(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			TypeToken<K> keyType = entryFormat.getKeyField().type;
@@ -1372,7 +1393,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		private final ObservableConfigValues<MapEntry<K, V>> theCollection;
 		private ObservableMultiMap<K, V> theWrapped;
 
-		ObservableConfigMultiMap(Transactable lock, ObservableConfigParseSession session,
+		ObservableConfigMultiMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
 			TypeToken<K> keyType = entryFormat.getKeyField().type;
@@ -1429,6 +1450,11 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theCollection.getBacking().tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theCollection.getBacking().getCurrentCauses();
 		}
 
 		@Override

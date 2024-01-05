@@ -350,6 +350,12 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public Collection<Cause> getCurrentCauses() {
+			ObservableConfig config = theConfigChild.get();
+			return config == null ? Collections.emptyList() : config.getCurrentCauses();
+		}
+
+		@Override
 		public long getStamp() {
 			long stamp = theConfigChild.getStamp();
 			ObservableConfig child = theConfigChild.get();
@@ -545,6 +551,11 @@ public class ObservableConfigContent {
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
 			return theConfig.tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theConfig.getCurrentCauses();
 		}
 
 		@Override

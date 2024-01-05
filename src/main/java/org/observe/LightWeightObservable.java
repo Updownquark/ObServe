@@ -78,7 +78,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 	public Subscription subscribe(Observer<? super T> observer) {
 		if (!isAlive) {
 			observer.onCompleted(null);
-			return () -> {};
+			return Subscription.NONE;
 		} else {
 			Runnable unsub = theListeners.add(observer, isInternalState());
 			return unsub::run;
@@ -101,6 +101,11 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		theListeners.forEach(//
 			observer -> observer.onCompleted(cause));
 		theListeners.clear();
+	}
+
+	/** Resets this observable so that it can be used again after {@link #onCompleted(Causable)} is called */
+	public void reUse() {
+		isAlive = true;
 	}
 
 	@Override

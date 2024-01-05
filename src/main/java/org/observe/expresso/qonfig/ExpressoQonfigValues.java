@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -210,6 +211,11 @@ public class ExpressoQonfigValues {
 			@Override
 			public Transaction tryLock(boolean write, Object cause) {
 				return Transaction.NONE;
+			}
+
+			@Override
+			public Collection<Cause> getCurrentCauses() {
+				return Collections.emptyList();
 			}
 
 			@Override
