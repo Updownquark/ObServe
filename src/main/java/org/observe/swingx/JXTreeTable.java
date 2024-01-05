@@ -85,9 +85,15 @@ import org.jdesktop.swingx.treetable.TreeTableModel;
 import org.jdesktop.swingx.util.Contract;
 
 /**
- * Andrew: This is straight copied from https://github.com/tmyroadctfig/swingx.  I'm pulling in swingx via Maven, but the latest version on
- * Maven Central is 1.6.1.  This is from the latest (I think I can say that confidently, since the latest at this point is over 9 years old),
- * version 1.6.6.  It contains some bugfixes I need.
+ * <p>
+ * Andrew: This is straight copied from https://github.com/tmyroadctfig/swingx. I'm pulling in swingx via Maven, but the latest version on
+ * Maven Central is 1.6.1. This is from the latest (I think I can say that confidently, since the latest at this point is over 9 years old),
+ * version 1.6.6. It contains some bugfixes I need.
+ * </p>
+ *
+ * <p>
+ * I've also made some custom modifications, either to fix obscure bugs or to support obscure features in my UI APIs.
+ * </p>
  *
  * <p><code>JXTreeTable</code> is a specialized {@link javax.swing.JTable table}
  * consisting of a single column in which to display hierarchical data, and any
