@@ -1527,7 +1527,7 @@ class QuickSwingTablePopulation {
 			action.setActionContext(ctx);
 			Supplier<List<R>>[] actionValues = new Supplier[1];
 			long[] lastUpdate = new long[1];
-			table.withMultiAction(null, LambdaUtils.printableConsumer(values -> {
+			table.withMultiAction(null, LambdaUtils.<List<? extends R>> printableConsumer(values -> {
 				if (!ctx.getActionValues().equals(values)) {
 					try (Transaction t = ctx.getActionValues().lock(true, null)) {
 						CollectionUtils.synchronize(ctx.getActionValues(), values)//

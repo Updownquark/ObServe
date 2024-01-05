@@ -38,7 +38,7 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchor.InstantiationTransaction;
-import org.observe.util.ObservableUtils;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -375,8 +375,12 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		// Sync multi-selection so we can control the actions if nothing else
 		ObservableCollection<R> multiSelection = ObservableCollection.build(getRowType()).build().safe(ThreadConstraint.EDT, getUntil());
 		syncMultiSelection(table, model, multiSelection);
-		if (theSelectionValues != null)
-			ObservableUtils.link(multiSelection, theSelectionValues);
+		if (theSelectionValues != null) {
+			// ObservableUtils.link(multiSelection, theSelectionValues);
+			Subscription selSyncSub = ObservableCollectionSynchronization.synchronize(multiSelection, theSelectionValues)//
+				.synchronize();
+			getUntil().take(1).act(__ -> selSyncSub.unsubscribe());
+		}
 
 		JComponent comp;
 		if (!theActions.isEmpty()) {

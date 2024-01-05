@@ -159,7 +159,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
 		ComboPopup popup = getComboPopup(comboBox);
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
-			if (index < 0 || index >= comboBox.getItemCount())
+			System.out.println("Index=" + index);
+			if (index < 0)
+				comboBox.setSelectedIndex(-1);
+			else if (index >= comboBox.getItemCount())
 				return;
 			else if (index == comboBox.getSelectedIndex())
 				return;
@@ -332,6 +335,13 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(selected.changes().act(evt -> {
 			if (callbackLock[0])
 				return;
+			System.out.println("SV: " + evt + ", CSV=" + currentSelected[0]);
+			if (evt.getNewValue() == null) {
+				currentSelectedElement[0] = null;
+				currentSelected[0] = null;
+				setSelected.accept(-1);
+				return;
+			}
 			String enabled = selected.isEnabled().get();
 			callbackLock[0] = true;
 			try (Transaction avT = availableValues.lock(false, null)) {
@@ -365,6 +375,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			if (evt.type == CollectionChangeType.remove)
 				return;
 			Object selectedV = selected.get();
+			System.out.println("AV " + evt + ", SV=" + selectedV + ", CSV=" + currentSelected[0]);
 			if (selectedV != null && currentSelected[0] != selectedV) {
 				for (CollectionChangeEvent.ElementChange<? extends T> change : evt.getElements()) {
 					if (((Equivalence<T>) availableValues.equivalence()).elementEquals(change.newValue, selectedV)) {

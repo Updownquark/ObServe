@@ -29,7 +29,7 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
-import org.observe.util.ObservableUtils;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.AbstractObservableTableModel.TableRenderContext;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
@@ -259,9 +259,18 @@ implements TreeTableEditor<F, P> {
 			ObservableTreeTableModel.syncSelection(table, selection, getUntil());
 		if (theValueMultiSelection != null) {
 			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
-			Subscription sub = ObservableUtils.link(selection, theValueMultiSelection, //
-				path -> path == null ? null : path.getLast(), //
-				value -> treeModel.getBetterPath(value, true), false, false);
+			// Subscription sub = ObservableUtils.link(selection, theValueMultiSelection, //
+			// path -> path == null ? null : path.getLast(), //
+			// value -> treeModel.getBetterPath(value, true), false, false);
+			TypeToken<F> type = (TypeToken<F>) getRowType().resolveType(BetterList.class.getTypeParameters()[0]);
+			ObservableCollection<F> modelValueSel = selection.flow()//
+				.transform(type, tx -> tx//
+					.cache(false).reEvalOnUpdate(false).fireIfUnchanged(true)//
+					.map(path -> path == null ? null : path.getLast())//
+					.replaceSource(value -> treeModel.getBetterPath(value, true), null))//
+				.collect();
+			Subscription sub = ObservableCollectionSynchronization.synchronize(modelValueSel, theValueMultiSelection)//
+				.synchronize();
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 		}
 	}

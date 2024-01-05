@@ -238,7 +238,9 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			try {
 				if (path != null) {
 					List<T> list = (List<T>) (List<?>) Arrays.asList(path.getPath());
-					selection.set(BetterList.of(list), e);
+					BetterList<T> newSel = BetterList.of(list);
+					if (selection.isAcceptable(newSel) == null)
+						selection.set(newSel, e);
 				} else if (selection.get() != null)
 					selection.set(null, e);
 			} finally {

@@ -83,6 +83,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				});
 			} catch (CheckedExceptionWrapper w) {
 				throw CheckedExceptionWrapper.getThrowable(w, ModelInstantiationException.class);
+			} catch (Throwable e) {
+				quick.reporting().error("Unexpected error", e);
+				return;
 			}
 			if (!modified[0])
 				throw new IllegalStateException("Component modifier not invoked by " + getClass().getName());
