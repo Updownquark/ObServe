@@ -4,7 +4,6 @@ import java.util.BitSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
@@ -21,21 +20,31 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeSet;
 
 /**
- * A class that is capable of synchronizing two collections of the same type but differing data tolerances. Unlike previous iterations, this
- * class can handle synchronization of collections whose internal orderings differ, or whose data filtering (e.g. see
- * {@link ObservableCollection#canAdd(Object)}) differs. If a value added to a collection cannot be added to the other collection in the
- * same location, another location may be tried (depending on the configured ordering, see {@link Builder#strictOrder()},
- * {@link Builder#preferOrdered()}, and {@link Builder#unordered()}). If this too fails, the value will dangle harmlessly. If then the value
- * is added to the second collection later from another source, these values will be matched up.
+ * <p>
+ * A class that is capable of synchronizing two collections of the same type but differing data tolerances.
+ * </p>
+ * <p>
+ * Unlike previous iterations of this feature (see {@link ObservableUtils#link(ObservableCollection, ObservableCollection)}), this class can
+ * handle synchronization of collections whose internal orderings differ, or whose data filtering (e.g. see
+ * {@link ObservableCollection#canAdd(Object)}) differs.
+ * </p>
+ * <p>
+ * If, for example, a value added to one collection cannot be added to the other collection in the same location, another location may be
+ * tried (depending on the configured ordering constraint, see {@link Builder#strictOrder()}, {@link Builder#preferOrdered()}, and
+ * {@link Builder#unordered()}). If this too fails, the value will dangle harmlessly. If then the value is added to the second collection
+ * later from another source, these values will be matched up.
+ * </p>
+ * <p>
+ * Similar functionality exists to handle removals or element set operations that are unsupported by the other collection. Thus, this class
+ * may be used to synchronize any 2 collections "as closely as possible" without any knowledge of the ordering or data capabilities of
+ * either.
+ * </p>
  *
  * @param <V> The type of values in the collections being synchronized
+ * @see #synchronize(ObservableCollection, ObservableCollection)
  */
 public class ObservableCollectionSynchronization<V> implements Subscription {
-	/**
-	 * An intermediate cause for events
-	 * {@link ObservableUtils#link(ObservableCollection, ObservableCollection, Function, Function, boolean, boolean) linking} 2
-	 * {@link ObservableCollection}s
-	 */
+	/** An intermediate cause for events linking 2 {@link ObservableCollection}s */
 	public static class ObservableCollectionLinkEvent extends Causable.AbstractCausable {
 		private final ObservableCollection<?> theSource;
 
@@ -402,8 +411,9 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 	}
 
 	/**
-	 * @param <V> The type of values to synchronize
+	 * Creates a builder to configure synchronization for 2 observable collections
 	 *
+	 * @param <V> The type of values to synchronize
 	 * @param left The first collection to synchronize
 	 * @param right The second collection to synchronize
 	 * @return A builder to configure the synchronization
@@ -413,7 +423,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 	}
 
 	/**
-	 * Configures synchronization
+	 * Configures synchronization between 2 observable collections
 	 *
 	 * @param <V> The type of values to synchronize
 	 */
@@ -470,6 +480,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 		 * Begins the synchronization operation
 		 *
 		 * @return The operation to use to {@link ObservableCollectionSynchronization#unsubscribe() terminate} the synchronization
+		 * @see ObservableCollectionSynchronization
 		 */
 		public ObservableCollectionSynchronization<V> synchronize() {
 			return new ObservableCollectionSynchronization<>(theLeft, theRight, isOrderEnforced);

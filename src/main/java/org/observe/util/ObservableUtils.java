@@ -8,6 +8,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.util.ObservableCollectionSynchronization.ObservableCollectionLinkEvent;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
@@ -100,7 +101,10 @@ public class ObservableUtils {
 	 * @param c2 The second collection to link
 	 * @return The subscription to {@link Subscription#unsubscribe()} to terminate the link and allow the collections to be independent
 	 *         again
+	 * @deprecated This method does not handle lack of support for changes by either collection. Use
+	 *             {@link ObservableCollectionSynchronization#synchronize(ObservableCollection, ObservableCollection)} instead.
 	 */
+	@Deprecated
 	public static <E> Subscription link(ObservableCollection<E> c1, ObservableCollection<E> c2) {
 		return link(c1, c2, v -> v, v -> v,
 			// The re-mapping option doesn't matter for content since the values in the collections are identical,
@@ -125,7 +129,10 @@ public class ObservableUtils {
 	 *        re-using the corresponding value in <code>c2</code>.
 	 * @return The subscription to {@link Subscription#unsubscribe()} to terminate the link and allow the collections to be independent
 	 *         again
+	 * @deprecated This method does not handle lack of support for changes by either collection. Use
+	 *             {@link ObservableCollectionSynchronization#synchronize(ObservableCollection, ObservableCollection)} instead.
 	 */
+	@Deprecated
 	public static <E1, E2> Subscription link(ObservableCollection<E1> c1, ObservableCollection<E2> c2, //
 		Function<? super E1, ? extends E2> map1, Function<? super E2, ? extends E1> map2, //
 		boolean reMapOnUpdate1, boolean reMapOnUpdate2) {
@@ -229,27 +236,5 @@ public class ObservableUtils {
 				throw new IllegalArgumentException("Two collections may only be linked if at least one of them is initially empty");
 		}
 		return Subscription.forAll(sub1, sub2);
-	}
-
-	/**
-	 * An intermediate cause for events
-	 * {@link ObservableUtils#link(ObservableCollection, ObservableCollection, Function, Function, boolean, boolean) linking} 2
-	 * {@link ObservableCollection}s
-	 */
-	public static class ObservableCollectionLinkEvent extends Causable.AbstractCausable {
-		private final ObservableCollection<?> theSource;
-
-		ObservableCollectionLinkEvent(ObservableCollection<?> source, Object cause) {
-			super(cause);
-			theSource = source;
-		}
-
-		/**
-		 * @param potentialSource An ObservableCollection to test
-		 * @return Whether the given collection is this event's source
-		 */
-		public boolean isSource(ObservableCollection<?> potentialSource) {
-			return theSource == potentialSource;
-		}
 	}
 }
