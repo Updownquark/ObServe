@@ -33,6 +33,7 @@ public class ClassView implements TypeParser {
 	private final List<ClassLoader> theClassLoaders;
 	private final Map<String, String> theImportedTypes;
 	private final Set<String> theWildcardImports;
+	private final Map<String, List<Method>> theStaticMethodImports;
 
 	private Map<String, Class<?>> theTypeCache;
 	private Map<String, ValueHolder<Field>> theFieldCache;
@@ -43,12 +44,37 @@ public class ClassView implements TypeParser {
 		theClassLoaders = classLoaders;
 		theImportedTypes = importedTypes;
 		theWildcardImports = wildcardImports;
+		theStaticMethodImports = new HashMap<>();
 		theFieldCache = new ConcurrentHashMap<>();
 		theMethodCache = new ConcurrentHashMap<>();
 
 		for (Map.Entry<String, String> imp : theImportedTypes.entrySet()) {
 			Class<?> type = getType(imp.getKey());
-			if (type == null)
+			boolean memberFound = false;
+			if (type == null) {
+				// Not a valid type import, but it could be a static member import
+				int lastDot = imp.getValue().lastIndexOf('.');
+				if (lastDot >= 0) {
+					type = getType(imp.getValue().substring(0, lastDot));
+					if (type != null) {
+						String memberName = imp.getValue().substring(lastDot + 1);
+						for (Field field : type.getFields()) {
+							if (Modifier.isStatic(field.getModifiers()) && field.getName().equals(memberName)) {
+								memberFound = true;
+								theFieldCache.putIfAbsent(memberName, new ValueHolder<>(field));
+							}
+						}
+						// First initialize the methods
+						for (Method method : type.getMethods()) {
+							if (Modifier.isStatic(method.getModifiers()) && method.getName().equals(memberName)) {
+								memberFound = true;
+								theStaticMethodImports.computeIfAbsent(memberName, __ -> new ArrayList<>()).add(method);
+							}
+						}
+					}
+				}
+			}
+			if (type == null && !memberFound)
 				importTypeErrors.get(imp.getValue()).error("Import '" + imp.getValue() + "' cannot be resolved");
 		}
 
@@ -88,6 +114,9 @@ public class ClassView implements TypeParser {
 	public List<Method> getImportedStaticMethods(String methodName) {
 		List<Method> methods = theMethodCache.computeIfAbsent(methodName, __ -> {
 			List<Method> m = new ArrayList<>();
+			List<Method> staticImports = theStaticMethodImports.get(methodName);
+			if (staticImports != null)
+				m.addAll(staticImports);
 			for (String wildcard : theWildcardImports) {
 				Class<?> type = getType(wildcard);
 				if (type == null)
