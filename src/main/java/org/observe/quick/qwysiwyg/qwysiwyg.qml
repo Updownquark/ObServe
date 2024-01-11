@@ -67,11 +67,11 @@
 					</column-edit>
 				</column>
 				<column name="`Value`" value="ex.getValue()" />
-				<multi-value-action allow-for-empty="true" icon="&quot;icons/add.png&quot;"
+				<multi-value-action allow-for-empty="true" icon="&quot;/icons/add.png&quot;"
 					enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
 					app.qwysiwyg.addWatchExpression(app.qwysiwyg.selectedNode)
 				</multi-value-action>
-				<value-action allow-for-multiple="true" icon="&quot;icons/remove.png&quot;" value-name="exp">
+				<value-action allow-for-multiple="true" icon="&quot;/icons/remove.png&quot;" value-name="exp">
 					exp.remove()
 				</value-action>
 			</table>
@@ -115,11 +115,11 @@
 						<on-click button="left">editWatchAction</on-click>
 					</label>
 				</column>
-				<multi-value-action allow-for-empty="true" icon="`icons/add.png`"
+				<multi-value-action allow-for-empty="true" icon="`/icons/add.png`"
 					enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
 					app.qwysiwyg.addWatchAction(app.qwysiwyg.selectedNode)
 				</multi-value-action>
-				<value-action allow-for-multiple="true" icon="`icons/remove.png`" value-name="exp">
+				<value-action allow-for-multiple="true" icon="`/icons/remove.png`" value-name="exp">
 					exp.remove()
 				</value-action>
 			</table>

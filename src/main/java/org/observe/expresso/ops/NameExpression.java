@@ -274,16 +274,16 @@ public class NameExpression implements ObservableExpression, Named {
 			} catch (NoSuchFieldException e) {
 				exHandler.handle1(new ExpressoInterpretationException(
 					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName(),
-					reporting.getFileLocation().getPosition(theNames.get(nameIndex - 1).length() + 1), theNames.get(nameIndex).length()));
+					reporting.getFileLocation().getPosition(0), theNames.get(nameIndex).length()));
 				return null;
 			} catch (SecurityException e) {
 				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed",
-					reporting.getFileLocation().getPosition(theNames.get(nameIndex - 1).length() + 1), theNames.get(nameIndex).length(),
+					reporting.getFileLocation().getPosition(0), theNames.get(nameIndex).length(),
 					e));
 				return null;
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //
-				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions, env, exHandler);
+				imv, nameIndex, type, expressionOffset, reporting, divisions, env, exHandler);
 		} else
 			throw new ExpressoInterpretationException(
 				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType, reporting.getPosition(),
