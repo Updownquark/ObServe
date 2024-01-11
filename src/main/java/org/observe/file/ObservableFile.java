@@ -305,8 +305,8 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
-	public OutputStream write() throws IOException {
-		return theFile.write();
+	public OutputStream write(boolean append) throws IOException {
+		return theFile.write(append);
 	}
 
 	@Override
