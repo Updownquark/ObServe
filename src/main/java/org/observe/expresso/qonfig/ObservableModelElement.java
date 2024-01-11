@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -168,7 +169,10 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			// Find all the interpreted model values and initialize them with this as their parent before they are initialized properly
 			theValues.clear();
-			try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+			try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
+				LinkedList::new, //
+				list -> list.add(this), //
+				LinkedList::removeLast)) {
 				for (String name : env.getModels().getComponentNames()) {
 					InterpretedModelComponentNode<?, ?> mv = env.getModels().getLocalComponent(name).interpret(env);
 					ModelValueElement.Interpreted<?, ?, ?> modelValue = findModelValue(mv.getValue());

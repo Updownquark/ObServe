@@ -419,7 +419,7 @@ public interface QuickTableColumn<R, C> {
 			MultiValueRenderable<R> owner = getOwner(getParentElement());
 			ModelSetInstance editorModels = copyTableModels(myModels.copy(), owner).build();
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, editorModels,
-				SettableValue.flatten(theEditColumnValue));
+				SettableValue.flatten(theEditColumnValue), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
 			if (owner != null)
 				replaceTableValues(editorModels, owner, SettableValue.flatten(theEditRowValue), SettableValue.flatten(isSelected),

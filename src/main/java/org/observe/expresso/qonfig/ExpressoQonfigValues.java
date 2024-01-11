@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -550,7 +551,10 @@ public class ExpressoQonfigValues {
 			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
+					LinkedList::new, //
+					list -> list.add(this), //
+					LinkedList::removeLast)) {
 					syncChildren(getDefinition().getElements(), theElements,
 						(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
 				}
@@ -1062,7 +1066,10 @@ public class ExpressoQonfigValues {
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
-				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
+					LinkedList::new, //
+					list -> list.add(this), //
+					LinkedList::removeLast)) {
 					syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
 						(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
 				}
@@ -1905,7 +1912,10 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
+					LinkedList::new, //
+					list -> list.add(this), //
+					LinkedList::removeLast)) {
 					syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
 						(i, aEnv) -> i.update(aEnv));
 				}
@@ -2117,7 +2127,10 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				theFinally = interpret(getDefinition().getFinally() == null ? null : getDefinition().getFinally(),
 					ModelTypes.Action.instance());
-				try (Transaction t = env.putTemp(ModelValueElement.MODEL_PARENT_ELEMENT, this)) {
+				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
+					LinkedList::new, //
+					list -> list.add(this), //
+					LinkedList::removeLast)) {
 					this.syncChildren(getDefinition().getBody(), theBody,
 						(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
 						(b, bEnv) -> b.updateValue(bEnv));

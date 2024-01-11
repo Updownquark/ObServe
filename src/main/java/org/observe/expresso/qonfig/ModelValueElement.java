@@ -1,5 +1,7 @@
 package org.observe.expresso.qonfig;
 
+import java.util.List;
+
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -20,7 +22,7 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface ModelValueElement<M, MV extends M> extends ExElement {
-	static final String MODEL_PARENT_ELEMENT = "Model.Parent.Element";
+	static final String MODEL_PARENT_ELEMENTS = "Model.Parent.Elements";
 
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model-value", interpretation = Interpreted.class)
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
@@ -343,25 +345,28 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		@Override
 		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			ExElement.Interpreted<?> parent=env.get(MODEL_PARENT_ELEMENT, ExElement.Interpreted.class);
-			if (parent == null)
-				throw new ExpressoInterpretationException("No " + MODEL_PARENT_ELEMENT + " installed in environment",
+			List<ExElement.Interpreted<?>> parents = env.get(MODEL_PARENT_ELEMENTS, List.class);
+			if (parents == null)
+				throw new ExpressoInterpretationException("No " + MODEL_PARENT_ELEMENTS + " installed in environment",
 					reporting().getFileLocation());
-			if(parent.getDefinition()!=getParentElement()) {
-				if(parent instanceof ObservableModelElement.Interpreted && getParentElement() instanceof ObservableModelElement.Def) {
-					try {
-						parent = ((ObservableModelElement.Interpreted<?>) parent).getInterpretingModel(//
-							((ObservableModelElement.Def<?, ?>) getParentElement()).getModelPath());
-					} catch (IllegalStateException e) {
-						throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation(), e);
+			for (ExElement.Interpreted<?> parent : parents) {
+				if (parent.getDefinition() != getParentElement()) {
+					if (parent instanceof ObservableModelElement.Interpreted && getParentElement() instanceof ObservableModelElement.Def) {
+						try {
+							parent = ((ObservableModelElement.Interpreted<?>) parent).getInterpretingModel(//
+								((ObservableModelElement.Def<?, ?>) getParentElement()).getModelPath());
+						} catch (IllegalStateException e) {
+							throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation(), e);
+						}
 					}
-				} else
-					throw new ExpressoInterpretationException("Incorrect " + MODEL_PARENT_ELEMENT + " installed",
-						reporting().getFileLocation());
+				}
+				if (parent.getDefinition() == getParentElement()) {
+					InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
+					interpreted.updateValue(env);
+					return interpreted;
+				}
 			}
-			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
-			interpreted.updateValue(env);
-			return interpreted;
+			throw new ExpressoInterpretationException("Correct model not installed in environment", reporting().getFileLocation());
 		}
 
 		InterpretedSynth<M, ?, ? extends E> interpretValue(ExElement.Interpreted<?> parent);

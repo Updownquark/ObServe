@@ -53,6 +53,7 @@ import org.qommons.config.QonfigPromiseFulfillment;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSessionImplementation;
 import org.qommons.io.BetterFile;
+import org.qommons.io.ResourceLocator;
 import org.qommons.io.TextParseException;
 
 public class QuickApp extends QonfigApp {
@@ -232,12 +233,12 @@ public class QuickApp extends QonfigApp {
 				throw new IllegalArgumentException("No quick-app command line argument or Quick-App manifest property specified");
 		}
 
+		ResourceLocator locator = new ResourceLocator();
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();
 		if (loader == null)
-			loader = QuickApplication.class.getClassLoader();
-		URL quickAppUrl = loader.getResource(quickAppFile);
-		if (quickAppUrl == null)
-			quickAppUrl = QuickApplication.class.getResource(quickAppFile);
+			locator.relativeTo(loader);
+		locator.relativeTo(QuickApplication.class);
+		URL quickAppUrl = locator.findResource(quickAppFile);
 		if (quickAppUrl == null)
 			throw new FileNotFoundException("Quick application file '" + quickAppFile + "' not found");
 
