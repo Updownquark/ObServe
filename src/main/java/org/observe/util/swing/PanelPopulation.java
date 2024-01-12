@@ -682,7 +682,7 @@ public class PanelPopulation {
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
 
-			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), value, getUntil());
+			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new PPComboBox<>(), value, getUntil());
 			if (modify != null)
 				modify.accept(fieldPanel);
 			ObservableComboBoxModel.ComboHookup hookup = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),

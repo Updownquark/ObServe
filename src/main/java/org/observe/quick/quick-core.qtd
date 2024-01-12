@@ -241,7 +241,7 @@
 		<!-- Now a basic outline of abstract Quick widgets -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<element-model>
-				<?DOC The value being managed by the widget?>
+				<?DOC The current value being managed by the widget?>
 				<value name-attribute="value-name" priority="1" />
 			</element-model>
 			<?DOC The name of this widget's value for use in internal expressions?>

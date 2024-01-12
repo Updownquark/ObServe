@@ -455,6 +455,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
 				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				lbl.withTooltip(quick.getTooltip());
 			});
 		}
 	}

@@ -120,9 +120,9 @@
 
 		<add-on name="multi-value-renderable" requires="widget">
 			<element-model>
-				<?DOC The value that is currently in use (e.g. being rendered, hovered, etc.)?>
+				<?DOC The value that is currently active (e.g. being rendered, hovered, etc.)?>
 				<value name-attribute="active-value-name" priority="1" />
-				<?DOC Whether the current value is selected?>
+				<?DOC Whether the current active value is selected?>
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
 			<?DOC The name of the currently applicable value, e.g. for rendering?>

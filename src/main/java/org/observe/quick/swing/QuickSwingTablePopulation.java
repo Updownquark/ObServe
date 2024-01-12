@@ -306,8 +306,8 @@ class QuickSwingTablePopulation {
 				return null;
 			try (Transaction t = QuickCoreSwing.rendering()) {
 				theRenderTableContext.getActiveValue().set(modelValue, null);
+				return theTooltip.get();
 			}
-			return theTooltip.get();
 		}
 
 		String getTooltip() {
@@ -926,9 +926,13 @@ class QuickSwingTablePopulation {
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						label[0].setOpaque(true);
-						if (!isManaged(label[0], "background"))
-							label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+						if (!isManaged(label[0], "background")) {
+							if (cell.getRowIndex() >= 0) {
+								label[0].setOpaque(true);
+								label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
+							} else // For combo boxes, the row index is -1 and the label should not be opaque
+								label[0].setOpaque(false);
+						}
 						if (!isManaged(label[0], "foreground"))
 							label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 						label[0].setEnabled(cell.isEnabled() == null);

@@ -10,18 +10,8 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -780,6 +770,17 @@ class PanelPopulationImpl {
 			else
 				getEditor().setValidator(MultiRangeSlider.RangeValidator.FREE);
 			return (P) this;
+		}
+	}
+
+	static class PPComboBox<T> extends JComboBox<T> {
+		@Override
+		public Dimension getPreferredSize() {
+			// Having trouble with the combo box not accommodating the size of some custom renderers,
+			// resulting in a lot of ellipses at the end of renderers
+			Dimension ps = super.getPreferredSize();
+			ps.width += 4;
+			return ps;
 		}
 	}
 
@@ -1724,12 +1725,12 @@ class PanelPopulationImpl {
 				.withValue(theInternalCollapsed.map(collapsed -> collapsed ? collapsedIcon : expandedIcon))//
 				.build();
 			theHeaderPanel.fill()//
-				.decorate(cd -> cd.bold().withFontSize(16))//
-				.addIcon(null, ObservableValue.flatten(theIcon), icon -> {
-					icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse"));
-					icon.modifyComponent(c -> c.addMouseListener(collapseMouseListener));
-				})//
-				.spacer(2);
+			.decorate(cd -> cd.bold().withFontSize(16))//
+			.addIcon(null, ObservableValue.flatten(theIcon), icon -> {
+				icon.withTooltip(theInternalCollapsed.map(collapsed -> collapsed ? "Expand" : "Collapse"));
+				icon.modifyComponent(c -> c.addMouseListener(collapseMouseListener));
+			})//
+			.spacer(2);
 			theHeaderPanel.getComponent().addMouseListener(collapseMouseListener);
 			decorate(deco -> deco.withBorder(BorderFactory.createLineBorder(Color.black)));
 		}

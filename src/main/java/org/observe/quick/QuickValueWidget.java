@@ -162,7 +162,6 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	SettableValue<String> getDisabled();
 
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
-		private ModelComponentId theValueVariable;
 		private ModelValueInstantiator<SettableValue<T>> theValueInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theDisabledInstantiator;
 		private SettableValue<SettableValue<T>> theValue;
@@ -188,7 +187,6 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 			super.doUpdate(interpreted);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
-			theValueVariable = myInterpreted.getDefinition().getValueVariable();
 			theValueInstantiator = myInterpreted.getValue().instantiate();
 			theDisabledInstantiator = myInterpreted.getDisabled() == null ? null : myInterpreted.getDisabled().instantiate();
 			if (theValue == null)
