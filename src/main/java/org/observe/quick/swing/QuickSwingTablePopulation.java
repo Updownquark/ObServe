@@ -279,7 +279,7 @@ class QuickSwingTablePopulation {
 		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx,
 			boolean withValue) {
 			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
-				if (withValue)
+				if (withValue || tableCtx.getActiveValue().get() != cell.getModelValue())
 					tableCtx.getActiveValue().set(cell.getModelValue(), null);
 				tableCtx.isSelected().set(cell.isSelected(), cause);
 				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
@@ -884,7 +884,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public Observable<?> getUntil() {
-			return Observable.constant(null);
+			return theRenderer.getRenderer().onDestroy();
 		}
 
 		@Override

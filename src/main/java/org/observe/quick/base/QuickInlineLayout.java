@@ -5,6 +5,7 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickWidget;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,7 +23,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		private JustifiedBoxLayout.Alignment theCrossAlign;
 		private int thePadding;
 
-		public Def(QonfigAddOn type, ExElement.Def<? extends QuickBox> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
@@ -47,7 +48,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
@@ -94,7 +95,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickInlineLayout create(QuickBox element) {
+		public QuickInlineLayout create(QuickWidget element) {
 			return new QuickInlineLayout(element);
 		}
 	}
@@ -104,7 +105,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theCrossAlign;
 	private int thePadding;
 
-	public QuickInlineLayout(QuickBox element) {
+	public QuickInlineLayout(QuickWidget element) {
 		super(element);
 	}
 
@@ -130,7 +131,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickBox, ?> interpreted, QuickBox element) {
+	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
 		super.update(interpreted, element);
 		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();

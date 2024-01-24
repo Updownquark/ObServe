@@ -84,7 +84,7 @@ public class QuickSize {
 	public String toString() {
 		if (percent != 0.0f) {
 			if (pixels > 0)
-				return percent + "% +" + pixels + "px";
+				return percent + "%+" + pixels + "px";
 			else if (pixels < 0)
 				return percent + "%" + pixels + "px";
 			else

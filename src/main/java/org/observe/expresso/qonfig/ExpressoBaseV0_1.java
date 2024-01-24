@@ -7,6 +7,7 @@ import java.util.Set;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ExpressoQonfigValues.FieldValueDef;
 import org.observe.expresso.qonfig.ExpressoTransformations.CaseOp;
 import org.observe.expresso.qonfig.ExpressoTransformations.If;
 import org.observe.expresso.qonfig.ExpressoTransformations.IfOp;
@@ -83,6 +84,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
 		interpreter.createWith("map-model-value", ExMapModelValue.Def.class, ExAddOn.creator(ExMapModelValue.Def::new));
 		interpreter.createWith("int-value", ExIntValue.Def.class, ExAddOn.creator(ExIntValue.Def::new));
+		interpreter.createWith(ExpressoQonfigValues.FieldValueDef.FIELD_VALUE, FieldValueDef.class, ExElement.creator(FieldValueDef::new));
 		interpreter.createWith("complex-operation", ExComplexOperation.class, ExAddOn.creator(ExComplexOperation::new));
 		interpreter.createWith("sort", ExSort.ExRootSort.class, ExElement.creator(ExSort.ExRootSort::new));
 		interpreter.createWith("sort-by", ExSort.ExSortBy.class, ExElement.creator(ExSort.class, ExSort.ExSortBy::new));

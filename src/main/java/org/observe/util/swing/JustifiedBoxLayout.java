@@ -4,9 +4,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Insets;
-import java.awt.LayoutManager2;
 import java.awt.Rectangle;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.observe.dbug.Dbug;
@@ -18,7 +16,7 @@ import org.qommons.ArrayUtils;
  * A very simple layout that lays out components in a column or a row, with support for 4 different {@link Alignment alignments} in each
  * dimension
  */
-public class JustifiedBoxLayout implements LayoutManager2 {
+public class JustifiedBoxLayout implements AbstractLayout {
 	/** Anchor type for {@link Dbug}-based debugging */
 	public static final DbugAnchorType<JustifiedBoxLayout> DBUG = Dbug.common().anchor(JustifiedBoxLayout.class, a -> a//
 		.withEvent("minSize").withEvent("prefSize").withEvent("maxSize").withEvent("layout")//
@@ -89,6 +87,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	/** @return Whether this layout allocates space to invisible components (false by default) */
+	@Override
 	public boolean isShowingInvisible() {
 		return isShowingInvisible;
 	}
@@ -276,77 +275,81 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	@Override
-	public Dimension preferredLayoutSize(Container parent) {
-		anchor.event("prefSize", null);
-		int main = 0;
-		int cross = 0;
-		boolean first = true;
-		for (Component comp : parent.getComponents()) {
-			if (!isShowingInvisible && !comp.isVisible())
-				continue;
-			if (first)
-				first = false;
-			else
-				main += thePadding;
-			Dimension pref = getPrefSize(comp);
-			main += getMain(pref);
-			int compCross = getCross(pref);
-			if (compCross > cross)
-				cross = compCross;
-		}
-		Insets insets = parent.getInsets();
-		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
-		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
-		return new Dimension((isVertical ? cross : main) + hIns, (isVertical ? main : cross) + vIns);
+	public boolean getScrollableTracksViewportWidth(Container parent) {
+		return isVertical;
 	}
 
 	@Override
-	public Dimension minimumLayoutSize(Container parent) {
+	public boolean getScrollableTracksViewportHeight(Container parent) {
+		return !isVertical;
+	}
+
+	@Override
+	public Dimension minimumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
 		anchor.event("minSize", null);
 		int main = 0;
 		int cross = 0;
 		boolean first = true;
-		for (Component comp : parent.getComponents()) {
-			if (!isShowingInvisible && !comp.isVisible())
-				continue;
+		for (LayoutChild comp : components) {
 			if (first)
 				first = false;
 			else
 				main += thePadding;
-			Dimension min = getMinSize(comp);
+			Dimension min = comp.getSize(-1);
 			main += getMain(min);
 			int compCross = getCross(min);
 			if (compCross > cross)
 				cross = compCross;
 		}
-		Insets insets = parent.getInsets();
+		Insets insets = parentInsets;
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
 		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
 		return new Dimension((isVertical ? cross : main) + hIns, (isVertical ? main : cross) + vIns);
 	}
 
 	@Override
-	public Dimension maximumLayoutSize(Container parent) {
+	public Dimension preferredLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		anchor.event("prefSize", null);
+		int main = 0;
+		int cross = 0;
+		boolean first = true;
+		for (LayoutChild comp : components) {
+			if (first)
+				first = false;
+			else
+				main += thePadding;
+			Dimension pref = comp.getSize(0);
+			main += getMain(pref);
+			int compCross = getCross(pref);
+			if (compCross > cross)
+				cross = compCross;
+		}
+		Insets insets = parentInsets;
+		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
+		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
+		return new Dimension((isVertical ? cross : main) + hIns, (isVertical ? main : cross) + vIns);
+	}
+
+	@Override
+	public Dimension maximumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
 		anchor.event("maxSize", null);
 		boolean computeMain = theMainAlign == Alignment.JUSTIFIED;
 		boolean computeCross = theCrossAlign == Alignment.JUSTIFIED;
 		if (!computeMain && !computeCross)
 			return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
-		Insets insets = parent.getInsets();
+		Insets insets = parentInsets;
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
 		int vIns = insets.top + insets.bottom + theMargin.top + theMargin.bottom;
 		int main = isVertical ? vIns : hIns;
 		int minOfMaxCross = Integer.MAX_VALUE;
 		int maxOfMinCross = 0;
 		boolean first = true;
-		for (Component comp : parent.getComponents()) {
-			if (!isShowingInvisible && !comp.isVisible())
-				continue;
-			Dimension max = getMaxSize(comp);
+		for (LayoutChild comp : components) {
+			Dimension max = comp.getSize(1);
 			if (first) {
 				if (computeCross) {
 					minOfMaxCross = Math.min(minOfMaxCross, getCross(max));
-					Dimension min = getMinSize(comp);
+					Dimension min = comp.getSize(-1);
 					maxOfMinCross = Math.max(maxOfMinCross, getCross(min));
 				}
 				first = false;
@@ -354,7 +357,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				int compCross = getCross(max);
 				if (compCross < minOfMaxCross)
 					minOfMaxCross = compCross;
-				Dimension min = getMinSize(comp);
+				Dimension min = comp.getSize(-1);
 				compCross = getCross(min);
 				if (compCross > maxOfMinCross)
 					maxOfMinCross = compCross;
@@ -385,22 +388,15 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 	}
 
 	@Override
-	public void layoutContainer(Container parent) {
-		Dimension parentSize = parent.getSize();
-		if (parentSize.width == 0 || parentSize.height == 0)
-			return;
+	public Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		Dimension parentSize = containerSize;
 		anchor.event("layout", null);
 
-		Insets insets = parent.getInsets();
+		Insets insets = parentInsets;
 		int totalLength = isVertical//
 			? insets.top + insets.bottom + theMargin.top + theMargin.bottom//
 				: insets.left + insets.right + theMargin.left + theMargin.right;
 		boolean first = true;
-		List<Component> components = new ArrayList<>(parent.getComponentCount());
-		for (Component comp : parent.getComponents()) {
-			if (isShowingInvisible || comp.isVisible())
-				components.add(comp);
-		}
 		int[] preferredMainSizes = new int[components.size()];
 		int[] preferredCrossSizes = new int[components.size()];
 		for (int i = 0; i < components.size(); i++) {
@@ -408,7 +404,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				first = false;
 			else
 				totalLength += thePadding;
-			Dimension ps = getPrefSize(components.get(i));
+			Dimension ps = components.get(i).getSize(0);
 			preferredMainSizes[i] = getMain(ps);
 			preferredCrossSizes[i] = getCross(ps);
 			totalLength += preferredMainSizes[i];
@@ -416,19 +412,23 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 
 		int parentLength = getMain(parentSize);
 		if (totalLength > parentLength)
-			layoutStretched(parent, components, preferredMainSizes, preferredCrossSizes, totalLength, parentLength);
+			return layoutStretched(containerSize, parentInsets, components, preferredMainSizes, preferredCrossSizes, totalLength,
+				parentLength);
 		else if (theMainAlign == Alignment.JUSTIFIED && totalLength != parentLength) {
 			if (isStretchingEqual)
-				layoutStretchedEqual(parent, components, preferredMainSizes, preferredCrossSizes, totalLength, parentLength);
+				return layoutStretchedEqual(containerSize, parentInsets, components, preferredMainSizes, preferredCrossSizes, totalLength,
+					parentLength);
 			else
-				layoutStretched(parent, components, preferredMainSizes, preferredCrossSizes, totalLength, parentLength);
+				return layoutStretched(containerSize, parentInsets, components, preferredMainSizes, preferredCrossSizes, totalLength,
+					parentLength);
 		} else
-			layoutDistributed(parent, components, preferredMainSizes, preferredCrossSizes, totalLength, parentLength);
+			return layoutDistributed(containerSize, parentInsets, components, preferredMainSizes, preferredCrossSizes, totalLength,
+				parentLength);
 	}
 
-	private void layoutDistributed(Container parent, List<Component> components, int[] preferredMainSizes, int[] preferredCrossSizes,
-		int preferredLength, int parentLength) {
-		Insets insets = parent.getInsets();
+	private Rectangle[] layoutDistributed(Dimension containerSize, Insets parentInsets, List<LayoutChild> components,
+		int[] preferredMainSizes, int[] preferredCrossSizes, int preferredLength, int parentLength) {
+		Insets insets = parentInsets;
 		int margin = isVertical ? insets.top + theMargin.top : insets.left + theMargin.left;
 		int pos = margin;
 		int pad = thePadding;
@@ -445,41 +445,42 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 		case JUSTIFIED:
 			break;
 		}
-		Rectangle bounds = new Rectangle();
-		int parentCross = getCross(parent.getSize()) - (isVertical//
+		Rectangle[] bounds = new Rectangle[components.size()];
+		int parentCross = getCross(containerSize) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
 				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
 			int main = preferredMainSizes[i];
 			int cross = Math.min(preferredCrossSizes[i], parentCross);
-			setBound(true, bounds, pos, main);
-			pos += getMain(bounds.getSize()) + pad;
+			bounds[i] = new Rectangle();
+			setBound(true, bounds[i], pos, main);
 			switch (theCrossAlign) {
 			case LEADING:
-				setBound(false, bounds, crossMargin, cross);
+				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
-				setBound(false, bounds, crossMargin + (parentCross - cross) / 2, cross);
+				setBound(false, bounds[i], crossMargin + (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
-				setBound(false, bounds, parentCross - cross - crossMargin, cross);
+				setBound(false, bounds[i], parentCross - cross - crossMargin, cross);
 				break;
 			case JUSTIFIED:
-				setBound(false, bounds, crossMargin, parentCross);
+				setBound(false, bounds[i], crossMargin, parentCross);
 				break;
 			}
-			components.get(i).setBounds(bounds);
+			pos += getMain(bounds[i].getSize()) + pad;
 		}
+		return bounds;
 	}
 
-	private void layoutStretched(Container parent, List<Component> components, int[] preferredMainSizes, int[] preferredCrossSizes,
-		int preferredLength, int parentLength) {
+	private Rectangle[] layoutStretched(Dimension containerSize, Insets parentInsets, List<LayoutChild> components,
+		int[] preferredMainSizes, int[] preferredCrossSizes, int preferredLength, int parentLength) {
 		boolean shrink = parentLength < preferredLength;
 		float[] sizes = new float[components.size()];
 		long totalExtremeSize = 0;
 		for (int i = 0; i < components.size(); i++) {
-			int size = getMain(shrink ? getMinSize(components.get(i)) : getMaxSize(components.get(i)));
+			int size = getMain(shrink ? components.get(i).getSize(-1) : components.get(i).getSize(1));
 			sizes[i] = size;
 			totalExtremeSize += size;
 		}
@@ -488,7 +489,7 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				+ ArrayUtils.toString(preferredCrossSizes) + ", pref" + (shrink ? "Min" : "Max") + "=" + ArrayUtils.toString(sizes));
 		}
 
-		Insets insets = parent.getInsets();
+		Insets insets = parentInsets;
 		int margin = isVertical ? insets.top + theMargin.top : insets.left + theMargin.left;
 		float padding = thePadding;
 		int extraLength = margin * 2 + thePadding * (sizes.length - 1);
@@ -532,16 +533,17 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			}
 		}
 		float fPos = margin;
-		Rectangle bounds = new Rectangle();
-		int parentCross = getCross(parent.getSize()) - (isVertical//
+		Rectangle[] bounds = new Rectangle[components.size()];
+		int parentCross = getCross(containerSize) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
 				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		int pos = margin;
 		for (int i = 0; i < components.size(); i++) {
+			bounds[i] = new Rectangle();
 			float newFPos = fPos + sizes[i];
 			int mainSize = Math.round(newFPos) - pos;
-			setBound(true, bounds, pos, mainSize);
+			setBound(true, bounds[i], pos, mainSize);
 			newFPos += padding;
 			fPos = newFPos;
 			pos = Math.round(newFPos);
@@ -549,25 +551,25 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			int cross = Math.min(preferredCrossSizes[i], parentCross);
 			switch (theCrossAlign) {
 			case LEADING:
-				setBound(false, bounds, crossMargin, cross);
+				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
-				setBound(false, bounds, (parentCross - cross) / 2, cross);
+				setBound(false, bounds[i], (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
-				setBound(false, bounds, parentCross - cross - crossMargin, cross);
+				setBound(false, bounds[i], parentCross - cross - crossMargin, cross);
 				break;
 			case JUSTIFIED:
-				setBound(false, bounds, crossMargin, parentCross);
+				setBound(false, bounds[i], crossMargin, parentCross);
 				break;
 			}
-			components.get(i).setBounds(bounds);
 		}
+		return bounds;
 	}
 
-	private void layoutStretchedEqual(Container parent, List<Component> components, int[] preferredMainSizes, int[] preferredCrossSizes,
-		int preferredLength, int parentLength) {
-		Insets insets = parent.getInsets();
+	private Rectangle[] layoutStretchedEqual(Dimension containerSize, Insets parentInsets, List<LayoutChild> components,
+		int[] preferredMainSizes, int[] preferredCrossSizes, int preferredLength, int parentLength) {
+		Insets insets = parentInsets;
 		int margin = isVertical ? insets.top + theMargin.top : insets.left + theMargin.left;
 		int extraLenth = (isVertical//
 			? insets.top + insets.bottom + theMargin.top + theMargin.bottom//
@@ -575,32 +577,33 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 			+ thePadding * (components.size() - 1);
 		int pos = margin;
 		float stretch = (parentLength - extraLenth) * 1.0f / (preferredLength - extraLenth);
-		Rectangle bounds = new Rectangle();
-		int parentCross = getCross(parent.getSize()) - (isVertical//
+		Rectangle[] bounds = new Rectangle[components.size()];
+		int parentCross = getCross(containerSize) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
 				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
 		for (int i = 0; i < components.size(); i++) {
+			bounds[i] = new Rectangle();
 			int main = Math.round(preferredMainSizes[i] * stretch);
 			int cross = Math.min(preferredCrossSizes[i], parentCross);
-			setBound(true, bounds, pos, main);
-			pos += getMain(bounds.getSize()) + thePadding;
+			setBound(true, bounds[i], pos, main);
 			switch (theCrossAlign) {
 			case LEADING:
-				setBound(false, bounds, crossMargin, cross);
+				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
-				setBound(false, bounds, (parentCross - cross) / 2, cross);
+				setBound(false, bounds[i], (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
-				setBound(false, bounds, parentCross - cross - crossMargin, cross);
+				setBound(false, bounds[i], parentCross - cross - crossMargin, cross);
 				break;
 			case JUSTIFIED:
-				setBound(false, bounds, crossMargin, parentCross);
+				setBound(false, bounds[i], crossMargin, parentCross);
 				break;
 			}
-			components.get(i).setBounds(bounds);
+			pos += getMain(bounds[i].getSize()) + thePadding;
 		}
+		return bounds;
 	}
 
 	private int getMain(Dimension dim) {

@@ -5,6 +5,7 @@ import org.qommons.Nameable;
 public class SwingTestEntity implements Nameable {
 	private String theName;
 	private boolean theBoolean;
+	private double theDouble = Double.NaN;
 
 	public SwingTestEntity() {}
 
@@ -32,11 +33,23 @@ public class SwingTestEntity implements Nameable {
 		return this;
 	}
 
+	public double getDouble() {
+		return theDouble;
+	}
+
+	public SwingTestEntity setDouble(double d) {
+		theDouble = d;
+		return this;
+	}
+
 	@Override
 	public String toString() {
-		if (theName == null)
-			return String.valueOf(theBoolean);
-		else
-			return theName + "=" + theBoolean;
+		StringBuilder str = new StringBuilder();
+		if (theName != null)
+			str.append(theName).append('=');
+		str.append(theBoolean);
+		if (!Double.isNaN(theDouble))
+			str.append(" (").append(theDouble).append(')');
+		return str.toString();
 	}
 }

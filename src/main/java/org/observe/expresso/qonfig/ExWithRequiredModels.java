@@ -309,8 +309,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		void installInternalValue(ModelSetInstance model, M externalValue) throws ModelInstantiationException {
 			// if (!ExFlexibleElementModelAddOn.isElementValueSatisfied(theInternalValue, model)) {
 			ExFlexibleElementModelAddOn.satisfyElementValue(theInternalValue, model, //
-				theConverter == null ? externalValue : theConverter.convert(externalValue), //
-					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				theConverter == null ? externalValue : theConverter.convert(externalValue));
 			// }
 		}
 	}

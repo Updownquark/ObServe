@@ -548,10 +548,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				ModelSetInstance models = theLocalModel.wrap(parentModels);
 				ModelSetInstance leftCopy = models.copy().build();
 				ModelSetInstance rightCopy = models.copy().build();
-				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, leftCopy, left,
-					ExWithElementModel.ActionIfSatisfied.Replace);
-				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, rightCopy, right,
-					ExWithElementModel.ActionIfSatisfied.Replace);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, leftCopy, left);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, rightCopy, right);
 				SettableValue<IT> internalLeft = theAttribute.get(leftCopy);
 				SettableValue<IT> internalRight = theAttribute.get(rightCopy);
 				return getInternalSorting(models, internalLeft, internalRight);

@@ -325,7 +325,10 @@ public class LittleList<E> extends JComponent implements Scrollable {
 				edit = theModel.getWrapped().mutableElement(theModel.getWrapped().getElement(selected).getElementId()).isEnabled() == null
 				&& editor.isCellEditable(cause);
 			if (edit) {
-				theEditorComponent = editor.getListCellEditorComponent(this, row, selected, true);
+				boolean hovered = cause instanceof MouseEvent;
+				ModelCell<E, E> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(row, row::toString, null), row, selected, 0,
+					true, true, hovered, hovered, false, true);
+				theEditorComponent = editor.getCellEditorComponent(this, cell, theModel.getWrapped(), theRenderStrategy);
 				CellEditorListener editListener = new CellEditorListener() {
 					private boolean isEditing = true;
 

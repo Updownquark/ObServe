@@ -210,7 +210,9 @@ public class BinaryOperator implements ObservableExpression {
 			return null;
 		TypeToken<T> rightTypeT = (TypeToken<T>) right.getType().getType(0);
 		BinaryOp<S, T, V> op;
-		op = (BinaryOp<S, T, V>) env.getBinaryOperators().getOperator(operator, targetType, leftType, TypeTokens.getRawType(rightTypeT));
+		op = (BinaryOp<S, T, V>) env.getBinaryOperators()//
+			.getOperator(operator, targetType, leftType, //
+				TypeTokens.getRawType(rightTypeT));
 		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (op == null) {
 			exHandler.handle1(new ExpressoInterpretationException(

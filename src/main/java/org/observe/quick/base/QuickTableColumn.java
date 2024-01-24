@@ -419,7 +419,7 @@ public interface QuickTableColumn<R, C> {
 			MultiValueRenderable<R> owner = getOwner(getParentElement());
 			ModelSetInstance editorModels = copyTableModels(myModels.copy(), owner).build();
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, editorModels,
-				SettableValue.flatten(theEditColumnValue), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				SettableValue.flatten(theEditColumnValue));
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
 			if (owner != null)
 				replaceTableValues(editorModels, owner, SettableValue.flatten(theEditRowValue), SettableValue.flatten(isSelected),
@@ -496,19 +496,15 @@ public interface QuickTableColumn<R, C> {
 		SettableValue<Boolean> selected, SettableValue<Integer> rowIndex, SettableValue<Integer> columnIndex)
 			throws ModelInstantiationException {
 		if (rowValue != null && owner.getActiveValueVariable() != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getActiveValueVariable(), columnModels, rowValue,
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getActiveValueVariable(), columnModels, rowValue);
 		if (selected != null && owner.getSelectedVariable() != null)
-			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getSelectedVariable(), columnModels, selected,
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+			ExFlexibleElementModelAddOn.satisfyElementValue(owner.getSelectedVariable(), columnModels, selected);
 		if (owner instanceof TabularWidget) {
 			TabularWidget<R> table = (TabularWidget<R>) owner;
 			if (rowIndex != null && table.getRowIndexVariable() != null)
-				ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), columnModels, rowIndex,
-					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), columnModels, rowIndex);
 			if (columnIndex != null && table.getColumnIndexVariable() != null)
-				ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), columnModels, columnIndex,
-					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), columnModels, columnIndex);
 		}
 	}
 

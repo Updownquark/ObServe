@@ -21,11 +21,13 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.Iconized;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.ValueAction;
@@ -36,10 +38,12 @@ import org.observe.quick.ext.QuickMultiSlider.SliderBgRenderer;
 import org.observe.quick.ext.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.ext.QuickShaded;
 import org.observe.quick.ext.QuickShading;
+import org.observe.quick.ext.QuickTiledPane;
 import org.observe.quick.ext.QuickTreeTable;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.AbstractLayout;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.MultiRangeSlider;
@@ -51,6 +55,7 @@ import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.Shading;
+import org.observe.util.swing.TiledPane;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -88,6 +93,7 @@ public class QuickXSwing implements QuickInterpretation {
 		tx.with(QuickComboButton.Interpreted.class, QuickSwingPopulator.class, SwingComboButton::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
+		tx.with(QuickTiledPane.Interpreted.class, QuickSwingPopulator.class, SwingTiledPane::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
@@ -602,6 +608,94 @@ public class QuickXSwing implements QuickInterpretation {
 				if (!init && theSlider != null)
 					theSlider.repaint();
 			}
+		}
+	}
+
+	static class SwingTiledPane<T> extends QuickSwingPopulator.Abstract<QuickTiledPane<T>> {
+		private final TypeToken<T> theValueType;
+		private final QuickSwingLayout<QuickLayout> theLayout;
+		private final QuickSwingPopulator<QuickWidget> theRenderer;
+
+		SwingTiledPane(QuickTiledPane.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			interpreted.persistModelInstances(true);
+			theValueType = interpreted.getValueType();
+			theLayout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
+			theRenderer = interpreted.getRenderer() == null ? null : tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTiledPane<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+
+			TiledPane<T> tiledPane = new TiledPane<>(quick.getValues(), Observable.or(panel.getUntil(), quick.onDestroy()));
+
+			LayoutManager layoutInst = theLayout.create(quick.getLayout());
+			if (layoutInst instanceof AbstractLayout)
+				tiledPane.setLayout(layoutInst);
+			else
+				quick.reporting().error("The provided layout (" + quick.getLayout() + ") is not supported for a " + quick.getTypeName());
+			PanelPopulation.ComponentEditor<?, ?>[] populator = new PanelPopulation.ComponentEditor[1];
+
+			// Let the Quick widget proper do the rendering
+			TabularWidget.TabularContext<T> renderCtx = new TabularWidget.TabularContext.Default<>(theValueType, quick.toString());
+			quick.setContext(renderCtx);
+			QuickWidget renderer = quick.getRenderer();
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T> swingRenderer = new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
+				theValueType, quick.getActiveValue(), renderer, renderCtx, () -> populator[0], theRenderer);
+
+			// Now we need to make copies of the Quick tiled pane so the other 2 renderers (one for hover, one for focus) are independent
+			// of each other and the renderer
+			QuickWithBackground.BackgroundContext bgCtx = new QuickWithBackground.BackgroundContext() {
+				@Override
+				public SettableValue<Boolean> isHovered() {
+					return quick.isHovered();
+				}
+
+				@Override
+				public SettableValue<Boolean> isFocused() {
+					return quick.isFocused();
+				}
+
+				@Override
+				public SettableValue<Boolean> isPressed() {
+					return quick.isPressed();
+				}
+
+				@Override
+				public SettableValue<Boolean> isRightPressed() {
+					return quick.isRightPressed();
+				}
+			};
+
+			QuickTiledPane<T> hoverCopy = quick.copy(quick.getParentElement());
+			ModelSetInstance hoverModels = quick.getModels().createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil())
+				.build();
+			hoverCopy.instantiate(hoverModels);
+			hoverCopy.setContext(bgCtx);
+			TabularWidget.TabularContext<T> hoverCtx = new TabularWidget.TabularContext.Default<>(theValueType,
+				quick.toString() + "(hover)");
+			hoverCopy.setContext(hoverCtx);
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T> swingHover = new QuickSwingTablePopulation.QuickSwingRenderer<>(hoverCopy,
+				theValueType, hoverCopy.getActiveValue(), hoverCopy.getRenderer(), hoverCtx, () -> populator[0], theRenderer);
+
+			QuickTiledPane<T> focusCopy = quick.copy(quick.getParentElement());
+			ModelSetInstance focusModels = quick.getModels().createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil())
+				.build();
+			focusCopy.instantiate(focusModels);
+			focusCopy.setContext(bgCtx);
+			TabularWidget.TabularContext<T> focusCtx = new TabularWidget.TabularContext.Default<>(theValueType,
+				quick.toString() + "(focus)");
+			focusCopy.setContext(focusCtx);
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T> swingFocus = new QuickSwingTablePopulation.QuickSwingRenderer<>(focusCopy,
+				theValueType, focusCopy.getActiveValue(), focusCopy.getRenderer(), focusCtx, () -> populator[0], theRenderer);
+
+			tiledPane.setRendering(swingRenderer, swingHover, swingFocus);
+
+			panel.addComponent(null, tiledPane, pop -> {
+				populator[0] = pop;
+				component.accept(pop);
+			});
 		}
 	}
 }

@@ -232,8 +232,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 
 	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue(),
-			ExWithElementModel.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
 		// After synthesizing and returning the children for the node, we can discard the model copy
 		return theChildrenSynth.get(modelCopy);
 	}
@@ -246,8 +245,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		if (theTextStyle == null)
 			return null;
 		ModelSetInstance widgetModelCopy = getUpdatingModels().copy().build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, widgetModelCopy, ctx.getNodeValue(),
-			ExWithElementModel.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, widgetModelCopy, ctx.getNodeValue());
 		ModelSetInstance styleElementModelCopy = getTextStyle().getUpdatingModels().copy()//
 			.withAll(widgetModelCopy)//
 			.build();
@@ -259,8 +257,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 
 	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue(),
-			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
 		// After synthesizing and returning the post text, we can discard the model copy
 		return thePostTextSynth.get(modelCopy);
 	}
@@ -311,8 +308,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	@Override
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, myModels, getNodeValue(),
-			ExWithElementModel.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, myModels, getNodeValue());
 		theRoot.set(theRootInstantiator.get(myModels), null);
 		theFormat = theFormatInstantiator.get(myModels).get();
 

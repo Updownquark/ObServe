@@ -57,15 +57,24 @@
 			<attribute name="values" type="expression" />
 		</element-def>
 
+		<?DOC A slider with a variable number of handles (thumbs) and highly customizable rendering?>
 		<element-def name="multi-slider" extends="widget">
+			<?DOC The values for each handle of the slider?>
 			<attribute name="values" type="expression" />
+			<?DOC Whether the slider shall be horizontal or vertical?>
 			<attribute name="orientation" type="orientation" default="horizontal" />
+			<?DOC Whether to prevent the user from re-ordering values such that they are out-of-order?>
 			<attribute name="enforce-order" type="boolean" default="true" />
+			<?DOC The minimum value for the slider's left or bottom?>
 			<attribute name="min" type="expression" />
+			<?DOC The maximum value for the slider's right or top?>
 			<attribute name="max" type="expression" />
+			<?DOC An optional renderer to color and otherwise style the slider's handles?>
 			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
+			<?DOC Optional renderers to color and style the slider's bar?>
 			<child-def name="bg-renderer" type="slider-bg-renderer" min="0" max="inf" />
 		</element-def>
+		<?DOC Specifies the color, thickness, and tooltip for the handles in a &lt;multi-slider>?>
 		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
 			<styles>
 				<style-attribute name="line-thickness" type="int" trickle-down="false" />
@@ -77,11 +86,26 @@
 			</element-model>
 			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
+		<?DOC Specifies the color and thickness for the slider line in a &lt;multi-slider>?>
 		<element-def name="slider-bg-renderer" inherits="with-background">
 			<styles>
 				<style-attribute name="line-thickness" type="int" trickle-down="false" />
 			</styles>
+			<?DOC The maximum value of this renderer's domain?>
 			<attribute name="max-value" type="expression" specify="optional" />
+		</element-def>
+
+		<?DOC A tiled pane takes a list of values and renders each with a renderer.<br>
+			This is similar to a table with a single column, except that this widget allows more customizable layouts and more complex renderers.?>
+		<element-def name="tiled-pane" extends="widget" inherits="multi-value-renderable,rendering">
+			<element-model>
+				<?DOC The row index of the value currently in use (e.g. being rendered, hovered, etc.)?>
+				<value name="rowIndex" type="int" priority="2" />
+			</element-model>
+			<?DOC The values to be represented as components in this panel?>
+			<attribute name="values" type="expression" specify="required" />
+			<?DOC The layout that the tiled panel will use to arrange its contents?>
+			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
 	</elements>
 

@@ -46,8 +46,6 @@ import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
-import org.observe.quick.QuickWidget;
-import org.observe.quick.QuickWindow;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingEventListener;
@@ -185,6 +183,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 						pm.getComponent().setName(evt.getNewValue());
 				});
 				Component[] component = new Component[1];
+				Cursor[] defaultCursor = new Cursor[1];
 				ObservableValue<Color> color = w.getStyle().getColor();
 				ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
 					try {
@@ -205,10 +204,9 @@ public class QuickCoreSwing implements QuickInterpretation {
 							return;
 
 						component[0] = c;
+						defaultCursor[0] = c.getCursor();
 						Cursor cursorV = cursor.get();
-						if (cursorV == null)
-							cursorV = Cursor.getDefaultCursor();
-						if (c.getCursor() != cursorV)
+						if (cursorV != null && c.getCursor() != cursorV)
 							c.setCursor(cursorV);
 						if (propertyManagers.isEmpty() || propertyManagers.get(0) != scd.propertyMgr)
 							propertyManagers.add(0, scd.propertyMgr);
@@ -251,12 +249,20 @@ public class QuickCoreSwing implements QuickInterpretation {
 							}
 						}
 					});
+					Map<Component, Cursor>[] defaultCursors = new Map[1];
 					comp.modifyAssociatedComponents(c -> {
 						c.setName(name.get());
 						ComponentPropertyManager<Component> pm = new ComponentPropertyManager<>(c);
 						propertyManagers.add(pm);
 						pm.setForeground(pmDecorator.getForeground());
-						c.setCursor(cursor.get());
+						if (defaultCursors[0] == null)
+							defaultCursors[0] = new HashMap<>();
+						defaultCursors[0].computeIfAbsent(c, Component::getCursor);
+						Cursor cursorV = cursor.get();
+						if (cursorV != null)
+							c.setCursor(cursorV);
+						else
+							c.setCursor(defaultCursors[0].get(c));
 						Color bg = color.get();
 						pm.setBackground(bg);
 						pm.setOpaque(bg == null ? null : true);
@@ -281,7 +287,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 				}
 				if (!renderer) { // Don't keep any subscriptions for renderers
 					adjustFont(pmDecorator, w.getStyle());
-					cursor.noInitChanges().takeUntil(comp.getUntil()).act(evt -> component[0].setCursor(evt.getNewValue()));
+					cursor.noInitChanges().takeUntil(comp.getUntil())
+					.act(evt -> component[0].setCursor(evt.getNewValue() == null ? defaultCursor[0] : evt.getNewValue()));
 					Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
 						adjustFont(pmDecorator.reset(), w.getStyle());
 						for (ComponentPropertyManager<?> pm : propertyManagers) {

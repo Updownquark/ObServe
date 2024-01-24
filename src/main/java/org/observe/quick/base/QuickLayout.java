@@ -2,11 +2,12 @@ package org.observe.quick.base;
 
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 
-public interface QuickLayout extends ExAddOn<QuickBox> {
-	public abstract class Def<L extends QuickLayout> extends ExAddOn.Def.Abstract<QuickBox, L> {
-		protected Def(QonfigAddOn type, ExElement.Def<? extends QuickBox> element) {
+public interface QuickLayout extends ExAddOn<QuickWidget> {
+	public abstract class Def<L extends QuickLayout> extends ExAddOn.Def.Abstract<QuickWidget, L> {
+		protected Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
@@ -14,7 +15,7 @@ public interface QuickLayout extends ExAddOn<QuickBox> {
 		public abstract Interpreted<L> interpret(ExElement.Interpreted<?> element);
 	}
 
-	public abstract class Interpreted<L extends QuickLayout> extends ExAddOn.Interpreted.Abstract<QuickBox, L> {
+	public abstract class Interpreted<L extends QuickLayout> extends ExAddOn.Interpreted.Abstract<QuickWidget, L> {
 		protected Interpreted(Def<L> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
@@ -25,8 +26,8 @@ public interface QuickLayout extends ExAddOn<QuickBox> {
 		}
 	}
 
-	public abstract class Abstract extends ExAddOn.Abstract<QuickBox> implements QuickLayout {
-		protected Abstract(QuickBox element) {
+	public abstract class Abstract extends ExAddOn.Abstract<QuickWidget> implements QuickLayout {
+		protected Abstract(QuickWidget element) {
 			super(element);
 		}
 	}

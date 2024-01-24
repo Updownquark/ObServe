@@ -83,6 +83,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickMultiSlider.SLIDER_BG_RENDERER, QuickMultiSlider.SliderBgRenderer.Def.class,
 			ExElement.creator(QuickMultiSlider.SliderBgRenderer.Def::new));
 
+		interpreter.createWith(QuickTiledPane.TILED_PANE, QuickTiledPane.Def.class, ExElement.creator(QuickTiledPane.Def::new));
+
 		return interpreter;
 	}
 

@@ -11,7 +11,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickBorderLayout extends QuickLayout.Abstract {
 	public static class Def extends QuickLayout.Def<QuickBorderLayout> {
-		public Def(QonfigAddOn type, QuickBox.Def<?> element) {
+		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
 		}
 
@@ -22,12 +22,12 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 
 		@Override
 		public Interpreted interpret(ExElement.Interpreted<?> element) {
-			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
+			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 		}
 	}
 
 	public static class Interpreted extends QuickLayout.Interpreted<QuickBorderLayout> {
-		public Interpreted(Def definition, QuickBox.Interpreted<? extends QuickBox> element) {
+		public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -47,12 +47,12 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickBorderLayout create(QuickBox element) {
+		public QuickBorderLayout create(QuickWidget element) {
 			return new QuickBorderLayout(element);
 		}
 	}
 
-	public QuickBorderLayout(QuickBox element) {
+	public QuickBorderLayout(QuickWidget element) {
 		super(element);
 	}
 

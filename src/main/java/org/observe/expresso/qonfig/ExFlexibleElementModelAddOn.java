@@ -34,7 +34,7 @@ import com.google.common.reflect.TypeToken;
 public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends ExModelAugmentation<E> {
 	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value)
 		throws ModelInstantiationException {
-		satisfyElementValue(elementValueId, models, value, ActionIfSatisfied.Error);
+		satisfyElementValue(elementValueId, models, value, ActionIfSatisfied.Replace);
 	}
 
 	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value,

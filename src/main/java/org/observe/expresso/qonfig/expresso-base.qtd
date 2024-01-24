@@ -117,6 +117,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<li>Nothing, in which case the initial value will be defaulted (same as a java field)</li>
 		</ul>?>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="field-value" extends="model-value" inherits="with-element-model">
+			<element-model>
+				<value name-attribute="source-as" />
+			</element-model>
+			<attribute name="source-as" type="identifier" />
+			<attribute name="source" type="expression" />
+			<attribute name="save" type="expression" />
+		</element-def>
 
 		<?DOC An ordered collection of values.  For internal models, this may be initialized with elements.?>
 		<element-def name="list" extends="model-value" inherits="allow-ext-model" />

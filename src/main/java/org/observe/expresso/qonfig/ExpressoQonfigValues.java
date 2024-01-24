@@ -19,6 +19,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SettableValue.WrappingSettableValue;
+import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
@@ -372,6 +373,212 @@ public class ExpressoQonfigValues {
 
 		public static class Element<T> extends AbstractCompiledValue.Element<T> {
 			public Element(Object id) {
+				super(id);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = FieldValueDef.FIELD_VALUE,
+		interpretation = FieldValueDef.Interpreted.class)
+	public static class FieldValueDef extends AbstractCompiledValue<FieldValueDef.Element<?>> {
+		public static final String FIELD_VALUE = "field-value";
+
+		private ModelComponentId theSourceAs;
+		private CompiledExpression theSource;
+		private CompiledExpression theSave;
+
+		public FieldValueDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter("source-as")
+		public ModelComponentId getSourceAs() {
+			return theSourceAs;
+		}
+
+		@QonfigAttributeGetter("source")
+		public CompiledExpression getSource() {
+			return theSource;
+		}
+
+		@QonfigAttributeGetter("save")
+		public CompiledExpression getSave() {
+			return theSave;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+
+			theSource = getAttributeExpression("source", session);
+			theSave = getAttributeExpression("save", session);
+			String sourceAsName = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceAs = elModels.getElementValueModelId(sourceAsName);
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceAs, ModelTypes.Value, (interp, env) -> {
+				return ModelTypes.Value.forType(interp.getOrEvalSourceType(env));
+			});
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) { // Nothing to do
+		}
+
+		@Override
+		public InterpretedSynth<SettableValue<?>, ?, ? extends Element<?>> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, Element<T>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSource;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theSave;
+
+			Interpreted(FieldValueDef definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public FieldValueDef getDefinition() {
+				return (FieldValueDef) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSource() {
+				return theSource;
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getSave() {
+				return theSave;
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Arrays.asList(theSource, theSave);
+			}
+
+			@Override
+			protected ModelInstanceType<SettableValue<?>, SettableValue<T>> getTargetType() {
+				return theSource.getType();
+			}
+
+			protected TypeToken<T> getOrEvalSourceType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				return (TypeToken<T>) theSource.getType().getType(0);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSource = getDefinition().getSource().interpret(ModelTypes.Value.anyAsV(), env);
+
+				super.doUpdate(env);
+
+				getOrEvalSourceType(env);
+				theSave = getDefinition().getSave().interpret(ModelTypes.Action.instance(), env);
+			}
+
+			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+			private final ModelInstantiator theLocalModels;
+			private final ModelValueInstantiator<SettableValue<T>> theSource;
+			private final ModelValueInstantiator<ObservableAction> theSave;
+			private final ModelComponentId theSourceAs;
+
+			Instantiator(Interpreted<T> interpreted) {
+				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theSource = interpreted.getSource().instantiate();
+				theSave = interpreted.getSave().instantiate();
+				theSourceAs = interpreted.getDefinition().getSourceAs();
+			}
+
+			@Override
+			public void instantiate() {
+				theLocalModels.instantiate();
+				theSource.instantiate();
+				theSave.instantiate();
+			}
+
+			@Override
+			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModels.wrap(models);
+				SettableValue<T> source = theSource.get(models);
+				ObservableAction save = theSave.get(models);
+				SettableValue<T> sourceAs = SettableValue.build(source.getType()).build();
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, sourceAs);
+				return new FieldValue<>(source, save, sourceAs);
+			}
+
+			@Override
+			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				sourceModels = theLocalModels.wrap(sourceModels);
+				newModels = theLocalModels.wrap(newModels);
+				SettableValue<T> sourceSource = ((FieldValue<T>) value).getSource();
+				ObservableAction sourceSave = ((FieldValue<T>) value).getSave();
+				SettableValue<T> newSource = theSource.forModelCopy(sourceSource, sourceModels, newModels);
+				ObservableAction newSave = theSave.forModelCopy(sourceSave, sourceModels, newModels);
+				if (sourceSource == newSource && sourceSave == newSave)
+					return value;
+				else {
+					SettableValue<T> sourceAs = SettableValue.build(newSource.getType()).build();
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, newModels, sourceAs);
+					return new FieldValue<>(newSource, newSave, sourceAs);
+				}
+			}
+		}
+
+		static class FieldValue<T> extends SettableValue.RefreshingSettableValue<T> {
+			private final SettableValue<T> theSource;
+			private final ObservableAction theSave;
+			private final SettableValue<T> theSourceAs;
+
+			FieldValue(SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs) {
+				super(source, new SimpleObservable<>());
+				theSource = source;
+				theSave = save;
+				theSourceAs = sourceAs;
+			}
+
+			SettableValue<T> getSource() {
+				return theSource;
+			}
+
+			ObservableAction getSave() {
+				return theSave;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				// We need a value to determine
+				return SettableValue.ALWAYS_ENABLED;
+			}
+
+			@Override
+			public <V extends T> String isAcceptable(V value) {
+				theSourceAs.set(value, null);
+				return isEnabled().get();
+			}
+
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				T old = theSource.get();
+				theSourceAs.set(value, cause);
+				theSave.act(cause);
+				((SimpleObservable<Void>) getRefresh()).onNext(null);
+				return old;
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return theSource.getIdentity();
+			}
+		}
+
+		static class Element<T> extends AbstractCompiledValue.Element<T> {
+			Element(Object id) {
 				super(id);
 			}
 		}

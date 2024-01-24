@@ -82,7 +82,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	 */
 	ObservableCellEditor<M, C> withClicks(int clickCount);
 
-	<E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected);
+	Component getCellEditorComponent(Component component, ModelCell<M, C> cell, ObservableCollection<M> model,
+		CategoryRenderStrategy<M, C> rendering);
 
 	/**
 	 * Creates an edit test to edit a cell with a minimum mouse click count. Follows the same behavior as {@link DefaultCellEditor}.
@@ -496,7 +497,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		@Override
-		public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
+		public Component getCellEditorComponent(Component list, ModelCell<M, C> cell, ObservableCollection<M> model,
+			CategoryRenderStrategy<M, C> rendering) {
 			if (theRevert != null) {
 				theRevert.run();
 				theRevert = null;
@@ -505,50 +507,43 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theEditorSubscription.uninstall(false);
 				theEditorSubscription = null;
 			}
-			boolean hovered = theHoveredRow != null && theHoveredRow.getAsInt() == rowIndex;
-			renderingValue(modelValue, selected, hovered, hovered, false, true, rowIndex, 0);
-			ObservableListModel<E> model = list.getModel();
-			CategoryRenderStrategy<E, E> category = list.getRenderStrategy();
+			renderingValue(cell.getModelValue(), cell.isSelected(), cell.isRowHovered(), cell.isCellHovered(), cell.isExpanded(),
+				cell.isLeaf(), cell.getRowIndex(), cell.getColumnIndex());
 			Function<C, String> valueFilter;
 			Function<C, String> valueTooltip;
 			String tooltip;
 
-			if (rowIndex < model.getSize()) {
-				MutableCollectionElement<E> modelElement = model.getWrapped()
-					.mutableElement(model.getWrapped().getElement(rowIndex).getElementId());
+			if (cell.getRowIndex() < model.size()) {
+				MutableCollectionElement<M> modelElement = model.mutableElement(model.getElement(cell.getRowIndex()).getElementId());
 				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(model.getWrapped().getType(), v))
-						return category.getMutator().isAcceptable(modelElement, (E) v);
+					if (v == null || TypeTokens.get().isInstance(model.getType(), v))
+						return rendering.getMutator().isAcceptable(modelElement, v);
 					else
 						return "Unacceptable value";
 				};
 			} else {
 				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(model.getWrapped().getType(), v)) {
-						String msg = category.getMutator().isAcceptable(null, (E) v);
+					if (v == null || TypeTokens.get().isInstance(model.getType(), v)) {
+						String msg = rendering.getMutator().isAcceptable(null, v);
 						if (msg == null)
-							msg = model.getWrapped().canAdd((E) v);
+							msg = model.canAdd((M) v);
 						return msg;
 					} else
 						return "Unacceptable value";
 				};
 			}
-			if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
-				ModelCell<E, E> cell = new ModelCell.Default<>(() -> modelValue, modelValue, rowIndex, 0, selected, selected, hovered,
-					hovered, true, true);
-				if (category.getMutator().getEditorTooltip() != null)
-					tooltip = category.getMutator().getEditorTooltip().apply(cell);
+			if (rendering.getMutator().getEditorTooltip() != null || rendering.getTooltipFn() != null) {
+				if (rendering.getMutator().getEditorTooltip() != null)
+					tooltip = rendering.getMutator().getEditorTooltip().apply(cell);
 				else
-					tooltip = category.getTooltip(cell);
+					tooltip = rendering.getTooltip(cell);
 			} else
 				tooltip = null;
-			valueTooltip = c -> theValueTooltip
-				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true));
+			valueTooltip = c -> theValueTooltip.apply(cell);
 
-			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
-				true, true);
-			if (theEditorValue.get() != modelValue)
-				theEditorValue.set((C) modelValue, null);
+			theEditingCell = cell;
+			if (theEditorValue.get() != cell.getModelValue())
+				theEditorValue.set((C) cell.getModelValue(), null);
 			Runnable revert = null;
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
@@ -938,9 +933,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		@Override
-		public <E extends M> Component getListCellEditorComponent(LittleList<E> list, E modelValue, int rowIndex, boolean selected) {
-			theCurrentEditor = selectComponent(modelValue, (C) modelValue);
-			return theCurrentEditor.getListCellEditorComponent(list, modelValue, rowIndex, selected);
+		public Component getCellEditorComponent(Component component, ModelCell<M, C> cell, ObservableCollection<M> model,
+			CategoryRenderStrategy<M, C> rendering) {
+			theCurrentEditor = selectComponent(cell.getModelValue(), cell.getCellValue());
+			return theCurrentEditor.getCellEditorComponent(component, cell, model, rendering);
 		}
 
 		@Override
@@ -957,5 +953,4 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			return theCurrentEditor.getTreeCellEditorComponent(tree, value, isSelected, expanded, leaf, row);
 		}
 	}
-
 }

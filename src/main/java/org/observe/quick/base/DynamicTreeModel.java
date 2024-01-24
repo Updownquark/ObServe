@@ -173,10 +173,8 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		SettableValue<BetterList<N>> pathV = SettableValue.asSettable(path, __ -> "Not Settable");
 		SettableValue<N> nodeV = SettableValue.asSettable(
 			path.map(theNodeType, LambdaUtils.printableFn(p -> p == null ? null : p.peekLast(), "last", null)), __ -> "Not Settable");
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActivePathVariable, nodeModel, pathV,
-			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveNodeVariable, nodeModel, nodeV,
-			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActivePathVariable, nodeModel, pathV);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveNodeVariable, nodeModel, nodeV);
 		return theChildren.get(nodeModel);
 	}
 

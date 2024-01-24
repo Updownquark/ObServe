@@ -101,7 +101,7 @@
 		<?DOC Components will be stretched to occupy the entire height or width of the container?>
 		<add-on name="justify" inherits="inline-alignment" />
 		<?DOC A layout that stacks components left-to-right or top-to-bottom (depending on the orientation)?>
-		<add-on name="inline-layout" requires="box" inherits="layout">
+		<add-on name="inline-layout" inherits="layout">
 			<?DOC Whether the components are arranged top-to-bottom or left-to-right?>
 			<attribute name="orientation" type="orientation" />
 			<?DOC The alignment strategy determining how all the components will share space along the main axis of the layout?>
@@ -338,10 +338,6 @@
 			<?DOC The maximum value for the progress bar?>
 			<attribute name="max" type="expression" specify="required" />
 			<attribute name="text" type="expression" specify="optional" />
-		</element-def>
-
-		<element-def name="render-field-panel" extends="value-widget">
-			<child-def name="field" type="value-widget" min="0" max="inf" />
 		</element-def>
 
 		<?DOC A widget that allows the user to select between a collection of available values?>

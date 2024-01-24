@@ -94,6 +94,39 @@ public class SimpleLayout implements LayoutManager2 {
 			return size == null ? null : size.get();
 		}
 
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			append(str, "left", left);
+			append(str, "h-center", hCenter);
+			append(str, "right", right);
+			append(str, "top", top);
+			append(str, "v-center", vCenter);
+			append(str, "bottom", bottom);
+			append(str, "width", width);
+			append(str, "min-width", minWidth);
+			append(str, "pref-width", prefWidth);
+			append(str, "max-width", maxWidth);
+			append(str, "height", height);
+			append(str, "min-height", minHeight);
+			append(str, "pref-height", prefHeight);
+			append(str, "max-height", maxHeight);
+			if (str.length() == 0)
+				return "(empty)";
+			return str.toString();
+		}
+
+		private static void append(StringBuilder str, String label, Supplier<?> value) {
+			if (value == null)
+				return;
+			Object v = value.get();
+			if (v == null)
+				return;
+			if (str.length() > 0)
+				str.append(", ");
+			str.append(label).append('=').append(v);
+		}
+
 		private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("(?<type>[a-zA-Z]+)[=:](?<value>.+)");
 
 		public static SimpleConstraints parse(String constraints) throws IllegalArgumentException {
@@ -327,7 +360,6 @@ public class SimpleLayout implements LayoutManager2 {
 		QuickSize lead = constraints.getPos(vertical, -1);
 		if (lead != null && lead.percent == 100.0f)
 			return lead.pixels;
-		QuickSize center = constraints.getPos(vertical, 0);
 		QuickSize size = constraints.getSize(vertical);
 		Integer absSize = null;
 		float relSize = 0.0f;
@@ -345,7 +377,7 @@ public class SimpleLayout implements LayoutManager2 {
 		}
 		if (trail != null) {
 			absSize += Math.abs(trail.pixels);
-			relSize += trail.percent;
+			relSize += 100f - trail.percent;
 		}
 		if (absSize > 0 && relSize != 0)
 			return new QuickSize(relSize, absSize).resolveExponential();
@@ -406,7 +438,7 @@ public class SimpleLayout implements LayoutManager2 {
 				setPos(childBounds, vertical, lead.evaluate(parentSize));
 			else if (trail != null) {
 				int absTrail = trail.evaluate(parentSize);
-				setPos(childBounds, vertical, parentSize - absSize - absTrail);
+				setPos(childBounds, vertical, absTrail - absSize);
 			} else if (center != null) {
 				int absCenter = center.evaluate(parentSize);
 				setPos(childBounds, vertical, absCenter - (absSize + 1) / 2);
