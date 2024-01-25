@@ -16,39 +16,61 @@ import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 
+/** A Quick element that may display text */
 public interface QuickTextElement extends QuickStyledElement {
+	/**
+	 * Definition of a {@link QuickTextElement}
+	 *
+	 * @param <E> The type of element
+	 */
 	public interface Def<E extends QuickTextElement> extends QuickStyledElement.Def<E> {
 		@Override
 		QuickTextStyle.Def getStyle();
 	}
 
+	/**
+	 * Interpretation of a {@link QuickTextElement}
+	 *
+	 * @param <E> The type of element
+	 */
 	public interface Interpreted<E extends QuickTextElement> extends QuickStyledElement.Interpreted<E> {
 		@Override
 		QuickTextStyle.Interpreted getStyle();
 	}
 
+	/** Style for a text element */
 	public interface QuickTextStyle extends QuickInstanceStyle {
+		/** Definition of a text element style */
 		public interface Def extends QuickInstanceStyle.Def {
+			/** @return The style attribute for the text's color */
 			QuickStyleAttributeDef getFontColor();
 
+			/** @return The style attribute for the text's size */
 			QuickStyleAttributeDef getFontSize();
 
+			/** @return The style attribute for the text's weight, or line thickness */
 			QuickStyleAttributeDef getFontWeight();
 
+			/** @return The style attribute for the text's slant */
 			QuickStyleAttributeDef getFontSlant();
 
+			/** @return The style attribute for whether the text is underlined */
 			QuickStyleAttributeDef isUnderline();
 
+			/** @return The style attribute for whether the text is struck-through */
 			QuickStyleAttributeDef isStrikeThrough();
 
+			/** @return The style attribute for whether the text is super-script */
 			QuickStyleAttributeDef isSuperScript();
 
+			/** @return The style attribute for whether the text is sub-script */
 			QuickStyleAttributeDef isSubScript();
 
 			@Override
 			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException;
 
+			/** Abstract {@link QuickTextStyle} definition implementation */
 			public abstract class Abstract extends QuickInstanceStyle.Def.Abstract implements Def {
 				private final QuickStyleAttributeDef theFontColor;
 				private final QuickStyleAttributeDef theFontSize;
@@ -59,6 +81,11 @@ public interface QuickTextElement extends QuickStyledElement {
 				private final QuickStyleAttributeDef isSuperScript;
 				private final QuickStyleAttributeDef isSubScript;
 
+				/**
+				 * @param parent The parent style for this style to inherit from
+				 * @param styledElement The text element being styled
+				 * @param wrapped The generic compiled style that this style class wraps
+				 */
 				protected Abstract(QuickInstanceStyle.Def parent, QuickTextElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
@@ -119,26 +146,36 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 		}
 
+		/** Interpretation of a text element style */
 		public interface Interpreted extends QuickInstanceStyle.Interpreted {
 			@Override
 			QuickTextStyle create(QuickStyledElement styledElement);
 
+			/** @return The style attribute for the text's color */
 			QuickElementStyleAttribute<Color> getFontColor();
 
+			/** @return The style attribute for the text's size */
 			QuickElementStyleAttribute<Double> getFontSize();
 
+			/** @return The style attribute for the text's weight, or line thickness */
 			QuickElementStyleAttribute<Double> getFontWeight();
 
+			/** @return The style attribute for the text's slant */
 			QuickElementStyleAttribute<Double> getFontSlant();
 
+			/** @return The style attribute for whether the text is underlined */
 			QuickElementStyleAttribute<Boolean> isUnderline();
 
+			/** @return The style attribute for whether the text is struck-through */
 			QuickElementStyleAttribute<Boolean> isStrikeThrough();
 
+			/** @return The style attribute for whether the text is super-script */
 			QuickElementStyleAttribute<Boolean> isSuperScript();
 
+			/** @return The style attribute for whether the text is sub-script */
 			QuickElementStyleAttribute<Boolean> isSubScript();
 
+			/** Abstract {@link QuickTextStyle} interpretation implementation */
 			public abstract class Abstract extends QuickInstanceStyle.Interpreted.Abstract implements Interpreted {
 				private QuickElementStyleAttribute<Color> theFontColor;
 				private QuickElementStyleAttribute<Double> theFontSize;
@@ -149,6 +186,12 @@ public interface QuickTextElement extends QuickStyledElement {
 				private QuickElementStyleAttribute<Boolean> isSuperScript;
 				private QuickElementStyleAttribute<Boolean> isSubScript;
 
+				/**
+				 * @param definition The style definition to interpret
+				 * @param styledElement The text element being styled
+				 * @param parent The parent style for this style to inherit from
+				 * @param wrapped The generic interpreted style that this style class wraps
+				 */
 				protected Abstract(Def definition, QuickTextElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(definition, styledElement, parent, wrapped);
@@ -216,22 +259,31 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 		}
 
+		/** @return The color for the text */
 		ObservableValue<Color> getFontColor();
 
+		/** @return The size for the text */
 		ObservableValue<Double> getFontSize();
 
+		/** @return The weight or line thickness for the text */
 		ObservableValue<Double> getFontWeight();
 
+		/** @return The slant for the text */
 		ObservableValue<Double> getFontSlant();
 
+		/** @return Whether the text is underlined */
 		ObservableValue<Boolean> isUnderline();
 
+		/** @return Whether the text is struck-through */
 		ObservableValue<Boolean> isStrikeThrough();
 
+		/** @return Whether the text is super-script */
 		ObservableValue<Boolean> isSuperScript();
 
+		/** @return Whether the text is sub-script */
 		ObservableValue<Boolean> isSubScript();
 
+		/** Abstract {@link QuickTextStyle} implementation */
 		public abstract class Abstract extends QuickInstanceStyle.Abstract implements QuickTextStyle {
 			private QuickStyleAttribute<Color> theFontColorAttr;
 			private ObservableValue<Color> theFontColor;

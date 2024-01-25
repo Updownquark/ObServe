@@ -1,5 +1,6 @@
 package org.observe.quick.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -18,14 +19,50 @@ import org.observe.quick.base.QuickBorderLayout.Region;
 import org.observe.quick.base.QuickSize;
 import org.qommons.LambdaUtils;
 
+/**
+ * <p>
+ * A layout that positions components along the edges of the container with an optional single component filling the rest of the space.
+ * </p>
+ * <p>
+ * This layout improves on Swing's {@link BorderLayout} in several ways:
+ * <ul>
+ * <li>This layout can accept any number of components along each edge. Edge components are arranged such that they appear closer to the
+ * opposite edge of the container than all previous components with the same edge. Edge components stretch out to the edges of the
+ * container, or to the edge of previous components along those edges.</li>
+ * <li>The amount of space that each component takes up can be specified by layout constraints, and can be specified relative to the edges
+ * or size of the container.</li>
+ * </ul>
+ * </p>
+ * <p>
+ * Like Swing's border layout, only a single center component may be specified. If specified, the center component will occupy all the space
+ * not taken up by the edge components. Size constraints on the center component are not allowed.
+ * </p>
+ */
 public class BetterBorderLayout implements LayoutManager2 {
+	/** Constraints on a child of a container using a {@link BetterBorderLayout} */
 	public static class Constraints {
+		/** The edge along which the component should be placed, or the center of the container */
 		public final QuickBorderLayout.Region region;
+		/**
+		 * The absolute size for the component. If this is specified, {@link #minSize}, {@link #prefSize}, and {@link #maxSize} will be
+		 * ignored.
+		 */
 		public final Supplier<QuickSize> size;
+		/** The minimum size for the component, in pixels */
 		public final Supplier<Integer> minSize;
+		/** The preferred size for the component, in pixels */
 		public final Supplier<Integer> prefSize;
+		/** The maximum size of the component, in pixels */
 		public final Supplier<Integer> maxSize;
 
+		/**
+		 * @param region The edge along which the component should be placed, or the center of the container
+		 * @param size The absolute size for the component. If this is specified, {@link #minSize}, {@link #prefSize}, and {@link #maxSize}
+		 *        will be ignored.
+		 * @param minSize The minimum size for the component, in pixels
+		 * @param prefSize The preferred size for the component, in pixels
+		 * @param maxSize The maximum size of the component, in pixels
+		 */
 		public Constraints(Region region, Supplier<QuickSize> size, Supplier<Integer> minSize, Supplier<Integer> prefSize,
 			Supplier<Integer> maxSize) {
 			this.region = region;
@@ -36,24 +73,31 @@ public class BetterBorderLayout implements LayoutManager2 {
 		}
 
 		Integer getSize(int type) {
-			Supplier<Integer> size;
+			Supplier<Integer> sizeV;
 			switch (type) {
 			case -1:
-				size = minSize;
+				sizeV = minSize;
 				break;
 			case 0:
-				size = prefSize;
+				sizeV = prefSize;
 				break;
 			case 1:
-				size = maxSize;
+				sizeV = maxSize;
 				break;
 			default:
 				throw new IllegalStateException("Expected -1, 0, or 1 for size type, not " + type);
 			}
-			return size == null ? null : size.get();
+			return sizeV == null ? null : sizeV.get();
 		}
 
-		public static Constraints parse(String constraints) {
+		/**
+		 * Parses constraints from text
+		 *
+		 * @param constraints The text to parse
+		 * @return The parsed constraints
+		 * @throws IllegalArgumentException If the constraints could not be parsed
+		 */
+		public static Constraints parse(String constraints) throws IllegalArgumentException {
 			constraints = constraints.trim().toLowerCase();
 			QuickBorderLayout.Region region = null;
 			for (QuickBorderLayout.Region r : QuickBorderLayout.Region.values()) {

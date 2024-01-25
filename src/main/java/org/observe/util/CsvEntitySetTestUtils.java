@@ -12,8 +12,8 @@ import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
+/** Utilities for unit tests on {@link CsvEntitySet} */
 public class CsvEntitySetTestUtils {
-
 	/**
 	 * @param directory The directory to create the entity set in
 	 * @return The new entity set
@@ -56,7 +56,7 @@ public class CsvEntitySetTestUtils {
 			.with("name", "Entity " + id)//
 			.with("values", BetterTreeList.build().build()//
 				.with(id, (id + 1) * 2, (id + 1) * 3, (id + 1) * 4, (id + 1) * 5))//
-		;
+			;
 		if (entitySet.update("test1", entity, true))
 			throw new AssertionError("Entity already existed");
 		return entity;

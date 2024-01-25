@@ -142,6 +142,7 @@ import org.jdesktop.swingx.util.Contract;
  * @author Ramesh Gupta
  *
  */
+@SuppressWarnings({ "hiding", "javadoc", "unused" })
 public class JXTreeTable extends JXTable {
 	@SuppressWarnings("unused")
 	private static final Logger LOG = Logger.getLogger(JXTreeTable.class

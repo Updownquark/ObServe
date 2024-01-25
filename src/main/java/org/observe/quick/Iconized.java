@@ -29,9 +29,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** An add-on for a quick element that may have an icon */
 public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
+	/** The XML name of this type */
 	public static final String ICONIZED = "iconized";
 
+	/** The defintion to create an {@link Iconized} element */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = ICONIZED,
 		interpretation = Interpreted.class,
@@ -41,14 +44,20 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		private QuickStyleAttributeDef theIconAttr;
 		private CompiledExpression theIcon;
 
+		/**
+		 * @param type The Qonfig type of this element
+		 * @param element The Qonfig element to interpret
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
 
+		/** @return The style attribute that the icon may be specified with */
 		public QuickStyleAttributeDef getIconAttr() {
 			return theIconAttr;
 		}
 
+		/** @return The icon expression as specified via a Qonfig attribute value */
 		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
@@ -71,6 +80,7 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 	}
 
+	/** The interpretation to create an {@link Iconized} element */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickStyledElement, Iconized> {
 		private QuickElementStyleAttribute<Icon> theIconAttr;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
@@ -89,10 +99,12 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 			return Iconized.class;
 		}
 
+		/** @return The style attribute that the icon may be specified with */
 		public QuickElementStyleAttribute<Icon> getIconAttr() {
 			return theIconAttr;
 		}
 
+		/** @return The icon expression as specified via a Qonfig attribute value */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
 			return theIcon;
 		}
@@ -130,6 +142,7 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		return Interpreted.class;
 	}
 
+	/** @return The icon specified for the element, either by Qonfig attribute or via styles */
 	public ObservableValue<Icon> getIcon() {
 		return ObservableValue.flatten(theIconValue);
 	}

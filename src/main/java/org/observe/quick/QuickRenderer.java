@@ -6,7 +6,12 @@ import org.qommons.config.QonfigAddOn;
 
 /** Tag for a widget that is only used as a renderer, instead of being a first class child of its parent */
 public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
+	/** Definition for a renderer */
 	public static class Def extends ExAddOn.Def.Abstract<QuickWidget, QuickRenderer> {
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The element this add-on affects
+		 */
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
 		}
@@ -22,8 +27,9 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		}
 	}
 
+	/** Interpretation of a renderer */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, QuickRenderer> {
-		public Interpreted(Def def, QuickWidget.Interpreted<?> element) {
+		Interpreted(Def def, QuickWidget.Interpreted<?> element) {
 			super(def, element);
 		}
 
@@ -48,7 +54,7 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		}
 	}
 
-	public QuickRenderer(QuickWidget element) {
+	QuickRenderer(QuickWidget element) {
 		super(element);
 	}
 

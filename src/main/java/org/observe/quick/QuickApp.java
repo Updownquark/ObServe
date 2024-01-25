@@ -56,15 +56,26 @@ import org.qommons.io.BetterFile;
 import org.qommons.io.ResourceLocator;
 import org.qommons.io.TextParseException;
 
+/** A class to facilitate instantiation of a Quick application from files */
 public class QuickApp extends QonfigApp {
 	/** The name of the Quick-App toolkit */
 	public static final String TOOLKIT_NAME = "Quick-App";
 
+	/**
+	 * <p>
+	 * If an argument by this name is specified in a Quick application file, the application will accept command-line arguments that do not
+	 * correspond to external model values explicitly expected by the application.
+	 * </p>
+	 * <p>
+	 * These arguments will then be passed to the application in a string collection-typed model value with this name.
+	 * </p>
+	 */
 	public static final String UNMATCHED_CL_ARGS = "$UNMATCHED$";
 
 	/**
 	 * @param appDefUrl The location of the {@link #getQonfigAppToolkit() Qonfig-App}-formatted application to parse
 	 * @param appToolkits The locations of other toolkit definitions that may be needed to parse the application
+	 * @param clArgs The command-line arguments to use to populate the application's external models
 	 * @return The parsed application
 	 * @throws IOException If the application could not be read
 	 * @throws TextParseException If the application could not be parsed as XML
@@ -87,6 +98,16 @@ public class QuickApp extends QonfigApp {
 	private final List<QuickInterpretation> theQuickInterpretations;
 	private final List<String> theCommandLineArgs;
 
+	/**
+	 * @param document The Qonfig document that this instance was parsed from
+	 * @param appFile The path to the app file that was used to parse this instance
+	 * @param toolkits All Qonfig toolkits loaded for the application
+	 * @param promiseFulfillment Promise-fulfillment to support external content referenced from files in the application
+	 * @param sessionTypes Qonfig sesson implementations for parsing
+	 * @param interpretations Qonfig interpretations to transform Qonfig-parsed elements into usable structures
+	 * @param quickInterpretations Quick interpretations to transform Quick elements into application behaviors
+	 * @param commandLineArgs The command-line arguments to pass to the application as external model values
+	 */
 	protected QuickApp(QonfigDocument document, String appFile, Set<QonfigToolkit> toolkits,
 		List<QonfigPromiseFulfillment> promiseFulfillment, List<SpecialSessionImplementation<?>> sessionTypes,
 		List<QonfigInterpretation> interpretations, List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs) {
@@ -95,15 +116,21 @@ public class QuickApp extends QonfigApp {
 		theCommandLineArgs = commandLineArgs;
 	}
 
+	/** @return All classes configured for this application to interpret Quick types into application behaviors */
 	public List<QuickInterpretation> getQuickInterpretations() {
 		return theQuickInterpretations;
 	}
 
+	/** @return Command-line arguments to be passed to the application in external model values */
 	public List<String> getCommandLineArgs() {
 		return theCommandLineArgs;
 	}
 
 	/**
+	 * Parses the Quick document for the application
+	 *
+	 * @param previous The Quick document previously parsed from by application, if this has been called previously
+	 * @return The Quick document of the application
 	 * @throws IllegalArgumentException If the {@link #getAppFile()} cannot be resolved
 	 * @throws IOException If the application file or the quick file cannot be read
 	 * @throws TextParseException If the application file or the quick file cannot be parsed as XML
@@ -126,6 +153,8 @@ public class QuickApp extends QonfigApp {
 	}
 
 	/**
+	 * @param quickDoc The interpreted document to interpret as an application
+	 * @return The interpreted application
 	 * @throws ExpressoInterpretationException If model configuration or references in the quick file contain errors
 	 */
 	public QuickApplication interpretQuickApplication(QuickDocument.Interpreted quickDoc) throws ExpressoInterpretationException {
@@ -199,6 +228,23 @@ public class QuickApp extends QonfigApp {
 		app.runApplication(doc, Observable.empty());
 	}
 
+	/**
+	 * <p>
+	 * Parses an instance of this class from command-line arguments and the application environment.
+	 * </p>
+	 * <p>
+	 * If the '--quick-app=' argument is specified, 'quick-app.qtd' will be used to parse that file. Otherwise, this method will look for
+	 * the 'Quick-App' manifest attribute.
+	 * </p>
+	 *
+	 * @param clArgs Command-line arguments passed to the application
+	 * @return The parsed application
+	 * @throws IllegalArgumentException If the --quick-app argument is not present in the command-line arguments and no Quick-App manifest
+	 *         property was specified
+	 * @throws IOException If the Quick app file could not be found or could not be read
+	 * @throws TextParseException If the Quick app file could not be parsed as XML
+	 * @throws QonfigParseException If the Quick app file could not be parsed via the toolkit definition
+	 */
 	public static QuickApp parseQuickApp(String... clArgs)
 		throws IllegalArgumentException, IOException, TextParseException, QonfigParseException {
 		// Find the app definition
@@ -244,11 +290,20 @@ public class QuickApp extends QonfigApp {
 
 		URL quickAppToolkitUrl = QuickApplication.class.getResource("quick-app.qtd");
 		if (quickAppToolkitUrl == null)
-			throw new IllegalStateException("Could not locate Quick App toolkit quick-app.qtd");
+			throw new IllegalStateException("Could not locate Quick App toolkit definition 'quick-app.qtd'");
 
 		return QuickApp.parseApp(quickAppUrl, new URL[] { quickAppToolkitUrl }, args.getUnmatched());
 	}
 
+	/**
+	 * Creates an external model set from command-line arguments passed to the application
+	 *
+	 * @param models The application's models
+	 * @param clArgs The command-line arguments passed to the application
+	 * @param ext The builder to build the external model set with
+	 * @param env The expresso environment to use to evaluate model expressions
+	 * @return The external model set to pass to the application
+	 */
 	public static ObservableModelSet.ExternalModelSet parseExtModels(ObservableModelSet.Built models, List<String> clArgs,
 		ObservableModelSet.ExternalModelSetBuilder ext, InterpretedExpressoEnv env) {
 		ArgumentParsing.ParserBuilder apBuilder = ArgumentParsing.build();
@@ -294,7 +349,17 @@ public class QuickApp extends QonfigApp {
 		return StringUtils.parseByCase(name, true).toKebabCase();
 	}
 
-	protected static <M, MV extends M> void buildArgument(String modelName, String name, ExtValueRef<M> thing, ParserBuilder builder,
+	/**
+	 * Builds a command-line argument parser for an external model value specified by the Quick application.
+	 *
+	 * @param <M> The type of the model value
+	 * @param modelName The name of the model the value will belong to
+	 * @param name The name of the model value
+	 * @param thing The reference of the external value to build
+	 * @param builder The builder for the command-line argument that will populate the model value
+	 * @param env The expresso environment to parse model expressions
+	 */
+	protected static <M> void buildArgument(String modelName, String name, ExtValueRef<M> thing, ParserBuilder builder,
 		InterpretedExpressoEnv env) {
 		ModelType<M> modelType = thing.getModelType();
 		if (modelType.getTypeCount() != 1)
@@ -399,6 +464,15 @@ public class QuickApp extends QonfigApp {
 		}
 	}
 
+	/**
+	 * @param <M> The model type of the model value
+	 * @param <MV> The instance type of the model value
+	 * @param valueName The name of the model value
+	 * @param thing The reference of the external value to satisfy
+	 * @param ext The builder for the external model set that the model value will belong to
+	 * @param parsedArgs The parsed command-line arguments passed to the application
+	 * @param env The expresso environment to parse model expressions
+	 */
 	protected static <M, MV extends M> void satisfyArgument(String valueName, ExtValueRef<M> thing, ExternalModelSetBuilder ext,
 		Arguments parsedArgs, InterpretedExpressoEnv env) {
 		String argName = String.join(".", Arrays.stream(valueName.split("\\.")).map(n -> StringUtils.parseByCase(n, true).toKebabCase())//

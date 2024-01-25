@@ -28,28 +28,49 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A listener for some kind of user event on a Quick widget */
 public interface QuickEventListener extends ExElement {
+	/** The XML name of this type */
 	public static final String EVENT_LISTENER = "event-listener";
 
+	/**
+	 * The definition of a {@link QuickEventListener}
+	 *
+	 * @param <L> The sub-type of listener to create
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = EVENT_LISTENER,
 		interpretation = Interpreted.class,
 		instance = QuickEventListener.class)
 	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
+		/** @return The list of filters that must be passed by an event if this listener's action is to be performed on it */
 		@QonfigChildGetter("filter")
 		List<EventFilter.Def> getFilters();
 
+		/** @return The action to perform when the event occurs */
 		@QonfigAttributeGetter
 		CompiledExpression getAction();
 
+		/** @return The model ID of the boolean value that is true if the user is pressing the ALT key when the event occurs */
 		ModelComponentId getAltPressedValue();
 
+		/** @return The model ID of the boolean value that is true if the user is pressing the CTRL key when the event occurs */
 		ModelComponentId getCtrlPressedValue();
 
+		/** @return The model ID of the boolean value that is true if the user is pressing the SHIFT key when the event occurs */
 		ModelComponentId getShiftPressedValue();
 
+		/**
+		 * @param parent The parent for the interpreted listener
+		 * @return The interpreted listener
+		 */
 		Interpreted<? extends L> interpret(ExElement.Interpreted<?> parent);
 
+		/**
+		 * Abstract {@link QuickEventListener} definition implementation
+		 *
+		 * @param <L> The sub-type of listener to create
+		 */
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Def.Abstract<L> implements Def<L> {
 			private final List<EventFilter.Def> theFilters;
 			private CompiledExpression theAction;
@@ -57,6 +78,10 @@ public interface QuickEventListener extends ExElement {
 			private ModelComponentId theCtrlPressedValue;
 			private ModelComponentId theShiftPressedValue;
 
+			/**
+			 * @param parent The parent of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 				theFilters = new ArrayList<>();
@@ -102,22 +127,45 @@ public interface QuickEventListener extends ExElement {
 		}
 	}
 
+	/**
+	 * The interpretation of a {@link QuickEventListener}
+	 *
+	 * @param <L> The sub-type of listener to create
+	 */
 	public interface Interpreted<L extends QuickEventListener> extends ExElement.Interpreted<L> {
 		@Override
 		Def<? super L> getDefinition();
 
+		/** @return The list of filters that must be passed by an event if this listener's action is to be performed on it */
 		List<EventFilter.Interpreted> getFilters();
 
+		/** @return The action to perform when the event occurs */
 		InterpretedValueSynth<ObservableAction, ObservableAction> getAction();
 
+		/**
+		 * Initializes or updates this listener
+		 *
+		 * @param env The expresso environment to interpret expressions
+		 * @throws ExpressoInterpretationException If this listener could not be interpreted
+		 */
 		void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/** @return The listener instance */
 		L create();
 
+		/**
+		 * Abstract {@link QuickEventListener} interpretation implementation
+		 *
+		 * @param <L> The sub-type of listener to create
+		 */
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L> implements Interpreted<L> {
 			private final List<EventFilter.Interpreted> theFilters;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element of this listener
+			 */
 			protected Abstract(Def<? super L> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theFilters = new ArrayList<>();
@@ -152,24 +200,35 @@ public interface QuickEventListener extends ExElement {
 		}
 	}
 
+	/** Context for an event listener */
 	public interface ListenerContext {
+		/** @return Whether the user is currently pressing the ALT key */
 		SettableValue<Boolean> isAltPressed();
 
+		/** @return Whether the user is currently pressing the CTRL key */
 		SettableValue<Boolean> isCtrlPressed();
 
+		/** @return Whether the user is currently pressing the SHIFT key */
 		SettableValue<Boolean> isShiftPressed();
 
+		/** Default {@link ListenerContext} implementation */
 		public class Default implements ListenerContext {
 			private final SettableValue<Boolean> isAltPressed;
 			private final SettableValue<Boolean> isCtrlPressed;
 			private final SettableValue<Boolean> isShiftPressed;
 
+			/**
+			 * @param altPressed Whether the user is currently pressing the ALT key
+			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
+			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
+			 */
 			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed) {
 				isAltPressed = altPressed;
 				isCtrlPressed = ctrlPressed;
 				isShiftPressed = shiftPressed;
 			}
 
+			/** Creates context with default value containers */
 			public Default() {
 				isAltPressed = SettableValue.build(boolean.class).withValue(false).build();
 				isCtrlPressed = SettableValue.build(boolean.class).withValue(false).build();
@@ -193,10 +252,17 @@ public interface QuickEventListener extends ExElement {
 		}
 	}
 
-	void setListenerContext(ListenerContext ctx) throws ModelInstantiationException;
+	/**
+	 * Sets the event listener context to populate this listener's models with context-specific values
+	 *
+	 * @param ctx The listener context from the Quick implementation
+	 */
+	void setListenerContext(ListenerContext ctx);
 
+	/** @return The list of filters that must be passed by an event if this listener's action is to be performed on it */
 	List<EventFilter> getFilters();
 
+	/** @return Runs all the tests in this listener's {@link #getFilters() filters} on the current model values */
 	default boolean testFilter() {
 		for (EventFilter filter : getFilters())
 			if (!filter.filterPasses())
@@ -204,11 +270,13 @@ public interface QuickEventListener extends ExElement {
 		return true;
 	}
 
+	/** @return The action to perform when the event occurs */
 	ObservableAction getAction();
 
 	@Override
 	QuickEventListener copy(ExElement parent);
 
+	/** Abstract {@link QuickEventListener} implementation */
 	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
 		private List<EventFilter> theFilters;
 
@@ -223,6 +291,7 @@ public interface QuickEventListener extends ExElement {
 		private SettableValue<SettableValue<Boolean>> isCtrlPressed;
 		private SettableValue<SettableValue<Boolean>> isShiftPressed;
 
+		/** @param id The element identifier for this listener */
 		protected Abstract(Object id) {
 			super(id);
 			theFilters = new ArrayList<>();
@@ -233,7 +302,7 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		public void setListenerContext(ListenerContext ctx) throws ModelInstantiationException {
+		public void setListenerContext(ListenerContext ctx) {
 			if (ctx == null)
 				return;
 			isAltPressed.set(ctx.isAltPressed(), null);
@@ -316,7 +385,9 @@ public interface QuickEventListener extends ExElement {
 		}
 	}
 
+	/** A test that must be passed by an event if a listener's action is to be performed on it */
 	public class EventFilter extends ExElement.Abstract {
+		/** The definition of a {@link EventFilter} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = "event-filter",
 			interpretation = Interpreted.class,
@@ -324,10 +395,15 @@ public interface QuickEventListener extends ExElement {
 		public static class Def extends ExElement.Def.Abstract<EventFilter> {
 			private CompiledExpression theCondition;
 
+			/**
+			 * @param parent The parent element for this filter
+			 * @param type The Qonfig type of this filter
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/** @return This filter's condition */
 			@QonfigAttributeGetter
 			public CompiledExpression getCondition() {
 				return theCondition;
@@ -339,14 +415,23 @@ public interface QuickEventListener extends ExElement {
 				theCondition = getValueExpression(session);
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted filter
+			 * @return The interpreted filter
+			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
+		/** The interpretation of a {@link EventFilter} */
 		public static class Interpreted extends ExElement.Interpreted.Abstract<EventFilter> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this filter
+			 */
 			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -356,10 +441,17 @@ public interface QuickEventListener extends ExElement {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return This filter's condition */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
 				return theCondition;
 			}
 
+			/**
+			 * Initializes or updates this filter
+			 *
+			 * @param env The expresso environment to interpret expressions
+			 * @throws ExpressoInterpretationException If this filter could not be interpreted
+			 */
 			public void updateFilter(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
 			}
@@ -370,6 +462,10 @@ public interface QuickEventListener extends ExElement {
 				theCondition = interpret(getDefinition().getCondition(), ModelTypes.Value.BOOLEAN);
 			}
 
+			/**
+			 * @param parent The parent element for the filter
+			 * @return The filter instance
+			 */
 			public EventFilter create(ExElement parent) {
 				return new EventFilter(parent);
 			}
@@ -378,14 +474,17 @@ public interface QuickEventListener extends ExElement {
 		private ModelValueInstantiator<SettableValue<Boolean>> theConditionInstantiator;
 		private SettableValue<Boolean> theCondition;
 
+		/** @param parent The owner of this filter (typically a {@link QuickEventListener}) */
 		public EventFilter(ExElement parent) {
 			super(parent);
 		}
 
+		/** @return This filter's condition */
 		public SettableValue<Boolean> getCondition() {
 			return theCondition;
 		}
 
+		/** @return Whether the filter passes on the event whose data is installed in this filter's model */
 		public boolean filterPasses() {
 			return Boolean.TRUE.equals(theCondition.get());
 		}

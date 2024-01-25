@@ -77,6 +77,7 @@ import org.observe.util.swing.JustifiedBoxLayout;
  * @author Scott Violet
  * @author Ramesh Gupta
  */
+@SuppressWarnings({ "javadoc", "hiding" })
 public class TreeTableCellEditor implements TableCellEditor {
 
 	@SuppressWarnings("unused")

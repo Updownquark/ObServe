@@ -26,25 +26,56 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A quick element with a background that can be styled */
 public interface QuickWithBackground extends QuickStyledElement {
+	/**
+	 * The definition of a {@link QuickWithBackground}
+	 *
+	 * @param <E> The sub-type of the element to create
+	 */
 	public interface Def<E extends QuickWithBackground> extends QuickStyledElement.Def<E> {
 		@Override
 		QuickBackgroundStyle.Def getStyle();
 
+		/**
+		 * @return The model ID of the boolean value in this element's model describing whether the mouse pointer is currently positioned
+		 *         over this element
+		 */
 		ModelComponentId getHoveredValue();
 
+		/**
+		 * @return The model ID of the boolean value in this element's model describing whether this element currently has the user's focus
+		 *         within the application
+		 */
 		ModelComponentId getFocusedValue();
 
+		/**
+		 * @return The model ID of the boolean value in this element's model describing whether the mouse pointer is currently positioned
+		 *         over this element with the left mouse button pressed
+		 */
 		ModelComponentId getPressedValue();
 
+		/**
+		 * @return The model ID of the boolean value in this element's model describing whether the mouse pointer is currently positioned
+		 *         over this element with the right mouse button pressed
+		 */
 		ModelComponentId getRightPressedValue();
 
+		/**
+		 * Abstract {@link QuickWithBackground} definition implementation
+		 *
+		 * @param <E> The sub-type of element to create
+		 */
 		public static abstract class Abstract<E extends QuickWithBackground> extends QuickStyledElement.Def.Abstract<E> implements Def<E> {
 			private ModelComponentId theHoveredValue;
 			private ModelComponentId theFocusedValue;
 			private ModelComponentId thePressedValue;
 			private ModelComponentId theRightPressedValue;
 
+			/**
+			 * @param parent The parent element for this element
+			 * @param type The Qonfig type of this element
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -91,6 +122,11 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * The interpretation of a {@link QuickWithBackground}
+	 *
+	 * @param <E> The sub-type of the element to create
+	 */
 	public interface Interpreted<E extends QuickWithBackground> extends QuickStyledElement.Interpreted<E> {
 		@Override
 		Def<? super E> getDefinition();
@@ -98,6 +134,11 @@ public interface QuickWithBackground extends QuickStyledElement {
 		@Override
 		QuickBackgroundStyle.Interpreted getStyle();
 
+		/**
+		 * Abstract {@link QuickWithBackground} interpretation implementation
+		 *
+		 * @param <E> The sub-type of element to create
+		 */
 		public static class Abstract<E extends QuickWithBackground> extends QuickStyledElement.Interpreted.Abstract<E>
 		implements Interpreted<E> {
 			/**
@@ -120,21 +161,33 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 	}
 
+	/** Context for a {@link QuickWithBackground} */
 	public interface BackgroundContext {
+		/** @return Whether the mouse pointer is currently positioned over the element */
 		SettableValue<Boolean> isHovered();
 
+		/** @return Whether the element currently has the user's focus within the application */
 		SettableValue<Boolean> isFocused();
 
+		/** @return Whether the mouse pointer is currently positioned over the element and the left mouse button is down */
 		SettableValue<Boolean> isPressed();
 
+		/** @return Whether the mouse pointer is currently positioned over the element and the right mouse button is down */
 		SettableValue<Boolean> isRightPressed();
 
+		/** Default {@link BackgroundContext} implementation */
 		public class Default implements BackgroundContext {
 			private final SettableValue<Boolean> isHovered;
 			private final SettableValue<Boolean> isFocused;
 			private final SettableValue<Boolean> isPressed;
 			private final SettableValue<Boolean> isRightPressed;
 
+			/**
+			 * @param hovered Whether the mouse pointer is currently positioned over the element
+			 * @param focused Whether the element currently has the user's focus within the application
+			 * @param pressed Whether the mouse pointer is currently positioned over the element and the left mouse button is down
+			 * @param rightPressed Whether the mouse pointer is currently positioned over the element and the right mouse button is down
+			 */
 			public Default(SettableValue<Boolean> hovered, SettableValue<Boolean> focused, SettableValue<Boolean> pressed,
 				SettableValue<Boolean> rightPressed) {
 				isHovered = hovered;
@@ -143,6 +196,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				isRightPressed = rightPressed;
 			}
 
+			/** Creates context with default value containers */
 			public Default() {
 				this(SettableValue.build(boolean.class).withValue(false).build(), //
 					SettableValue.build(boolean.class).withValue(false).build(), //
@@ -175,14 +229,22 @@ public interface QuickWithBackground extends QuickStyledElement {
 	@Override
 	QuickBackgroundStyle getStyle();
 
+	/** @return Whether the mouse pointer is currently positioned over this element */
 	SettableValue<Boolean> isHovered();
 
+	/** @return Whether this element currently has the user's focus within the application */
 	SettableValue<Boolean> isFocused();
 
+	/** @return Whether the mouse pointer is currently positioned over this element and the left mouse button is down */
 	SettableValue<Boolean> isPressed();
 
+	/** @return Whether the mouse pointer is currently positioned over this element and the right mouse button is down */
 	SettableValue<Boolean> isRightPressed();
 
+	/**
+	 * @param ctx The background context for this element from the Quick implementation
+	 * @throws ModelInstantiationException If the context could not be installed in the element's models
+	 */
 	void setContext(BackgroundContext ctx) throws ModelInstantiationException;
 
 	/** An abstract {@link QuickWithBackground} implementation */
@@ -197,6 +259,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 		private ModelComponentId thePressedValue;
 		private ModelComponentId theRightPressedValue;
 
+		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
 			isHovered = SettableValue
@@ -274,16 +337,26 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 	}
 
+	/** Style for a {@link QuickWithBackground} */
 	public interface QuickBackgroundStyle extends QuickInstanceStyle {
+		/** Definition for a {@link QuickBackgroundStyle} */
 		public interface Def extends QuickInstanceStyle.Def {
+			/** @return The style attribute for the element's background color */
 			QuickStyleAttributeDef getColor();
 
+			/** @return The style attribute for the mouse cursor appearance when hovered over the element */
 			QuickStyleAttributeDef getMouseCursor();
 
+			/** Default {@link QuickBackgroundStyle} definition implementation */
 			public class Default extends QuickInstanceStyle.Def.Abstract implements QuickBackgroundStyle.Def {
 				private final QuickStyleAttributeDef theColor;
 				private final QuickStyleAttributeDef theMouseCursor;
 
+				/**
+				 * @param parent The parent style for this style to inherit from
+				 * @param styledElement The element being styled
+				 * @param wrapped The generic compiled style that this style class wraps
+				 */
 				public Default(QuickInstanceStyle.Def parent, QuickWithBackground.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
@@ -311,18 +384,28 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 		}
 
+		/** Interpretation for a {@link QuickBackgroundStyle} */
 		public interface Interpreted extends QuickInstanceStyle.Interpreted {
+			/** @return The style attribute for the element's background color */
 			QuickElementStyleAttribute<Color> getColor();
 
+			/** @return The style attribute for the mouse cursor appearance when hovered over the element */
 			QuickElementStyleAttribute<MouseCursor> getMouseCursor();
 
 			@Override
 			QuickBackgroundStyle create(QuickStyledElement styledElement);
 
+			/** Default {@link QuickBackgroundStyle} interpretation implementation */
 			public class Default extends QuickInstanceStyle.Interpreted.Abstract implements QuickBackgroundStyle.Interpreted {
 				private QuickElementStyleAttribute<Color> theColor;
 				private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
+				/**
+				 * @param definition The style definition to interpret
+				 * @param styledElement The element being styled
+				 * @param parent The parent style for this style to inherit from
+				 * @param wrapped The generic interpreted style that this style class wraps
+				 */
 				public Default(Def definition, QuickWithBackground.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(definition, styledElement, parent, wrapped);
@@ -359,10 +442,13 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 		}
 
+		/** @return The background color for the element */
 		ObservableValue<Color> getColor();
 
+		/** @return The the mouse cursor appearance when hovered over the element */
 		ObservableValue<MouseCursor> getMouseCursor();
 
+		/** Default {@link QuickBackgroundStyle} implementation */
 		public class Default extends QuickInstanceStyle.Abstract implements QuickBackgroundStyle {
 			private QuickStyleAttribute<Color> theColorAttr;
 			private QuickStyleAttribute<MouseCursor> theMouseCursorAttr;

@@ -41,6 +41,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** The base class for widgets in Quick */
 public interface QuickWidget extends QuickTextElement, QuickWithBackground {
+	/** The XML name of this type */
 	public static final String WIDGET = "widget";
 
 	/**
@@ -75,9 +76,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@QonfigChildGetter("border")
 		QuickBorder.Def<?> getBorder();
 
+		/** @return All event listeners configured for this widget */
 		@QonfigChildGetter("event-listener")
 		List<QuickEventListener.Def<?>> getEventListeners();
 
+		/** @return All dialogs configured to display for this widget */
 		@QonfigChildGetter("dialog")
 		List<QuickDialog.Def<?>> getDialogs();
 
@@ -210,6 +213,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@Override
 		Def<? super W> getDefinition();
 
+		/** @return This widget's name, typically for debugging */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName();
 
 		@Override
@@ -227,8 +231,10 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		/** @return The value determining when this widget is to be visible */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
 
+		/** @return All event listeners configured for this widget */
 		List<QuickEventListener.Interpreted<?>> getEventListeners();
 
+		/** @return All dialogs configured to display for this widget */
 		List<QuickDialog.Interpreted<?>> getDialogs();
 
 		/**
@@ -341,6 +347,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	/** @return The parent container, if any */
 	QuickContainer<?> getParent();
 
+	/** @return This widget's name, typically for debugging */
 	ObservableValue<String> getName();
 
 	/** @return This widget's border */
@@ -353,8 +360,10 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
+	/** @return All event listeners for this widget */
 	ObservableCollection<QuickEventListener> getEventListeners();
 
+	/** @return All dialogs this widget may display */
 	ObservableCollection<QuickDialog> getDialogs();
 
 	@Override
@@ -383,6 +392,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		private ObservableCollection<QuickEventListener> theEventListeners;
 		private ObservableCollection<QuickDialog> theDialogs;
 
+		/** @param id The element identifier for this widget */
 		protected Abstract(Object id) {
 			super(id);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
@@ -581,12 +591,20 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		}
 	}
 
+	/** Style object for a widget */
 	public interface QuickWidgetStyle extends QuickTextStyle, QuickBackgroundStyle {
+		/** Definition for a widget style */
 		public interface Def extends QuickTextStyle.Def, QuickBackgroundStyle.Def {
+			/** Default {@link QuickWidgetStyle} definition implementation */
 			public class Default extends QuickTextStyle.Def.Abstract implements QuickWidgetStyle.Def {
 				private final QuickStyleAttributeDef theColor;
 				private final QuickStyleAttributeDef theMouseCursor;
 
+				/**
+				 * @param parent The parent style for this style to inherit from
+				 * @param styledElement The widget element being styled
+				 * @param wrapped The generic compiled style that this style class wraps
+				 */
 				public Default(QuickInstanceStyle.Def parent, QuickWidget.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
@@ -614,14 +632,22 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 		}
 
+		/** Interpretation of a widget style */
 		public interface Interpreted extends QuickTextStyle.Interpreted, QuickBackgroundStyle.Interpreted {
 			@Override
 			QuickWidgetStyle create(QuickStyledElement styledElement);
 
+			/** Default {@link QuickWidgetStyle} interpretation implementation */
 			public class Default extends QuickTextStyle.Interpreted.Abstract implements QuickWidgetStyle.Interpreted {
 				private QuickElementStyleAttribute<Color> theColor;
 				private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
+				/**
+				 * @param definition The style definition to interpret
+				 * @param styledElement The widget element being styled
+				 * @param parent The parent style for this style to inherit from
+				 * @param wrapped The generic interpreted style that this style class wraps
+				 */
 				public Default(Def definition, QuickWidget.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(definition, styledElement, parent, wrapped);
@@ -658,6 +684,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 		}
 
+		/** Default {@link QuickWidgetStyle} implementation */
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
 			private QuickStyleAttribute<Color> theColorAttr;
 			private QuickStyleAttribute<MouseCursor> theMouseCursorAttr;

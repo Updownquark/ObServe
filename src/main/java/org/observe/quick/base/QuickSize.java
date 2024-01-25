@@ -41,6 +41,10 @@ public class QuickSize {
 		return value;
 	}
 
+	/**
+	 * @param other The other size to add
+	 * @return A size that is the sum of this size and the other
+	 */
 	public QuickSize plus(QuickSize other) {
 		int pix = pixels + other.pixels;
 		if (pix < 0)
@@ -48,10 +52,18 @@ public class QuickSize {
 		return new QuickSize(percent + other.percent, pix);
 	}
 
+	/**
+	 * @param other The other size to subtract
+	 * @return A size that is the difference of this size and the other
+	 */
 	public QuickSize minus(QuickSize other) {
 		return new QuickSize(percent - other.percent, pixels - other.pixels);
 	}
 
+	/**
+	 * @param adjPixels The number of pixels to add to this size
+	 * @return A size that is the sum of this size and the given number of pixels
+	 */
 	public QuickSize plus(int adjPixels) {
 		int pix = pixels + adjPixels;
 		if (pix < 0)
@@ -59,6 +71,10 @@ public class QuickSize {
 		return new QuickSize(percent, pix);
 	}
 
+	/**
+	 * @return The number of pixels that a container must be for this size's {@link #pixels} to be equal to its relative size as specified
+	 *         by {@link #percent}, or just {@link #pixels} if one or both fields are zero
+	 */
 	public int resolveExponential() {
 		if (percent <= 0 || percent >= 100 || pixels <= 0)
 			return pixels;
@@ -93,6 +109,10 @@ public class QuickSize {
 			return pixels + "px";
 	}
 
+	/**
+	 * @param pixels The number of pixels
+	 * @return A size for the given number of pixels
+	 */
 	public static QuickSize ofPixels(int pixels) {
 		if (pixels == 0)
 			return ZERO;

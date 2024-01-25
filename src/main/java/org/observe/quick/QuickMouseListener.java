@@ -16,9 +16,16 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** Listens for mouse events on a widget */
 public abstract class QuickMouseListener extends QuickEventListener.Abstract {
+	/** The XML name of this type */
 	public static final String MOUSE_LISTENER = "mouse-listener";
 
+	/**
+	 * Definition of a {@link QuickMouseListener}
+	 *
+	 * @param <L> The sub-type of listener to create
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = MOUSE_LISTENER,
 		interpretation = Interpreted.class,
@@ -27,14 +34,26 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		private ModelComponentId theEventXValue;
 		private ModelComponentId theEventYValue;
 
+		/**
+		 * @param parent The parent element of this listener
+		 * @param type The Qonfig type of this listener
+		 */
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/**
+		 * @return The model ID of the model value containing the X-coordinate of the mouse's position relative to the upper-left corner of
+		 *         the widget for the current event
+		 */
 		public ModelComponentId getEventXValue() {
 			return theEventXValue;
 		}
 
+		/**
+		 * @return The model ID of the model value containing the Y-coordinate of the mouse's position relative to the upper-left corner of
+		 *         the widget for the current event
+		 */
 		public ModelComponentId getEventYValue() {
 			return theEventYValue;
 		}
@@ -52,7 +71,16 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public abstract QuickMouseListener.Interpreted<? extends L> interpret(ExElement.Interpreted<?> parent);
 	}
 
+	/**
+	 * Interpretation of a {@link QuickMouseListener}
+	 *
+	 * @param <L> The sub-type of listener to create
+	 */
 	public static abstract class Interpreted<L extends QuickMouseListener> extends QuickEventListener.Interpreted.Abstract<L> {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for this listener
+		 */
 		protected Interpreted(Def<? super L> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -63,14 +91,26 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Context for a mouse listener */
 	public interface MouseListenerContext extends ListenerContext {
+		/** @return The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event */
 		SettableValue<Integer> getX();
 
+		/** @return The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event */
 		SettableValue<Integer> getY();
 
+		/** Default {@link MouseListenerContext} implementation */
 		public class Default extends ListenerContext.Default implements MouseListenerContext {
 			private final SettableValue<Integer> theX;
 			private final SettableValue<Integer> theY;
+
+			/**
+			 * @param altPressed Whether the user is currently pressing the ALT key
+			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
+			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
+			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 */
 			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
 				SettableValue<Integer> x, SettableValue<Integer> y) {
 				super(altPressed, ctrlPressed, shiftPressed);
@@ -100,6 +140,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	private SettableValue<SettableValue<Integer>> theEventX;
 	private SettableValue<SettableValue<Integer>> theEventY;
 
+	/** @param id The element ID of this listener */
 	protected QuickMouseListener(Object id) {
 		super(id);
 		theEventX = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
@@ -107,7 +148,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		theEventY = SettableValue.build(theEventX.getType()).build();
 	}
 
-	public void setListenerContext(MouseListenerContext ctx) throws ModelInstantiationException {
+	/** @param ctx The listener context from the Quick implementation */
+	public void setListenerContext(MouseListenerContext ctx) {
 		setListenerContext((ListenerContext) ctx);
 		theEventX.set(ctx.getX(), null);
 		theEventY.set(ctx.getY(), null);
@@ -138,13 +180,26 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		return copy;
 	}
 
+	/** Recognized mouse button types in Quick */
 	public enum MouseButton {
-		Left, Middle, Right
+		/** The left mouse button */
+		Left,
+		/** The middle mouse button (often the scroll wheel) */
+		Middle,
+		/** The right mouse button */
+		Right
 	}
 
+	/** Recognized types of mouse movement in Quick */
 	public enum MouseMoveEventType {
-		Move("on-mouse-move"), Enter("on-mouse-enter"), Exit("on-mouse-exit");
+		/** Simple movement event */
+		Move("on-mouse-move"),
+		/** When the mouse enters a widget from outside the widget's bounds or from the bounds of one of its opaque components */
+		Enter("on-mouse-enter"),
+		/** When the mouse leaves a widget to a place outside the widget's bounds or into the bounds of one of its opaque components */
+		Exit("on-mouse-exit");
 
+		/** The XML name of this event type */
 		public final String elementName;
 
 		private MouseMoveEventType(String elementName) {
@@ -152,18 +207,30 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Context for a {@link QuickMouseButtonListener} */
 	public interface MouseButtonListenerContext extends MouseListenerContext {
+		/** @return The mouse button that was pressed for the current event */
 		SettableValue<MouseButton> getMouseButton();
 
+		/** Default {@link MouseButtonListenerContext} implementation */
 		public class Default extends MouseListenerContext.Default implements MouseButtonListenerContext {
 			private final SettableValue<MouseButton> theMouseButton;
 
+			/**
+			 * @param altPressed Whether the user is currently pressing the ALT key
+			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
+			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
+			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 * @param mouseButton The mouse button that was pressed for the current event
+			 */
 			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
 				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<MouseButton> mouseButton) {
 				super(altPressed, ctrlPressed, shiftPressed, x, y);
 				theMouseButton = mouseButton;
 			}
 
+			/** Creates context with default value containers */
 			public Default() {
 				theMouseButton = SettableValue.build(MouseButton.class).build();
 			}
@@ -175,12 +242,23 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Context for a {@link QuickScrollListener} */
 	public interface ScrollListenerContext extends MouseListenerContext {
+		/** @return The amount that the scroll event intends to be scrolled */
 		SettableValue<Integer> getScrollAmount();
 
+		/** Default {@link ScrollListenerContext} implementation */
 		public class Default extends MouseListenerContext.Default implements ScrollListenerContext {
 			private final SettableValue<Integer> theScrollAmount;
 
+			/**
+			 * @param altPressed Whether the user is currently pressing the ALT key
+			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
+			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
+			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
+			 * @param scrollAmount The amount that the scroll event intends to be scrolled
+			 */
 			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
 				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<Integer> scrollAmount) {
 				super(altPressed, ctrlPressed, shiftPressed, x, y);
@@ -194,7 +272,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Listens for events of the mouse moving over a widget */
 	public static class QuickMouseMoveListener extends QuickMouseListener {
+		/** Definition for a {@link QuickMouseMoveListener} */
 		@ExMultiElementTraceable({
 			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 				qonfigType = "on-mouse-move",
@@ -211,11 +291,17 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public static class Def extends QuickMouseListener.Def<QuickMouseMoveListener> {
 			private final MouseMoveEventType theEventType;
 
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 * @param eventType The movement event type that this listener will listen for
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type, MouseMoveEventType eventType) {
 				super(parent, type);
 				theEventType = eventType;
 			}
 
+			/** @return The movement event type that this listener will listen for */
 			public MouseMoveEventType getEventType() {
 				return theEventType;
 			}
@@ -231,8 +317,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
+		/** Interpretation for a {@link QuickMouseMoveListener} */
 		public static class Interpreted extends QuickMouseListener.Interpreted<QuickMouseMoveListener> {
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -249,10 +336,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		private MouseMoveEventType theEventType;
 
-		public QuickMouseMoveListener(Object id) {
+		QuickMouseMoveListener(Object id) {
 			super(id);
 		}
 
+		/** @return The movement event type that this listener will listen for */
 		public MouseMoveEventType getEventType() {
 			return theEventType;
 		}
@@ -265,9 +353,16 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Listens for events related to mouse buttons over a widget */
 	public static abstract class QuickMouseButtonListener extends QuickMouseListener {
+		/** The XML name of this type */
 		public static final String MOUSE_BUTTON_LISTENER = "mouse-button-listener";
 
+		/**
+		 * Definition for a {@link QuickMouseButtonListener}
+		 *
+		 * @param <L> The sub-type of listener to create
+		 */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = MOUSE_BUTTON_LISTENER,
 			interpretation = Interpreted.class,
@@ -276,14 +371,23 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			private ModelComponentId theButtonValue;
 			private MouseButton theButton;
 
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/** @return The model ID of the model value containing the type of the button that the current event is for */
 			public ModelComponentId getButtonValue() {
 				return theButtonValue;
 			}
 
+			/**
+			 * @return The button type that an event must be for for this listener's action to be called, or null if the action will be
+			 *         called for any button event
+			 */
 			@QonfigAttributeGetter("button")
 			public MouseButton getButton() {
 				return theButton;
@@ -318,7 +422,16 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link QuickMouseButtonListener}
+		 *
+		 * @param <L> The sub-type of listener to create
+		 */
 		public static abstract class Interpreted<L extends QuickMouseButtonListener> extends QuickMouseListener.Interpreted<L> {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this listener
+			 */
 			protected Interpreted(Def<? super L> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -333,17 +446,23 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		private SettableValue<SettableValue<MouseButton>> theEventButton;
 		private MouseButton theButton;
 
+		/** @param id The element ID for this listener */
 		protected QuickMouseButtonListener(Object id) {
 			super(id);
 			theEventButton = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<MouseButton>> parameterized(MouseButton.class)).build();
 		}
 
+		/**
+		 * @return The button type that an event must be for for this listener's action to be called, or null if the action will be called
+		 *         for any button event
+		 */
 		public MouseButton getButton() {
 			return theButton;
 		}
 
-		public void setListenerContext(MouseButtonListenerContext ctx) throws ModelInstantiationException {
+		/** @param ctx The context for this listener from the Quick implementation */
+		public void setListenerContext(MouseButtonListenerContext ctx) {
 			setListenerContext((MouseListenerContext) ctx);
 			theEventButton.set(ctx.getMouseButton(), null);
 		}
@@ -372,9 +491,12 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Listens for mouse clicks on a widget */
 	public static class QuickMouseClickListener extends QuickMouseButtonListener {
+		/** The XML name of this type */
 		public static final String ON_MOUSE_CLICK = "on-click";
 
+		/** Definition for a {@link QuickMouseClickListener} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = ON_MOUSE_CLICK,
 			interpretation = Interpreted.class,
@@ -382,10 +504,18 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public static class Def extends QuickMouseButtonListener.Def<QuickMouseClickListener> {
 			private int theClickCount;
 
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/**
+			 * @return The click count an event must have for this listener's action to be called, or 0 if the action will be called for all
+			 *         click events
+			 */
 			@QonfigAttributeGetter("click-count")
 			public int getClickCount() {
 				return theClickCount;
@@ -413,8 +543,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		}
 
+		/** Interpretation for a {@link QuickMouseClickListener} */
 		public static class Interpreted extends QuickMouseButtonListener.Interpreted<QuickMouseClickListener> {
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -431,10 +562,14 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		private int theClickCount;
 
-		public QuickMouseClickListener(Object id) {
+		QuickMouseClickListener(Object id) {
 			super(id);
 		}
 
+		/**
+		 * @return The click count an event must have for this listener's action to be called, or 0 if the action will be called for all
+		 *         click events
+		 */
 		public int getClickCount() {
 			return theClickCount;
 		}
@@ -447,15 +582,21 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
+	/** Listens for the user pressing a mouse button over a widget */
 	public static class QuickMousePressedListener extends QuickMouseButtonListener {
+		/** The XML name of this type */
 		public static final String ON_MOUSE_PRESSED = "on-mouse-press";
 
+		/** Definition for a {@link QuickMousePressedListener} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = ON_MOUSE_PRESSED,
 			interpretation = Interpreted.class,
 			instance = QuickMousePressedListener.class)
 		public static class Def extends QuickMouseButtonListener.Def<QuickMousePressedListener> {
-
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -472,8 +613,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		}
 
+		/** Interpretation for a {@link QuickMousePressedListener} */
 		public static class Interpreted extends QuickMouseButtonListener.Interpreted<QuickMousePressedListener> {
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -488,20 +630,26 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
-		public QuickMousePressedListener(Object id) {
+		QuickMousePressedListener(Object id) {
 			super(id);
 		}
 	}
 
+	/** Listens for the user releasing a mouse button over a widget */
 	public static class QuickMouseReleasedListener extends QuickMouseButtonListener {
+		/** The XML name of this type */
 		public static final String ON_MOUSE_RELEASED = "on-mouse-release";
 
+		/** Definition for a {@link QuickMouseReleasedListener} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = ON_MOUSE_RELEASED,
 			interpretation = Interpreted.class,
 			instance = QuickMouseReleasedListener.class)
 		public static class Def extends QuickMouseButtonListener.Def<QuickMouseReleasedListener> {
-
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -515,11 +663,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
-
 		}
 
+		/** Interpretation for a {@link QuickMouseReleasedListener} */
 		public static class Interpreted extends QuickMouseButtonListener.Interpreted<QuickMouseReleasedListener> {
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -534,14 +682,17 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
-		public QuickMouseReleasedListener(Object id) {
+		QuickMouseReleasedListener(Object id) {
 			super(id);
 		}
 	}
 
+	/** Listens for scroll events on a widget */
 	public static class QuickScrollListener extends QuickMouseListener {
+		/** The XML name of this type */
 		public static final String SCROLL_LISTENER = "on-scroll";
 
+		/** Definition for a {@link QuickScrollListener} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = SCROLL_LISTENER,
 			interpretation = Interpreted.class,
@@ -549,10 +700,15 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public static class Def extends QuickMouseListener.Def<QuickScrollListener> {
 			private ModelComponentId theScrollAmountValue;
 
+			/**
+			 * @param parent The parent element of this listener
+			 * @param type The Qonfig type of this listener
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/** @return The model ID of the model value containing the scroll amount for the current scroll event */
 			public ModelComponentId getScrollAmountValue() {
 				return theScrollAmountValue;
 			}
@@ -571,8 +727,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
+		/** Interpretation for a {@link QuickScrollListener} */
 		public static class Interpreted extends QuickMouseListener.Interpreted<QuickScrollListener> {
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -590,13 +747,14 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		private ModelComponentId theScrollAmountValue;
 		private SettableValue<SettableValue<Integer>> theScrollAmount;
 
-		public QuickScrollListener(Object id) {
+		QuickScrollListener(Object id) {
 			super(id);
 			theScrollAmount = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class)).build();
 		}
 
-		public void setListenerContext(ScrollListenerContext ctx) throws ModelInstantiationException {
+		/** @param ctx The listener context from the Quick implementation */
+		public void setListenerContext(ScrollListenerContext ctx) {
 			setListenerContext((MouseListenerContext) ctx);
 			theScrollAmount.set(ctx.getScrollAmount(), null);
 		}

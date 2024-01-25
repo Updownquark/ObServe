@@ -44,6 +44,7 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 			return theBody;
 		}
 
+		/** @return The head section containing model and style information for the document */
 		public ExpressoHeadSection.Def getHead() {
 			return getAddOn(ExpressoDocument.Def.class).getHead();
 		}
@@ -89,6 +90,7 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The head section containing model and style information for the document */
 		public ExpressoHeadSection.Interpreted getHead() {
 			return getAddOn(ExpressoDocument.Interpreted.class).getHead();
 		}
@@ -104,6 +106,12 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 			return head == null ? null : head.getAddOn(ExWithStyleSheet.Interpreted.class).getStyleSheet();
 		}
 
+		/**
+		 * Initializes or updates this document
+		 *
+		 * @param env The expresso environment to interpret expressions with
+		 * @throws ExpressoInterpretationException If an error occurs interpreting the document
+		 */
 		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			env = env.with(env.getClassView().copy()//
 				.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
@@ -126,6 +134,7 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 
 	private QuickWidget theBody;
 
+	/** @param id The element identifier for the document */
 	public QuickDocument(Object id) {
 		super(id);
 	}
@@ -135,10 +144,22 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 		return theBody;
 	}
 
+	/**
+	 * Initializes or updates this document
+	 *
+	 * @param interpreted The interpreted document to use to initialize this document
+	 */
 	public void update(QuickDocument.Interpreted interpreted) {
 		update(interpreted, null);
 	}
 
+	/**
+	 * Instantiates the values in this document
+	 *
+	 * @param until The observable to deconstruct values owned by the document
+	 * @return The model set instance for the document
+	 * @throws ModelInstantiationException If instantiation fails
+	 */
 	public ModelSetInstance instantiate(Observable<?> until) throws ModelInstantiationException {
 		ModelSetInstance models = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getModels().createInstance(until).build();
 		return instantiate(models);

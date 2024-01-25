@@ -14,121 +14,61 @@ import java.util.regex.Pattern;
 import org.observe.quick.base.QuickSize;
 import org.qommons.LambdaUtils;
 
+/**
+ * <p>
+ * Not really all that "simple", but I couldn't think of a better name.
+ * </p>
+ * <p>
+ * This class supports dynamic constraints for each component's edges, center, and size independently, and positions can be specified
+ * relative to the container's edges or its size.
+ * </p>
+ * <p>
+ * While this class provides extreme control for positioning each widget, it does not provide any ability to position elements relative to
+ * each other.
+ * </p>
+ */
 public class SimpleLayout implements LayoutManager2 {
+	/** The component constraints for children of a container using a {@link SimpleLayout} */
 	public static class SimpleConstraints {
-		public final Supplier<QuickSize> left;
-		public final Supplier<QuickSize> hCenter;
-		public final Supplier<QuickSize> right;
-		public final Supplier<QuickSize> top;
-		public final Supplier<QuickSize> vCenter;
-		public final Supplier<QuickSize> bottom;
-		public final Supplier<QuickSize> width;
-		public final Supplier<Integer> minWidth;
-		public final Supplier<Integer> prefWidth;
-		public final Supplier<Integer> maxWidth;
-		public final Supplier<QuickSize> height;
-		public final Supplier<Integer> minHeight;
-		public final Supplier<Integer> prefHeight;
-		public final Supplier<Integer> maxHeight;
+		/** The horizontal component of this set of constraints */
+		public final DimensionConstraints h;
+		/** The vertical component of this set of constraints */
+		public final DimensionConstraints v;
 
-		public SimpleConstraints(Supplier<QuickSize> left, Supplier<QuickSize> hCenter, Supplier<QuickSize> right, //
-			Supplier<QuickSize> top, Supplier<QuickSize> vCenter, Supplier<QuickSize> bottom, //
-			Supplier<QuickSize> width, Supplier<Integer> minWidth, Supplier<Integer> prefWidth, Supplier<Integer> maxWidth, //
-			Supplier<QuickSize> height, Supplier<Integer> minHeight, Supplier<Integer> prefHeight, Supplier<Integer> maxHeight)
-				throws IllegalArgumentException {
-			this.left = left;
-			this.hCenter = hCenter;
-			this.right = right;
-			this.top = top;
-			this.vCenter = vCenter;
-			this.bottom = bottom;
-			this.width = width;
-			this.minWidth = minWidth;
-			this.prefWidth = prefWidth;
-			this.maxWidth = maxWidth;
-			this.height = height;
-			this.minHeight = minHeight;
-			this.prefHeight = prefHeight;
-			this.maxHeight = maxHeight;
-		}
-
-		QuickSize getPos(boolean vertical, int type) {
-			Supplier<QuickSize> pos;
-			if (vertical) {
-				if (type < 0)
-					pos = top;
-				else if (type == 0)
-					pos = vCenter;
-				else
-					pos = bottom;
-			} else {
-				if (type < 0)
-					pos = left;
-				else if (type == 0)
-					pos = hCenter;
-				else
-					pos = right;
-			}
-			return pos == null ? null : pos.get();
-		}
-
-		QuickSize getSize(boolean vertical) {
-			return (vertical ? height : width).get();
-		}
-
-		Integer getSize(boolean vertical, int type) {
-			Supplier<Integer> size;
-			switch (type) {
-			case -1:
-				size = vertical ? minHeight : minWidth;
-				break;
-			case 0:
-				size = vertical ? prefHeight : prefWidth;
-				break;
-			case 1:
-				size = vertical ? maxHeight : maxWidth;
-				break;
-			default:
-				throw new IllegalStateException("Expected -1, 0, or 1 for size type, not " + type);
-			}
-			return size == null ? null : size.get();
+		/**
+		 * @param h The horizontal constraints for the component
+		 * @param v The vertical constraints for the component
+		 */
+		public SimpleConstraints(DimensionConstraints h, DimensionConstraints v) {
+			this.h = h;
+			this.v = v;
 		}
 
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
-			append(str, "left", left);
-			append(str, "h-center", hCenter);
-			append(str, "right", right);
-			append(str, "top", top);
-			append(str, "v-center", vCenter);
-			append(str, "bottom", bottom);
-			append(str, "width", width);
-			append(str, "min-width", minWidth);
-			append(str, "pref-width", prefWidth);
-			append(str, "max-width", maxWidth);
-			append(str, "height", height);
-			append(str, "min-height", minHeight);
-			append(str, "pref-height", prefHeight);
-			append(str, "max-height", maxHeight);
-			if (str.length() == 0)
+			String hStr = h.toString();
+			if (!hStr.isEmpty())
+				str.append("h:{").append(hStr).append("}");
+			String vStr = v.toString();
+			if (!vStr.isEmpty()) {
+				if (!hStr.isEmpty())
+					str.append(',');
+				str.append("v:{").append(vStr).append("}");
+			} else if (hStr.isEmpty())
 				return "(empty)";
 			return str.toString();
 		}
 
-		private static void append(StringBuilder str, String label, Supplier<?> value) {
-			if (value == null)
-				return;
-			Object v = value.get();
-			if (v == null)
-				return;
-			if (str.length() > 0)
-				str.append(", ");
-			str.append(label).append('=').append(v);
-		}
-
 		private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("(?<type>[a-zA-Z]+)[=:](?<value>.+)");
 
+		/**
+		 * Parses constraints from text
+		 *
+		 * @param constraints The text to parse
+		 * @return The parsed constraints
+		 * @throws IllegalArgumentException If the constraints could not be parsed
+		 */
 		public static SimpleConstraints parse(String constraints) throws IllegalArgumentException {
 			QuickSize left = null;
 			QuickSize hCenter = null;
@@ -279,21 +219,123 @@ public class SimpleLayout implements LayoutManager2 {
 			QuickSize fLeft = left, fHCenter = hCenter, fRight = right, fTop = top, fVCenter = vCenter, fBottom = bottom;
 			QuickSize fWidth = width, fHeight = height;
 			Integer fMinW = minWidth, fPrefW = prefWidth, fMaxW = maxWidth, fMinH = minHeight, fPrefH = prefHeight, fMaxH = maxHeight;
-			return new SimpleConstraints(//
+			DimensionConstraints h = new DimensionConstraints(//
 				fLeft == null ? null : LambdaUtils.constantSupplier(fLeft, fLeft::toString, fLeft), //
 					fHCenter == null ? null : LambdaUtils.constantSupplier(fHCenter, fHCenter::toString, fHCenter), //
 						fRight == null ? null : LambdaUtils.constantSupplier(fRight, fRight::toString, fRight), //
-							fTop == null ? null : LambdaUtils.constantSupplier(fTop, fTop::toString, fTop), //
-								fVCenter == null ? null : LambdaUtils.constantSupplier(fVCenter, fVCenter::toString, fVCenter), //
-									fBottom == null ? null : LambdaUtils.constantSupplier(fBottom, fBottom::toString, fBottom), //
-										fWidth == null ? null : LambdaUtils.constantSupplier(fWidth, fWidth::toString, fWidth), //
-											fMinW == null ? null : LambdaUtils.constantSupplier(fMinW, fMinW::toString, fMinW), //
-												fPrefW == null ? null : LambdaUtils.constantSupplier(fPrefW, fPrefW::toString, fPrefW), //
-													fMaxW == null ? null : LambdaUtils.constantSupplier(fMaxW, fMaxW::toString, fMaxW), //
-														fHeight == null ? null : LambdaUtils.constantSupplier(fHeight, fHeight::toString, fHeight), //
-															fMinH == null ? null : LambdaUtils.constantSupplier(fMinH, fMinH::toString, fMinH), //
-																fPrefH == null ? null : LambdaUtils.constantSupplier(fPrefH, fPrefH::toString, fPrefH), //
-																	fMaxH == null ? null : LambdaUtils.constantSupplier(fMaxH, fMaxH::toString, fMaxH));
+							fWidth == null ? null : LambdaUtils.constantSupplier(fWidth, fWidth::toString, fWidth), //
+								fMinW == null ? null : LambdaUtils.constantSupplier(fMinW, fMinW::toString, fMinW), //
+									fPrefW == null ? null : LambdaUtils.constantSupplier(fPrefW, fPrefW::toString, fPrefW), //
+										fMaxW == null ? null : LambdaUtils.constantSupplier(fMaxW, fMaxW::toString, fMaxW));
+			DimensionConstraints v = new DimensionConstraints(//
+				fTop == null ? null : LambdaUtils.constantSupplier(fTop, fTop::toString, fTop), //
+					fVCenter == null ? null : LambdaUtils.constantSupplier(fVCenter, fVCenter::toString, fVCenter), //
+						fBottom == null ? null : LambdaUtils.constantSupplier(fBottom, fBottom::toString, fBottom), //
+							fHeight == null ? null : LambdaUtils.constantSupplier(fHeight, fHeight::toString, fHeight), //
+								fMinH == null ? null : LambdaUtils.constantSupplier(fMinH, fMinH::toString, fMinH), //
+									fPrefH == null ? null : LambdaUtils.constantSupplier(fPrefH, fPrefH::toString, fPrefH), //
+										fMaxH == null ? null : LambdaUtils.constantSupplier(fMaxH, fMaxH::toString, fMaxH));
+			return new SimpleConstraints(h, v);
+		}
+	}
+
+	/** The constraints on a child of a container using a {@link SimpleLayout} in one dimension */
+	public static class DimensionConstraints {
+		/** The position for the leading edge (left or top) of the component */
+		public final Supplier<QuickSize> leading;
+		/** The position for the horizontal or vertical center of the component */
+		public final Supplier<QuickSize> center;
+		/** The position for the trailing edge (right or bottom) of the component */
+		public final Supplier<QuickSize> trailing;
+
+		/**
+		 * The absolute size for the component. If this is specified, {@link #minSize}, {@link #prefSize}, and {@link #maxSize} will be
+		 * ignored.
+		 */
+		public final Supplier<QuickSize> size;
+		/** The minimum size for the component, in pixels */
+		public final Supplier<Integer> minSize;
+		/** The preferred size for the component, in pixels */
+		public final Supplier<Integer> prefSize;
+		/** The maximum size of the component, in pixels */
+		public final Supplier<Integer> maxSize;
+
+		/**
+		 * @param leading The position for the leading edge (left or top) of the component
+		 * @param center The position for the horizontal or vertical center of the component
+		 * @param trailing The position for the trailing edge (right or bottom) of the component
+		 * @param size The absolute size for the component. If this is specified, {@link #minSize}, {@link #prefSize}, and {@link #maxSize}
+		 *        will be ignored.
+		 * @param minSize The minimum size for the component, in pixels
+		 * @param prefSize The preferred size for the component, in pixels
+		 * @param maxSize The maximum size of the component, in pixels
+		 */
+		public DimensionConstraints(Supplier<QuickSize> leading, Supplier<QuickSize> center, Supplier<QuickSize> trailing,
+			Supplier<QuickSize> size, Supplier<Integer> minSize, Supplier<Integer> prefSize, Supplier<Integer> maxSize) {
+			this.leading = leading;
+			this.center = center;
+			this.trailing = trailing;
+			this.size = size;
+			this.minSize = minSize;
+			this.prefSize = prefSize;
+			this.maxSize = maxSize;
+		}
+
+		QuickSize getPos(int type) {
+			Supplier<QuickSize> pos;
+			if (type < 0)
+				pos = leading;
+			else if (type == 0)
+				pos = center;
+			else
+				pos = trailing;
+			return pos == null ? null : pos.get();
+		}
+
+		QuickSize getSize() {
+			return size == null ? null : size.get();
+		}
+
+		Integer getSize(int type) {
+			Supplier<Integer> sizeV;
+			switch (type) {
+			case -1:
+				sizeV = minSize;
+				break;
+			case 0:
+				sizeV = prefSize;
+				break;
+			case 1:
+				sizeV = maxSize;
+				break;
+			default:
+				throw new IllegalStateException("Expected -1, 0, or 1 for size type, not " + type);
+			}
+			return sizeV == null ? null : sizeV.get();
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			append(str, "lead", leading);
+			append(str, "center", center);
+			append(str, "trail", trailing);
+			append(str, "size", size);
+			append(str, "min-size", minSize);
+			append(str, "pref-size", prefSize);
+			append(str, "max-size", maxSize);
+			return str.toString();
+		}
+
+		private static void append(StringBuilder str, String label, Supplier<?> value) {
+			if (value == null)
+				return;
+			Object v = value.get();
+			if (v == null)
+				return;
+			if (str.length() > 0)
+				str.append(", ");
+			str.append(label).append('=').append(v);
 		}
 	}
 
@@ -341,33 +383,33 @@ public class SimpleLayout implements LayoutManager2 {
 			if (!c.isVisible())
 				continue;
 			SimpleConstraints constraints = theConstraints.get(c);
-			int w = getContainerSizeFor(c, false, type, constraints);
+			int w = getContainerSizeFor(c, false, type, constraints.h);
 			if (w > size.width)
 				size.width = w;
-			int h = getContainerSizeFor(c, true, type, constraints);
+			int h = getContainerSizeFor(c, true, type, constraints.v);
 			if (h > size.height)
 				size.height = h;
 		}
 		return size;
 	}
 
-	private int getContainerSizeFor(Component c, boolean vertical, int type, SimpleConstraints constraints) {
+	private int getContainerSizeFor(Component c, boolean vertical, int type, DimensionConstraints constraints) {
 		if (constraints == null)
 			return getComponentSize(c, vertical, type);
-		QuickSize trail = constraints.getPos(vertical, 1);
+		QuickSize trail = constraints.getPos(1);
 		if (trail != null && trail.percent == 0.0f)
 			return trail.pixels;
-		QuickSize lead = constraints.getPos(vertical, -1);
+		QuickSize lead = constraints.getPos(-1);
 		if (lead != null && lead.percent == 100.0f)
 			return lead.pixels;
-		QuickSize size = constraints.getSize(vertical);
+		QuickSize size = constraints.getSize();
 		Integer absSize = null;
 		float relSize = 0.0f;
 		if (size != null) {
 			absSize = size.pixels;
 			relSize = size.percent;
 		} else {
-			absSize = constraints.getSize(vertical, type);
+			absSize = constraints.getSize(type);
 			if (absSize == null)
 				absSize = getComponentSize(c, vertical, type);
 		}
@@ -420,17 +462,17 @@ public class SimpleLayout implements LayoutManager2 {
 					c.setBounds(0, 0, 0, 0);
 				continue;
 			}
-			layoutChild(c, constraints, parentSize.height, true, childBounds);
-			layoutChild(c, constraints, parentSize.width, false, childBounds);
+			layoutChild(c, constraints.v, parentSize.height, true, childBounds);
+			layoutChild(c, constraints.h, parentSize.width, false, childBounds);
 			c.setBounds(childBounds);
 		}
 	}
 
-	private void layoutChild(Component c, SimpleConstraints constraints, int parentSize, boolean vertical, Rectangle childBounds) {
-		QuickSize lead = constraints.getPos(vertical, -1);
-		QuickSize center = constraints.getPos(vertical, 0);
-		QuickSize trail = constraints.getPos(vertical, 1);
-		QuickSize size = constraints.getSize(vertical);
+	private void layoutChild(Component c, DimensionConstraints constraints, int parentSize, boolean vertical, Rectangle childBounds) {
+		QuickSize lead = constraints.getPos(-1);
+		QuickSize center = constraints.getPos(0);
+		QuickSize trail = constraints.getPos(1);
+		QuickSize size = constraints.getSize();
 		if (size != null) {
 			int absSize = size.evaluate(parentSize);
 			setSize(childBounds, vertical, absSize);
@@ -455,7 +497,7 @@ public class SimpleLayout implements LayoutManager2 {
 					int absCenter = center.evaluate(parentSize);
 					setSize(childBounds, vertical, absCenter < absLead ? 0 : (absCenter - absLead) * 2);
 				} else {
-					Integer pref = constraints.getSize(vertical, 0);
+					Integer pref = constraints.getSize(0);
 					if (pref == null)
 						pref = getComponentSize(c, vertical, 0);
 					setSize(childBounds, vertical, Math.min(pref, parentSize - absLead));
@@ -472,7 +514,7 @@ public class SimpleLayout implements LayoutManager2 {
 						setSize(childBounds, vertical, 0);
 					}
 				} else {
-					Integer pref = constraints.getSize(vertical, 0);
+					Integer pref = constraints.getSize(0);
 					if (pref == null)
 						pref = getComponentSize(c, vertical, 0);
 					setPos(childBounds, vertical, absTrail - pref);
@@ -480,13 +522,13 @@ public class SimpleLayout implements LayoutManager2 {
 				}
 			} else if (center != null) {
 				int absCenter = center.evaluate(parentSize);
-				Integer pref = constraints.getSize(vertical, 0);
+				Integer pref = constraints.getSize(0);
 				if (pref == null)
 					pref = getComponentSize(c, vertical, 0);
 				setPos(childBounds, vertical, absCenter - (pref + 1) / 2);
 				setSize(childBounds, vertical, pref);
 			} else {
-				Integer pref = constraints.getSize(vertical, 0);
+				Integer pref = constraints.getSize(0);
 				if (pref == null)
 					pref = getComponentSize(c, vertical, 0);
 				setSize(childBounds, vertical, pref);

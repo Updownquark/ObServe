@@ -26,19 +26,30 @@ import org.qommons.io.SpinnerFormat;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget whose primary function is to display (and potentially allow editing of) a value as text
+ *
+ * @param <T> The type of the value being edited
+ */
 public interface QuickTextWidget<T> extends QuickValueWidget<T> {
+	/** The XML name of this type */
 	public static final String TEXT_WIDGET = "text-widget";
 
+	/** Default format for double-typed values */
 	public static final Format<Double> DEFAULT_DOUBLE_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
 		.withExpCondition(5, 2)//
 		.build();
+	/** Default format for float-typed values */
 	public static final Format<Float> DEFAULT_FLOAT_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
 		.withExpCondition(5, 2)//
 		.buildFloat();
+	/** Default format for {@link Instant}-typed values */
 	public static final Format<Instant> DEFAULT_INSTANT_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+	/** Default format for {@link Duration}-typed values */
 	public static final Format<Duration> DEFAULT_DURATION_FORMAT = SpinnerFormat.flexDuration(false);
+	/** Default format for {@link String}-typed values */
 	public static final Format<Object> TO_STRING_FORMAT = new Format<Object>() {
 		@Override
 		public void append(StringBuilder text, Object value) {
@@ -54,27 +65,44 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	};
 
+	/**
+	 * Definition for a text widget
+	 *
+	 * @param <W> The sub-type of text widget
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = TEXT_WIDGET,
 		interpretation = Interpreted.class,
 		instance = QuickTextWidget.class)
 	public interface Def<W extends QuickTextWidget<?>> extends QuickValueWidget.Def<W> {
+		/** @return The format for rendering the value as text */
 		@QonfigAttributeGetter("format")
 		CompiledExpression getFormat();
 
+		/** @return Whether widgets built by this type may allow editing of the value by editing of the text representation */
 		boolean isTypeEditable();
 
+		/** @return The expression specifying that text can be edited */
 		@QonfigAttributeGetter("editable")
 		CompiledExpression isEditable();
 
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
+		/**
+		 * Abstract {@link QuickValueWidget} definition implementation
+		 *
+		 * @param <W> The sub-type of text widget
+		 */
 		public abstract class Abstract<W extends QuickTextWidget<?>> extends QuickValueWidget.Def.Abstract<W>
 		implements Def<W> {
 			private CompiledExpression theFormat;
 			private CompiledExpression isEditable;
 
+			/**
+			 * @param parent The parent element of this widget
+			 * @param type The Qonfig type of this element
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -98,19 +126,37 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	}
 
+	/**
+	 * Abstract {@link QuickValueWidget} interpretation implementation
+	 *
+	 * @param <T> The type of value to edit
+	 * @param <W> The sub-type of text widget
+	 */
 	public interface Interpreted<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Interpreted<T, W> {
 		@Override
 		Def<? super W> getDefinition();
 
+		/** @return The format for rendering the value as text */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getFormat();
 
+		/** @return The expression specifying that text can be edited */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable();
 
+		/**
+		 * Abstract {@link QuickValueWidget} interpretation implementation
+		 *
+		 * @param <T> The type of value to edit
+		 * @param <W> The sub-type of text widget
+		 */
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element of this widget
+			 */
 			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -148,7 +194,15 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	}
 
-	public static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getDefaultFormat(TypeToken valueType,
+	/**
+	 * @param <T> The type of the value
+	 * @param valueType The type of the value
+	 * @param editRequired Whether the format must support editing
+	 * @param position The position to report errors for
+	 * @return An interpreted expression for a format to render and possibly edit values of the given type
+	 * @throws ExpressoInterpretationException If no such default format is available
+	 */
+	public static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getDefaultFormat(TypeToken<T> valueType,
 		boolean editRequired, LocatedFilePosition position) throws ExpressoInterpretationException {
 		Class<T> raw = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
 		Format<T> defaultFormat;
@@ -174,10 +228,13 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		return InterpretedValueSynth.literalValue(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
 	}
 
+	/** @return The format for rendering the value as text */
 	SettableValue<Format<T>> getFormat();
 
+	/** @return Whether the text can be edited */
 	SettableValue<Boolean> isEditable();
 
+	/** @return The current value rendered as text */
 	default String getCurrentText() {
 		T value = getValue().get();
 		Format<T> format = getFormat().get();
@@ -189,12 +246,18 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			return value.toString();
 	}
 
+	/**
+	 * Abstract {@link QuickTextWidget} implementation
+	 *
+	 * @param <T> The type of the value to edit
+	 */
 	public abstract class Abstract<T> extends QuickValueWidget.Abstract<T> implements QuickTextWidget<T> {
 		private ModelValueInstantiator<SettableValue<Format<T>>> theFormatInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theEditableInstantiator;
 		private SettableValue<SettableValue<Format<T>>> theFormat;
 		private SettableValue<SettableValue<Boolean>> isEditable;
 
+		/** @param id The element identifier for this text widget */
 		protected Abstract(Object id) {
 			super(id);
 			isEditable = SettableValue

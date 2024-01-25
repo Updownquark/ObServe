@@ -377,12 +377,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 	static SimpleLayout.SimpleConstraints simpleConstraints(Positionable h, Positionable v, Sizeable width, Sizeable height) {
 		return new SimpleLayout.SimpleConstraints(//
-			h.getLeading(), h.getCenter(), h.getTrailing(), //
-			v.getLeading(), v.getCenter(), v.getTrailing(), //
-			width.getSize(), enforceAbsolute(width.getMinimum()), enforceAbsolute(width.getPreferred()),
-			enforceAbsolute(width.getMaximum()), //
-			height.getSize(), enforceAbsolute(height.getMinimum()), enforceAbsolute(height.getPreferred()),
-			enforceAbsolute(height.getMaximum())//
+			new SimpleLayout.DimensionConstraints(//
+				h.getLeading(), h.getCenter(), h.getTrailing(), //
+				width.getSize(), enforceAbsolute(width.getMinimum()), enforceAbsolute(width.getPreferred()),
+				enforceAbsolute(width.getMaximum())), //
+			new SimpleLayout.DimensionConstraints(//
+				v.getLeading(), v.getCenter(), v.getTrailing(), //
+				height.getSize(), enforceAbsolute(height.getMinimum()), enforceAbsolute(height.getPreferred()),
+				enforceAbsolute(height.getMaximum()))//
 			);
 	}
 

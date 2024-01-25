@@ -23,32 +23,54 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A Quick widget whose primary purpose is to display and potentially allow editing of a single, typically scalar, value
+ *
+ * @param <T> The type of the value to display/edit
+ */
 public interface QuickValueWidget<T> extends QuickWidget {
+	/** The XML name of this type */
 	public static final String VALUE_WIDGET = "value-widget";
 
+	/**
+	 * The definition of a {@link QuickValueWidget}
+	 *
+	 * @param <W> The sub-type of value widget
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = VALUE_WIDGET,
 		interpretation = Interpreted.class,
 		instance = QuickValueWidget.class)
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
+		/** @return The model ID of the model value containing the value that the widget will be editing */
 		@QonfigAttributeGetter("value-name")
 		ModelComponentId getValueVariable();
 
+		/** @return The value that the widget will edit */
 		@QonfigAttributeGetter("value")
 		CompiledExpression getValue();
 
+		/** @return An expression that will cause the editor to be disabled and not accept user input */
 		@QonfigAttributeGetter("disable-with")
 		CompiledExpression getDisabled();
 
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
+		/**
+		 * Abstract {@link QuickValueWidget} definition implementation
+		 *
+		 * @param <W> The sub-type of value widget
+		 */
 		public abstract class Abstract<W extends QuickValueWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
-			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
 			private ModelComponentId theValueVariable;
 
+			/**
+			 * @param parent The parent element for this widget
+			 * @param type The Qonfig type of this element
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -84,25 +106,51 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 	}
 
+	/**
+	 * An interpretation of a {@link QuickValueWidget}
+	 *
+	 * @param <T> The type of the value to display/edit
+	 * @param <W> The sub-type of value widget
+	 */
 	public interface Interpreted<T, W extends QuickValueWidget<T>> extends QuickWidget.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
 
+		/** @return The value that the widget will edit */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue();
 
+		/**
+		 * @return The value that the widget will edit
+		 * @throws ExpressoInterpretationException If the value could not be interpreted
+		 */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException;
 
+		/** @return An expression that will cause the editor to be disabled and not accept user input */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisabled();
 
+		/**
+		 * @return The type of the value to edit
+		 * @throws ExpressoInterpretationException If the value could not be interpreted
+		 */
 		default TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			return (TypeToken<T>) getOrInitValue().getType().getType(0);
 		}
 
+		/**
+		 * Abstract {@link QuickValueWidget} interpretation implementation
+		 *
+		 * @param <T> The type of the value to display/edit
+		 * @param <W> The sub-type of value widget
+		 */
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theDisabled;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this widget
+			 */
 			protected Abstract(QuickValueWidget.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -117,6 +165,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				return theValue;
 			}
 
+			/** @return The target type to use to attempt to interpret the value */
 			protected ModelInstanceType<SettableValue<?>, SettableValue<T>> getTargetType() {
 				return ModelTypes.Value.<T> anyAsV();
 			}
@@ -152,21 +201,38 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				checkValidModel();
 			}
 
+			/**
+			 * Checks to ensure that the configuration for this widget is correct. E.g. some components may allow an optional value, an
+			 * icon, or some static text, but at least one must be specified.
+			 *
+			 * @throws ExpressoInterpretationException If this widget is not correctly configured
+			 */
 			protected void checkValidModel() throws ExpressoInterpretationException {
 			}
 		}
 	}
 
+	/** @return The value to edit */
 	SettableValue<T> getValue();
 
+	/**
+	 * @return A value that, when null, specifies that the widget should accept user input. When not null, this is a human-readable message
+	 *         describing why the widget should be disabled.
+	 */
 	SettableValue<String> getDisabled();
 
+	/**
+	 * Abstract {@link QuickValueWidget} implementation
+	 *
+	 * @param <T> The type of the value to display/edit
+	 */
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
 		private ModelValueInstantiator<SettableValue<T>> theValueInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theDisabledInstantiator;
 		private SettableValue<SettableValue<T>> theValue;
 		private SettableValue<SettableValue<String>> theDisabled;
 
+		/** @param id The element identifier for this widget */
 		protected Abstract(Object id) {
 			super(id);
 			theDisabled = SettableValue
@@ -220,14 +286,35 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 	}
 
+	/**
+	 * When a {@link QuickValueWidget} is a child of an element that implements this interface, it can accept the value to be edited from
+	 * the parent, not requiring that it be specified in XML.
+	 *
+	 * @param <T> The type of the value to edit
+	 */
 	public interface WidgetValueSupplier<T> extends ExElement {
+		/**
+		 * Definition of a {@link WidgetValueSupplier}
+		 *
+		 * @param <VS> The sub-type of the element
+		 */
 		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {
 		}
 
+		/**
+		 * Interpretation of a {@link WidgetValueSupplier}
+		 *
+		 * @param <T> The type of the value to edit
+		 * @param <VS> The sub-type of the element
+		 */
 		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends ExElement.Interpreted<VS> {
 			@Override
 			Def<? super VS> getDefinition();
 
+			/**
+			 * @return The value to edit
+			 * @throws ExpressoInterpretationException If the value could not be interpreted
+			 */
 			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() throws ExpressoInterpretationException;
 		}
 	}

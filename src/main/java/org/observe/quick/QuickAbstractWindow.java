@@ -18,9 +18,14 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
 public interface QuickAbstractWindow extends ExAddOn<ExElement> {
+	/** The XML name of this type */
 	public static final String ABSTRACT_WINDOW = "abstract-window";
 
-	/** The definition of a {@link QuickAbstractWindow} */
+	/**
+	 * The definition of a {@link QuickAbstractWindow}
+	 *
+	 * @param <W> The type of the window
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = ABSTRACT_WINDOW,
 		interpretation = Interpreted.class,
@@ -34,6 +39,11 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		@QonfigAttributeGetter("visible")
 		public CompiledExpression isVisible();
 
+		/**
+		 * Default window definition
+		 *
+		 * @param <W> The type of window
+		 */
 		public static class Default<W extends QuickAbstractWindow> extends ExAddOn.Def.Abstract<ExElement, W> implements Def<W> {
 			private CompiledExpression theTitle;
 			private CompiledExpression theVisible;
@@ -69,7 +79,11 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		}
 	}
 
-	/** An interpretation of a {@link QuickAbstractWindow} */
+	/**
+	 * An interpretation of a {@link QuickAbstractWindow}
+	 *
+	 * @param <W> The type of window
+	 */
 	public interface Interpreted<W extends QuickAbstractWindow> extends ExAddOn.Interpreted<ExElement, W> {
 		/** @return The expression defining the title for the window */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle();
@@ -77,6 +91,11 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
 
+		/**
+		 * Default window interpretation
+		 *
+		 * @param <W> The type of window
+		 */
 		public static class Default<W extends QuickAbstractWindow> extends ExAddOn.Interpreted.Abstract<ExElement, W>
 		implements Interpreted<W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTitle;
@@ -130,6 +149,7 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 	/** @return The value defining when the window is visible--to hide/show and to be updated when the user closes the window */
 	public SettableValue<Boolean> isVisible();
 
+	/** Default window implementation */
 	public static class Default extends ExAddOn.Abstract<ExElement> implements QuickAbstractWindow {
 		private ModelValueInstantiator<SettableValue<String>> theTitleInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;

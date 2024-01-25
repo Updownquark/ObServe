@@ -11,21 +11,37 @@ import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A Quick dialog containing arbitrary widget contents */
 public interface QuickContentDialog extends QuickDialog {
+	/**
+	 * Definition for a {@link QuickContentDialog}
+	 *
+	 * @param <D> The sub-type of dialog to create
+	 */
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = "content-dialog",
 		interpretation = Interpreted.class,
 		instance = QuickContentDialog.class)
 	public static interface Def<D extends QuickContentDialog> extends QuickDialog.Def<D> {
+		/** @return The widget contents for the dialog */
 		@QonfigChildGetter("content")
 		QuickWidget.Def<?> getContent();
 
 		@Override
 		Interpreted<? extends D> interpret(ExElement.Interpreted<?> parent);
 
+		/**
+		 * Abstract {@link QuickContentDialog} definition implementation
+		 *
+		 * @param <D> The sub-type of dialog to create
+		 */
 		public static abstract class Abstract<D extends QuickContentDialog> extends QuickDialog.Def.Abstract<D> implements Def<D> {
 			private QuickWidget.Def<?> theContent;
 
+			/**
+			 * @param parent The parent element of the dialog
+			 * @param qonfigType The Qonfig type of the dialog
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 			}
@@ -44,7 +60,13 @@ public interface QuickContentDialog extends QuickDialog {
 		}
 	}
 
+	/**
+	 * Interpretation for a {@link QuickContentDialog}
+	 *
+	 * @param <D> The sub-type of dialog to create
+	 */
 	public static interface Interpreted<D extends QuickContentDialog> extends QuickDialog.Interpreted<D> {
+		/** @return The widget contents for the dialog */
 		QuickWidget.Interpreted<?> getContent();
 
 		@Override
@@ -53,10 +75,19 @@ public interface QuickContentDialog extends QuickDialog {
 		@Override
 		D create();
 
+		/**
+		 * Abstract {@link QuickContentDialog} interpretation implementation
+		 *
+		 * @param <D> The sub-type of dialog to create
+		 */
 		public static abstract class Abstract<D extends QuickContentDialog> extends QuickDialog.Interpreted.Abstract<D>
 		implements Interpreted<D> {
 			private QuickWidget.Interpreted<?> theContent;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element of the dialog
+			 */
 			protected Abstract(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -86,14 +117,17 @@ public interface QuickContentDialog extends QuickDialog {
 		}
 	}
 
+	/** @return The widget contents for the dialog */
 	QuickWidget getContent();
 
 	@Override
 	QuickDialog copy(ExElement parent);
 
+	/** Abstract {@link QuickContentDialog} implementation */
 	public static abstract class Abstract extends QuickDialog.Abstract implements QuickContentDialog {
 		private QuickWidget theContent;
 
+		/** @param id The element ID of the dialog */
 		protected Abstract(Object id) {
 			super(id);
 		}

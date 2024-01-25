@@ -21,6 +21,7 @@ import org.qommons.tree.BetterTreeList;
  * @param <C> The type of widgets in this container's content
  */
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
+	/** The XML name of this type */
 	public static final String CONTAINER = "container";
 
 	/**
@@ -145,6 +146,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<C> {
 		private ObservableCollection<C> theContents;
 
+		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
 			theContents = ObservableCollection.build((Class<C>) QuickWidget.class).build();
