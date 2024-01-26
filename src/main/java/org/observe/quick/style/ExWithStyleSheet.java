@@ -17,9 +17,12 @@ import org.observe.quick.base.MultiValueWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** An add on for an element that may have a style sheet */
 public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
+	/** The XML name of this type */
 	public static final String QUICK_STYLE_SHEET = "Quick.Style.Sheet";
 
+	/** Definition for {@link ExWithStyleSheet} */
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
 		qonfigType = "with-style-sheet",
 		interpretation = Interpreted.class,
@@ -27,6 +30,10 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithStyleSheet> {
 		private QuickStyleSheet theStyleSheet;
 
+		/**
+		 * @param type This add-on's Qonfig type
+		 * @param element The element this add-on affects
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
@@ -36,6 +43,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 			return Collections.singleton((Class<? extends ExAddOn.Def<?, ?>>) ExModelAugmentation.Def.class);
 		}
 
+		/** @return The style sheet for the element */
 		@QonfigChildGetter("style-sheet")
 		public QuickStyleSheet getStyleSheet() {
 			return theStyleSheet;
@@ -55,6 +63,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
+	/** Interpretation for {@link ExWithStyleSheet} */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExWithStyleSheet> {
 		private QuickStyleSheet.Interpreted theStyleSheet;
 
@@ -67,6 +76,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The style sheet for the element */
 		public QuickStyleSheet.Interpreted getStyleSheet() {
 			return theStyleSheet;
 		}

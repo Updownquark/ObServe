@@ -28,6 +28,7 @@ import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElement} */
 public interface QuickInterpretedStyle {
+	/** @return This interpreted style's definition */
 	QuickCompiledStyle getDefinition();
 
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
@@ -86,14 +87,36 @@ public interface QuickInterpretedStyle {
 	 */
 	<T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr);
 
+	/**
+	 * @param <T> The type of the attribute
+	 * @param attributeName The name of the attribute
+	 * @param type The type of the attribute
+	 * @return The interpreted attribute style for the attribute
+	 * @throws IllegalArgumentException If the attribute could not be resolved or multiple attributes with the given name were found
+	 */
 	default <T> QuickElementStyleAttribute<T> get(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
 		return get(getAttribute(attributeName, type));
 	}
 
+	/**
+	 * @param <T> The type of the attribute
+	 * @param attributeName The name of the attribute
+	 * @param type The type of the attribute
+	 * @return The interpreted attribute style for the attribute
+	 * @throws IllegalArgumentException If the attribute could not be resolved or multiple attributes with the given name were found
+	 */
 	default <T> QuickElementStyleAttribute<T> get(String attributeName, Class<T> type) throws IllegalArgumentException {
 		return get(attributeName, TypeTokens.get().of(type));
 	}
 
+	/**
+	 * Initializes or updates this style
+	 *
+	 * @param env The expresso environment to interpret expressions with
+	 * @param styleSheet The application style sheet
+	 * @param appCache The application cache
+	 * @throws ExpressoInterpretationException If this style could not be interpreted
+	 */
 	void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
 		throws ExpressoInterpretationException;
 
@@ -106,6 +129,7 @@ public interface QuickInterpretedStyle {
 		private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributesByName;
 
 		/**
+		 * @param definition The definition to interpret
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
 		 */
 		public Default(QuickCompiledStyle definition, QuickInterpretedStyle parent) {
@@ -267,6 +291,7 @@ public interface QuickInterpretedStyle {
 			return theValues;
 		}
 
+		/** @return All style values in this interpreted style attribute */
 		public List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> getAllValues() {
 			List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> values = new ArrayList<>();
 			for (InterpretedStyleValue<T> value : theValues)
@@ -274,6 +299,10 @@ public interface QuickInterpretedStyle {
 			return values;
 		}
 
+		/**
+		 * @param models The interpreted models to instantiate for
+		 * @return An instantiator for style values for this attribute
+		 */
 		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) {
 			return new QuickStyleAttributeInstantiator<>(theAttribute,
 				QommonsUtils.map(theValues, v -> v.instantiate(models), true));
@@ -285,28 +314,45 @@ public interface QuickInterpretedStyle {
 		}
 	}
 
+	/**
+	 * Instantiator for Quick style values for an attribute
+	 *
+	 * @param <T> The type of the style attribute this instantiator is for
+	 */
 	public static class QuickStyleAttributeInstantiator<T> {
 		private final QuickStyleAttribute<T> theAttribute;
 		private final List<InterpretedStyleValue.StyleValueInstantiator<T>> theValues;
 
+		/**
+		 * @param attribute The attribute this instantiator is for
+		 * @param values The list of style values to instantiate
+		 */
 		public QuickStyleAttributeInstantiator(QuickStyleAttribute<T> attribute, List<StyleValueInstantiator<T>> values) {
 			theAttribute = attribute;
 			theValues = values;
 		}
 
+		/** @return The attribute this instantiator is for */
 		public QuickStyleAttribute<T> getAttribute() {
 			return theAttribute;
 		}
 
+		/** @return The style values determining the value of the style */
 		public List<InterpretedStyleValue.StyleValueInstantiator<T>> getValues() {
 			return theValues;
 		}
 
+		/** Instantiates model values in this instantiator. Must be called once after creation. */
 		public void instantiate() {
 			for (InterpretedStyleValue.StyleValueInstantiator<T> value : theValues)
 				value.instantiate();
 		}
 
+		/**
+		 * @param models The models to use to instantiate the style values
+		 * @return All conditional values for the style attribute
+		 * @throws ModelInstantiationException If the style values could not be instantiated
+		 */
 		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
 			List<ObservableValue<ConditionalValue<T>>> values = new ArrayList<>();
 			for (int i = 0; i < theValues.size(); i++) {
@@ -347,8 +393,15 @@ public interface QuickInterpretedStyle {
 		}
 	}
 
+	/**
+	 * A tuple containing the observable value of a style value and whether its condition is currently passing
+	 *
+	 * @param <T> The type of the attribute
+	 */
 	public static class ConditionalValue<T> {
+		/** Whether the style value's condition is passing */
 		public final boolean pass;
+		/** The value for the style */
 		public final ObservableValue<T> value;
 
 		ConditionalValue(boolean pass, ObservableValue<T> value) {

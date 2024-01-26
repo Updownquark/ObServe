@@ -21,6 +21,34 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * <p>
+ * This class is the unification of {@link ObservableModelSet} with {@link ExElement}.
+ * </p>
+ *
+ * <p>
+ * I have to say, this code is kind of a mess. The {@link CompiledSynth} class is cool, because it's both an {@link ExElement.Def} and a
+ * {@link org.observe.expresso.ObservableModelSet.CompiledModelValue}, and it produces an {@link InterpretedSynth}, which is both an
+ * {@link ExElement.Interpreted} and an {@link org.observe.expresso.ObservableModelSet.InterpretedValueSynth}.
+ * </p>
+ *
+ * <p>
+ * But I also have the {@link Def} and {@link Interpreted} classes here, which are ExElement types, but not {@link ObservableModelSet}
+ * types. And {@link ModelValueElement} is a first-class type with its own file, but it's never actually instantiated.
+ * </p>
+ *
+ * <p>
+ * Ideally, ModelValueElement should be what {@link CompiledSynth} is, with the {@link Interpreted} inner class being with
+ * {@link InterpretedSynth} is, and all the other inner classes being deleted. But there are probably hundreds of extensions of these
+ * classes, so the work required to do this is immense, and I also have a nagging feeling that not all {@link Def} extensions could easily
+ * be made into {@link CompiledSynth} extensions.
+ * </p>
+ *
+ * <p>
+ * Basically, this works, it does what I need to use Expresso with Qonfig. But it's ugly. It could be a lot better, but it will take a lot
+ * of work to get there.
+ * </p>
+ */
 public interface ModelValueElement<M, MV extends M> extends ExElement {
 	static final String MODEL_PARENT_ELEMENTS = "Model.Parent.Elements";
 

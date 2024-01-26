@@ -7,7 +7,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.qommons.ThreadConstraint;
 
+/** Tests the ObServe remote software */
 public class RemoteServiceTest {
+	/** Runs an in-memory test with no actual network communication or persistence */
 	@Test
 	public void testInMemory() {
 		LocalObservableClient client1 = LocalObservableClient.create();

@@ -302,6 +302,19 @@ public class ExpressoTests extends AbstractExpressoTest<ExpressoHeadSection> {
 		}
 	}
 
+	/**
+	 * A method called from some of the tests
+	 *
+	 * @param <C> The type to compare
+	 * @param a The first value to compare
+	 * @param b The second value to compare
+	 * @param lt Whether a should be &lt; b
+	 * @param lte Whether a should be &lt;= b
+	 * @param gt Whether a should be &gt; b
+	 * @param gte Whether a should be &gt;= b
+	 * @param eq Whether a should be == b
+	 * @param neq Whether a should be != b
+	 */
 	public static <C extends Comparable<C>> void testComparison(SettableValue<C> a, SettableValue<C> b, //
 		SettableValue<Boolean> lt, SettableValue<Boolean> lte, SettableValue<Boolean> gt, SettableValue<Boolean> gte,
 		SettableValue<Boolean> eq, SettableValue<Boolean> neq) {

@@ -53,6 +53,7 @@ public interface QuickStyledElement extends ExElement {
 		/** @return This element's style */
 		QuickInstanceStyle.Def getStyle();
 
+		/** @return Style elements declared on this element */
 		@QonfigChildGetter("style")
 		List<QuickStyleElement.Def> getStyleElements();
 
@@ -146,6 +147,7 @@ public interface QuickStyledElement extends ExElement {
 			/**
 			 * Provides the element an opportunity to wrap the standard style with one specific to this element
 			 *
+			 * @param parentStyle The parent style to inherit from
 			 * @param style The style interpreted from the {@link #getStyle() compiled style}
 			 * @return The style to use for this element
 			 */
@@ -165,12 +167,13 @@ public interface QuickStyledElement extends ExElement {
 		/** @return This element's interpreted style */
 		QuickInstanceStyle.Interpreted getStyle();
 
+		/** @return Style elements declared on this element */
 		List<QuickStyleElement.Interpreted<?>> getStyleElements();
 
 		/**
 		 * Populates and updates this interpretation. Must be called once after being produced by the {@link #getDefinition() definition}.
 		 *
-		 * @param cache The cache to use to interpret the widget
+		 * @param env The expresso environment to use to interpret style information
 		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
 		 *         content
 		 */
@@ -243,8 +246,10 @@ public interface QuickStyledElement extends ExElement {
 		}
 	}
 
+	/** @return This element's style */
 	QuickInstanceStyle getStyle();
 
+	/** @return Style elements declared on this element */
 	List<QuickStyleElement<?>> getStyleElements();
 
 	/** An abstract {@link QuickStyledElement} implementation */
@@ -253,6 +258,7 @@ public interface QuickStyledElement extends ExElement {
 		private final List<QuickStyleElement<?>> theStyleElements;
 		private final Set<ModelComponentId> theStyleSheetModels;
 
+		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
 			theStyleElements = new ArrayList<>();
@@ -340,24 +346,30 @@ public interface QuickStyledElement extends ExElement {
 		}
 	}
 
+	/** Structure containing style information for a {@link QuickStyledElement} */
 	public interface QuickInstanceStyle {
+		/** Definition for a {@link QuickInstanceStyle} */
 		public interface Def extends QuickCompiledStyle {
+			/** @return The element this style is for */
 			QuickStyledElement.Def<?> getStyledElement();
 
 			@Override
 			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException;
 
+			/** @return All style attributes that apply to this style's element */
 			Set<QuickStyleAttributeDef> getApplicableAttributes();
 
-			public interface StyleDefBuilder {
-				QuickStyleAttributeDef addApplicableAttribute(QuickStyleAttributeDef attr);
-			}
-
+			/** Abstract {@link QuickInstanceStyle} definition implementation */
 			public static abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
 				private final QuickStyledElement.Def<?> theStyledElement;
 				private final Set<QuickStyleAttributeDef> theApplicableAttributes;
 
+				/**
+				 * @param parent The parent style to inherit from
+				 * @param styledElement The element that this style is for
+				 * @param wrapped The compiled style to wrap
+				 */
 				protected Abstract(Def parent, QuickStyledElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					theStyledElement = styledElement;
@@ -386,6 +398,10 @@ public interface QuickStyledElement extends ExElement {
 					return Collections.unmodifiableSet(theApplicableAttributes);
 				}
 
+				/**
+				 * @param attr The attribute to add
+				 * @return This definition
+				 */
 				protected QuickStyleAttributeDef addApplicableAttribute(QuickStyleAttributeDef attr) {
 					theApplicableAttributes.add(attr);
 					return attr;
@@ -397,21 +413,35 @@ public interface QuickStyledElement extends ExElement {
 			}
 		}
 
+		/** Interpretation for a {@link QuickInstanceStyle} */
 		public interface Interpreted extends QuickInterpretedStyle {
 			@Override
 			Def getDefinition();
 
+			/** @return The element this style is for */
 			QuickStyledElement.Interpreted<?> getStyledElement();
 
+			/** @return All style attributes that apply to this style's element, by definition */
 			Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> getApplicableAttributes();
 
+			/**
+			 * @param parent The element that the style instance is for
+			 * @return The style instance
+			 */
 			QuickInstanceStyle create(QuickStyledElement parent);
 
+			/** Abstract {@link QuickInstanceStyle} definition implementation */
 			public static abstract class Abstract extends QuickInterpretedStyle.Wrapper implements Interpreted {
 				private final Def theDefinition;
 				private final QuickStyledElement.Interpreted<?> theStyledElement;
 				private final Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> theApplicableAttributes;
 
+				/**
+				 * @param definition The definition to interpret
+				 * @param styledElement The element that this style is for
+				 * @param parent The parent style to inherit from
+				 * @param wrapped The interpreted style to wrap
+				 */
 				protected Abstract(Def definition, QuickStyledElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(parent, wrapped);
@@ -452,28 +482,51 @@ public interface QuickStyledElement extends ExElement {
 			}
 		}
 
+		/** @return The element that this style is for */
 		QuickStyledElement getStyledElement();
 
+		/** @return All style attributes that apply to this style's element */
 		Set<QuickStyleAttribute<?>> getApplicableAttributes();
 
+		/**
+		 * @param <T> The type of the attribute
+		 * @param attribute The style attribute
+		 * @return The value of the style attribute in this style
+		 */
 		<T> ObservableValue<T> getApplicableAttribute(QuickStyleAttribute<T> attribute);
 
+		/** @return An observable that fires whenever the value of any style applicable to this style's element changes */
 		Observable<ObservableValueEvent<?>> changes();
 
+		/**
+		 * @param interpreted The interpretation of this style
+		 * @param styledElement The element this style is for
+		 */
 		void update(Interpreted interpreted, QuickStyledElement styledElement);
 
+		/** Instantiates all model values. Must be called once after creation. */
 		void instantiated();
 
+		/**
+		 * @param models The model instance to instantiate with
+		 * @throws ModelInstantiationException If this style could not instantiate its data
+		 */
 		void instantiate(ModelSetInstance models) throws ModelInstantiationException;
 
+		/**
+		 * @param styledElement The element copy that the style copy is for
+		 * @return A copy of this style
+		 */
 		public QuickInstanceStyle copy(QuickStyledElement styledElement);
 
+		/** Abstract {@link QuickInstanceStyle} implementation */
 		public abstract class Abstract implements QuickInstanceStyle, Cloneable {
 			private QuickStyledElement theStyledElement;
 			private Map<QuickStyleAttribute<?>, StyleAttributeData<?>> theApplicableAttributes;
 			private SettableValue<Observable<ObservableValueEvent<?>>> theChanges;
 			private Observable<ObservableValueEvent<?>> theFlatChanges;
 
+			/** Creates the style */
 			protected Abstract() {
 				theApplicableAttributes = new LinkedHashMap<>();
 				theChanges = SettableValue.build((Class<Observable<ObservableValueEvent<?>>>) (Class<?>) Observable.class).build();
@@ -609,6 +662,14 @@ public interface QuickStyledElement extends ExElement {
 		}
 	}
 
+	/**
+	 * @param styleSet The type set to get the style from
+	 * @param element The element to get the style for
+	 * @param toolkitName The name of the toolkit declaring the type to get the style for
+	 * @param toolkitVersion The version of the toolkit declaring the type to get the style for
+	 * @param elementName The name of the element to get style for
+	 * @return Style information for the given type
+	 */
 	public static QuickTypeStyle getTypeStyle(QuickTypeStyle.TypeStyleSet styleSet, QonfigElement element, String toolkitName,
 		Version toolkitVersion, String elementName) {
 		QonfigToolkit.ToolkitDefVersion tdv = new QonfigToolkit.ToolkitDefVersion(toolkitVersion.major, toolkitVersion.minor);

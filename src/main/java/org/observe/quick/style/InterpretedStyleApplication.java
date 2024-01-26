@@ -50,7 +50,10 @@ public class InterpretedStyleApplication {
 		return theCondition;
 	}
 
-	/** @return An instantiator for the condition returning whether and when this applies to the element */
+	/**
+	 * @param models The interpreted models to use to create the instantiator
+	 * @return An instantiator for the condition returning whether and when this applies to the element
+	 */
 	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator(InterpretedModelSet models) {
 		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(models),
 			theCondition == null ? null : theCondition.instantiate());
@@ -61,10 +64,15 @@ public class InterpretedStyleApplication {
 		return theDefinition.toString();
 	}
 
+	/** An instantiator for a style element's condition */
 	public static class Instantiator implements ModelValueInstantiator<ObservableValue<Boolean>> {
 		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theParentCondition;
 		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theCondition;
 
+		/**
+		 * @param parentCondition The parent element's condition
+		 * @param condition The style element's condition
+		 */
 		public Instantiator(ModelValueInstantiator<? extends ObservableValue<Boolean>> parentCondition,
 			ModelValueInstantiator<? extends ObservableValue<Boolean>> condition) {
 			theParentCondition = parentCondition;
@@ -139,6 +147,7 @@ public class InterpretedStyleApplication {
 
 	/**
 	 * @param models The model instance to get the parent model from
+	 * @param parentModelValue The model ID of the model value containing the parent style element's models
 	 * @return The model instance for the parent &lt;styled> element
 	 */
 	public static ModelSetInstance getParentModels(ModelSetInstance models, ModelComponentId parentModelValue) {

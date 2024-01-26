@@ -96,7 +96,8 @@
 		</element-def>
 
 		<?DOC A tiled pane takes a list of values and renders each with a renderer.<br>
-			This is similar to a table with a single column, except that this widget allows more customizable layouts and more complex renderers.?>
+			This is similar to a table with a single column, except that this widget allows more customizable layouts,
+			complex rendering, and intuitive interaction.?>
 		<element-def name="tiled-pane" extends="widget" inherits="multi-value-renderable,rendering">
 			<element-model>
 				<?DOC The row index of the value currently in use (e.g. being rendered, hovered, etc.)?>

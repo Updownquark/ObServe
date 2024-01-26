@@ -64,6 +64,10 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 		theModelContext = modelContext;
 	}
 
+	/**
+	 * @param modelContext Model context for externally-required models
+	 * @return The style value with the given model context
+	 */
 	public QuickStyleValue withModelContext(ExWithRequiredModels.RequiredModelContext modelContext) {
 		if (modelContext == null)
 			return this;
@@ -72,6 +76,10 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 		return new QuickStyleValue(theStyleSheet, theStyleSet, theApplication, theAttribute, theValueExpression, modelContext);
 	}
 
+	/**
+	 * @param inherited The inherited models for the model context
+	 * @return The style value for the given inherited models
+	 */
 	public QuickStyleValue forInherited(ObservableModelSet inherited) {
 		if (theModelContext == null)
 			return this;
@@ -128,10 +136,11 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	}
 
 	/**
-	 * @param appCache The interpreted style cache to avoid duplicating applications
 	 * @param env The expresso environment with which to
 	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *        evaluate} this value's expressions
+	 * @param styleSheet The style sheet that this value belongs to
+	 * @param appCache The interpreted style cache to avoid duplicating applications
 	 * @return The compiled style value
 	 * @throws ExpressoInterpretationException If the expressions could not be compiled
 	 */

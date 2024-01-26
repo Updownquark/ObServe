@@ -35,6 +35,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #TOOLKIT_NAME} and {@link #VERSION} */
 	public static final String TESTING = "Expresso-Test v0.1";
 
 	@Override

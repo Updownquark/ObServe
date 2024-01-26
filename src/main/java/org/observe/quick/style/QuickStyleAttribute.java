@@ -5,19 +5,30 @@ import org.qommons.SelfDescribed;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An attribute that can be affected by Quick styles
+ *
+ * @param <T> The type of the attribute's value
+ */
 public class QuickStyleAttribute<T> implements Named, SelfDescribed {
 	private final QuickStyleAttributeDef theDefinition;
 	private final TypeToken<T> theType;
 
+	/**
+	 * @param definition The definition of the attribute
+	 * @param type The type of the attribute
+	 */
 	public QuickStyleAttribute(QuickStyleAttributeDef definition, TypeToken<T> type) {
 		theDefinition = definition;
 		theType = type;
 	}
 
+	/** @return The definition of the attribute */
 	public QuickStyleAttributeDef getDefinition() {
 		return theDefinition;
 	}
 
+	/** @return The type of the attribute */
 	public TypeToken<T> getType() {
 		return theType;
 	}

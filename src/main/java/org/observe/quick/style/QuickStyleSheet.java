@@ -51,31 +51,39 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.SimpleXMLParser;
 
-/** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
+/** A structure containing many style values that may apply to all &lt;styled> elements in a document */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-sheet")
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	private static final String SUB_SHEET_MODEL_NAME = "$MODELINSTANCE";
 
+	/** An imported style sheet */
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "import-style-sheet")
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement.Void> {
 		private String theName;
 		private QuickStyleSheet theTarget;
 		private URL theReference;
 
+		/**
+		 * @param parent The parent style sheet importing this style sheet
+		 * @param type The Qonfig type of this import reference
+		 */
 		public StyleSheetRef(QuickStyleSheet parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The name of the imported style sheet in the parent */
 		@QonfigAttributeGetter("name")
 		public String getName() {
 			return theName;
 		}
 
+		/** @return The location of the imported style sheet */
 		@QonfigAttributeGetter("ref")
 		public URL getReference() {
 			return theReference;
 		}
 
+		/** @return The imported style sheet */
 		public QuickStyleSheet getTarget() {
 			return theTarget;
 		}
@@ -145,8 +153,11 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	private final Map<String, QuickStyleSheet> theImportedStyleSheets;
 	private final List<QuickStyleSet> theStyleSetList;
 	private final Map<String, QuickStyleSet> theStyleSets;
-	private final Map<String, ModelComponentId> theStyleSheetSubModelRefs;
 
+	/**
+	 * @param parent The parent element of this style sheet
+	 * @param qonfigType The Qonfig type of this style sheet
+	 */
 	public QuickStyleSheet(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 		super(parent, qonfigType);
 		theStyleSetList = new ArrayList<>();
@@ -154,7 +165,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		theStyleSheetRefs = new ArrayList<>();
 		theImportedStyleSheets = new LinkedHashMap<>();
 		theStyleElements = new ArrayList<>();
-		theStyleSheetSubModelRefs = new LinkedHashMap<>();
 	}
 
 	/** @return This style sheet's style sets, whose values can be inherited en-masse by name */
@@ -162,21 +172,24 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		return Collections.unmodifiableMap(theStyleSets);
 	}
 
+	/** @return All style sets in this style sheet */
 	@QonfigChildGetter("style-set")
 	public List<QuickStyleSet> getStyleSetList() {
 		return theStyleSetList;
 	}
 
+	/** @return All style elements in this style sheet */
 	@QonfigChildGetter("style")
 	public List<QuickStyleElement.Def> getStyleElements() {
 		return Collections.unmodifiableList(theStyleElements);
 	}
 
-	/** @return All style sheets referred to by this style sheet */
+	/** @return All style sheets referred to by this style sheet, by name */
 	public Map<String, QuickStyleSheet> getImportedStyleSheets() {
 		return Collections.unmodifiableMap(theImportedStyleSheets);
 	}
 
+	/** @return All stylesheets imported into this style sheet */
 	@QonfigChildGetter("style-sheet-ref")
 	public List<StyleSheetRef> getImportedStyleSheetRefs() {
 		return Collections.unmodifiableList(theStyleSheetRefs);
@@ -348,6 +361,10 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 	}
 
+	/**
+	 * @param parent The parent element for the interpreted style sheet
+	 * @return The interpreted style sheet
+	 */
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
 		return new Interpreted(this, parent);
 	}
@@ -383,10 +400,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			str.append('\t');
 	}
 
+	/** @return A string representation of this style sheet's style content */
 	public String printContent() {
 		return print(null, 0).toString();
 	}
 
+	/** Interpretation of a {@link QuickStyleSheet} */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<ExElement.Void> {
 		private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
 		private final Map<String, QuickStyleSheet.Interpreted> theImportedStyleSheets;
@@ -404,18 +423,26 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			return (QuickStyleSheet) super.getDefinition();
 		}
 
+		/** @return All style elements in this style sheet */
 		public List<QuickStyleElement.Interpreted<?>> getStyleElements() {
 			return Collections.unmodifiableList(theStyleElements);
 		}
 
+		/** @return All style sheets referred to by this style sheet, by name */
 		public Map<String, QuickStyleSheet.Interpreted> getImportedStyleSheets() {
 			return Collections.unmodifiableMap(theImportedStyleSheets);
 		}
 
+		/** @return This style sheet's style sets, whose values can be inherited en-masse by name */
 		public Map<String, QuickStyleSet.Interpreted> getStyleSets() {
 			return Collections.unmodifiableMap(theStyleSets);
 		}
 
+		/**
+		 * @param styleSheet The style sheet to find the interpretation of
+		 * @return The interpretation of this style sheet or one of its imported style sheets whose definition is given, or null if this
+		 *         style sheet is not and does not use the given style sheet
+		 */
 		public Interpreted findInterpretation(QuickStyleSheet styleSheet) {
 			if (styleSheet.getIdentity() == getIdentity())
 				return this;
@@ -427,6 +454,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			return null;
 		}
 
+		/**
+		 * Initializes or updates this style sheet
+		 *
+		 * @param expressoEnv The expresso environment to use to interpret expressions
+		 * @throws ExpressoInterpretationException If this style sheet could not be interpreted
+		 */
 		public void updateStyleSheet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			update(expressoEnv);
 		}
@@ -485,6 +518,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			.adjust();
 		}
 
+		/** @return Style sheet models to use to populate element models with values needed by this style sheet */
 		public StyleSheetModels instantiateModels() {
 			ArrayList<ModelInstantiator> styleSetModels = new ArrayList<>(theStyleSets.size());
 			for (QuickStyleSet.Interpreted styleSet : theStyleSets.values()) {
@@ -504,6 +538,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 	}
 
+	/** Populates element models with values needed by a style sheet */
 	public static class StyleSheetModels {
 		private final ModelInstantiator theStyleSheetModels;
 		private final List<ModelInstantiator> theStyleSetModels;
@@ -516,6 +551,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			theSubModels = subModels;
 		}
 
+		/** Instantiates this model's values. Must be called once after creation. */
 		public void instantiate() {
 			theStyleSheetModels.instantiate();
 			for (ModelInstantiator styleSetModel : theStyleSetModels)
@@ -524,6 +560,11 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				subSheet.instantiate();
 		}
 
+		/**
+		 * @param into The model instance builder to populate the style sheet models into
+		 * @return The style sheet models
+		 * @throws ModelInstantiationException If the style sheet models could not be instantiated
+		 */
 		public ModelSetInstance populate(ModelSetInstanceBuilder into) throws ModelInstantiationException {
 			ModelSetInstanceBuilder builder = theStyleSheetModels.createInstance(into.getUntil())//
 				.withAll(into);

@@ -67,29 +67,60 @@ import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
+/** A collection of Expresso Qonfig model value types */
 public class ExpressoQonfigValues {
 	private ExpressoQonfigValues() {}
 
+	/**
+	 * Abstract scalar model value definition
+	 *
+	 * @param <E> The Qonfig element type, unused
+	 */
 	public static abstract class AbstractCompiledValue<E extends AbstractCompiledValue.Element<?>>
 	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, E> implements ModelValueElement.CompiledSynth<SettableValue<?>, E> {
+		/**
+		 * @param parent The parent element of this model value
+		 * @param qonfigType The Qonfig type of this model value
+		 */
 		protected AbstractCompiledValue(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
 		}
 
+		/**
+		 * Interpretation of a {@link AbstractCompiledValue}
+		 *
+		 * @param <T> The type of the model value
+		 * @param <E> The Qonfig element type, unused
+		 */
 		public static abstract class Interpreted<T, E extends Element<T>>
 		extends ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<T>, E>
 		implements ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, E> {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent for this element
+			 */
 			protected Interpreted(AbstractCompiledValue<? super E> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 		}
 
+		/**
+		 * Element instance of of a {@link AbstractCompiledValue}, unused
+		 *
+		 * @param <T> The type of the model value
+		 */
 		public static abstract class Element<T> extends ModelValueElement.Default<SettableValue<?>, SettableValue<T>> {
+			/** @param id The element ID for this element */
 			protected Element(Object id) {
 				super(id);
 			}
 		}
 
+		/**
+		 * Un-creatable element type
+		 *
+		 * @param <T> The type of the model value
+		 */
 		public static abstract class VoidElement<T> extends Element<T> {
 			private VoidElement() {
 				super(null);

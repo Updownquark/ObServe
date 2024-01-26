@@ -14,9 +14,9 @@ import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledAddOn;
+import org.observe.quick.style.QuickStyledAddOn.StyleDefBuilder;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
-import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle.Def.StyleDefBuilder;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigAddOn;
 
@@ -41,7 +41,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 
 		@Override
-		public void addStyleAttributes(QuickTypeStyle type, StyleDefBuilder builder) {
+		public void addStyleAttributes(QuickTypeStyle type, QuickStyledAddOn.StyleDefBuilder builder) {
 			theLightSource = builder.addApplicableAttribute(type.getAttribute("light-source"));
 			theLightColor = builder.addApplicableAttribute(type.getAttribute("light-color"));
 			theShadowColor = builder.addApplicableAttribute(type.getAttribute("shadow-color"));

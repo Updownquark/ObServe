@@ -19,13 +19,19 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A style set containing styles that can be applied to an element by name */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-set")
 public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implements Named {
+	/** The session key in which to install the currently parsing style set */
 	public static final String STYLE_SET_SESSION_KEY = "Quick.Style.Set";
 
 	private String theName;
 	private final List<QuickStyleElement.Def> theStyleElements;
 
+	/**
+	 * @param styleSheet The style sheet that owns this style set
+	 * @param styleSetEl The Qonfig type of this style set
+	 */
 	public QuickStyleSet(QuickStyleSheet styleSheet, QonfigElementOrAddOn styleSetEl) {
 		super(styleSheet, styleSetEl);
 		theStyleElements = new ArrayList<>();
@@ -42,11 +48,22 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		return theName;
 	}
 
+	/** @return All style elements in this style set */
 	@QonfigChildGetter("style")
 	public List<QuickStyleElement.Def> getStyleElements() {
 		return Collections.unmodifiableList(theStyleElements);
 	}
 
+	/**
+	 * Populates all this style set's style values for an element
+	 *
+	 * @param styleValues The collection to populate
+	 * @param application The style application of the parent environment
+	 * @param element The environment to get style values for
+	 * @param env The expresso environment to evaluate with
+	 * @param modelContext The model context for externally-required models
+	 * @throws QonfigInterpretationException If the style values could not be compiled
+	 */
 	public void getStyleValues(Collection<QuickStyleValue> styleValues, StyleApplicationDef application, QonfigElement element,
 		CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
 		ExWithRequiredModels.RequiredModelContext styleSetModelContext = getAddOn(ExWithRequiredModels.Def.class).getContext(env);
@@ -71,10 +88,15 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		}
 	}
 
+	/**
+	 * @param parent The parent element for the interpreted style set
+	 * @return The interpreted style set
+	 */
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
 		return new Interpreted(this, parent);
 	}
 
+	/** Interpretation of a {@link QuickStyleSet} */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<ExElement.Void> {
 		private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
 
@@ -88,10 +110,17 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 			return (QuickStyleSet) super.getDefinition();
 		}
 
+		/** @return All style elements in this style set */
 		public List<QuickStyleElement.Interpreted<?>> getStyleElements() {
 			return Collections.unmodifiableList(theStyleElements);
 		}
 
+		/**
+		 * Initializes or updates this style set
+		 *
+		 * @param expressoEnv The expresso environment to interpret expressions with
+		 * @throws ExpressoInterpretationException If this style set could not be interpreted
+		 */
 		public void updateStyleSet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			update(expressoEnv);
 		}

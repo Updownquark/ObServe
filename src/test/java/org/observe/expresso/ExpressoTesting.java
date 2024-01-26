@@ -33,6 +33,7 @@ interpretation = StatefulStruct.Interpreted.class)
 public class ExpressoTesting extends ExElement.Abstract {
 	/** A test to execute */
 	public static class ExpressoTest extends ExElement.Abstract implements Named {
+		/** Definition of {@link ExpressoTest} */
 		@ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
 			qonfigType = "test",
 			interpretation = Interpreted.class,
@@ -40,6 +41,10 @@ public class ExpressoTesting extends ExElement.Abstract {
 		public static class Def extends ExElement.Def.Abstract<ExpressoTest> implements Named {
 			private final List<TestAction> theActions;
 
+			/**
+			 * @param parent The parent element of the test element
+			 * @param qonfigType The Qonfig type of the test element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theActions = new ArrayList<>();
@@ -64,11 +69,16 @@ public class ExpressoTesting extends ExElement.Abstract {
 					BetterList.of2(session.forChildren("test-action").stream(), s -> s.asElement(testAction)));
 			}
 
+			/**
+			 * @param parent The parent for the interpreted test
+			 * @return The interpreted test
+			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
+		/** Interpretation of {@link ExpressoTest} */
 		public static class Interpreted extends ExElement.Interpreted.Abstract<ExpressoTest> implements Named {
 			private final List<TestAction.Interpreted> theActions;
 
@@ -87,10 +97,17 @@ public class ExpressoTesting extends ExElement.Abstract {
 				return getDefinition().getName();
 			}
 
+			/** @return All the actions to execute for this test */
 			public List<TestAction.Interpreted> getActions() {
 				return Collections.unmodifiableList(theActions);
 			}
 
+			/**
+			 * Initializes or updates this test
+			 *
+			 * @param env The expresso environment for interpreting expressions
+			 * @throws ExpressoInterpretationException If this test could not be interpreted
+			 */
 			public void updateTest(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
 			}
@@ -101,14 +118,15 @@ public class ExpressoTesting extends ExElement.Abstract {
 				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this), TestAction.Interpreted::updateValue);
 			}
 
-			public ExpressoTest create(ExElement parent) {
+			/** @return The test instance */
+			public ExpressoTest create() {
 				return new ExpressoTest(getIdentity());
 			}
 		}
 
 		private final List<TestAction.TestActionElement> theActions;
 
-		public ExpressoTest(Object id) {
+		ExpressoTest(Object id) {
 			super(id);
 			theActions = new ArrayList<>();
 		}
@@ -118,10 +136,12 @@ public class ExpressoTesting extends ExElement.Abstract {
 			return getAddOn(ExNamed.class).getName();
 		}
 
+		/** @return All the actions to execute for this test */
 		public List<TestAction.TestActionElement> getActions() {
 			return theActions;
 		}
 
+		/** Executes this test */
 		public void execute() {
 			for (TestAction.TestActionElement action : theActions) {
 				System.out.print(action.reporting().getPosition().printPosition());
@@ -181,6 +201,10 @@ public class ExpressoTesting extends ExElement.Abstract {
 		private String theExpectedException;
 		private boolean isBreakpoint;
 
+		/**
+		 * @param parent The parent element for this action
+		 * @param type The Qonfig type of this action
+		 */
 		public TestAction(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -214,6 +238,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 			return new Interpreted(this, parent);
 		}
 
+		/** Interpretation of a {@link TestAction} */
 		public static class Interpreted extends ExpressoQonfigValues.Action.Interpreted {
 			private Class<? extends Throwable> theExpectedException;
 
@@ -249,18 +274,25 @@ public class ExpressoTesting extends ExElement.Abstract {
 					theExpectedException = null;
 			}
 
+			/** @return The class of the exception that is expected to be thrown by the action */
 			public Class<? extends Throwable> getExpectedException() {
 				return theExpectedException;
 			}
 
+			/** @return Whether to catch a breakpoint before executing this action */
 			public boolean isBreakpoint() {
 				return getDefinition().isBreakpoint();
 			}
 
+			/** @return The position in the source file where this action was declared */
 			public LocatedFilePosition getPosition() {
 				return getDefinition().getPosition();
 			}
 
+			/**
+			 * @param parent The parent element for the action instance
+			 * @return The action instance
+			 */
 			public TestActionElement create(ExElement parent) {
 				return new TestActionElement(getIdentity());
 			}
@@ -305,10 +337,15 @@ public class ExpressoTesting extends ExElement.Abstract {
 		}
 	}
 
+	/** Definition of {@link ExpressoTesting} */
 	public static class Def extends ExElement.Def.Abstract<ExpressoTesting> {
 		private final List<ExpressoTest.Def> theTests;
 		private final Map<String, ExpressoTest.Def> theTestsByName;
 
+		/**
+		 * @param parent The parent element for this test set
+		 * @param qonfigType The Qonfig type of this test set
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theTests = new ArrayList<>();
@@ -351,19 +388,26 @@ public class ExpressoTesting extends ExElement.Abstract {
 		}
 	}
 
+	/** Interpretation of {@link ExpressoTesting} */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<ExpressoTesting> {
 		private ExpressoTest.Def theTargetTestDef;
 		private ExpressoTest.Interpreted theTargetTest;
 
-		public Interpreted(Def definition, ExpressoTest.Def targetTest) {
+		Interpreted(Def definition, ExpressoTest.Def targetTest) {
 			super(definition, null);
 			theTargetTestDef = targetTest;
 		}
 
+		/** @return The interpretation of the test we're actually going to execute */
 		public ExpressoTest.Interpreted getTargetTest() {
 			return theTargetTest;
 		}
 
+		/**
+		 * Initializes or updates this test set
+		 *
+		 * @throws ExpressoInterpretationException If this test set could not be interpreted
+		 */
 		public void updateTest() throws ExpressoInterpretationException {
 			update(getDefinition().getExpressoEnv().interpret(null, InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getClassView()));
 		}
@@ -381,6 +425,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 			System.out.println("complete");
 		}
 
+		/** @return The test set instance */
 		public ExpressoTesting create() {
 			return new ExpressoTesting(getIdentity());
 		}
@@ -397,7 +442,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theTargetTest = myInterpreted.getTargetTest().create(this);
+		theTargetTest = myInterpreted.getTargetTest().create();
 		theTargetTest.update(myInterpreted.getTargetTest(), this);
 	}
 
@@ -418,6 +463,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 		System.out.println("complete");
 	}
 
+	/** Executes the target test in this test set */
 	public void execute() {
 		System.out.println("Executing test " + theTargetTest.getName() + "...");
 		theTargetTest.execute();

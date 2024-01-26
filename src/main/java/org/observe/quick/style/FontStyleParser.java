@@ -62,6 +62,7 @@ public class FontStyleParser extends NonStructuredParser.Simple<Double> {
 		.with("italic", italic)//
 		.getUnmodifiable();
 
+	/** Singleton instance of this class */
 	public static final FontStyleParser INSTANCE = new FontStyleParser();
 
 	/** Creates a FontStyleParser */

@@ -4,7 +4,9 @@ import org.qommons.Named;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** Add-on for an expresso element with an identifier name */
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
+	/** Definition for a {@link ExNamed} */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
 		qonfigType = "named",
 		interpretation = Interpreted.class,
@@ -12,6 +14,10 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {
 		private String theName;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The element this add-on affects
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
@@ -34,7 +40,12 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 		}
 	}
 
+	/** Interpretation of a {@link ExNamed} */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExNamed> implements Named {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The element this add-on affects
+		 */
 		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
@@ -62,6 +73,7 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 
 	private String theName;
 
+	/** @param element The element this add-on affects */
 	public ExNamed(ExElement element) {
 		super(element);
 	}

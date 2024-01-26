@@ -49,7 +49,7 @@ public class TypeTokensTest {
 	/**
 	 * Tests the ability to parse {@link TypeToken}s from strings
 	 *
-	 * @see TypeTokens#parseType(String)
+	 * @see TypeTokens#parseType(CharSequence)
 	 */
 	@Test
 	public void testTypeParsing() {

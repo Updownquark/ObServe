@@ -25,6 +25,11 @@ public abstract class AbstractExpressoTest<H extends ExpressoHeadSection> {
 
 	private ExpressoTesting.Def theTesting;
 
+	/**
+	 * @param testName The name of the test to execute
+	 * @throws ExpressoInterpretationException If the test with the given name could not be interpreted
+	 * @throws ModelInstantiationException If the test with the given name could not be instantiated
+	 */
 	public void executeTest(String testName) throws ExpressoInterpretationException, ModelInstantiationException {
 		ExpressoTesting.Interpreted interpreted = theTesting.interpret(testName);
 		interpreted.updateTest();

@@ -40,9 +40,16 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 
+/**
+ * A &lt;style> element affecting one or more elements' style
+ *
+ * @param <T> The type of the style's attribute (if any)
+ */
 public class QuickStyleElement<T> extends ExElement.Abstract {
+	/** Session property in which to cache the {@link QuickTypeStyle.TypeStyleSet} */
 	public static final String STYLE_TYPE_SET = "Quick.Style.Type.Set";
 
+	/** Definition for a {@link QuickStyledElement} */
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
 		qonfigType = "style",
 		interpretation = Interpreted.class,
@@ -59,6 +66,10 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		private final List<Def> theChildren;
 		private final List<QuickStyleValue> theStyleValues;
 
+		/**
+		 * @param parent The parent of this style element
+		 * @param qonfigType The Qonfig type of this style element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theRoles = new ArrayList<>();
@@ -66,49 +77,68 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theStyleValues = new ArrayList<>();
 		}
 
+		/** @return The type of element that this style element will affect style for */
 		@QonfigAttributeGetter("element")
 		public QonfigElementOrAddOn getStyleElement() {
 			return theStyleElement;
 		}
 
+		/** @return Child roles that an element must fulfill to be affected by this style */
 		@QonfigAttributeGetter("child")
 		public List<QonfigChildDef> getRoles() {
 			return Collections.unmodifiableList(theRoles);
 		}
 
+		/** @return A condition that must be true for this style to be effective */
 		@QonfigAttributeGetter("if")
 		public LocatedExpression getCondition() {
 			return theCondition;
 		}
 
+		/** @return The style set that this style belongs to */
 		@QonfigAttributeGetter("style-set")
 		public QuickStyleSet getStyleSet() {
 			return theStyleSet;
 		}
 
+		/** @return The style attribute declared by this element */
 		@QonfigAttributeGetter("attr")
 		public QuickStyleAttributeDef getDeclaredAttribute() {
 			return theDeclaredAttribute;
 		}
 
+		/** @return The style attribute that this style is for, if any */
 		public QuickStyleAttributeDef getEffectiveAttribute() {
 			return theEffectiveAttribute;
 		}
 
+		/** @return The expression containing the value for the style */
 		@QonfigAttributeGetter
 		public LocatedExpression getValue() {
 			return theValue;
 		}
 
+		/** @return The style application of this element */
 		public StyleApplicationDef getApplication() {
 			return theApplication;
 		}
 
+		/** @return All sub-styles on this element */
 		@QonfigChildGetter("sub-style")
 		public List<Def> getChildren() {
 			return Collections.unmodifiableList(theChildren);
 		}
 
+		/**
+		 * Populates conditional values for this style element (and its children)
+		 *
+		 * @param values The values collection to populate
+		 * @param application The style application of the parent environment
+		 * @param element The element to get style values for
+		 * @param env The expresso environment of the evaluation
+		 * @param modelContext Model context for expected model values
+		 * @throws QonfigInterpretationException If the style values could not be compiled
+		 */
 		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element,
 			CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
 			if (theApplication.applies(element)) {
@@ -479,11 +509,20 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * @param parent The parent element for the interpreted style
+		 * @return The interpreted style
+		 */
 		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
+	/**
+	 * Interpretation for a {@link QuickStyledElement}
+	 *
+	 * @param <T> The type of the style's attribute (if any)
+	 */
 	public static class Interpreted<T> extends ExElement.Interpreted.Abstract<QuickStyleElement<T>> {
 		private QuickStyleAttribute<T> theDeclaredAttribute;
 		private QuickStyleAttribute<T> theEffectiveAttribute;
@@ -491,7 +530,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 		private final List<Interpreted<?>> theChildren;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theChildren = new ArrayList<>();
 		}
@@ -501,26 +540,37 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The style attribute declared by this element */
 		public QuickStyleAttribute<T> getDeclaredAttribute() {
 			return theDeclaredAttribute;
 		}
 
+		/** @return The style attribute that this style is for, if any */
 		public QuickStyleAttribute<T> getEffectiveAttribute() {
 			return theEffectiveAttribute;
 		}
 
+		/** @return A condition that must be true for this style to be effective */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
 			return theCondition;
 		}
 
+		/** @return The expression containing the value for the style */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
 			return theValue;
 		}
 
+		/** @return All sub-styles on this element */
 		public List<Interpreted<?>> getChildren() {
 			return Collections.unmodifiableList(theChildren);
 		}
 
+		/**
+		 * Initializes or updates this style
+		 *
+		 * @param env The expresso environment for interpreting expressions
+		 * @throws ExpressoInterpretationException If this style could not be interpreted
+		 */
 		public void updateStyle(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			update(env);
 		}
@@ -541,6 +591,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), (i, sEnv) -> i.updateStyle(sEnv));
 		}
 
+		/** @return The style element */
 		public QuickStyleElement<T> create() {
 			return new QuickStyleElement<>(getIdentity());
 		}
@@ -552,17 +603,19 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	private SettableValue<SettableValue<T>> theValue;
 	private final List<QuickStyleElement<?>> theChildren;
 
-	public QuickStyleElement(Object id) {
+	QuickStyleElement(Object id) {
 		super(id);
 		theCondition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 		theChildren = new ArrayList<>();
 	}
 
+	/** @return A condition that must be true for this style to be effective */
 	public SettableValue<Boolean> getCondition() {
 		return SettableValue.flatten(theCondition, () -> true);
 	}
 
+	/** @return The value for the style */
 	public SettableValue<T> getValue() {
 		if (theValue == null)
 			return (SettableValue<T>) SettableValue.of(Object.class, null, "Unsettable");
@@ -570,6 +623,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return SettableValue.flatten(theValue);
 	}
 
+	/** @return All sub-styles on this element */
 	public List<QuickStyleElement<?>> getChildren() {
 		return Collections.unmodifiableList(theChildren);
 	}

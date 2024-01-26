@@ -47,9 +47,11 @@ import org.qommons.io.LocatedPositionedContent;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
 public interface ExElement extends Identifiable {
+	/** Default element identity class */
 	public static class ElementIdentity {
 		private String theStringRep;
 
+		/** @param stringRep The new toString() for this identity */
 		public void setStringRepresentation(String stringRep) {
 			theStringRep = stringRep;
 		}
@@ -69,15 +71,19 @@ public interface ExElement extends Identifiable {
 		/** @return The definition interpreted from the parent element */
 		Def<?> getParentElement();
 
+		/** @return The Qonfig type of this element */
 		QonfigElementOrAddOn getQonfigType();
 
 		/** @return The QonfigElement that this definition was interpreted from */
 		QonfigElement getElement();
 
+		/** @return Error reporting for this element */
 		ErrorReporting reporting();
 
+		/** @return The expresso environment for this element */
 		CompiledExpressoEnv getExpressoEnv();
 
+		/** @param env The expresso environment for this element */
 		void setExpressoEnv(CompiledExpressoEnv env);
 
 		/**
@@ -87,6 +93,11 @@ public interface ExElement extends Identifiable {
 		 */
 		<AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn);
 
+		/**
+		 * @param <AO> The type of the add-ons to get
+		 * @param addOn The type of the add-ons to get
+		 * @return All add-ons on this element with the given type
+		 */
 		<AO extends ExAddOn.Def<? super E, ?>> Collection<AO> getAddOns(Class<AO> addOn);
 
 		/** @return All add-ons on this element definition */
@@ -104,12 +115,22 @@ public interface ExElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
+		/**
+		 * @param attr The attribute to get
+		 * @return The value of the given attribute in this element
+		 */
 		Object getAttribute(QonfigAttributeDef attr);
 
+		/** @return The element value of this element */
 		Object getElementValue();
 
+		/**
+		 * @param child The child definition to get the children for
+		 * @return The child elements in this element for the given role
+		 */
 		List<? extends Def<?>> getDefChildren(QonfigChildDef child);
 
+		/** @return All element children of this element */
 		default List<Def<?>> getAllDefChildren() {
 			List<Def<?>> children = null;
 			Set<QonfigChildDef.Declared> fulfilled = null;
@@ -145,12 +166,30 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
+		/**
+		 * @param interpreted The interpreted element to get the attribute value for
+		 * @param attr The attribute to get the value for
+		 * @return The value of the given attribute in the given interpreted element
+		 */
 		Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr);
 
+		/**
+		 * @param interpreted The interpreted element to get the element value for
+		 * @return The element value of the given interpreted element
+		 */
 		Object getElementValue(Interpreted<? extends E> interpreted);
 
+		/**
+		 * @param interpreted The interpreted element to get the children value in
+		 * @param child The child role to get the children for
+		 * @return The elements for the given child role in the given interpreted element
+		 */
 		List<? extends Interpreted<?>> getInterpretedChildren(Interpreted<? extends E> interpreted, QonfigChildDef child);
 
+		/**
+		 * @param interpreted The interpreted element to get the children value in
+		 * @return All child elements in the given interpreted element
+		 */
 		default List<Interpreted<?>> getAllInterpretedChildren(Interpreted<? extends E> interpreted) {
 			List<Interpreted<?>> children = null;
 			Set<QonfigChildDef.Declared> fulfilled = null;
@@ -186,8 +225,17 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
+		/**
+		 * @param element The element instance to get the children value in
+		 * @param child The child role to get the children for
+		 * @return The elements for the given child role in the given element Instance
+		 */
 		List<? extends ExElement> getElementChildren(E element, QonfigChildDef child);
 
+		/**
+		 * @param element The element instance to get the children in
+		 * @return All child elements in the given element instance
+		 */
 		default List<ExElement> getAllElementChildren(E element) {
 			List<ExElement> children = null;
 			Set<QonfigChildDef.Declared> fulfilled = null;
@@ -223,10 +271,12 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
+		/** @return The promise that was specified to load this element's content */
 		QonfigPromise.Def<?> getPromise();
 
 		/**
 		 * @param attrName The name of the attribute to get
+		 * @param session The session to use to compile the expression
 		 * @return The observable expression at the given attribute
 		 * @throws QonfigInterpretationException If the attribute expression could not be parsed
 		 */
@@ -268,6 +318,7 @@ public interface ExElement extends Identifiable {
 		 * @param def The definition currently in use
 		 * @param session The parent session to interpret the new definition from, if needed
 		 * @param childName The name of the child role fulfilled by the element to parse the definition from
+		 * @param update The function to update the element with its session
 		 * @return The given definition if it is up-to-date, or the newly interpreted one
 		 * @throws QonfigInterpretationException If the definition could not be interpreted
 		 * @throws IllegalArgumentException If no such child role exists
@@ -276,11 +327,30 @@ public interface ExElement extends Identifiable {
 			ExBiConsumer<? super D, ExpressoQIS, QonfigInterpretationException> update)
 				throws QonfigInterpretationException, IllegalArgumentException;
 
+		/**
+		 * Synchronizes a list of children with Qonfig-backed sessions, so that the result has exactly one child per Qonfig element
+		 *
+		 * @param <T> The type of the child definition
+		 * @param defType The type of the child definition
+		 * @param defs The list of children
+		 * @param sessions The sessions for this element's children
+		 * @throws QonfigInterpretationException If the children could not be interpreted from Qonfig
+		 */
 		default <T extends ExElement.Def<?>> void syncChildren(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
 			throws QonfigInterpretationException {
 			syncChildren(defType, defs, sessions, Def::update);
 		}
 
+		/**
+		 * Synchronizes a list of children with Qonfig-backed sessions, so that the result has exactly one child per Qonfig element
+		 *
+		 * @param <T> The type of the child definition
+		 * @param defType The type of the child definition
+		 * @param defs The list of children
+		 * @param sessions The sessions for this element's children
+		 * @param update The function to update a child with its session
+		 * @throws QonfigInterpretationException If the children could not be interpreted from Qonfig
+		 */
 		<T extends ExElement.Def<?>> void syncChildren(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions,
 			ExBiConsumer<? super T, ExpressoQIS, QonfigInterpretationException> update) throws QonfigInterpretationException;
 
@@ -314,6 +384,7 @@ public interface ExElement extends Identifiable {
 
 			/**
 			 * @param parent The definition interpreted from the parent element
+			 * @param qonfigType The Qonfig type of this element
 			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				theId = new ElementIdentity();
@@ -334,6 +405,11 @@ public interface ExElement extends Identifiable {
 				return theParent;
 			}
 
+			/**
+			 * Sets the parent element in situations where this cannot be known upon creation
+			 *
+			 * @param parent The parent element for this element
+			 */
 			protected void setParentElement(ExElement.Def<?> parent) {
 				if (theParent != null) {
 					if (parent != theParent)
@@ -593,6 +669,10 @@ public interface ExElement extends Identifiable {
 				adjustment.adjust();
 			}
 
+			/**
+			 * @return Traceability for this element, which can provide attribute and element values and children for this element and its
+			 *         interpretation and instantiations
+			 */
 			protected Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> getTraceability() {
 				return theTraceability;
 			}
@@ -658,7 +738,7 @@ public interface ExElement extends Identifiable {
 					}
 					makeAddOnSequence(theAddOns.getAllValues(),
 						theExternalView == null ? null : theExternalView.theExtAddOns.getAllValues(),
-						ao -> getAddOns((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
+							ao -> getAddOns((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
 					if (theExternalView != null)
 						makeAddOnSequence(theExternalView.theExtAddOns.getAllValues(), theAddOns.getAllValues(),
 							ao -> theExternalView.getAddOns((Class<ExAddOn.Def<? super ExElement, ?>>) ao),
@@ -706,10 +786,21 @@ public interface ExElement extends Identifiable {
 					thePromise.setExpressoEnv(env);
 			}
 
+			/**
+			 * Performs implementation-specific instantiation/update work. Also updates add-ons.
+			 *
+			 * @param session The Qonfig-backed session representing this element
+			 * @throws QonfigInterpretationException If this element could not be interpreted from Qonfig
+			 */
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				forAddOns(session, (addOn, s) -> addOn.update(s, this));
 			}
 
+			/**
+			 * Called after all add-ons have been updated
+			 *
+			 * @throws QonfigInterpretationException If any post-update work fails
+			 */
 			protected void postUpdate() throws QonfigInterpretationException {}
 
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested,
@@ -985,7 +1076,7 @@ public interface ExElement extends Identifiable {
 
 			private static <E extends ExElement> void addWithDependencies(ExAddOn.Def<? super E, ?> addOn,
 				Function<Class<? extends ExAddOn.Def<?, ?>>, Collection<? extends ExAddOn.Def<?, ?>>> getter,
-				BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
+					BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
 					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
 				dependencies.add(addOn);
 				for (Class<? extends ExAddOn.Def<?, ?>> depType : addOn.getDependencies()) {
@@ -1022,8 +1113,10 @@ public interface ExElement extends Identifiable {
 		/** @return The interpretation of the parent element */
 		Interpreted<?> getParentElement();
 
+		/** @return The promise that was specified to load this element's content */
 		QonfigPromise.Interpreted<?> getPromise();
 
+		/** @return Error reportig for this element */
 		default ErrorReporting reporting() {
 			return getDefinition().reporting();
 		}
@@ -1031,8 +1124,10 @@ public interface ExElement extends Identifiable {
 		/** @return This element's models */
 		InterpretedModelSet getModels();
 
+		/** @return The expresso environment for this element */
 		InterpretedExpressoEnv getExpressoEnv();
 
+		/** @param env The expresso environment for this element */
 		void setExpressoEnv(InterpretedExpressoEnv env);
 
 		/**
@@ -1057,10 +1152,27 @@ public interface ExElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
+		/**
+		 * @return Whether instances created from this interpretation should preserve their {@link ExElement#getUpdatingModels() models}
+		 *         after {@link ExElement#instantiate(ModelSetInstance) instantiation}
+		 */
 		boolean isModelInstancePersistent();
 
+		/**
+		 * @param persist Whether instances created from this interpretation should preserve their {@link ExElement#getUpdatingModels()
+		 *        models} after {@link ExElement#instantiate(ModelSetInstance) instantiation}
+		 * @return This element
+		 */
 		Interpreted<E> persistModelInstances(boolean persist);
 
+		/**
+		 * @param <M> The model type for the expression
+		 * @param <MV> The value type for the expression
+		 * @param expression The expression to interpret
+		 * @param type The type for the expression
+		 * @return The interpreted expression
+		 * @throws ExpressoInterpretationException If the expression could not be interpreted
+		 */
 		default <M, MV extends M> InterpretedValueSynth<M, MV> interpret(LocatedExpression expression, ModelInstanceType<M, MV> type)
 			throws ExpressoInterpretationException {
 			if (expression == null)
@@ -1069,6 +1181,19 @@ public interface ExElement extends Identifiable {
 			return expression.interpret(type, env);
 		}
 
+		/**
+		 * @param <M> The model type for the expression
+		 * @param <MV> The value type for the expression
+		 * @param <X1> The exception thrown by the exception handler in response to {@link ExpressoInterpretationException}s
+		 * @param <X2> The exception thrown by the exception handler in response to {@link TypeConversionException}s
+		 * @param expression The expression to interpret
+		 * @param type The type for the expression
+		 * @param handler The expression handler for non-fatal {@link ExpressoInterpretationException}s and {@link TypeConversionException}s
+		 * @return The interpreted expression
+		 * @throws ExpressoInterpretationException If the expression could not be interpreted
+		 * @throws X1 If the exception handler throws one in response to an {@link ExpressoInterpretationException}
+		 * @throws X2 If the exception handler throws one in response to a {@link TypeConversionException}
+		 */
 		default <M, MV extends M, X1 extends Throwable, X2 extends Throwable> InterpretedValueSynth<M, MV> interpret(
 			LocatedExpression expression, ModelInstanceType<M, MV> type,
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, X1, X2> handler)
@@ -1079,8 +1204,24 @@ public interface ExElement extends Identifiable {
 			return expression.interpret(type, env, handler);
 		}
 
+		/**
+		 * @param env The expression to get the environment for
+		 * @return The expresso environment to use to interpret the expression
+		 */
 		InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env);
 
+		/**
+		 * Interprets or updates an interpreted child
+		 *
+		 * @param <D> The type of the definition of the child
+		 * @param <I> The type of the interpretation of the child
+		 * @param definition The child definition to interpret
+		 * @param existing The existing interpreted child
+		 * @param interpret The function to produce an interpretation for a child from a definition
+		 * @param update The function to update an interpreted child
+		 * @return The interpreted child
+		 * @throws ExpressoInterpretationException
+		 */
 		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
 			ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
 			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
@@ -1088,10 +1229,34 @@ public interface ExElement extends Identifiable {
 			return syncChild(definition, existing, (d, env) -> interpret.apply(d), update);
 		}
 
+		/**
+		 * Interprets or updates an interpreted child
+		 *
+		 * @param <D> The type of the definition of the child
+		 * @param <I> The type of the interpretation of the child
+		 * @param definition The child definition to interpret
+		 * @param existing The existing interpreted child
+		 * @param interpret The function to produce an interpretation for a child from a definition
+		 * @param update The function to update an interpreted child
+		 * @return The interpreted child
+		 * @throws ExpressoInterpretationException
+		 */
 		<D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
 			ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
 			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
 
+		/**
+		 * Synchronizes a list of child definitions and interpretations, ensuring each child in the definitions list has its interpretation
+		 * in the interpreted list, and that any interpretations without a definition are removed and disposed.
+		 *
+		 * @param <D> The type of the definition of the children
+		 * @param <I> The type of the interpretation of the children
+		 * @param definitions The child definitions to interpret
+		 * @param existing The existing interpreted children
+		 * @param interpret The function to produce an interpretation for a child from a definition
+		 * @param update The function to update an interpreted child
+		 * @throws ExpressoInterpretationException
+		 */
 		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> void syncChildren(List<? extends D> definitions,
 			List<I> existing, ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
 			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
@@ -1099,18 +1264,39 @@ public interface ExElement extends Identifiable {
 			syncChildren(definitions, existing, (d, env) -> interpret.apply(d), update);
 		}
 
+		/**
+		 * Synchronizes a list of child definitions and interpretations, ensuring each child in the definitions list has its interpretation
+		 * in the interpreted list, and that any interpretations without a definition are removed and disposed.
+		 *
+		 * @param <D> The type of the definition of the children
+		 * @param <I> The type of the interpretation of the children
+		 * @param definitions The child definitions to interpret
+		 * @param existing The existing interpreted children
+		 * @param interpret The function to produce an interpretation for a child from a definition
+		 * @param update The function to update an interpreted child
+		 * @throws ExpressoInterpretationException
+		 */
 		<D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> void syncChildren(List<? extends D> definitions, List<I> existing,
 			ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
 			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
 
+		/**
+		 * Installs a callback that will be called when an element on this interpretation is instantiated
+		 *
+		 * @param task The callback
+		 * @return A Runnable that will remove the callback when {@link Runnable#run() run}
+		 */
 		Runnable onInstantiation(ExConsumer<? super E, ModelInstantiationException> task);
 
+		/** @return Whether this element has been {@link #destroy() destroyed} */
 		ObservableValue<Boolean> isDestroyed();
 
+		/** @return An observable that fires if and when this element is {@link #destroy() destroyed} */
 		default Observable<ObservableValueEvent<Boolean>> destroyed() {
 			return isDestroyed().changes().filterP(evt -> Boolean.TRUE.equals(evt.getNewValue())).take(1);
 		}
 
+		/** Destroys this interpreted element, releasing all its resources */
 		void destroy();
 
 		/**
@@ -1201,6 +1387,12 @@ public interface ExElement extends Identifiable {
 				return theParent;
 			}
 
+			/**
+			 * Sets this element's parent in situation where the parent cannot be known when this interpretation is created.
+			 *
+			 * @param parent The parent for this element
+			 * @return This interpreted element
+			 */
 			protected Abstract<E> setParentElement(Interpreted<?> parent) {
 				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement())
 					throw new IllegalArgumentException(parent + " is not the parent of " + this);
@@ -1259,6 +1451,11 @@ public interface ExElement extends Identifiable {
 				return theOnInstantiations.add(task, false);
 			}
 
+			/**
+			 * Called when this interpretation is instantiated for {@link #onInstantiation(ExConsumer)} callbacks
+			 *
+			 * @param element The element that was instantiated
+			 */
 			protected void instantiated(E element) {
 				if (theOnInstantiations != null)
 					theOnInstantiations.forEach(l -> {
@@ -1387,6 +1584,7 @@ public interface ExElement extends Identifiable {
 			 * Updates this element interpretation. Must be called at least once after the {@link #getDefinition() definition} produces this
 			 * object.
 			 *
+			 * @param parentEnv The expresso environment of this element's parent
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
 			protected final void update(InterpretedExpressoEnv parentEnv) throws ExpressoInterpretationException {
@@ -1424,6 +1622,12 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
+			/**
+			 * Performs implementation-specific initialization/update work on this element. Also updates add-ons and external content.
+			 *
+			 * @param expressoEnv The expresso environment to interpret expressions with
+			 * @throws ExpressoInterpretationException If this element cannot be interpreted
+			 */
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				setExpressoEnv(expressoEnv);
 				if (thePromise != null) {
@@ -1436,6 +1640,11 @@ public interface ExElement extends Identifiable {
 					thePromise.getExternalExpressoEnv().getModels().interpret(thePromise.getExternalExpressoEnv());
 			}
 
+			/**
+			 * Called after all add-ons have been updated for this element
+			 *
+			 * @throws ExpressoInterpretationException If an exception occurs performing post-update work on this element
+			 */
 			protected void postUpdate() throws ExpressoInterpretationException {}
 
 			@Override
@@ -1549,6 +1758,7 @@ public interface ExElement extends Identifiable {
 		}
 	}
 
+	/** @return The name of this element's Qonfig type */
 	String getTypeName();
 
 	/** @return The parent element */
@@ -1584,21 +1794,21 @@ public interface ExElement extends Identifiable {
 	 * Retrieves the model instance by which this element is populated with expression values.
 	 * </p>
 	 * <p>
-	 * This method is generally only applicable while it is {@link #update(Interpreted, ModelSetInstance) updating}. The model structures
-	 * are typically discarded outside this phase to free up memory.
+	 * This method is generally only applicable while it is {@link #update(Interpreted, ExElement) updating}. The model structures are
+	 * typically discarded outside this phase to free up memory.
 	 * </p>
 	 * <p>
 	 * The exception to this is when the {@link Interpreted#isModelInstancePersistent()} flag is set on the interpreter passed to the
-	 * {@link #update(Interpreted, ModelSetInstance) update} method. In this case the models are persisted in the element and available any
-	 * time
+	 * {@link #update(Interpreted, ExElement) update} method. In this case the models are persisted in the element and available any time
 	 * </p>
 	 *
 	 * @return The model instance used by this element to build its expression values
-	 * @throws IllegalStateException If this element is not {@link #update(Interpreted, ModelSetInstance) updating} and its interpretation's
+	 * @throws IllegalStateException If this element is not {@link #update(Interpreted, ExElement) updating} and its interpretation's
 	 *         {@link Interpreted#isModelInstancePersistent()} flag was not set
 	 */
 	ModelSetInstance getUpdatingModels() throws IllegalStateException;
 
+	/** @return Error reporting for this element */
 	ErrorReporting reporting();
 
 	/**
@@ -1606,10 +1816,11 @@ public interface ExElement extends Identifiable {
 	 * interpretation.
 	 *
 	 * @param interpreted The interpretation producing this element
-	 * @param models The model instance for this element
+	 * @param parent The parent element for this element
 	 */
 	void update(Interpreted<?> interpreted, ExElement parent);
 
+	/** Instantiates this element's models. Must be called once after creation. */
 	void instantiated();
 
 	/**
@@ -1622,12 +1833,19 @@ public interface ExElement extends Identifiable {
 	 */
 	ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException;
 
+	/**
+	 * @param parent The parent element for the new copy
+	 * @return A copy of this element with the given parent
+	 */
 	ExElement copy(ExElement parent);
 
+	/** @return Whether this element has been {@link #destroy() destroyed} */
 	ObservableValue<Boolean> isDestroyed();
 
+	/** Destroys this element, unsubscribing all its connections and releasing its resources */
 	void destroy();
 
+	/** @return An observable that fires once if and when this element is {@link #destroy() destroyed} */
 	default Observable<ObservableValueEvent<Boolean>> onDestroy() {
 		return isDestroyed().noInitChanges().filter(evt -> evt.getNewValue()).take(1);
 	}
@@ -1712,6 +1930,9 @@ public interface ExElement extends Identifiable {
 			return theReporting;
 		}
 
+		/**
+		 * Whether to preserve this element's {@link #getUpdatingModels() models} after {@link #instantiate(ModelSetInstance) instantiation}
+		 */
 		protected void persistModels() {
 			isModelPersistent = true;
 		}
@@ -1821,6 +2042,11 @@ public interface ExElement extends Identifiable {
 			}
 		}
 
+		/**
+		 * Performs implementation specific initialization/update operations. Also updates add-ons and external content.
+		 *
+		 * @param interpreted The interpretation of this element
+		 */
 		protected void doUpdate(Interpreted<?> interpreted) {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				((ExAddOn<ExElement>) addOn)
@@ -1869,6 +2095,14 @@ public interface ExElement extends Identifiable {
 			return myModels;
 		}
 
+		/**
+		 * @param builder The model instance builder to install runtime models into. Runtime models are those that expressions on the
+		 *        element should not have access to, but may be needed for expressions that were interpreted in a different environment but
+		 *        need to be executed on this element (e.g. style sheets).
+		 *
+		 * @param elementModels The model instance for this element
+		 * @throws ModelInstantiationException If any runtime models could not be installed
+		 */
 		protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels)
 			throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
@@ -1877,6 +2111,11 @@ public interface ExElement extends Identifiable {
 				((ExElement.Abstract) thePromise).addRuntimeModels(builder, elementModels);
 		}
 
+		/**
+		 * @param parentModels The parent models
+		 * @return The models for this element
+		 * @throws ModelInstantiationException If the element models could not be created
+		 */
 		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
 			// Construct a model instance containing the parent models, this element's local models,
 			// and any models required by the runtime environment
@@ -1898,6 +2137,12 @@ public interface ExElement extends Identifiable {
 				return runtimeModels.build();
 		}
 
+		/**
+		 * Performs implementation-specific instantiation for the element. Also instantiates add-ons and external content.
+		 *
+		 * @param myModels The model instance for this element to use for its values
+		 * @throws ModelInstantiationException If this element could not be instantiated
+		 */
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			theUpdatingModels = myModels;
 			for (ExAddOn<?> addOn : theAddOnSequence)
@@ -2073,6 +2318,11 @@ public interface ExElement extends Identifiable {
 		}
 	}
 
+	/**
+	 * @param location1 The location of document 1
+	 * @param location2 The location of document 2
+	 * @return Whether the 2 locations are for the same document
+	 */
 	public static boolean documentsMatch(String location1, String location2) {
 		// This function handles null and also calls hashCode, which caches, to speed this up for multiple calls
 		if (location1 == null)
@@ -2104,6 +2354,15 @@ public interface ExElement extends Identifiable {
 		}
 	}
 
+	/**
+	 * Creates a Qonfig interpretation creator for an {@link ExElement}
+	 *
+	 * @param <P> The parent type required by the element type
+	 * @param <T> The type of the element
+	 * @param parentType The parent type required by the element type
+	 * @param creator Function to create the element from the parent and type
+	 * @return The Qonfig interpretation creator
+	 */
 	static <P extends Def<?>, T> QonfigInterpreterCore.QonfigValueCreator<T> creator(Class<P> parentType,
 		BiFunction<P, QonfigElementOrAddOn, T> creator) {
 		return session -> {
@@ -2115,6 +2374,13 @@ public interface ExElement extends Identifiable {
 		};
 	}
 
+	/**
+	 * Creates a Qonfig interpretation creator for an {@link ExElement}
+	 *
+	 * @param <T> The type of the element
+	 * @param creator Function to create the element from the parent and type
+	 * @return The Qonfig interpretation creator
+	 */
 	static <T> QonfigInterpreterCore.QonfigValueCreator<T> creator(BiFunction<Def<?>, QonfigElementOrAddOn, T> creator) {
 		return session -> creator.apply(session.as(ExpressoQIS.class).getElementRepresentation(), session.getFocusType());
 	}

@@ -141,78 +141,78 @@ public class DSTesting {
 	static class DSTestable implements Testable {
 		@Override
 		public void accept(TestHelper helper) {
-			DefaultDependencyService<String> dds = new DefaultDependencyService<>(Transactable.NONE);
+			try (DefaultDependencyService<String> dds = new DefaultDependencyService<>(Transactable.NONE)) {
+				int serviceCount = helper.getInt(1, helper.getInt(3, 10));
+				int componentCount = helper.getInt(1, helper.getInt(3, 10));
 
-			int serviceCount = helper.getInt(1, helper.getInt(3, 10));
-			int componentCount = helper.getInt(1, helper.getInt(3, 10));
+				if (helper.isReproducing())
+					System.out.println(serviceCount + " services, " + componentCount + " components");
 
-			if (helper.isReproducing())
-				System.out.println(serviceCount + " services, " + componentCount + " components");
+				List<SimpleService> services = new ArrayList<>(serviceCount);
+				List<ComponentController<String>> components = new ArrayList<>(componentCount);
 
-			List<SimpleService> services = new ArrayList<>(serviceCount);
-			List<ComponentController<String>> components = new ArrayList<>(componentCount);
-
-			BetterSet<Dependency<String, ?>> path = BetterHashSet.build().build();
-			Boolean[] initialized = new Boolean[1];
-			for (int i = 0; i < serviceCount; i++)
-				services.add(new SimpleService("" + i));
-			int[] componentIndex = new int[1];
-			for (componentIndex[0] = 0; componentIndex[0] < componentCount; componentIndex[0]++) {
-				String name = "" + (char) ('A' + componentIndex[0]);
-				components.add(configureComponent(//
-					dds.inject(name, __ -> name), components.size(), services, helper, initialized, path));
-			}
-
-			checkState(dds, false, path);
-			if (helper.isReproducing())
-				System.out.println("initializing");
-			helper.placemark();
-			initialized[0] = null;
-			dds.init();
-			initialized[0] = true;
-			if (helper.isReproducing())
-				System.out.println("initialized");
-			checkState(dds, true, path);
-
-			int ops = helper.getInt(10, 100);
-			try {
-				for (int i = 0; i < ops; i++) {
-					if (helper.isReproducing())
-						print(dds);
-					helper.createAction()//
-					.or(1, () -> { // Toggle availability
-						if (components.isEmpty())
-							return;
-						ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-						boolean available = !comp.isAvailable().get();
-						if (helper.isReproducing())
-							System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
-						comp.setAvailable(available);
-						Assert.assertEquals(available, comp.isAvailable().get());
-					}).or(0.01, () -> {// Remove component
-						if (components.isEmpty())
-							return;
-						ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-						if (helper.isReproducing())
-							System.out.println("Removing " + comp.getName());
-						comp.remove();
-						Assert.assertFalse(dds.getComponents().contains(comp));
-						components.remove(comp);
-					}).or(0.01, () -> {// Add component
-						String name = "" + (char) ('A' + componentIndex[0]);
-						if (helper.isReproducing())
-							System.out.println("Adding " + name);
-						components.add(
-							configureComponent(dds.inject(name, __ -> name), components.size(), services, helper, initialized, path));
-						componentIndex[0]++;
-					})//
-					.execute("op");
-					checkState(dds, true, path);
+				BetterSet<Dependency<String, ?>> path = BetterHashSet.build().build();
+				Boolean[] initialized = new Boolean[1];
+				for (int i = 0; i < serviceCount; i++)
+					services.add(new SimpleService("" + i));
+				int[] componentIndex = new int[1];
+				for (componentIndex[0] = 0; componentIndex[0] < componentCount; componentIndex[0]++) {
+					String name = "" + (char) ('A' + componentIndex[0]);
+					components.add(configureComponent(//
+						dds.inject(name, __ -> name), components.size(), services, helper, initialized, path));
 				}
-			} catch (AssertionError e) {
-				System.err.println("On error:");
-				print(dds);
-				throw e;
+
+				checkState(dds, false, path);
+				if (helper.isReproducing())
+					System.out.println("initializing");
+				helper.placemark();
+				initialized[0] = null;
+				dds.init();
+				initialized[0] = true;
+				if (helper.isReproducing())
+					System.out.println("initialized");
+				checkState(dds, true, path);
+
+				int ops = helper.getInt(10, 100);
+				try {
+					for (int i = 0; i < ops; i++) {
+						if (helper.isReproducing())
+							print(dds);
+						helper.createAction()//
+							.or(1, () -> { // Toggle availability
+								if (components.isEmpty())
+									return;
+								ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+								boolean available = !comp.isAvailable().get();
+								if (helper.isReproducing())
+									System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
+								comp.setAvailable(available);
+								Assert.assertEquals(available, comp.isAvailable().get());
+							}).or(0.01, () -> {// Remove component
+								if (components.isEmpty())
+									return;
+								ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+								if (helper.isReproducing())
+									System.out.println("Removing " + comp.getName());
+								comp.remove();
+								Assert.assertFalse(dds.getComponents().contains(comp));
+								components.remove(comp);
+							}).or(0.01, () -> {// Add component
+								String name = "" + (char) ('A' + componentIndex[0]);
+								if (helper.isReproducing())
+									System.out.println("Adding " + name);
+								components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper,
+									initialized, path));
+								componentIndex[0]++;
+							})//
+							.execute("op");
+						checkState(dds, true, path);
+					}
+				} catch (AssertionError e) {
+					System.err.println("On error:");
+					print(dds);
+					throw e;
+				}
 			}
 		}
 
@@ -392,7 +392,7 @@ public class DSTesting {
 				return Observable.or(comp2.getStage().noInitChanges(), comp2.isAvailable().noInitChanges());
 			}).collect().simpleChanges())
 				.collect(Collectors.toList()).toArray(new Observable[0])))
-			.takeUntil(removed)//
+		.takeUntil(removed)//
 		.act(cause -> {
 			// All providers known to the dependencies must be available and satisfied (or pre-satisfied) at all times
 			for (Dependency<String, ?> dep : comp.getDependencies().values()) {

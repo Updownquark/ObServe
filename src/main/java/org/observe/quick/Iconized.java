@@ -23,7 +23,6 @@ import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledAddOn;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
-import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle.Def.StyleDefBuilder;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;

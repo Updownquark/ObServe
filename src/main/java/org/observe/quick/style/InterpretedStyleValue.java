@@ -24,8 +24,9 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	/**
 	 * @param styleValue The style value this structure is evaluated from
 	 * @param application The application for this value
+	 * @param attribute The style attribute this value is for
 	 * @param value The value container
-	 * @param modelContext
+	 * @param modelContext The required model context for the style value
 	 */
 	public InterpretedStyleValue(QuickStyleValue styleValue, InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value, InterpretedRequiredModelContext modelContext) {
@@ -46,6 +47,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theApplication;
 	}
 
+	/** @return The style attribute this value is for */
 	public QuickStyleAttribute<T> getAttribute() {
 		return theAttribute;
 	}
@@ -55,10 +57,15 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theValue;
 	}
 
+	/** @return The required model context for this style value */
 	public ExWithRequiredModels.InterpretedRequiredModelContext getModelContext() {
 		return theModelContext;
 	}
 
+	/**
+	 * @param models The interpreted models to create the instantiator with
+	 * @return An instantiator for this style value
+	 */
 	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) {
 		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(models), theValue.instantiate(), theModelContext);
 	}
@@ -73,11 +80,24 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theStyleValue.toString();
 	}
 
+	/**
+	 * Instantiator for a style value's condition and value
+	 *
+	 * @param <T> The type of the style attribute
+	 */
 	public static class StyleValueInstantiator<T> {
+		/** The model value instantiator for the style value's condition */
 		public final ModelValueInstantiator<ObservableValue<Boolean>> condition;
+		/** The model value instantiator for the style value's value */
 		public final ModelValueInstantiator<SettableValue<T>> value;
+		/** The required model context for the style value */
 		public final ExWithRequiredModels.InterpretedRequiredModelContext modelContext;
 
+		/**
+		 * @param condition The model value instantiator for the style value's condition
+		 * @param value The model value instantiator for the style value's value
+		 * @param modelContext The required model context for the style value
+		 */
 		public StyleValueInstantiator(ModelValueInstantiator<ObservableValue<Boolean>> condition,
 			ModelValueInstantiator<SettableValue<T>> value, ExWithRequiredModels.InterpretedRequiredModelContext modelContext) {
 			this.condition = condition;

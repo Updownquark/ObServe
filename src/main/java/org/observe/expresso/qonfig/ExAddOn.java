@@ -28,6 +28,7 @@ public interface ExAddOn<E extends ExElement> {
 		/** @return The add-on that the Qonfig toolkit uses to represent this type */
 		QonfigAddOn getType();
 
+		/** @return The classes of add-ons whose work this add-on depends on before it can work */
 		default Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
 			return Collections.emptySet();
 		}
@@ -35,6 +36,14 @@ public interface ExAddOn<E extends ExElement> {
 		/** @return The element definition that this add-on is added onto */
 		ExElement.Def<?> getElement();
 
+		/**
+		 * Called from the {@link #getElement() element}'s {@link ExElement.Def#update(ExpressoQIS) update} before
+		 * {@link #update(ExpressoQIS, org.observe.expresso.qonfig.ExElement.Def)} has been called on any add-ons
+		 *
+		 * @param session The session to support this add-on
+		 * @param element The element that this add-on is for
+		 * @throws QonfigInterpretationException If an error occurs updating this add-on
+		 */
 		default void preUpdate(ExpressoQIS session, ExElement.Def<? extends E> element) throws QonfigInterpretationException {
 		}
 
@@ -43,10 +52,19 @@ public interface ExAddOn<E extends ExElement> {
 		 * add-on definition
 		 *
 		 * @param session The session to support this add-on
+		 * @param element The element that this add-on is for
 		 * @throws QonfigInterpretationException If an error occurs updating this add-on
 		 */
 		void update(ExpressoQIS session, ExElement.Def<? extends E> element) throws QonfigInterpretationException;
 
+		/**
+		 * Called from the {@link #getElement() element}'s {@link ExElement.Def#update(ExpressoQIS) update} afer
+		 * {@link #update(ExpressoQIS, org.observe.expresso.qonfig.ExElement.Def)} has been called on all add-ons
+		 *
+		 * @param session The session to support this add-on
+		 * @param element The element that this add-on is for
+		 * @throws QonfigInterpretationException If an error occurs updating this add-on
+		 */
 		default void postUpdate(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 		}
 
@@ -103,21 +121,35 @@ public interface ExAddOn<E extends ExElement> {
 		/** @return The element interpretation that this add-on is added onto */
 		ExElement.Interpreted<?> getElement();
 
+		/**
+		 * Called from the {@link #getElement() element}'s update before {@link #update(org.observe.expresso.qonfig.ExElement.Interpreted)}
+		 * has been called on any add-ons
+		 *
+		 * @param element The element that this add-on is for
+		 * @throws ExpressoInterpretationException If an error occurs updating this add-on
+		 */
 		default void preUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
 
 		/**
 		 * Called from the {@link #getElement() element}'s update, initializes or updates this add-on interpretation
 		 *
-		 * @param models The models to support this add-on
-		 * @param session The session to support this add-on
+		 * @param element The element that this add-on is for
 		 * @throws ExpressoInterpretationException If any models in this add on could not be interpreted
 		 */
 		void update(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException;
 
+		/**
+		 * Called from the {@link #getElement() element}'s update after {@link #update(org.observe.expresso.qonfig.ExElement.Interpreted)}
+		 * has been called on all add-ons
+		 *
+		 * @param element The element that this add-on is for
+		 * @throws ExpressoInterpretationException If an error occurs updating this add-on
+		 */
 		default void postUpdate(ExElement.Interpreted<? extends E> element) throws ExpressoInterpretationException {
 		}
 
+		/** @return The type of add-on instance that this interpretation creates */
 		public Class<AO> getInstanceType();
 
 		/**
@@ -168,11 +200,19 @@ public interface ExAddOn<E extends ExElement> {
 		}
 	}
 
+	/** @return The type of interpretation that created this add-on */
 	Class<? extends Interpreted<?, ?>> getInterpretationType();
 
 	/** @return The element that this add-on is added onto */
 	ExElement getElement();
 
+	/**
+	 * Called from the {@link #getElement() element}'s {@link ExElement#update(org.observe.expresso.qonfig.ExElement.Interpreted, ExElement)
+	 * update} before {@link #update(Interpreted, ExElement)} has been called on any add-ons
+	 *
+	 * @param interpreted The interpretation producing this add-on
+	 * @param element The element that this add-on is for
+	 */
 	default void preUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
 
@@ -180,18 +220,46 @@ public interface ExAddOn<E extends ExElement> {
 	 * Called by the {@link #getElement() element's} update, initializes or updates this add-on
 	 *
 	 * @param interpreted The interpretation producing this add-on
+	 * @param element The element that this add-on is for
 	 */
 	void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element);
 
+	/**
+	 * Called from the {@link #getElement() element}'s
+	 * {@link ExElement#update(org.observe.expresso.qonfig.ExElement.Interpreted, ExElement)} after {@link #update(Interpreted, ExElement)}
+	 * has been called on all add-ons
+	 *
+	 * @param interpreted The interpretation producing this add-on
+	 * @param element The element that this add-on is for
+	 */
 	default void postUpdate(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
 	}
 
-	default void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {}
+	/**
+	 * @param builder The model instance builder to install runtime models into. Runtime models are those that expressions on the element
+	 *        should not have access to, but may be needed for expressions that were interpreted in a different environment but need to be
+	 *        executed on this element (e.g. style sheets).
+	 *
+	 * @param elementModels The model instance for this element
+	 * @throws ModelInstantiationException If any runtime models could not be installed
+	 */
+	default void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
+	}
 
-	default void preInstantiated() {}
+	/**
+	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated} before {@link #instantiated()} has been
+	 * called on any add-ons
+	 */
+	default void preInstantiated() {
+	}
 
+	/** Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated} */
 	void instantiated();
 
+	/**
+	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiate(ModelSetInstance) instantiate} before
+	 * {@link #instantiate(ModelSetInstance)} has been called on any add-ons
+	 */
 	default void preInstantiate() {
 	}
 
@@ -204,12 +272,25 @@ public interface ExAddOn<E extends ExElement> {
 	 */
 	void instantiate(ModelSetInstance models) throws ModelInstantiationException;
 
+	/**
+	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiate(ModelSetInstance) instantiate} after
+	 * {@link #instantiate(ModelSetInstance)} has been called on all add-ons
+	 *
+	 * @param models The models to support this add-on
+	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated
+	 */
 	default void postInstantiate(ModelSetInstance models) throws ModelInstantiationException {
 	}
 
+	/**
+	 * @param element The element to create a copy for
+	 * @return A copy of this add-on for the given element
+	 */
 	ExAddOn<E> copy(E element);
 
-	default void destroy() {}
+	/** Destroys this add-on, destroying its model values and releasing its resources */
+	default void destroy() {
+	}
 
 	/**
 	 * An abstract {@link ExAddOn} implementation
@@ -276,11 +357,27 @@ public interface ExAddOn<E extends ExElement> {
 		}
 	}
 
+	/**
+	 * Creates a Qonfig interpretation creator for an {@link ExAddOn}
+	 *
+	 * @param <AO> The type of the add-on
+	 * @param creator Function to create the add-on from the owner and type
+	 * @return The Qonfig interpretation creator
+	 */
 	static <AO extends Def<?, ?>> QonfigInterpreterCore.QonfigValueCreator<AO> creator(
 		BiFunction<QonfigAddOn, ExElement.Def<?>, AO> creator) {
 		return session -> creator.apply((QonfigAddOn) session.getFocusType(), session.as(ExpressoQIS.class).getElementRepresentation());
 	}
 
+	/**
+	 * Creates a Qonfig interpretation creator for an {@link ExAddOn}
+	 *
+	 * @param <D> The element type required by the add-on type
+	 * @param <AO> The type of the add-on
+	 * @param defType The element type required by the add-on type
+	 * @param creator Function to create the add-on from the owner and type
+	 * @return The Qonfig interpretation creator
+	 */
 	static <D extends ExElement.Def<?>, AO extends Def<?, ?>> QonfigInterpreterCore.QonfigValueCreator<AO> creator(Class<D> defType,
 		BiFunction<QonfigAddOn, D, AO> creator) {
 		return session -> {

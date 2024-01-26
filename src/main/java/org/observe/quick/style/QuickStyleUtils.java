@@ -24,16 +24,27 @@ import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 
+/** General utilities for Quick Styles */
 public class QuickStyleUtils {
+	/** A runtime cache that can be stashed in an expresso environment to avoid loading resources multiple times */
 	public static class RuntimeCache {
+		/** The session key by which to store the cache in the expresso environment */
 		public static final String ENV_KEY = "Quick.Runtime.Cache";
 
 		private final Map<Object, Object> theCache = new ConcurrentHashMap<>();
 
+		/**
+		 * @param key The key to get the resource for
+		 * @return The resource in this cache with the given key, or null
+		 */
 		public Object getCacheItem(Object key) {
 			return theCache.get(key);
 		}
 
+		/**
+		 * @param key The key to store the resource under
+		 * @param value The resource to cache with the given key
+		 */
 		public void setCacheItem(Object key, Object value) {
 			theCache.put(key, value);
 		}
@@ -44,6 +55,16 @@ public class QuickStyleUtils {
 
 		IconKey(String location) {
 			theLocation = location;
+		}
+
+		@Override
+		public int hashCode() {
+			return theLocation.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof IconKey && theLocation.equals(((IconKey) obj).theLocation);
 		}
 	}
 
@@ -108,7 +129,7 @@ public class QuickStyleUtils {
 					else if (icon instanceof ImageIcon && ((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
 						reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
 					if (icon != null)
-						fCache.setCacheItem(loc, icon);
+						fCache.setCacheItem(key, icon);
 					return icon;
 				}), __ -> "unsettable")));
 			}

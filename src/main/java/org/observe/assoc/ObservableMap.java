@@ -494,8 +494,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	}
 
 	/**
-	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
-	 *         per transaction.
+	 * @return An observable that fires a value whenever anything in this structure changes. This observable will only fire 1 event per
+	 *         transaction.
 	 */
 	default Observable<Causable> changes() {
 		return values().simpleChanges();

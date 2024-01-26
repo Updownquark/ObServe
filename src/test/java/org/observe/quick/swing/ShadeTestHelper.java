@@ -1,8 +1,15 @@
 package org.observe.quick.swing;
 
+/** Used by the Simple Shading Demo */
 public class ShadeTestHelper {
 	private boolean isIncreasingShade = true;
 
+	/**
+	 * Moves the sun around
+	 *
+	 * @param lightSource The light source orientation
+	 * @return The new light source orientation
+	 */
 	public float advanceLightSource(float lightSource) {
 		lightSource += 3;
 		if (lightSource >= 360)
@@ -10,6 +17,12 @@ public class ShadeTestHelper {
 		return lightSource;
 	}
 
+	/**
+	 * Changes the max shading
+	 *
+	 * @param maxShade The max shading
+	 * @return The new max shading
+	 */
 	public float advanceMaxShading(float maxShade) {
 		if (isIncreasingShade) {
 			maxShade += 0.05;
@@ -33,6 +46,13 @@ public class ShadeTestHelper {
 			DROP_SHADING[i] = (float) Math.sin(i * Math.PI * 2 / DROP_SHADING.length);
 	}
 
+	/**
+	 * @param x The x position to shade
+	 * @param y The y position to shade
+	 * @param w The width of a tile
+	 * @param h The height of a tile
+	 * @return The shade amount
+	 */
 	public float shadeCustom(int x, int y, int w, int h) {
 		int wOver2 = w / 2;
 		int hOver2 = h / 2;

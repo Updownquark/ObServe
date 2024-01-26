@@ -446,6 +446,8 @@ public class ObservableConfigTest {
 
 		i = 0;
 		for (TestEntity2 entity : testEntities.getValues()) {
+			if (entity == null)
+				throw new IllegalStateException(); // Just suppressing a warning here
 			switch (i) {
 			case 0:
 				// TODO
