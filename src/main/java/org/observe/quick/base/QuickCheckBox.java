@@ -91,14 +91,14 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 		theTextInstantiator = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theTextInstantiator != null)
 			theTextInstantiator.instantiate();

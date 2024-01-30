@@ -329,7 +329,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
 		theSizeInstantiator = myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate();
@@ -412,7 +412,6 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		boolean fPct = pct, fXp = xp;
 		int fUnit = unit;
 		return CompiledModelValue.of(expression::toString, ModelTypes.Value, env -> {
-			InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
 			if (fUnit > 0) {
 				InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> num;
 				try {
@@ -433,8 +432,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 					map = v -> v == null ? null : new QuickSize(0.0f, Math.round(v.floatValue()));
 					reverse = s -> s == null ? null : Double.valueOf(s.pixels);
 				}
-				ModelValueInstantiator<SettableValue<Double>> numInst = num.instantiate();
-				positionValue = InterpretedValueSynth.simple(ModelTypes.Value.forType(QuickSize.class), ModelValueInstantiator.of(msi -> {
+				return num.map(ModelTypes.Value.forType(QuickSize.class), numInst -> ModelValueInstantiator.of(msi -> {
 					SettableValue<Double> numV = numInst.get(msi);
 					return numV.transformReversible(QuickSize.class, tx -> tx//
 						.map(map)//
@@ -443,6 +441,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			} else {
 				ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
 					.holder2();
+				InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
 				positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), env, 0, tce);
 				if (tce.hasException()) {
 					// If it doesn't parse as a position, try parsing as a number.
@@ -459,8 +458,8 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 								new LocatedFilePosition(value.fileLocation, env.reporting().getPosition()), 0, tce.get2());
 					}
 				}
+				return positionValue;
 			}
-			return positionValue;
 		});
 	}
 

@@ -1,5 +1,6 @@
 package org.observe.quick.base;
 
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -78,7 +79,7 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;

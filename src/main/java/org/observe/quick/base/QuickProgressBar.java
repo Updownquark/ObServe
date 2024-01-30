@@ -19,8 +19,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	public static final String PROGRESS_BAR = "progress-bar";
 
@@ -121,7 +119,7 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -130,7 +128,7 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theMaximumInstantiator.instantiate();

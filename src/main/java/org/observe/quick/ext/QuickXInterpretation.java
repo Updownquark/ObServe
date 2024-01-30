@@ -92,8 +92,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		qonfigType = QuickCustomShadingElement.CUSTOM_SHADING,
 		interpretation = QuickCustomShadingElement.Interpreted.class)
 	static class QuickCustomShadingElement
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>> {
 		public static final String CUSTOM_SHADING = "custom-shading";
 
 		private CompiledExpression theUnitWidth;
@@ -199,9 +199,9 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitWidth;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitHeight;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theLit;
@@ -260,12 +260,12 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<QuickShading>> instantiate() {
+			public ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<QuickShading>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<QuickShading>> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitWidth;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitHeight;
@@ -282,7 +282,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			private final ModelComponentId thePXVariable;
 			private final ModelComponentId thePYVariable;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(QuickCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theLocalModel = interpreted.getModels().instantiate();
 				theUnitWidth = interpreted.getUnitWidth() == null ? null : interpreted.getUnitWidth().instantiate();
 				theUnitHeight = interpreted.getUnitHeight() == null ? null : interpreted.getUnitHeight().instantiate();
@@ -300,7 +301,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				if (theUnitWidth != null)
 					theUnitWidth.instantiate();
@@ -354,8 +355,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		qonfigType = QuickRaisedShadingElement.RAISED_SHADING,
 		interpretation = QuickCustomShadingElement.Interpreted.class)
 	static class QuickRaisedShadingElement
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>> {
 		public static final String RAISED_SHADING = "raised-shading";
 
 		private boolean isRound;
@@ -404,9 +405,9 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<?>, SettableValue<QuickShading>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
 			Interpreted(QuickRaisedShadingElement definition, ExElement.Interpreted<?> parent) {
@@ -440,26 +441,24 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<QuickShading>> instantiate() {
+			public ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<QuickShading>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<QuickShading>> {
 			private boolean isRound;
 			private boolean isHorizontal;
 			private boolean isVertical;
 			private ModelValueInstantiator<SettableValue<Double>> theOpacity;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(QuickRaisedShadingElement.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				isRound = interpreted.getDefinition().isRound();
 				isHorizontal = interpreted.getDefinition().isHorizontal();
 				isVertical = interpreted.getDefinition().isVertical();
 				theOpacity = interpreted.getOpacity() == null ? null : interpreted.getOpacity().instantiate();
 			}
-
-			@Override
-			public void instantiate() {}
 
 			@Override
 			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {

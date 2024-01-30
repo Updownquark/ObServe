@@ -155,7 +155,7 @@ public class AssignmentExpression implements ObservableExpression {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction> instantiate() {
+			public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(target.instantiate(), value.instantiate(), reporting);
 			}
 
@@ -195,7 +195,7 @@ public class AssignmentExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theTarget.instantiate();
 			theSource.instantiate();
 		}

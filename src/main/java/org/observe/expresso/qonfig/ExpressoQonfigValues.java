@@ -7,10 +7,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.observe.Observable;
@@ -40,6 +38,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
@@ -69,15 +68,12 @@ import com.google.common.reflect.TypeToken;
 
 /** A collection of Expresso Qonfig model value types */
 public class ExpressoQonfigValues {
-	private ExpressoQonfigValues() {}
+	private ExpressoQonfigValues() {
+	}
 
-	/**
-	 * Abstract scalar model value definition
-	 *
-	 * @param <E> The Qonfig element type, unused
-	 */
-	public static abstract class AbstractCompiledValue<E extends AbstractCompiledValue.Element<?>>
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, E> implements ModelValueElement.CompiledSynth<SettableValue<?>, E> {
+	/** Abstract scalar model value definition */
+	public static abstract class AbstractCompiledValue extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<?>> {
 		/**
 		 * @param parent The parent element of this model value
 		 * @param qonfigType The Qonfig type of this model value
@@ -90,45 +86,21 @@ public class ExpressoQonfigValues {
 		 * Interpretation of a {@link AbstractCompiledValue}
 		 *
 		 * @param <T> The type of the model value
-		 * @param <E> The Qonfig element type, unused
 		 */
-		public static abstract class Interpreted<T, E extends Element<T>>
-		extends ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<T>, E>
-		implements ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, E> {
+		public static abstract class Interpreted<T>
+		extends ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<T>>>
+		implements ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<T>>> {
 			/**
 			 * @param definition The definition to interpret
 			 * @param parent The parent for this element
 			 */
-			protected Interpreted(AbstractCompiledValue<? super E> definition, ExElement.Interpreted<?> parent) {
+			protected Interpreted(AbstractCompiledValue definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
-			}
-		}
-
-		/**
-		 * Element instance of of a {@link AbstractCompiledValue}, unused
-		 *
-		 * @param <T> The type of the model value
-		 */
-		public static abstract class Element<T> extends ModelValueElement.Default<SettableValue<?>, SettableValue<T>> {
-			/** @param id The element ID for this element */
-			protected Element(Object id) {
-				super(id);
-			}
-		}
-
-		/**
-		 * Un-creatable element type
-		 *
-		 * @param <T> The type of the model value
-		 */
-		public static abstract class VoidElement<T> extends Element<T> {
-			private VoidElement() {
-				super(null);
 			}
 		}
 	}
 
-	public static class ConstantValueDef extends AbstractCompiledValue<AbstractCompiledValue.VoidElement<?>> {
+	public static class ConstantValueDef extends AbstractCompiledValue {
 		public ConstantValueDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -147,7 +119,7 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, AbstractCompiledValue.VoidElement<T>> {
+		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T> {
 			public Interpreted(ConstantValueDef definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -168,29 +140,25 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
-				return new Instantiator<>(getDefinition().getModelPath(), getElementValue().instantiate());
+			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
-			private final String theModelPath;
-			private final ModelValueInstantiator<SettableValue<T>> theSource;
-
-			Instantiator(String modelPath, ModelValueInstantiator<SettableValue<T>> source) {
-				theModelPath = modelPath;
-				theSource = source;
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
+			Instantiator(ConstantValueDef.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 			}
 
 			@Override
-			public void instantiate() {
-				theSource.instantiate();
+			public ModelValueInstantiator<SettableValue<T>> getElementValue() {
+				return (ModelValueInstantiator<SettableValue<T>>) super.getElementValue();
 			}
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<T> initV = theSource.get(models);
-				return new ConstantValue<>(theModelPath, initV.getType(), initV.get());
+				SettableValue<T> initV = getElementValue().get(models);
+				return new ConstantValue<>(getModelPath(), initV.getType(), initV.get());
 			}
 
 			@Override
@@ -273,7 +241,7 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	public static class SimpleValueDef extends AbstractCompiledValue<SimpleValueDef.Element<?>> {
+	public static class SimpleValueDef extends AbstractCompiledValue {
 		public SimpleValueDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -311,7 +279,7 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, Element<T>> {
+		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T> {
 			public Interpreted(SimpleValueDef definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -341,48 +309,42 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
-				return new Instantiator<>(getDefinition().getModelPath(), (TypeToken<T>) getType().getType(0),
-					getElementValue() == null ? null : getElementValue().instantiate(), //
-						getInit() == null ? null : getInit().instantiate());
-			}
-
-			@Override
-			public Element<T> create() {
-				return new Element<>(getIdentity());
+			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this, (TypeToken<T>) getType().getType(0), getInit() == null ? null : getInit().instantiate());
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
-			private final String theModelPath;
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
 			private final TypeToken<T> theType;
-			private final ModelValueInstantiator<SettableValue<T>> theValue;
 			private final ModelValueInstantiator<SettableValue<T>> theInit;
 
-			Instantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<SettableValue<T>> value,
-				ModelValueInstantiator<SettableValue<T>> init) {
-				theModelPath = modelPath;
-				theValue = value;
-				theInit = init;
+			Instantiator(SimpleValueDef.Interpreted<T> parent, TypeToken<T> type, ModelValueInstantiator<SettableValue<T>> init)
+				throws ModelInstantiationException {
+				super(parent);
+				theInit = parent.getInit() == null ? null : parent.getInit().instantiate();
 				theType = type;
 			}
 
 			@Override
-			public void instantiate() {
-				if (theValue != null)
-					theValue.instantiate();
+			public ModelValueInstantiator<SettableValue<T>> getElementValue() {
+				return (ModelValueInstantiator<SettableValue<T>>) super.getElementValue();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				super.instantiate();
 				if (theInit != null)
 					theInit.instantiate();
 			}
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				if (theValue != null)
-					return theValue.get(models);
+				if (getElementValue() != null)
+					return getElementValue().get(models);
 				else {
 					SettableValue.Builder<T> builder = SettableValue.build(theType);
-					if (theModelPath != null)
-						builder.withDescription(theModelPath);
+					if (getModelPath() != null)
+						builder.withDescription(getModelPath());
 					if (theInit != null) {
 						SettableValue<T> initV = theInit.get(models);
 						builder.withValue(initV.get());
@@ -395,24 +357,19 @@ public class ExpressoQonfigValues {
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				if (theValue != null)
-					return theValue.forModelCopy(value, sourceModels, newModels);
+				if (getElementValue() != null)
+					return getElementValue().forModelCopy(value, sourceModels, newModels);
 				else
 					return value; // Independent (fundamental) value
-			}
-		}
-
-		public static class Element<T> extends AbstractCompiledValue.Element<T> {
-			public Element(Object id) {
-				super(id);
 			}
 		}
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = FieldValueDef.FIELD_VALUE,
-		interpretation = FieldValueDef.Interpreted.class)
-	public static class FieldValueDef extends AbstractCompiledValue<FieldValueDef.Element<?>> {
+		interpretation = FieldValueDef.Interpreted.class,
+		instance = FieldValueDef.Instantiator.class)
+	public static class FieldValueDef extends AbstractCompiledValue {
 		public static final String FIELD_VALUE = "field-value";
 
 		private ModelComponentId theSourceAs;
@@ -457,11 +414,11 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public InterpretedSynth<SettableValue<?>, ?, ? extends Element<?>> interpretValue(ExElement.Interpreted<?> parent) {
+		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<?>> interpretValue(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, Element<T>> {
+		static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSource;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theSave;
 
@@ -507,26 +464,39 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+		public static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
 			private final ModelInstantiator theLocalModels;
 			private final ModelValueInstantiator<SettableValue<T>> theSource;
 			private final ModelValueInstantiator<ObservableAction> theSave;
 			private final ModelComponentId theSourceAs;
 
-			Instantiator(Interpreted<T> interpreted) {
+			Instantiator(FieldValueDef.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
 				theSource = interpreted.getSource().instantiate();
 				theSave = interpreted.getSave().instantiate();
 				theSourceAs = interpreted.getDefinition().getSourceAs();
 			}
 
+			public ModelValueInstantiator<SettableValue<T>> getSource() {
+				return theSource;
+			}
+
+			public ModelValueInstantiator<ObservableAction> getSave() {
+				return theSave;
+			}
+
+			public ModelComponentId getSourceAs() {
+				return theSourceAs;
+			}
+
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModels.instantiate();
 				theSource.instantiate();
 				theSave.instantiate();
@@ -607,17 +577,14 @@ public class ExpressoQonfigValues {
 				return theSource.getIdentity();
 			}
 		}
-
-		static class Element<T> extends AbstractCompiledValue.Element<T> {
-			Element(Object id) {
-				super(id);
-			}
-		}
 	}
 
 	/** ExElement definition for the Expresso &lt;element>. */
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "element", interpretation = CollectionElement.Interpreted.class)
-	public static class CollectionElement extends AbstractCompiledValue<AbstractCompiledValue.VoidElement<?>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "element",
+		interpretation = CollectionElement.Interpreted.class,
+		instance = CollectionElement.CollectionPopulator.class)
+	public static class CollectionElement extends AbstractCompiledValue {
 		public CollectionElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -642,7 +609,7 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, AbstractCompiledValue.VoidElement<T>> {
+		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T> {
 			public Interpreted(CollectionElement definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -663,39 +630,47 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
-				return getElementValue().instantiate();
-			}
-
-			public CollectionPopulator<T> populator() {
-				return new CollectionPopulator.Default<>(instantiate(),
-					reporting().at(getDefinition().getElementValue().getFilePosition()));
+			public CollectionPopulator<T> create() throws ModelInstantiationException {
+				return new CollectionPopulator.Default<>(this);
 			}
 		}
 
-		public interface CollectionPopulator<T> {
-			void instantiate();
-
+		public interface CollectionPopulator<T> extends ModelValueElement<SettableValue<T>> {
 			boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models) throws ModelInstantiationException;
 
-			static class Default<T> implements CollectionPopulator<T> {
-				private final ModelValueInstantiator<SettableValue<T>> theValue;
+			static class Default<T> extends ModelValueElement.Abstract<SettableValue<T>> implements CollectionPopulator<T> {
 				private final ErrorReporting theReporting;
 
-				public Default(ModelValueInstantiator<SettableValue<T>> value, ErrorReporting reporting) {
-					theValue = value;
-					theReporting = reporting;
+				public Default(CollectionElement.Interpreted<T> interpreted) throws ModelInstantiationException {
+					super(interpreted);
+					theReporting = interpreted.reporting().at(interpreted.getDefinition().getElementValue().getFilePosition());
 				}
 
 				@Override
-				public void instantiate() {
-					theValue.instantiate();
+				public ModelValueInstantiator<SettableValue<T>> getElementValue() {
+					return (ModelValueInstantiator<SettableValue<T>>) super.getElementValue();
+				}
+
+				@Override
+				public void instantiate() throws ModelInstantiationException {
+					super.instantiate();
+				}
+
+				@Override
+				public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					return getElementValue().get(models);
+				}
+
+				@Override
+				public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+					throws ModelInstantiationException {
+					return getElementValue().forModelCopy(value, sourceModels, newModels);
 				}
 
 				@Override
 				public boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models)
 					throws ModelInstantiationException {
-					SettableValue<T> elValue = theValue.get(models);
+					SettableValue<T> elValue = get(models);
 					T value = elValue.get();
 					String msg = collection.canAdd(value);
 					if (msg != null) {
@@ -711,10 +686,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "int-list", interpretation = AbstractCollectionDef.Interpreted.class)
-	public static abstract class AbstractCollectionDef<C extends ObservableCollection<?>>
-	extends ModelValueElement.Def.SingleTyped<C, ModelValueElement<C, C>>
-	implements ModelValueElement.CompiledSynth<C, ModelValueElement<C, C>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "int-list",
+		interpretation = AbstractCollectionDef.Interpreted.class,
+		instance = AbstractCollectionDef.Instantiator.class)
+	public static abstract class AbstractCollectionDef<C extends ObservableCollection<?>> extends
+	ModelValueElement.Def.SingleTyped<C, ModelValueElement<C>> implements ModelValueElement.CompiledSynth<C, ModelValueElement<C>> {
 		private QonfigElementOrAddOn theIntListType;
 		private final List<CollectionElement> theElements;
 
@@ -763,8 +740,8 @@ public class ExpressoQonfigValues {
 		protected abstract Interpreted<?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<T, C extends ObservableCollection<T>>
-		extends ModelValueElement.Def.SingleTyped.Interpreted<C, C, ModelValueElement<C, C>>
-		implements ModelValueElement.InterpretedSynth<C, C, ModelValueElement<C, C>> {
+		extends ModelValueElement.Def.SingleTyped.Interpreted<C, C, ModelValueElement<C>>
+		implements ModelValueElement.InterpretedSynth<C, C, ModelValueElement<C>> {
 			private final List<CollectionElement.Interpreted<T>> theElements;
 
 			protected Interpreted(AbstractCollectionDef<?> definition, ExElement.Interpreted<?> parent) {
@@ -789,10 +766,7 @@ public class ExpressoQonfigValues {
 			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
-					LinkedList::new, //
-					list -> list.add(this), //
-					LinkedList::removeLast)) {
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getElements(), theElements,
 						(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
 				}
@@ -802,45 +776,45 @@ public class ExpressoQonfigValues {
 				return TypeTokens.get().wrap((TypeToken<T>) getTargetType().getType(0));
 			}
 
-			protected List<CollectionElement.CollectionPopulator<T>> instantiateElements() {
-				return theElements.stream().map(el -> el.populator()).collect(Collectors.toList());
-			}
-
-			@Override
-			public ModelValueElement<C, C> create() {
-				return new ModelValueElement.Default<>(getIdentity());
+			protected List<CollectionElement.CollectionPopulator<T>> instantiateElements() throws ModelInstantiationException {
+				return BetterList.of2(theElements.stream(), el -> el.create());
 			}
 		}
 
-		protected static abstract class Instantiator<T, C extends ObservableCollection<T>> implements ModelValueInstantiator<C> {
-			private final String theModelPath;
+		public static abstract class Instantiator<T, C extends ObservableCollection<T>> extends ModelValueElement.Abstract<C> {
 			private final TypeToken<T> theType;
-			private final ModelValueInstantiator<C> theValueInstantiator;
 			private final List<CollectionElement.CollectionPopulator<T>> theElements;
 
-			protected Instantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<C> value,
-				List<CollectionPopulator<T>> elements) {
-				theModelPath = modelPath;
-				theType = type;
-				theValueInstantiator = value;
+			protected Instantiator(AbstractCollectionDef.Interpreted<T, C> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted);
+				theType = interpreted.getValueType();
 				theElements = elements;
 			}
 
+			public List<CollectionElement.CollectionPopulator<T>> getElements() {
+				return Collections.unmodifiableList(theElements);
+			}
+
 			@Override
-			public void instantiate() {
-				if (theValueInstantiator != null)
-					theValueInstantiator.instantiate();
+			public ModelValueInstantiator<C> getElementValue() {
+				return (ModelValueInstantiator<C>) super.getElementValue();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				super.instantiate();
 				for (CollectionElement.CollectionPopulator<T> element : theElements)
 					element.instantiate();
 			}
 
 			@Override
 			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				if (theValueInstantiator != null)
-					return theValueInstantiator.get(models);
+				if (getElementValue() != null)
+					return getElementValue().get(models);
 				ObservableCollectionBuilder<T, ?> builder = create(theType, models);
-				if (theModelPath != null)
-					builder.withDescription(theModelPath);
+				if (getModelPath() != null)
+					builder.withDescription(getModelPath());
 				C collection = (C) builder.build();
 				for (CollectionElement.CollectionPopulator<T> element : theElements)
 					element.populateCollection(collection, models);
@@ -849,8 +823,8 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (theValueInstantiator != null)
-					return theValueInstantiator.forModelCopy(value, sourceModels, newModels);
+				if (getElementValue() != null)
+					return getElementValue().forModelCopy(value, sourceModels, newModels);
 				// Configured elements are merely initialized, not slaved, and the collection may have been modified
 				// since it was created. There's no sense to making a re-initialized copy here.
 				return value;
@@ -877,17 +851,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableCollection<T>> instantiate() {
-				return new PlainInstantiator<>(getDefinition().getModelPath(), getValueType(), //
-					getElementValue() == null ? null : getElementValue().instantiate(), //
-						instantiateElements());
+			public ModelValueElement<ObservableCollection<T>> create() throws ModelInstantiationException {
+				return new PlainInstantiator<>(this, instantiateElements());
 			}
 		}
 
 		static class PlainInstantiator<T> extends Instantiator<T, ObservableCollection<T>> {
-			public PlainInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<ObservableCollection<T>> value,
-				List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, value, elements);
+			public PlainInstantiator(PlainCollectionDef.Interpreted<T> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted, elements);
 			}
 
 			@Override
@@ -900,7 +872,8 @@ public class ExpressoQonfigValues {
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "sorted-model-value",
-		interpretation = AbstractSortedCollectionDef.Interpreted.class)
+		interpretation = AbstractSortedCollectionDef.Interpreted.class,
+		instance = AbstractSortedCollectionDef.SortedInstantiator.class)
 	public static abstract class AbstractSortedCollectionDef<C extends ObservableSortedCollection<?>> extends AbstractCollectionDef<C> {
 		private ExSort.ExRootSort theSort;
 
@@ -939,6 +912,10 @@ public class ExpressoQonfigValues {
 				return (AbstractSortedCollectionDef<C>) super.getDefinition();
 			}
 
+			public ExSort.ExRootSort.Interpreted<T> getSort() {
+				return theSort;
+			}
+
 			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
@@ -954,7 +931,7 @@ public class ExpressoQonfigValues {
 				}
 			}
 
-			protected ModelValueInstantiator<Comparator<? super T>> instantiateSort() {
+			protected ModelValueInstantiator<Comparator<? super T>> instantiateSort() throws ModelInstantiationException {
 				if (theSort != null)
 					return theSort.instantiateSort();
 				else
@@ -962,17 +939,21 @@ public class ExpressoQonfigValues {
 			}
 		}
 
-		static abstract class SortedInstantiator<T, C extends ObservableSortedCollection<T>> extends Instantiator<T, C> {
+		public static abstract class SortedInstantiator<T, C extends ObservableSortedCollection<T>> extends Instantiator<T, C> {
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 
-			protected SortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				ModelValueInstantiator<C> value, List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, value, elements);
-				theSort = sort;
+			protected SortedInstantiator(AbstractSortedCollectionDef.Interpreted<T, C> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted, elements);
+				theSort = interpreted.instantiateSort();
+			}
+
+			public ModelValueInstantiator<Comparator<? super T>> getSort() {
+				return theSort;
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theSort.instantiate();
 			}
@@ -1005,17 +986,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableSortedCollection<T>> instantiate() {
-				return new SimpleSortedInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
-					getElementValue() == null ? null : getElementValue().instantiate(), //
-						instantiateElements());
+			public ModelValueElement<ObservableSortedCollection<T>> create() throws ModelInstantiationException {
+				return new SimpleSortedInstantiator<>(this, instantiateElements());
 			}
 		}
 
 		static class SimpleSortedInstantiator<T> extends SortedInstantiator<T, ObservableSortedCollection<T>> {
-			SimpleSortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				ModelValueInstantiator<ObservableSortedCollection<T>> value, List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, sort, value, elements);
+			SimpleSortedInstantiator(SortedCollectionDef.Interpreted<T> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted, elements);
 			}
 
 			@Override
@@ -1042,17 +1021,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableSet<T>> instantiate() {
-				return new SetInstantiator<>(getDefinition().getModelPath(), getValueType(), //
-					getElementValue() == null ? null : getElementValue().instantiate(), //
-						instantiateElements());
+			public ModelValueElement<ObservableSet<T>> create() throws ModelInstantiationException {
+				return new SetInstantiator<>(this, instantiateElements());
 			}
 		}
 
 		static class SetInstantiator<T> extends Instantiator<T, ObservableSet<T>> {
-			public SetInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<ObservableSet<T>> value,
-				List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, value, elements);
+			public SetInstantiator(SetDef.Interpreted<T> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted, elements);
 			}
 
 			@Override
@@ -1079,17 +1056,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableSortedSet<T>> instantiate() {
-				return new SortedSetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
-					getElementValue() == null ? null : getElementValue().instantiate(), //
-						instantiateElements());
+			public ModelValueElement<ObservableSortedSet<T>> create() throws ModelInstantiationException {
+				return new SortedSetInstantiator<>(this, instantiateElements());
 			}
 		}
 
 		static class SortedSetInstantiator<T> extends SortedInstantiator<T, ObservableSortedSet<T>> {
-			SortedSetInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				ModelValueInstantiator<ObservableSortedSet<T>> value, List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, sort, value, elements);
+			SortedSetInstantiator(SortedSetDef.Interpreted<T> interpreted, List<CollectionPopulator<T>> elements)
+				throws ModelInstantiationException {
+				super(interpreted, elements);
 			}
 
 			@Override
@@ -1101,13 +1076,16 @@ public class ExpressoQonfigValues {
 	}
 
 	/** ExElement definition for the Expresso &lt;entry>. */
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "entry", interpretation = MapEntry.Interpreted.class)
-	public static class MapEntry extends ExElement.Def.Abstract<ExElement> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "entry",
+		interpretation = MapEntry.Interpreted.class,
+		instance = MapEntry.MapPopulator.class)
+	public static class MapEntry extends ModelValueElement.Def.Abstract<SettableValue<?>, ModelValueElement<?>> {
 		private CompiledExpression theKey;
 		private CompiledExpression theValue;
 
 		public MapEntry(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
+			super(parent, qonfigType, ModelTypes.Value);
 		}
 
 		@QonfigAttributeGetter("key")
@@ -1122,6 +1100,15 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
+		public void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException {
+			throw new QonfigInterpretationException("<entry> cannot be used this way", reporting().getFileLocation());
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+		}
+
+		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 		}
@@ -1130,7 +1117,8 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<K, V> extends ExElement.Interpreted.Abstract<ExElement> {
+		public static class Interpreted<K, V>
+		extends ModelValueElement.Interpreted.Abstract<SettableValue<?>, SettableValue<V>, ModelValueElement<SettableValue<V>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<K>> theKey;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<V>> theValue;
 
@@ -1143,10 +1131,17 @@ public class ExpressoQonfigValues {
 				return (MapEntry) super.getDefinition();
 			}
 
+			@Override
+			protected ModelInstanceType<SettableValue<?>, SettableValue<V>> getTargetType() {
+				AbstractMapDef.Interpreted<K, V, ?> parent = (AbstractMapDef.Interpreted<K, V, ?>) getParentElement();
+				return ModelTypes.Value.forType(parent.getValueType());
+			}
+
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<K>> getKey() {
 				return theKey;
 			}
 
+			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<V>> getElementValue() {
 				return theValue;
 			}
@@ -1158,41 +1153,60 @@ public class ExpressoQonfigValues {
 				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.forType(valueType));
 			}
 
-			public MapPopulator<K, V> populator() {
-				return new MapPopulator.Default<>(theKey.instantiate(), theValue.instantiate(),
-					reporting().at(getDefinition().getElementValue().getFilePosition()));
+			@Override
+			public MapPopulator<K, V> create() throws ModelInstantiationException {
+				return new MapPopulator.Default<>(this);
 			}
 		}
 
-		protected interface MapPopulator<K, V> {
-			void instantiate();
+		public interface MapPopulator<K, V> extends ModelValueElement<SettableValue<V>> {
+			@Override
+			void instantiate() throws ModelInstantiationException;
 
 			boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
 
 			boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
-			static class Default<K, V> implements MapPopulator<K, V> {
+			static class Default<K, V> extends ModelValueElement.Abstract<SettableValue<V>> implements MapPopulator<K, V> {
 				private final ModelValueInstantiator<SettableValue<K>> theKey;
-				private final ModelValueInstantiator<SettableValue<V>> theValue;
 				private final ErrorReporting theReporting;
 
-				public Default(ModelValueInstantiator<SettableValue<K>> key, ModelValueInstantiator<SettableValue<V>> value,
-					ErrorReporting reporting) {
-					theKey = key;
-					theValue = value;
-					theReporting = reporting;
+				public Default(MapEntry.Interpreted<K, V> interpreted) throws ModelInstantiationException {
+					super(interpreted);
+					theKey = interpreted.getKey().instantiate();
+					theReporting = interpreted.reporting().at(interpreted.getDefinition().getElementValue().getFilePosition());
+				}
+
+				public ModelValueInstantiator<SettableValue<K>> getKey() {
+					return theKey;
 				}
 
 				@Override
-				public void instantiate() {
+				public ModelValueInstantiator<SettableValue<V>> getElementValue() {
+					return (ModelValueInstantiator<SettableValue<V>>) super.getElementValue();
+				}
+
+				@Override
+				public void instantiate() throws ModelInstantiationException {
+					super.instantiate();
 					theKey.instantiate();
-					theValue.instantiate();
+				}
+
+				@Override
+				public SettableValue<V> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					return getElementValue().get(models);
+				}
+
+				@Override
+				public SettableValue<V> forModelCopy(SettableValue<V> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+					throws ModelInstantiationException {
+					return getElementValue().forModelCopy(value, sourceModels, newModels);
 				}
 
 				@Override
 				public boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models)
 					throws ModelInstantiationException {
 					SettableValue<K> keyValue = theKey.get(models);
-					SettableValue<V> vValue = theValue.get(models);
+					SettableValue<V> vValue = getElementValue().get(models);
 					K key = keyValue.get();
 					V value = vValue.get();
 					String msg = map.canPut(key, value);
@@ -1208,7 +1222,7 @@ public class ExpressoQonfigValues {
 				public boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models)
 					throws ModelInstantiationException {
 					SettableValue<K> keyValue = theKey.get(models);
-					SettableValue<V> vValue = theValue.get(models);
+					SettableValue<V> vValue = getElementValue().get(models);
 					K key = keyValue.get();
 					V value = vValue.get();
 					BetterCollection<? super V> values = map.get(key);
@@ -1226,10 +1240,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "int-map", interpretation = AbstractMapDef.Interpreted.class)
-	public static abstract class AbstractMapDef<M extends ObservableMap<?, ?>>
-	extends ModelValueElement.Def.DoubleTyped<M, ModelValueElement<M, M>>
-	implements ModelValueElement.CompiledSynth<M, ModelValueElement<M, M>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "int-map",
+		interpretation = AbstractMapDef.Interpreted.class,
+		instance = AbstractMapDef.Instantiator.class)
+	public static abstract class AbstractMapDef<M extends ObservableMap<?, ?>> extends
+	ModelValueElement.Def.DoubleTyped<M, ModelValueElement<M>> implements ModelValueElement.CompiledSynth<M, ModelValueElement<M>> {
 		private final List<MapEntry> theEntries;
 
 		protected AbstractMapDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
@@ -1257,7 +1273,8 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) {}
+		protected void doPrepare(ExpressoQIS session) {
+		}
 
 		@Override
 		public Interpreted<?, ?, M> interpretValue(ExElement.Interpreted<?> parent) {
@@ -1267,8 +1284,8 @@ public class ExpressoQonfigValues {
 		protected abstract Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<K, V, M extends ObservableMap<K, V>>
-		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M, M>>
-		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M, M>> {
+		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M>>
+		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M>> {
 			private final List<MapEntry.Interpreted<K, V>> theEntries;
 
 			protected Interpreted(AbstractMapDef<?> definition, ExElement.Interpreted<?> parent) {
@@ -1304,41 +1321,45 @@ public class ExpressoQonfigValues {
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
-				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
-					LinkedList::new, //
-					list -> list.add(this), //
-					LinkedList::removeLast)) {
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
 						(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
 				}
 			}
 
-			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
-				return theEntries.stream().map(e -> e.populator()).collect(Collectors.toList());
-			}
-
-			@Override
-			public ModelValueElement<M, M> create() {
-				return new ModelValueElement.Default<>(getIdentity());
+			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() throws ModelInstantiationException {
+				return QommonsUtils.filterMapE(theEntries, null, e -> e.create());
 			}
 		}
 
-		protected static abstract class Instantiator<K, V, M extends ObservableMap<K, V>> implements ModelValueInstantiator<M> {
-			private final String theModelPath;
+		public static abstract class Instantiator<K, V, M extends ObservableMap<K, V>> extends ModelValueElement.Abstract<M> {
 			private final TypeToken<K> theKeyType;
 			private final TypeToken<V> theValueType;
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
 
-			protected Instantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				List<MapEntry.MapPopulator<K, V>> elements) {
-				theModelPath = modelPath;
-				theKeyType = keyType;
-				theValueType = valueType;
+			protected Instantiator(AbstractMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> elements)
+				throws ModelInstantiationException {
+				super(interpreted);
+				ModelInstanceType<?, ?> type = interpreted.getType();
+				theKeyType = interpreted.getKeyType();
+				theValueType = interpreted.getValueType();
 				theEntries = elements;
 			}
 
+			public TypeToken<K> getKeyType() {
+				return theKeyType;
+			}
+
+			public TypeToken<V> getValueType() {
+				return theValueType;
+			}
+
+			public List<MapEntry.MapPopulator<K, V>> getEntries() {
+				return Collections.unmodifiableList(theEntries);
+			}
+
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				for (MapEntry.MapPopulator<?, ?> entry : theEntries)
 					entry.instantiate();
 			}
@@ -1346,8 +1367,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				ObservableMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
-				if (theModelPath != null)
-					builder.withDescription(theModelPath);
+				if (getModelPath() != null)
+					builder.withDescription(getModelPath());
 				M map = (M) builder.build();
 				for (MapEntry.MapPopulator<K, V> entry : theEntries)
 					entry.populateMap(map, models);
@@ -1382,15 +1403,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableMap<K, V>> instantiate() {
-				return new PlainInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateEntries());
+			public ModelValueElement<ObservableMap<K, V>> create() throws ModelInstantiationException {
+				return new PlainInstantiator<>(this, instantiateEntries());
 			}
 		}
 
 		static class PlainInstantiator<K, V> extends Instantiator<K, V, ObservableMap<K, V>> {
-			public PlainInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				List<MapEntry.MapPopulator<K, V>> entries) {
-				super(modelPath, keyType, valueType, entries);
+			public PlainInstantiator(PlainMapDef.Interpreted<K, V> interpreted, List<MapEntry.MapPopulator<K, V>> entries)
+				throws ModelInstantiationException {
+				super(interpreted, entries);
 			}
 
 			@Override
@@ -1401,6 +1422,10 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "sorted-map",
+		interpretation = SortedMapDef.Interpreted.class,
+		instance = SortedMapDef.Instantiator.class)
 	public static class SortedMapDef<M extends ObservableSortedMap<?, ?>> extends AbstractMapDef<M> {
 		private ExSort.ExRootSort theSort;
 
@@ -1408,6 +1433,7 @@ public class ExpressoQonfigValues {
 			super(parent, qonfigType, (ModelType.DoubleTyped<M>) ModelTypes.SortedMap);
 		}
 
+		@QonfigChildGetter("sort")
 		public ExSort.ExRootSort getSort() {
 			return theSort;
 		}
@@ -1436,6 +1462,10 @@ public class ExpressoQonfigValues {
 				return (SortedMapDef<M>) super.getDefinition();
 			}
 
+			public ExSort.ExRootSort.Interpreted<K> getSort() {
+				return theSort;
+			}
+
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
@@ -1449,7 +1479,7 @@ public class ExpressoQonfigValues {
 				}
 			}
 
-			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() {
+			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() throws ModelInstantiationException {
 				if (theSort != null)
 					return theSort.instantiateSort();
 				else
@@ -1457,23 +1487,26 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<M> instantiate() {
-				return new SortedInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateSort(),
-					instantiateEntries());
+			public ModelValueElement<M> create() throws ModelInstantiationException {
+				return new SortedInstantiator<>(this, instantiateEntries());
 			}
 		}
 
-		static class SortedInstantiator<K, V, M extends ObservableMap<K, V>> extends Instantiator<K, V, M> {
+		public static class SortedInstantiator<K, V, M extends ObservableSortedMap<K, V>> extends Instantiator<K, V, M> {
 			private final ModelValueInstantiator<Comparator<? super K>> theSort;
 
-			protected SortedInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				ModelValueInstantiator<Comparator<? super K>> sort, List<MapEntry.MapPopulator<K, V>> entries) {
-				super(modelPath, keyType, valueType, entries);
-				theSort = sort;
+			protected SortedInstantiator(SortedMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> entries)
+				throws ModelInstantiationException {
+				super(interpreted, entries);
+				theSort = interpreted.instantiateSort();
+			}
+
+			public ModelValueInstantiator<Comparator<? super K>> getSort() {
+				return theSort;
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theSort.instantiate();
 			}
@@ -1487,9 +1520,8 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	public static abstract class AbstractMultiMapDef<M extends ObservableMultiMap<?, ?>>
-	extends ModelValueElement.Def.DoubleTyped<M, ModelValueElement<M, M>>
-	implements ModelValueElement.CompiledSynth<M, ModelValueElement<M, M>> {
+	public static abstract class AbstractMultiMapDef<M extends ObservableMultiMap<?, ?>> extends
+	ModelValueElement.Def.DoubleTyped<M, ModelValueElement<M>> implements ModelValueElement.CompiledSynth<M, ModelValueElement<M>> {
 		private final List<MapEntry> theEntries;
 
 		protected AbstractMultiMapDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
@@ -1525,8 +1557,8 @@ public class ExpressoQonfigValues {
 		protected abstract Interpreted<?, ?, ?> interpret2(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<K, V, M extends ObservableMultiMap<K, V>>
-		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M, M>>
-		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M, M>> {
+		extends ModelValueElement.Def.DoubleTyped.Interpreted<M, M, ModelValueElement<M>>
+		implements ModelValueElement.InterpretedSynth<M, M, ModelValueElement<M>> {
 			private final List<MapEntry.Interpreted<K, V>> theEntries;
 
 			protected Interpreted(AbstractMultiMapDef<?> definition, ExElement.Interpreted<?> parent) {
@@ -1566,32 +1598,26 @@ public class ExpressoQonfigValues {
 				return TypeTokens.get().wrap((TypeToken<V>) getType().getType(1));
 			}
 
-			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
-				return theEntries.stream().map(e -> e.populator()).collect(Collectors.toList());
-			}
-
-			@Override
-			public ModelValueElement<M, M> create() {
-				return new ModelValueElement.Default<>(getIdentity());
+			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() throws ModelInstantiationException, RuntimeException {
+				return QommonsUtils.filterMapE(theEntries, null, e -> e.create());
 			}
 		}
 
-		protected static abstract class Instantiator<K, V, M extends ObservableMultiMap<K, V>> implements ModelValueInstantiator<M> {
-			private final String theModelPath;
+		protected static abstract class Instantiator<K, V, M extends ObservableMultiMap<K, V>> extends ModelValueElement.Abstract<M> {
 			private final TypeToken<K> theKeyType;
 			private final TypeToken<V> theValueType;
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
 
-			protected Instantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				List<MapEntry.MapPopulator<K, V>> elements) {
-				theModelPath = modelPath;
-				theKeyType = keyType;
-				theValueType = valueType;
+			protected Instantiator(AbstractMultiMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> elements)
+				throws ModelInstantiationException {
+				super(interpreted);
+				theKeyType = interpreted.getKeyType();
+				theValueType = interpreted.getValueType();
 				theEntries = elements;
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				for (MapEntry.MapPopulator<?, ?> entry : theEntries)
 					entry.instantiate();
 			}
@@ -1599,8 +1625,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				ObservableMultiMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
-				if (theModelPath != null)
-					builder.withDescription(theModelPath);
+				if (getModelPath() != null)
+					builder.withDescription(getModelPath());
 				M map = (M) builder.build(models.getUntil());
 				for (MapEntry.MapPopulator<K, V> entry : theEntries)
 					entry.populateMultiMap(map, models);
@@ -1635,15 +1661,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableMultiMap<K, V>> instantiate() {
-				return new PlainInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateEntries());
+			public ModelValueElement<ObservableMultiMap<K, V>> create() throws ModelInstantiationException {
+				return new PlainInstantiator<>(this, instantiateEntries());
 			}
 		}
 
 		static class PlainInstantiator<K, V> extends Instantiator<K, V, ObservableMultiMap<K, V>> {
-			public PlainInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				List<MapEntry.MapPopulator<K, V>> entries) {
-				super(modelPath, keyType, valueType, entries);
+			public PlainInstantiator(PlainMultiMapDef.Interpreted<K, V> interpreted, List<MapEntry.MapPopulator<K, V>> entries)
+				throws ModelInstantiationException {
+				super(interpreted, entries);
 			}
 
 			@Override
@@ -1702,7 +1728,7 @@ public class ExpressoQonfigValues {
 				}
 			}
 
-			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() {
+			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() throws ModelInstantiationException {
 				if (theSort != null)
 					return theSort.instantiateSort();
 				else
@@ -1710,23 +1736,22 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<M> instantiate() {
-				return new SortedInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateSort(),
-					instantiateEntries());
+			public ModelValueElement<M> create() throws ModelInstantiationException, RuntimeException {
+				return new SortedInstantiator<>(this, instantiateEntries());
 			}
 		}
 
-		static class SortedInstantiator<K, V, M extends ObservableMultiMap<K, V>> extends Instantiator<K, V, M> {
+		static class SortedInstantiator<K, V, M extends ObservableSortedMultiMap<K, V>> extends Instantiator<K, V, M> {
 			private final ModelValueInstantiator<Comparator<? super K>> theSort;
 
-			protected SortedInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
-				ModelValueInstantiator<Comparator<? super K>> sort, List<MapEntry.MapPopulator<K, V>> entries) {
-				super(modelPath, keyType, valueType, entries);
-				theSort = sort;
+			protected SortedInstantiator(SortedMultiMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> entries)
+				throws ModelInstantiationException {
+				super(interpreted, entries);
+				theSort = interpreted.instantiateSort();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theSort.instantiate();
 			}
@@ -1740,9 +1765,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "hook", interpretation = Hook.Interpreted.class)
-	public static class Hook extends ExElement.Def.Abstract<ModelValueElement<Observable<?>, ?>>
-	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<Observable<?>, ?>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "hook",
+		interpretation = Hook.Interpreted.class,
+		instance = Hook.Instantiator.class)
+	public static class Hook extends ExElement.Def.Abstract<ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<?>> {
 		private String theModelPath;
 		private CompiledExpression theEvent;
 		private CompiledExpression theAction;
@@ -1806,8 +1834,8 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<Observable<?>, Observable<T>>>
-		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>> {
+		public static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<Observable<T>>>
+		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<T>>> {
 			private TypeToken<T> theEventType;
 			private InterpretedValueSynth<Observable<?>, Observable<T>> theEvent;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
@@ -1873,36 +1901,34 @@ public class ExpressoQonfigValues {
 				return ModelTypes.Event.forType(theEventType);
 			}
 
-			@Override
-			public ModelValueInstantiator<Observable<T>> instantiate() {
-				return new Instantiator<>(theEventType, getExpressoEnv().getModels().instantiate(), //
-					theEvent == null ? null : theEvent.instantiate(), theAction.instantiate(), getDefinition().getEventVariable());
+			public TypeToken<T> getEventType() {
+				return theEventType;
 			}
 
 			@Override
-			public ModelValueElement<Observable<?>, Observable<T>> create() {
-				return null;
+			public ModelValueElement<Observable<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T, A> implements ModelValueInstantiator<Observable<T>> {
+		static class Instantiator<T, A> extends ModelValueElement.Abstract<Observable<T>> {
 			private final TypeToken<T> theType;
 			private final ModelInstantiator theLocalModels;
 			private final ModelValueInstantiator<Observable<T>> theEvent;
 			private final ModelValueInstantiator<ObservableAction> theAction;
 			private final ModelComponentId theEventValue;
 
-			Instantiator(TypeToken<T> type, ModelInstantiator localModels, ModelValueInstantiator<Observable<T>> event,
-				ModelValueInstantiator<? extends ObservableAction> action, ModelComponentId eventValue) {
-				theType = type;
-				theLocalModels = localModels;
-				theEvent = event;
-				theAction = (ModelValueInstantiator<ObservableAction>) action;
-				theEventValue = eventValue;
+			Instantiator(Hook.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theType = interpreted.getEventType();
+				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theEvent = interpreted.getEvent() == null ? null : interpreted.getEvent().instantiate();
+				theAction = interpreted.getAction().instantiate();
+				theEventValue = interpreted.getDefinition().getEventVariable();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModels.instantiate();
 				if (theEvent != null)
 					theEvent.instantiate();
@@ -1948,9 +1974,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "action", interpretation = Action.Interpreted.class)
-	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ?>>
-	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ?>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "action",
+		interpretation = Action.Interpreted.class,
+		instance = Action.Instantiator.class)
+	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<?>> {
 		private CompiledExpression theAction;
 		private boolean isAsync;
 
@@ -1983,10 +2012,9 @@ public class ExpressoQonfigValues {
 			return new Interpreted(this, parent);
 		}
 
-		protected static class Interpreted extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
-		implements
-		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+		public static class Interpreted
+		extends ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>>
+		implements ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>> {
 			public Interpreted(Action definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -2007,39 +2035,53 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction> instantiate() {
-				if (getDefinition().isAsync())
-					return new AsyncActionInstantiator(getElementValue().instantiate());
-				else
-					return getElementValue().instantiate();
+			public ModelValueElement<ObservableAction> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class AsyncActionInstantiator implements ModelValueInstantiator<ObservableAction> {
-			private final ModelValueInstantiator<ObservableAction> theWrapped;
+		static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
+			private final boolean isAsync;
 
-			AsyncActionInstantiator(ModelValueInstantiator<ObservableAction> wrapped) {
-				theWrapped = wrapped;
+			Instantiator(Action.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				isAsync = interpreted.getDefinition().isAsync();
 			}
 
 			@Override
-			public void instantiate() {
-				theWrapped.instantiate();
+			public ModelValueInstantiator<ObservableAction> getElementValue() {
+				return (ModelValueInstantiator<ObservableAction>) super.getElementValue();
+			}
+
+			public boolean isAsync() {
+				return isAsync;
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				getElementValue().instantiate();
 			}
 
 			@Override
 			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return new AsyncAction(theWrapped.get(models));
+				ObservableAction action = getElementValue().get(models);
+				if (isAsync)
+					return new AsyncAction(action);
+				else
+					return action;
 			}
 
 			@Override
 			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				ObservableAction wrapped = ((AsyncAction) value).theWrapped;
-				ObservableAction newWrapped = theWrapped.forModelCopy(wrapped, sourceModels, newModels);
-				if (wrapped == newWrapped)
-					return wrapped;
-				return new AsyncAction(newWrapped);
+				if (isAsync) {
+					ObservableAction wrapped = ((AsyncAction) value).theWrapped;
+					ObservableAction newWrapped = getElementValue().forModelCopy(wrapped, sourceModels, newModels);
+					if (wrapped == newWrapped)
+						return wrapped;
+					return new AsyncAction(newWrapped);
+				} else
+					return getElementValue().forModelCopy(value, sourceModels, newModels);
 			}
 		}
 
@@ -2086,10 +2128,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "action-group", interpretation = ActionGroup.Interpreted.class)
-	public static class ActionGroup
-	extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
-	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "action-group",
+		interpretation = ActionGroup.Interpreted.class,
+		instance = ActionGroup.Instantiator.class)
+	public static class ActionGroup extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction>> {
 		private final List<ModelValueElement.CompiledSynth<ObservableAction, ?>> theActions;
 
 		public ActionGroup(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -2121,10 +2165,9 @@ public class ExpressoQonfigValues {
 			return new Interpreted(this, parent);
 		}
 
-		static class Interpreted extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
-		implements
-		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+		static class Interpreted
+		extends ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>>
+		implements ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>> {
 			private final List<Action.Interpreted> theActions;
 
 			public Interpreted(ActionGroup definition, ExElement.Interpreted<?> parent) {
@@ -2135,6 +2178,10 @@ public class ExpressoQonfigValues {
 			@Override
 			public ActionGroup getDefinition() {
 				return (ActionGroup) super.getDefinition();
+			}
+
+			public List<Action.Interpreted> getActions() {
+				return Collections.unmodifiableList(theActions);
 			}
 
 			@Override
@@ -2150,10 +2197,7 @@ public class ExpressoQonfigValues {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
-					LinkedList::new, //
-					list -> list.add(this), //
-					LinkedList::removeLast)) {
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
 						(i, aEnv) -> i.update(aEnv));
 				}
@@ -2165,20 +2209,21 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction> instantiate() {
-				return new Instantiator(QommonsUtils.map(theActions, a -> a.instantiate(), true));
+			public ModelValueElement<ObservableAction> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<ObservableAction> {
+		static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
 			private final List<ModelValueInstantiator<? extends ObservableAction>> theActions;
 
-			Instantiator(List<ModelValueInstantiator<? extends ObservableAction>> actions) {
-				theActions = actions;
+			Instantiator(ActionGroup.Interpreted interpreted) throws ModelInstantiationException, RuntimeException {
+				super(interpreted);
+				theActions = QommonsUtils.filterMapE(interpreted.getActions(), null, a -> a.instantiate());
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				for (ModelValueInstantiator<?> action : theActions)
 					action.instantiate();
 			}
@@ -2243,9 +2288,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "loop", interpretation = Loop.Interpreted.class)
-	public static class Loop extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
-	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "loop",
+		interpretation = Loop.Interpreted.class,
+		instance = Loop.Instantiator.class)
+	public static class Loop extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction>> {
 		private CompiledExpression theInit;
 		private CompiledExpression theBefore;
 		private CompiledExpression theWhile;
@@ -2321,10 +2369,9 @@ public class ExpressoQonfigValues {
 			return new Interpreted(this, parent);
 		}
 
-		static class Interpreted extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
-		implements
-		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+		static class Interpreted
+		extends ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>>
+		implements ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>> {
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theInit;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theBefore;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theWhile;
@@ -2341,6 +2388,34 @@ public class ExpressoQonfigValues {
 			@Override
 			public Loop getDefinition() {
 				return (Loop) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getInit() {
+				return theInit;
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getBefore() {
+				return theBefore;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getWhile() {
+				return theWhile;
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getBeforeBody() {
+				return theBeforeBody;
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getAfterBody() {
+				return theAfterBody;
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getFinally() {
+				return theFinally;
+			}
+
+			public List<ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>> getBody() {
+				return Collections.unmodifiableList(theBody);
 			}
 
 			@Override
@@ -2365,10 +2440,7 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				theFinally = interpret(getDefinition().getFinally() == null ? null : getDefinition().getFinally(),
 					ModelTypes.Action.instance());
-				try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
-					LinkedList::new, //
-					list -> list.add(this), //
-					LinkedList::removeLast)) {
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					this.syncChildren(getDefinition().getBody(), theBody,
 						(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
 						(b, bEnv) -> b.updateValue(bEnv));
@@ -2383,19 +2455,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction> instantiate() {
-				return new Instantiator(getExpressoEnv().getModels().instantiate(), //
-					theInit == null ? null : theInit.instantiate(), //
-						theBefore == null ? null : theBefore.instantiate(), //
-							theWhile.instantiate(), //
-							theBeforeBody == null ? null : theBeforeBody.instantiate(), //
-								QommonsUtils.map(theBody, b -> b.instantiate(), true), //
-								theAfterBody == null ? null : theAfterBody.instantiate(), //
-									theFinally == null ? null : theFinally.instantiate());
+			public ModelValueElement<ObservableAction> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<ObservableAction> {
+		static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
 			private final ModelInstantiator theLocalModels;
 			private final ModelValueInstantiator<? extends ObservableAction> theInit;
 			private final ModelValueInstantiator<? extends ObservableAction> theBefore;
@@ -2405,23 +2470,52 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<? extends ObservableAction> theAfterBody;
 			private final ModelValueInstantiator<? extends ObservableAction> theFinally;
 
-			Instantiator(ModelInstantiator localModels, ModelValueInstantiator<? extends ObservableAction> init,
-				ModelValueInstantiator<? extends ObservableAction> before, ModelValueInstantiator<SettableValue<Boolean>> while1,
-				ModelValueInstantiator<? extends ObservableAction> beforeBody,
-				List<? extends ModelValueInstantiator<? extends ObservableAction>> body,
-					ModelValueInstantiator<? extends ObservableAction> afterBody, ModelValueInstantiator<? extends ObservableAction> finally1) {
-				theLocalModels = localModels;
-				theInit = init;
-				theBefore = before;
-				theWhile = while1;
-				theBeforeBody = beforeBody;
-				theBody = body;
-				theAfterBody = afterBody;
-				theFinally = finally1;
+			Instantiator(Loop.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theInit = interpreted.getInit() == null ? null : interpreted.getInit().instantiate();
+				theBefore = interpreted.getBefore() == null ? null : interpreted.getBefore().instantiate();
+				theWhile = interpreted.getWhile().instantiate();
+				theBeforeBody = interpreted.getBeforeBody() == null ? null : interpreted.getBeforeBody().instantiate();
+				theBody = QommonsUtils.filterMapE(interpreted.getBody(), null, e -> e.instantiate());
+				theAfterBody = interpreted.getAfterBody() == null ? null : interpreted.getAfterBody().instantiate();
+				theFinally = interpreted.getFinally() == null ? null : interpreted.getFinally().instantiate();
+			}
+
+			public ModelInstantiator getLocalModels() {
+				return theLocalModels;
+			}
+
+			public ModelValueInstantiator<? extends ObservableAction> getInit() {
+				return theInit;
+			}
+
+			public ModelValueInstantiator<? extends ObservableAction> getBefore() {
+				return theBefore;
+			}
+
+			public ModelValueInstantiator<SettableValue<Boolean>> getWhile() {
+				return theWhile;
+			}
+
+			public ModelValueInstantiator<? extends ObservableAction> getBeforeBody() {
+				return theBeforeBody;
+			}
+
+			public List<? extends ModelValueInstantiator<? extends ObservableAction>> getBody() {
+				return theBody;
+			}
+
+			public ModelValueInstantiator<? extends ObservableAction> getAfterBody() {
+				return theAfterBody;
+			}
+
+			public ModelValueInstantiator<? extends ObservableAction> getFinally() {
+				return theFinally;
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theLocalModels != null)
 					theLocalModels.instantiate();
 				if (theInit != null)
@@ -2575,8 +2669,8 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	public static class Event extends ModelValueElement.Def.SingleTyped<Observable<?>, ModelValueElement<Observable<?>, ?>>
-	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<Observable<?>, ?>> {
+	public static class Event extends ModelValueElement.Def.SingleTyped<Observable<?>, ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<?>> {
 		public Event(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Event);
 		}
@@ -2590,9 +2684,9 @@ public class ExpressoQonfigValues {
 			return new Interpreted<>(this, parent);
 		}
 
-		public static class Interpreted<T> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>>
-		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>> {
+		static class Interpreted<T>
+		extends ModelValueElement.Def.SingleTyped.Interpreted<Observable<?>, Observable<T>, ModelValueElement<Observable<T>>>
+		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<T>>> {
 			Interpreted(Event definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -2603,14 +2697,36 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<Observable<T>> instantiate() {
-				return getElementValue().instantiate();
+			public ModelValueElement<Observable<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<T> extends ModelValueElement.Abstract<Observable<T>> {
+			Instantiator(Event.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+			}
+
+			@Override
+			public ModelValueInstantiator<Observable<T>> getElementValue() {
+				return (ModelValueInstantiator<Observable<T>>) super.getElementValue();
+			}
+
+			@Override
+			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				return getElementValue().get(models);
+			}
+
+			@Override
+			public Observable<T> forModelCopy(Observable<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				return getElementValue().forModelCopy(value, sourceModels, newModels);
 			}
 		}
 	}
 
-	static class ValueSet extends ModelValueElement.Def.SingleTyped<ObservableValueSet<?>, ModelValueElement<ObservableValueSet<?>, ?>>
-	implements ModelValueElement.CompiledSynth<ObservableValueSet<?>, ModelValueElement<ObservableValueSet<?>, ?>> {
+	public static class ValueSet extends ModelValueElement.Def.SingleTyped<ObservableValueSet<?>, ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<ObservableValueSet<?>, ModelValueElement<?>> {
 		public ValueSet(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.ValueSet);
 		}
@@ -2620,15 +2736,14 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public InterpretedSynth<ObservableValueSet<?>, ?, ? extends ModelValueElement<ObservableValueSet<?>, ?>> interpretValue(
-			ExElement.Interpreted<?> parent) {
+		public InterpretedSynth<ObservableValueSet<?>, ?, ? extends ModelValueElement<?>> interpretValue(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 
 		static class Interpreted<T> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<?>, ObservableValueSet<T>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<T>>>
 		implements
-		ModelValueElement.InterpretedSynth<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<?>, ObservableValueSet<T>>> {
+		ModelValueElement.InterpretedSynth<ObservableValueSet<?>, ObservableValueSet<T>, ModelValueElement<ObservableValueSet<T>>> {
 			public Interpreted(ValueSet definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -2644,20 +2759,22 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableValueSet<T>> instantiate() {
-				return new Instantiator<>((TypeToken<T>) getType().getType(0));
+			public ModelValueElement<ObservableValueSet<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<ObservableValueSet<T>> {
+		static class Instantiator<T> extends ModelValueElement.Abstract<ObservableValueSet<T>> {
 			private final TypeToken<T> theType;
 
-			Instantiator(TypeToken<T> type) {
-				theType = type;
+			Instantiator(ValueSet.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theType = (TypeToken<T>) interpreted.getType().getType(0);
 			}
 
 			@Override
-			public void instantiate() {}
+			public void instantiate() {
+			}
 
 			@Override
 			public ObservableValueSet<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
@@ -2677,10 +2794,12 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = Timer.TIMER, interpretation = Timer.Interpreted.class)
-	static class Timer
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>> {
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = Timer.TIMER,
+		interpretation = Timer.Interpreted.class,
+		instance = Timer.Instantiator.class)
+	public static class Timer extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<Instant>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<Instant>>> {
 		public static final String TIMER = "timer";
 
 		private CompiledExpression isActive;
@@ -2768,9 +2887,9 @@ public class ExpressoQonfigValues {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<Instant>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<Instant>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isActive;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Duration>> theFrequency;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRemainingExecutions;
@@ -2855,12 +2974,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<Instant>> instantiate() {
+			public ModelValueElement<SettableValue<Instant>> create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<Instant>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<Instant>> {
 			private final ModelValueInstantiator<SettableValue<Boolean>> isActive;
 			private final ModelValueInstantiator<SettableValue<Duration>> theFrequency;
 			private final boolean isStrictTiming;
@@ -2874,7 +2993,8 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<ObservableAction> theAction;
 			private final ErrorReporting theActionReporting;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(Timer.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				isActive = interpreted.isActive().instantiate();
 				theFrequency = interpreted.getFrequency().instantiate();
 				isStrictTiming = interpreted.getDefinition().isStrictTiming();
@@ -2893,7 +3013,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				isActive.instantiate();
 				theFrequency.instantiate();
 				if (theRemainingExecutions != null)
@@ -2998,7 +3118,8 @@ public class ExpressoQonfigValues {
 				if (!isBackground)
 					task.onEDT();
 				theHandle = task;
-				theExecuteFinish = Causable.key((cause, data) -> {}, (cause, data) -> {
+				theExecuteFinish = Causable.key((cause, data) -> {
+				}, (cause, data) -> {
 					if (isExecuting != null && isExecuting.isAcceptable(false) == null)
 						isExecuting.set(false, cause);
 				});

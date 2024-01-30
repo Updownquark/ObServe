@@ -53,8 +53,10 @@ public class InterpretedStyleApplication {
 	/**
 	 * @param models The interpreted models to use to create the instantiator
 	 * @return An instantiator for the condition returning whether and when this applies to the element
+	 * @throws ModelInstantiationException If the condition cannot be instantiated
 	 */
-	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator(InterpretedModelSet models) {
+	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator(InterpretedModelSet models)
+		throws ModelInstantiationException {
 		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(models),
 			theCondition == null ? null : theCondition.instantiate());
 	}
@@ -80,7 +82,7 @@ public class InterpretedStyleApplication {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			if(theParentCondition!=null)
 				theParentCondition.instantiate();
 			if(theCondition!=null)

@@ -24,7 +24,7 @@ public class ExStyleModelValue extends ExElementModelValue {
 		 * @param type The Qonfig type of this add-on
 		 * @param element The element to affect
 		 */
-		public Def(QonfigAddOn type, ExElement.Def<? extends ExtModelValueElement<?, ?>> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends ExtModelValueElement<?>> element) {
 			super(type, element);
 		}
 
@@ -35,7 +35,7 @@ public class ExStyleModelValue extends ExElementModelValue {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?, ?>> element)
+		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?>> element)
 			throws QonfigInterpretationException {
 			super.update(session.asElement("element-model-value"), element);
 			thePriority = Integer.parseInt(session.getAttributeText("priority"));
@@ -62,13 +62,13 @@ public class ExStyleModelValue extends ExElementModelValue {
 		}
 
 		@Override
-		public AO create(ExtModelValueElement<?, ?> element) {
+		public AO create(ExtModelValueElement<?> element) {
 			return (AO) new ExStyleModelValue(element);
 		}
 	}
 
 	/** @param element The model value element */
-	protected ExStyleModelValue(ExtModelValueElement<?, ?> element) {
+	protected ExStyleModelValue(ExtModelValueElement<?> element) {
 		super(element);
 	}
 }

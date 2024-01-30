@@ -654,7 +654,7 @@ public interface ExElement extends Identifiable {
 				CollectionUtils.SimpleAdjustment<T, ExpressoQIS, QonfigInterpretationException> adjustment = CollectionUtils
 					.synchronize((List<T>) defs, sessions, //
 						(widget, child) -> ExElement.typesEqual(widget.getElement(), child.getElement()))//
-					.simpleE(child -> child.interpret(defType, update))//
+					.simpleX(child -> child.interpret(defType, update))//
 					.rightOrder();
 				if (update != null) {
 					// Right-only element already updated
@@ -1506,7 +1506,7 @@ public interface ExElement extends Identifiable {
 				ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
 					throws ExpressoInterpretationException {
 				CollectionUtils.synchronize(existing, definitions, (interp, def) -> interp.getIdentity() == def.getIdentity())//
-				.adjust(new CollectionUtils.CollectionSynchronizerE<I, D, ExpressoInterpretationException>() {
+				.adjust(new CollectionUtils.CollectionSynchronizerX<I, D, ExpressoInterpretationException>() {
 					@Override
 					public boolean getOrder(ElementSyncInput<I, D> element) throws ExpressoInterpretationException {
 						return true;
@@ -1817,11 +1817,16 @@ public interface ExElement extends Identifiable {
 	 *
 	 * @param interpreted The interpretation producing this element
 	 * @param parent The parent element for this element
+	 * @throws ModelInstantiationException If any model values fail to initialize
 	 */
-	void update(Interpreted<?> interpreted, ExElement parent);
+	void update(Interpreted<?> interpreted, ExElement parent) throws ModelInstantiationException;
 
-	/** Instantiates this element's models. Must be called once after creation. */
-	void instantiated();
+	/**
+	 * Instantiates this element's models. Must be called once after creation.
+	 *
+	 * @throws ModelInstantiationException If any model values fail to initialize
+	 */
+	void instantiated() throws ModelInstantiationException;
 
 	/**
 	 * Instantiates all model values in this element this element. Must be called at least once after being produced by its interpretation.
@@ -1938,7 +1943,7 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public final void update(Interpreted<?> interpreted, ExElement parent) {
+		public final void update(Interpreted<?> interpreted, ExElement parent) throws ModelInstantiationException {
 			if (theId != interpreted.getIdentity())
 				throw new IllegalArgumentException("Wrong interpretation: " + interpreted + " for " + this);
 			if (interpreted instanceof Interpreted.Abstract)
@@ -2046,8 +2051,9 @@ public interface ExElement extends Identifiable {
 		 * Performs implementation specific initialization/update operations. Also updates add-ons and external content.
 		 *
 		 * @param interpreted The interpretation of this element
+		 * @throws ModelInstantiationException If any model values fail to initialize
 		 */
-		protected void doUpdate(Interpreted<?> interpreted) {
+		protected void doUpdate(Interpreted<?> interpreted) throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				((ExAddOn<ExElement>) addOn)
 				.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
@@ -2056,7 +2062,7 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.preInstantiated();
 			if (theLocalModel != null)
@@ -2275,14 +2281,14 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public void update(Interpreted<?> interpreted, ExElement parent) {
+			public void update(Interpreted<?> interpreted, ExElement parent) throws ModelInstantiationException {
 				Interpreted.Abstract<?> owner = (Interpreted.Abstract<?>) interpreted;
 
 				thePromise.update(owner.getPromise());
 			}
 
 			@Override
-			public void instantiated() {
+			public void instantiated() throws ModelInstantiationException {
 				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
 					addOn.instantiated();
 				thePromise.instantiated();

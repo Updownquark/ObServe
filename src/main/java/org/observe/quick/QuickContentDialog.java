@@ -138,7 +138,7 @@ public interface QuickContentDialog extends QuickDialog {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickContentDialog.Interpreted<?> myInterpreted = (QuickContentDialog.Interpreted<?>) interpreted;
@@ -152,7 +152,7 @@ public interface QuickContentDialog extends QuickDialog {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			theContent.instantiated();

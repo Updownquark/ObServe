@@ -329,7 +329,7 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
@@ -340,14 +340,14 @@ public interface QuickEventListener extends ExElement {
 			theActionInstantiator = myInterpreted.getAction().instantiate();
 
 			CollectionUtils.synchronize(theFilters, myInterpreted.getFilters(), (f, i) -> f.getIdentity() == i.getIdentity())
-			.simple(f -> f.create(this))//
-			.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+				.<ModelInstantiationException> simpleX(f -> f.create(this))//
+				.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			theActionInstantiator.instantiate();
@@ -490,14 +490,14 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theConditionInstantiator = myInterpreted.getCondition().instantiate();
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			theConditionInstantiator.instantiate();
 		}

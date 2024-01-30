@@ -1,16 +1,13 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickSpacer extends QuickWidget.Abstract {
 	public static final String SPACER = "spacer";
@@ -70,7 +67,7 @@ public class QuickSpacer extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		theLength = myInterpreted.getDefinition().getLength();

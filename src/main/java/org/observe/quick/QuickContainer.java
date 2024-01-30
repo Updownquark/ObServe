@@ -158,22 +158,22 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.simple(child -> (C) child.create())//
+				.<ModelInstantiationException> simpleX(child -> (C) child.create())//
 			.rightOrder()//
-			.onRight(element -> {
+				.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
-			.onCommon(element -> {
+				.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
@@ -184,7 +184,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			for (C content : theContents)
 				content.instantiated();

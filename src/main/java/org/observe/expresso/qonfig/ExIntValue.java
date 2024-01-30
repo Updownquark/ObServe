@@ -96,7 +96,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theInitInstantiator = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate();

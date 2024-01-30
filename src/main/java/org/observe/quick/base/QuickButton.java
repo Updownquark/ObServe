@@ -109,7 +109,7 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
 		theTextInstantiator = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate();
@@ -117,7 +117,7 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theTextInstantiator != null)

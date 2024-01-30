@@ -629,7 +629,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		QuickStyleAttribute<T> attr = myInterpreted.getEffectiveAttribute();
@@ -642,13 +642,13 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		if (theValue != null)
 			theValueInstantiator = myInterpreted.getValue().instantiate();
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.simple(interp -> interp.create())//
-		.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))
-		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this)).adjust();
+			.<ModelInstantiationException> simpleX(interp -> interp.create())//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this)).adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theConditionInstantiator != null)

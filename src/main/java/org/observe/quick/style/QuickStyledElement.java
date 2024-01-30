@@ -276,7 +276,7 @@ public interface QuickStyledElement extends ExElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
@@ -298,13 +298,14 @@ public interface QuickStyledElement extends ExElement {
 			CollectionUtils
 			.synchronize(theStyleElements, myInterpreted.getStyleElements(),
 				(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-			.simple(interp -> interp.create()).onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.<ModelInstantiationException> simpleX(interp -> interp.create())//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			theStyle.instantiated();
@@ -501,11 +502,16 @@ public interface QuickStyledElement extends ExElement {
 		/**
 		 * @param interpreted The interpretation of this style
 		 * @param styledElement The element this style is for
+		 * @throws ModelInstantiationException If any model values fail to initialize
 		 */
-		void update(Interpreted interpreted, QuickStyledElement styledElement);
+		void update(Interpreted interpreted, QuickStyledElement styledElement) throws ModelInstantiationException;
 
-		/** Instantiates all model values. Must be called once after creation. */
-		void instantiated();
+		/**
+		 * Instantiates all model values. Must be called once after creation.
+		 *
+		 * @throws ModelInstantiationException If any model values fail to initialize
+		 */
+		void instantiated() throws ModelInstantiationException;
 
 		/**
 		 * @param models The model instance to instantiate with
@@ -558,7 +564,7 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
-			public void update(Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(Interpreted interpreted, QuickStyledElement styledElement) throws ModelInstantiationException {
 				theStyledElement = styledElement;
 				boolean[] different = new boolean[1];
 				different[0] = theApplicableAttributes.keySet().retainAll(interpreted.getApplicableAttributes().values());
@@ -577,7 +583,8 @@ public interface QuickStyledElement extends ExElement {
 				theChanges.set(Observable.or(changes), null);
 			}
 
-			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different) {
+			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different)
+				throws ModelInstantiationException {
 				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr)
 					.instantiate(interpreted.getStyledElement().getModels());
 				theApplicableAttributes.computeIfAbsent(attr, __ -> {
@@ -587,7 +594,7 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
-			public void instantiated() {
+			public void instantiated() throws ModelInstantiationException {
 				for (StyleAttributeData<?> attr : theApplicableAttributes.values())
 					attr.theInstantiator.instantiate();
 			}

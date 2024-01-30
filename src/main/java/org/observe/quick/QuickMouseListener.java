@@ -156,7 +156,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		QuickMouseListener.Interpreted<?> myInterpreted = (QuickMouseListener.Interpreted<?>) interpreted;
 		theEventXValue = myInterpreted.getDefinition().getEventXValue();
@@ -346,7 +346,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			QuickMouseMoveListener.Interpreted myInterpreted = (QuickMouseMoveListener.Interpreted) interpreted;
 			theEventType = myInterpreted.getDefinition().getEventType();
@@ -468,7 +468,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 			theEventButtonValue = myInterpreted.getDefinition().getButtonValue();
@@ -575,7 +575,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theClickCount = myInterpreted.getDefinition().getClickCount();
@@ -760,7 +760,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickScrollListener.Interpreted myInterpreted = (QuickScrollListener.Interpreted) interpreted;

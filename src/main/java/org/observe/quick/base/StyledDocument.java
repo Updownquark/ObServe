@@ -174,7 +174,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 
@@ -205,7 +205,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theSelectionStartValueInstantiator != null)
@@ -375,7 +375,8 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 
 		@Override
-		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			throws ModelInstantiationException {
 			super.update(interpreted, styledElement);
 
 			TextStyle.Interpreted myInterpreted = (TextStyle.Interpreted) interpreted;

@@ -92,7 +92,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
@@ -100,7 +100,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theSelectedInstantiator.instantiate();

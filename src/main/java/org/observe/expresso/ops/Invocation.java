@@ -640,11 +640,11 @@ public abstract class Invocation implements ObservableExpression {
 				return theArguments;
 		}
 
-		protected ModelValueInstantiator<? extends SettableValue<?>> contextInstantiator() {
+		protected ModelValueInstantiator<? extends SettableValue<?>> contextInstantiator() throws ModelInstantiationException {
 			return theContext == null ? null : theContext.instantiate();
 		}
 
-		protected List<ModelValueInstantiator<? extends SettableValue<?>>> argumentInstantiators() {
+		protected List<ModelValueInstantiator<? extends SettableValue<?>>> argumentInstantiators() throws ModelInstantiationException {
 			ModelValueInstantiator<? extends SettableValue<?>>[] args = new ModelValueInstantiator[theArguments.size()];
 			for (int i = 0; i < args.length; i++)
 				args[i] = theArguments.get(i).instantiate();
@@ -697,7 +697,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			if (theContext != null)
 				theContext.instantiate();
 			for (ModelValueInstantiator<?> arg : theArguments)
@@ -889,7 +889,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public ModelValueInstantiator<ObservableAction> instantiate() {
+		public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
 			return new ActionInstantiator<>(getMethod(), contextInstantiator(), argumentInstantiators(), getImpl(), isCaching(),
 				getReporting(), isTesting(), (TypeToken<T>) getMethod().converter.getType().getType(0));
 		}
@@ -964,7 +964,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public ModelValueInstantiator<MV> instantiate() {
+		public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 			return new ThingInstantiator<>(getMethod(), contextInstantiator(), argumentInstantiators(), getImpl(), isCaching(),
 				getReporting(), isTesting());
 		}

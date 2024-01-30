@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -28,6 +27,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
+import org.qommons.ex.ExSupplier;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.LocatedFilePosition;
 
@@ -189,8 +189,11 @@ public interface ObservableModelSet extends Identifiable {
 			return BetterList.of(components.stream(), v -> v.getCores().stream());
 		}
 
-		/** @return An instantiator for this interpreted model value */
-		ModelValueInstantiator<MV> instantiate();
+		/**
+		 * @return An instantiator for this interpreted model value
+		 * @throws ModelInstantiationException If any model values could not be created
+		 */
+		ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException;
 
 		/**
 		 * Converts this value interpretation to another type
@@ -216,7 +219,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A ModelValueSynth that returns this container's value, transformed to the given type
 		 */
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
-			Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> map) {
+			ExFunction<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>, ModelInstantiationException> map) {
 			return new MappedIVC<>(this, type, map);
 		}
 
@@ -229,7 +232,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> mapValue(ModelInstanceType<M2, MV2> type,
 			ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
-			return new MappedIVC<>(this, type, LambdaUtils.printableFn(inst -> inst.map(map), map::toString, map));
+			return new MappedIVC<>(this, type, LambdaUtils.printableExFn(inst -> inst.map(map), map::toString, map));
 		}
 
 		/**
@@ -243,10 +246,10 @@ public interface ObservableModelSet extends Identifiable {
 		class MappedIVC<M, MV extends M, M2, MV2 extends M2> implements InterpretedValueSynth<M2, MV2> {
 			private final InterpretedValueSynth<M, MV> theSource;
 			private final ModelInstanceType<M2, MV2> theType;
-			private final Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> theMap;
+			private final ExFunction<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>, ModelInstantiationException> theMap;
 
 			public MappedIVC(InterpretedValueSynth<M, MV> source, ModelInstanceType<M2, MV2> type,
-				Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> map) {
+				ExFunction<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>, ModelInstantiationException> map) {
 				theSource = source;
 				theType = type;
 				theMap = map;
@@ -268,7 +271,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV2> instantiate() {
+			public ModelValueInstantiator<MV2> instantiate() throws ModelInstantiationException {
 				return theMap.apply(theSource.instantiate());
 			}
 
@@ -302,7 +305,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param components The components of the model value
 		 * @return A value container with the given type, implemented by the given function
 		 */
-		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type, Supplier<ModelValueInstantiator<MV>> value,
+		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,
+			ExSupplier<ModelValueInstantiator<MV>, ModelInstantiationException> value,
 			InterpretedValueSynth<?, ?>... components) {
 			class SimpleVC implements InterpretedValueSynth<M, MV> {
 				@Override
@@ -321,7 +325,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public ModelValueInstantiator<MV> instantiate() {
+				public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 					return value.get();
 				}
 
@@ -419,8 +423,12 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <MV> The type of values that this instantiator produces
 	 */
 	public interface ModelValueInstantiator<MV> {
-		/** Must be called once on this object after it is created. Initializes internal structures. */
-		void instantiate();
+		/**
+		 * Must be called once on this object after it is created. Initializes internal structures.
+		 *
+		 * @throws ModelInstantiationException If any internal structures fail to initialize
+		 */
+		void instantiate() throws ModelInstantiationException;
 
 		/**
 		 * @param models The model instance set to get the model value for this container from
@@ -478,7 +486,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theSource.instantiate();
 			}
 
@@ -1524,8 +1532,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
 		 *        model instance set is to be infinite)
 		 * @return A builder for the new instance set
+		 * @throws ModelInstantiationException If any models fail to initialize
 		 */
-		default ModelSetInstanceBuilder createInstance(Observable<?> until) {
+		default ModelSetInstanceBuilder createInstance(Observable<?> until) throws ModelInstantiationException {
 			ModelInstantiator instantiated = instantiate();
 			instantiated.instantiate();
 			return instantiated.createInstance(until);
@@ -1570,8 +1579,9 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the component to get
 		 * @return The value instantiator for the given component
+		 * @throws ModelInstantiationException IF the model component could not be instantiated
 		 */
-		ModelValueInstantiator<?> getComponent(ModelComponentId component);
+		ModelValueInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException;
 
 		/** @return The IDs of all models that this instantiator's models inherit */
 		Set<ModelComponentId> getInheritance();
@@ -1582,8 +1592,12 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelInstantiator getInheritance(ModelComponentId inherited);
 
-		/** Must be called once after creation. Creates internal structures. */
-		void instantiate();
+		/**
+		 * Must be called once after creation. Creates and initializes internal structures.
+		 *
+		 * @throws ModelInstantiationException If any model values fail to initialize
+		 */
+		void instantiate() throws ModelInstantiationException;
 
 		/**
 		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
@@ -2285,7 +2299,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() {
+			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 				return new DefaultComponentInstantiator<>(this);
 			}
 
@@ -2337,7 +2351,7 @@ public interface ObservableModelSet extends Identifiable {
 			private final ModelComponentId theIdentity;
 			private ModelValueInstantiator<MV> theInstantiator;
 
-			DefaultComponentInstantiator(InterpretedModelComponentNode<?, MV> component) {
+			DefaultComponentInstantiator(InterpretedModelComponentNode<?, MV> component) throws ModelInstantiationException {
 				theIdentity = component.getIdentity();
 				theInstantiator = component.getValue().instantiate();
 			}
@@ -2348,7 +2362,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theInstantiator.instantiate();
 			}
 
@@ -2953,7 +2967,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelValueInstantiator<?> getComponent(ModelComponentId component) {
+			public ModelValueInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException {
 				ModelComponentId rootModelId = component.getRootId();
 				if (rootModelId != theModelId.getRootId()) {
 					ModelInstantiator inh = theInheritance.get(rootModelId);
@@ -3012,7 +3026,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theInterpretedModels == null)
 					return;
 				instantiate(theInterpretedModels);
@@ -3023,7 +3037,7 @@ public interface ObservableModelSet extends Identifiable {
 					component.instantiate();
 			}
 
-			private void instantiate(InterpretedModelSet models) {
+			private void instantiate(InterpretedModelSet models) throws ModelInstantiationException {
 				for (String name : models.getComponentNames()) {
 					InterpretableModelComponentNode<?> interpretableNode = models.getLocalComponent(name);
 					if (interpretableNode.getModel() != null)

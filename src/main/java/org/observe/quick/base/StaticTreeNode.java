@@ -103,8 +103,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		protected TypeToken<N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
-				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this),
-					null);
+				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), null);
 				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
 				if (getExpressoEnv() != null)
 					theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
@@ -194,7 +193,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<N, ?> myInterpreted = (Interpreted<N, ?>) interpreted;
 
@@ -214,16 +213,16 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 			initChildren();
 		theInitializedChildren.clear();
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.simpleE(interp -> interp.create())//
+		.<ModelInstantiationException> simpleX(interp -> interp.create())//
 		.onLeft(el -> el.getLeftValue().destroy())//
-		.onRight(el -> el.getLeftValue().update(el.getRightValue(), getParentElement()))
-		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), getParentElement())).rightOrder()//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), getParentElement()))
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), getParentElement())).rightOrder()//
 		.adjust();
 		theInitializedChildren.addAll(theChildren);
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		for (TreeModel<? extends N> child : theInitializedChildren)
 			child.instantiated();

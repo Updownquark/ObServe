@@ -179,7 +179,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
 
@@ -197,16 +197,16 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity())//
-		.simple(action -> action.create())//
+		.<ModelInstantiationException> simpleX(action -> action.create())//
 		.rightOrder()//
 		.onLeftX(element -> element.getLeftValue().destroy())//
-		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
-		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theRowsInstantiator.instantiate();

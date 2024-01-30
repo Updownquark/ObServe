@@ -196,7 +196,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
 		theMousePositionVariable = myInterpreted.getDefinition().getMousePositionVariable();
@@ -207,7 +207,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theRowsInstantiator != null)

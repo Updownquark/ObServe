@@ -481,7 +481,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickWidget.Interpreted<?> myInterpreted = (QuickWidget.Interpreted<?>) interpreted;
@@ -502,29 +502,29 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			try (Transaction t = theEventListeners.lock(true, null)) {
 				CollectionUtils
 				.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getIdentity() == i.getIdentity())//
-				.simple(l -> {
+				.simpleX(l -> {
 					QuickEventListener listener = l.create();
 					listener.update(l, this);
 					return listener;
 				})//
-				.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 				.adjust();
 			}
 
 			try (Transaction t = theDialogs.lock(true, null)) {
 				CollectionUtils.synchronize(theDialogs, myInterpreted.getDialogs(), (l, i) -> l.getIdentity() == i.getIdentity())//
-				.simple(l -> {
+				.simpleX(l -> {
 					QuickDialog listener = l.create();
 					listener.update(l, this);
 					return listener;
 				})//
-				.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 				.adjust();
 			}
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			if (theTooltipInstantiator != null)
@@ -702,7 +702,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;

@@ -131,7 +131,7 @@ public class InstanceofExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theValue.instantiate();
 		}
 

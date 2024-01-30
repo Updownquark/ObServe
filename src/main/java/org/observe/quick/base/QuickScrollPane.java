@@ -10,11 +10,8 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SCROLL = "scroll";
@@ -107,7 +104,7 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 
@@ -125,7 +122,7 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theRowHeader != null)
 			theRowHeader.instantiated();

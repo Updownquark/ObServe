@@ -390,7 +390,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theUntil.instantiate());
 			}
 
@@ -413,7 +413,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theUntil.instantiate();
 			}
 
@@ -541,7 +541,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theMap.instantiate());
 			}
 
@@ -568,7 +568,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theMap.instantiate();
 			}
 
@@ -713,7 +713,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
 			}
 
@@ -740,7 +740,7 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theTest.instantiate();
 			}
 

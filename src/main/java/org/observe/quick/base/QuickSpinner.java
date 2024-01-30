@@ -109,7 +109,7 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
@@ -118,7 +118,7 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (thePrevious != null)

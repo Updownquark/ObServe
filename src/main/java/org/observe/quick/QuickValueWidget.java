@@ -250,7 +250,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
 			theValueInstantiator = myInterpreted.getValue().instantiate();
@@ -261,7 +261,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			theValueInstantiator.instantiate();
 			if (theDisabledInstantiator != null)

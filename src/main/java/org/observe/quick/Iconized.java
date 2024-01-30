@@ -147,7 +147,8 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickStyledElement, ?> interpreted, QuickStyledElement element) {
+	public void update(ExAddOn.Interpreted<? extends QuickStyledElement, ?> interpreted, QuickStyledElement element)
+		throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -164,7 +165,7 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theIconInstantiator != null)

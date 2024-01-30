@@ -118,7 +118,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theDisablement.instantiate());
 			}
 
@@ -141,7 +141,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theDisablement.instantiate();
 			}
 
@@ -266,7 +266,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate(),
 					getExpressoEnv().getModels().instantiate());
 			}
@@ -297,7 +297,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theTest.instantiate();
 				theLocalModel.instantiate();
 			}
@@ -396,9 +396,10 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, SettableValue<S>, SettableValue<T>> instantiate() {
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, SettableValue<S>, SettableValue<T>> instantiate()
+				throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(), //
-					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
@@ -545,14 +546,14 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
 		static class Instantiator<S, T> extends If.Instantiator<S, T>
 		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
-			public Instantiator(Interpreted<S, T> interpreted) {
+			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 			}
 
@@ -604,14 +605,14 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
 		static class Instantiator<S, T> extends Switch.Instantiator<S, T>
 		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
-			public Instantiator(Interpreted<S, T> interpreted) {
+			public Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 			}
 
@@ -663,14 +664,14 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
 		static class Instantiator<S, T> extends Return.Instantiator<S, T>
 		implements Operation.Instantiator<SettableValue<S>, SettableValue<T>> {
-			public Instantiator(Interpreted<S, T> interpreted) {
+			public Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 			}
 
@@ -735,7 +736,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theRefresh.instantiate());
 			}
 
@@ -758,7 +759,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theRefresh.instantiate();
 			}
 
@@ -1292,7 +1293,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<SettableValue<?>, CV> instantiate() {
+			public Operation.Instantiator<SettableValue<?>, CV> instantiate() throws ModelInstantiationException {
 				ModelValueInstantiator<Comparator<? super T>> sorting;
 				if (!isSorted)
 					sorting = null;
@@ -1325,7 +1326,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theEquivalence != null)
 					theEquivalence.instantiate();
 				if (theSorting != null)

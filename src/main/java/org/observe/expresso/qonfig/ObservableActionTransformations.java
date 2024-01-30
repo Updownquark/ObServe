@@ -91,7 +91,7 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theDisablement.instantiate());
 			}
 
@@ -114,7 +114,7 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theDisablement.instantiate();
 			}
 

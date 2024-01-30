@@ -325,7 +325,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				}
 
 				@Override
-				public ModelValueInstantiator<M> instantiate() {
+				public ModelValueInstantiator<M> instantiate() throws ModelInstantiationException {
 					ModelValueInstantiator<M> ssmvInstantiated = subSheetModelValue.instantiate();
 					return new SubSheetValueInstantiator<>(ssmvInstantiated, theSubSheetModelId);
 				}
@@ -343,7 +343,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theSubSheetModelValue.instantiate();
 		}
 
@@ -478,7 +478,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			CollectionUtils
 			.synchronize(importedStyleSheets, new ArrayList<>(getDefinition().getImportedStyleSheets().entrySet()),
 				(interp, def) -> interp.getIdentity() == def.getValue().getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(null))//
+			.<ExpressoInterpretationException> simpleX(def -> def.getValue().interpret(null))//
 			.onLeftX(el -> el.getLeftValue().destroy())//
 			.onRightX(el -> {
 				el.getLeftValue().updateStyleSheet(expressoEnv);
@@ -504,7 +504,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			CollectionUtils
 			.synchronize(styleSets, new ArrayList<>(getDefinition().getStyleSets().entrySet()),
 				(interp, def) -> interp.getIdentity() == def.getValue().getIdentity())//
-			.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(this))//
+			.<ExpressoInterpretationException> simpleX(def -> def.getValue().interpret(this))//
 			.onLeftX(el -> el.getLeftValue().destroy())//
 			.onRightX(el -> {
 				el.getLeftValue().updateStyleSet(expressoEnv);
@@ -551,8 +551,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			theSubModels = subModels;
 		}
 
-		/** Instantiates this model's values. Must be called once after creation. */
-		public void instantiate() {
+		/**
+		 * Instantiates this model's values. Must be called once after creation.
+		 *
+		 * @throws ModelInstantiationException If any model values fail to initialize
+		 */
+		public void instantiate() throws ModelInstantiationException {
 			theStyleSheetModels.instantiate();
 			for (ModelInstantiator styleSetModel : theStyleSetModels)
 				styleSetModel.instantiate();

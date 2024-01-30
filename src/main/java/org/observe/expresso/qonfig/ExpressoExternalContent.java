@@ -322,7 +322,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		ExpressoExternalContent.Interpreted<?> myInterpreted = (ExpressoExternalContent.Interpreted<?>) interpreted;
 		theContentModelModel = myInterpreted.getContentModelModel().instantiate();
 		theContentModelVariable = myInterpreted.getDefinition().getContentModelVariable();
@@ -390,7 +390,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			ModelValueInstantiator<ContentModelHolder> contentModel) {
 			return new ModelValueInstantiator<MV>() {
 				@Override
-				public void instantiate() {
+				public void instantiate() throws ModelInstantiationException {
 					attrValue.instantiate();
 					contentModel.instantiate();
 				}

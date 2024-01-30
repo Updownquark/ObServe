@@ -203,7 +203,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 			super.update(interpreted, element);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theTabNameInstantiator = myInterpreted.getTabName() == null ? null : myInterpreted.getTabName().instantiate();
@@ -213,7 +213,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			if (theTabNameInstantiator != null)
 				theTabNameInstantiator.instantiate();
@@ -327,14 +327,15 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+		public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element)
+			throws ModelInstantiationException {
 			super.update(interpreted, element);
 			Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 			theTabIdInstantiator = myInterpreted.getTabId().instantiate();
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			theTabIdInstantiator.instantiate();
 		}
@@ -491,7 +492,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 			theTabIdType = myInterpreted.getTabIdType();
@@ -511,7 +512,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			theValuesInstantiator.instantiate();
@@ -576,14 +577,13 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				theAbstractTab = renderer.getAddOn(AbstractTab.class);
 			}
 
-			void update(QuickWidget.Interpreted<?> renderer, TabSet<T> tabSet) {
+			void update(QuickWidget.Interpreted<?> renderer, TabSet<T> tabSet) throws ModelInstantiationException {
 				theTabRenderer.update(renderer, tabSet);
 			}
 
 			void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 				ModelSetInstance copy = getModels()
-					.createCopy(models, Observable.or(models.getUntil(), theTabRenderer.isDestroyed().noInitChanges().take(1)))
-					.build();
+					.createCopy(models, Observable.or(models.getUntil(), theTabRenderer.isDestroyed().noInitChanges().take(1))).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTabIdVariable, copy,
 					SettableValue.of(theTabIdType, theTabId, "Tab ID is not modifiable"));
 				theTabRenderer.instantiate(copy);
@@ -794,7 +794,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		// Do this before the super call because the content will need it
 		if (theSelectedTab == null || !theTabIdType.equals(myInterpreted.getTabIdType())) {
@@ -807,16 +807,16 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		theSelectedTabInstantiator = myInterpreted.getSelectedTab() == null ? null : myInterpreted.getSelectedTab().instantiate();
 
 		CollectionUtils.synchronize(theTabSets, myInterpreted.getTabSets(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.simple(interp -> interp.create())//
+		.<ModelInstantiationException> simpleX(interp -> interp.create())//
 		.onLeft(el -> theTabSets.remove(el.getLeftValue()))//
-		.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 		.rightOrder()//
 		.adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theSelectedTabInstantiator != null)

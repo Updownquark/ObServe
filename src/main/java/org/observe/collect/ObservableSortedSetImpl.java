@@ -38,7 +38,7 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils.AdjustmentOrder;
-import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
@@ -834,7 +834,7 @@ public class ObservableSortedSetImpl {
 		 */
 		protected DataControlledSortedSetImpl(ObservableSortedSet<E> backing, Supplier<? extends List<? extends V>> backingData,
 			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
-			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
+			CollectionSynchronizerX<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
 			super(backing, backingData, autoRefresh, refreshOnAccess, equals, synchronizer, adjustmentOrder);
 		}
 

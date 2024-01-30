@@ -156,7 +156,7 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() {
+			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 				return value.instantiate();
 			}
 
@@ -210,7 +210,7 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() {
+			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 				return wrapped.instantiate();
 			}
 

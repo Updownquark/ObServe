@@ -147,9 +147,10 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate() {
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate()
+				throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
-					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
@@ -267,7 +268,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV, CV> instantiate() {
+			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
 			}
 		}
@@ -284,7 +285,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theTest.instantiate();
 			}
 
@@ -566,7 +567,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV, CV> instantiate() {
+			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theRefresh.instantiate());
 			}
 
@@ -584,7 +585,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theRefresh.instantiate();
 			}
 
@@ -685,7 +686,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV, CV> instantiate() {
+			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theSourceType, getDefinition().getSourceVariable(),
 					theRefresh.instantiate());
 			}
@@ -711,7 +712,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				theRefresh.instantiate();
 			}
@@ -840,7 +841,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV1, CV2> instantiate() {
+			public Operation.Instantiator<CV1, CV2> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSort == null ? null : theSort.instantiateSort(), getDefinition().isUseFirst(),
 					getDefinition().isPreservingSourceOrder());
 			}
@@ -859,7 +860,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theSort != null)
 					theSort.instantiate();
 			}
@@ -943,7 +944,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV1, CV2> instantiate() {
+			public Operation.Instantiator<CV1, CV2> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(instantiateSort());
 			}
 		}
@@ -957,7 +958,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theSorting.instantiate();
 			}
 
@@ -1211,9 +1212,10 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate() {
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate()
+				throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
-					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
@@ -1242,7 +1244,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				if (theSort != null)
 					theSort.instantiate();
@@ -1443,7 +1445,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV1, CV2> instantiate() {
+			public Operation.Instantiator<CV1, CV2> instantiate() throws ModelInstantiationException {
 				return new Instantiator<S, T, CV1, CV2>((ModelType<CV2>) getDefinition().getTargetModelType(),
 					theSort == null ? null : theSort.instantiateSort(), theFlatten);
 			}
@@ -1478,7 +1480,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theSort != null)
 					theSort.instantiate();
 			}
@@ -1616,7 +1618,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public Operation.Instantiator<CV, CV> instantiate() {
+			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theFilter.instantiate(), getDefinition().isInclusive());
 			}
 
@@ -1636,7 +1638,7 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theFilter.instantiate();
 			}
 

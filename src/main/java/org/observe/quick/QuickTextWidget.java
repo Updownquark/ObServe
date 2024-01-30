@@ -275,7 +275,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
 			if (theFormat == null) {
@@ -294,7 +294,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			if (theFormatInstantiator != null)
 				theFormatInstantiator.instantiate();

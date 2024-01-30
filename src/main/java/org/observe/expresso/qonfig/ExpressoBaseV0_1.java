@@ -96,7 +96,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
 		configureInternalModels(interpreter);
-		interpreter.createWith("hook", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Hook::new));
 		ExpressoTransformations.configureTransformation(interpreter);
 		return interpreter;
 	}
@@ -233,5 +232,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExElement.creator(ExpressoQonfigValues.PlainMultiMapDef::new));
 		interpreter.createWith("sorted-multi-map", ModelValueElement.CompiledSynth.class,
 			ExElement.creator(ExpressoQonfigValues.SortedMultiMapDef::new));
+		interpreter.createWith("hook", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Hook::new));
 	}
 }

@@ -290,7 +290,7 @@ public interface QuickBorder extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			TitledBorder.Interpreted<?> myInterpreted = (TitledBorder.Interpreted<?>) interpreted;
 			theTitleInstantiator = myInterpreted.getTitle().instantiate();
@@ -410,7 +410,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				Interpreted myInterpreted = (Interpreted) interpreted;
@@ -566,7 +567,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				QuickBorderStyle.Interpreted myInterpreted = (QuickBorderStyle.Interpreted) interpreted;

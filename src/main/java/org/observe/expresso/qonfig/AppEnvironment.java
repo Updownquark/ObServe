@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.awt.Image;
 
 import org.observe.SettableValue;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 
@@ -11,7 +12,7 @@ public interface AppEnvironment {
 
 	InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon();
 
-	default Instantiator instantiate() {
+	default Instantiator instantiate() throws ModelInstantiationException {
 		return new Instantiator(getTitle() == null ? null : getTitle().instantiate(), getIcon() == null ? null : getIcon().instantiate());
 	}
 

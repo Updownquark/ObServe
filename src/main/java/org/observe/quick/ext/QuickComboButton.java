@@ -25,9 +25,6 @@ import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickBaseInterpretation;
 import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickComboBox;
-import org.observe.quick.base.MultiValueRenderable.MultiValueRenderContext;
-import org.observe.quick.base.QuickButton.Def;
-import org.observe.quick.base.QuickButton.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -180,7 +177,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 
@@ -206,7 +203,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theValuesInstantiator != null)
 			theValuesInstantiator.instantiate();

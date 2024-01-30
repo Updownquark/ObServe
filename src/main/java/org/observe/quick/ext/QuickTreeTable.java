@@ -16,13 +16,9 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickTableColumn;
+import org.observe.quick.base.QuickTableColumn.TableColumnSet;
 import org.observe.quick.base.QuickTree;
 import org.observe.quick.base.TabularWidget;
-import org.observe.quick.base.MultiValueRenderable.MultiValueRenderContext;
-import org.observe.quick.base.QuickTableColumn.TableColumnSet;
-import org.observe.quick.base.QuickTree.Def;
-import org.observe.quick.base.QuickTree.Interpreted;
-import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -170,7 +166,7 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		Interpreted<N> myInterpreted = (Interpreted<N>) interpreted;
 		TypeToken<BetterList<N>> rowType;
 		boolean newType;
@@ -193,7 +189,7 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 		theColumnIndexVariable = myInterpreted.getDefinition().getColumnIndexVariable();
 		CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getIdentity() == i.getIdentity())//
 		.adjust(
-			new CollectionUtils.CollectionSynchronizer<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>>() {
+			new CollectionUtils.CollectionSynchronizerX<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>, ModelInstantiationException>() {
 				@Override
 				public boolean getOrder(
 					ElementSyncInput<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> element) {
@@ -209,7 +205,8 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 
 				@Override
 				public ElementSyncAction rightOnly(
-					ElementSyncInput<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> element) {
+					ElementSyncInput<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> element)
+						throws ModelInstantiationException {
 					TableColumnSet<BetterList<N>> created;
 					try {
 						created = element.getRightValue().create();
@@ -231,7 +228,8 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 
 				@Override
 				public ElementSyncAction common(
-					ElementSyncInput<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> element) {
+					ElementSyncInput<QuickTableColumn.TableColumnSet<BetterList<N>>, QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> element)
+						throws ModelInstantiationException {
 					try {
 						element.getLeftValue().update(element.getRightValue(), QuickTreeTable.this);
 					} catch (RuntimeException | Error e) {
@@ -250,7 +248,7 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		for (TableColumnSet<BetterList<N>> column : theColumnSets)

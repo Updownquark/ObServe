@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.VariableType;
 import org.qommons.config.QonfigAddOn;
@@ -102,7 +103,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted<K, ?> myInterpreted = (Interpreted<K, ?>) interpreted;
 		theKeyType = myInterpreted.getKeyType();

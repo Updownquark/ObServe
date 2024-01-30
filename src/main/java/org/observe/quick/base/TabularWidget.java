@@ -288,13 +288,13 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
 			TypeToken<R> rowType;
 			try {
-				rowType=myInterpreted.getValueType();
-			} catch(ExpressoInterpretationException e) {
+				rowType = myInterpreted.getValueType();
+			} catch (ExpressoInterpretationException e) {
 				throw new IllegalStateException("Not initialized?", e);
 			}
 			if (theRowType == null || !theRowType.equals(rowType)) {
@@ -314,7 +314,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
 			CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getIdentity() == i.getIdentity())//
 			.adjust(
-				new CollectionUtils.CollectionSynchronizer<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>>() {
+				new CollectionUtils.CollectionSynchronizerX<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>, ModelInstantiationException>() {
 					@Override
 					public boolean getOrder(
 						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element) {
@@ -330,7 +330,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 					@Override
 					public ElementSyncAction rightOnly(
-						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element) {
+						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element)
+							throws ModelInstantiationException {
 						TableColumnSet<R> created;
 						try {
 							created = element.getRightValue().create();
@@ -352,7 +353,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 					@Override
 					public ElementSyncAction common(
-						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element) {
+						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element)
+							throws ModelInstantiationException {
 						try {
 							element.getLeftValue().update(element.getRightValue(), TabularWidget.Abstract.this);
 						} catch (RuntimeException | Error e) {
@@ -371,7 +373,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			for (TableColumnSet<R> column : theColumnSets)

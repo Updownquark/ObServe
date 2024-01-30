@@ -242,12 +242,12 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 	}
 
 	@Override
-	public void update(QonfigPromise.Interpreted<?> interpreted) {
+	public void update(QonfigPromise.Interpreted<?> interpreted) throws ModelInstantiationException {
 		update(interpreted, null);
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		ExpressoExternalReference.Interpreted<?> myInterpreted = (ExpressoExternalReference.Interpreted<?>) interpreted;
@@ -262,7 +262,7 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		theExternalContent.instantiated();
 		theExtModels.instantiate();

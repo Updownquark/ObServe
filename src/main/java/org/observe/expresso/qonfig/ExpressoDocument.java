@@ -135,7 +135,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted<?, ?> myInterpreted = (Interpreted<?, ?>) interpreted;
@@ -152,7 +152,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void preInstantiated() {
+	public void preInstantiated() throws ModelInstantiationException {
 		super.preInstantiated();
 
 		theHead.instantiated();

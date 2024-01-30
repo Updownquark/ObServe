@@ -247,7 +247,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public ModelValueInstantiator<ObservableAction> instantiate() {
+					public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
 					return new ActionInstantiator<>(left.instantiate(), right.instantiate(), op, reporting, operatorReporting);
 				}
 
@@ -277,7 +277,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public ModelValueInstantiator<SettableValue<V>> instantiate() {
+				public ModelValueInstantiator<SettableValue<V>> instantiate() throws ModelInstantiationException {
 					if (op == BinaryOperatorSet.OR)
 						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new OrValue(
 							(TypeToken<Boolean>) resultType, //
@@ -328,7 +328,7 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theLeft.instantiate();
 			theRight.instantiate();
 		}
@@ -397,7 +397,7 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theLeft.instantiate();
 			theRight.instantiate();
 		}

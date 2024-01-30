@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -20,7 +19,6 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
-import org.observe.config.ObservableConfigFormat;
 import org.observe.config.ObservableConfigFormatSet;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
@@ -37,6 +35,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
@@ -50,8 +49,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.CollectionUtils.ElementSyncAction;
-import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -64,33 +61,70 @@ import org.qommons.io.SpinnerFormat;
 import org.qommons.io.TextParseException;
 import org.qommons.threading.QommonsTimer;
 
-import com.google.common.reflect.TypeToken;
-
+/**
+ * <p>
+ * This class is the model component of the unification of {@link ObservableModelSet} with {@link ExElement}. {@link ModelValueElement} is
+ * the value component of the unification.
+ * </p>
+ * <p>
+ * This class is an {@link ExElement} that represents an Observable model. Specifically, this class represents an
+ * {@link org.observe.expresso.ObservableModelSet.ModelInstantiator ObservableModelSet.ModelInstantiator}, but it does not implement that
+ * class.
+ * </p>
+ * <p>
+ * The {@link ObservableModelElement.Def ObservableModelElement.Def} class represents an {@link ObservableModelSet}, and
+ * {@link ObservableModelElement.Interpreted ObservableModelElement.Interpreted} represents an
+ * {@link org.observe.expresso.ObservableModelSet.InterpretedModelSet ObservableModelSet.InterpretedModelSet}.
+ * </p>
+ * <p>
+ * Due to the fact that models are needed before {@link ExElement} implementations can be initialized, it's not feasible that the element
+ * representations of model set structures can implement the model set interfaces. Rather, this class searches for
+ * {@link ModelValueElement}-typed elements in the Observable model structures it receives and incorporates them as the model element's
+ * children.
+ * </p>
+ */
 public abstract class ObservableModelElement extends ExElement.Abstract {
-	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "abst-model", interpretation = Interpreted.class)
+	/**
+	 * Definition of an {@link ObservableModelElement}
+	 *
+	 * @param <M> The sub-type of {@link ObservableModelElement} to create
+	 * @param <V> The sub-type of {@link ModelValueElement} for this element's values
+	 */
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "abst-model",
+		interpretation = Interpreted.class,
+		instance = ObservableModelElement.class)
 	public static abstract class Def<M extends ObservableModelElement, V extends ModelValueElement.Def<?, ?>>
 	extends ExElement.Def.Abstract<M> {
 		private String theModelPath;
 		private final List<V> theValues;
 
+		/**
+		 * @param parent The parent element of this model element
+		 * @param qonfigType The Qonfig type of this model element
+		 */
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theValues = new ArrayList<>();
 		}
 
+		/** @return The path of this model in its parent (or empty ("") if it is the root model) */
 		public String getModelPath() {
 			return theModelPath;
 		}
 
+		/** @return The name of this model */
 		public String getName() {
 			return getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 		}
 
+		/** @return This model's values */
 		@QonfigChildGetter("value")
 		public List<V> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
 
+		/** @return The sub-type of {@link ModelValueElement} for this element's values */
 		protected abstract Class<V> getValueType();
 
 		@Override
@@ -133,12 +167,26 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * @param parent The interpreted parent for the interpreted model
+		 * @return The interpreted model element
+		 * @throws ExpressoInterpretationException If the model element could not be interpreted
+		 */
 		public abstract Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
 	}
 
+	/**
+	 * Interpretation of an {@link ObservableModelElement}
+	 *
+	 * @param <M> The sub-type of model element to create
+	 */
 	public static abstract class Interpreted<M extends ObservableModelElement> extends ExElement.Interpreted.Abstract<M> {
 		private final List<ModelValueElement.Interpreted<?, ?, ?>> theValues;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for this model element
+		 */
 		protected Interpreted(Def<? super M, ?> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theValues = new ArrayList<>();
@@ -149,12 +197,20 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			return (Def<? super M, ?>) super.getDefinition();
 		}
 
+		/** @return This model's sub-models */
 		protected abstract List<? extends ObservableModelElement.Interpreted<?>> getSubModels();
 
+		/** @return This model's values */
 		public List<? extends ModelValueElement.Interpreted<?, ?, ?>> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
 
+		/**
+		 * Initializes or updates this model element
+		 *
+		 * @param env The expresso environment to use to interpret expressions
+		 * @throws ExpressoInterpretationException If this model element could not be interpreted
+		 */
 		public void updateSubModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			InterpretedModelSet childModels;
 			try {
@@ -169,10 +225,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			// Find all the interpreted model values and initialize them with this as their parent before they are initialized properly
 			theValues.clear();
-			try (Transaction t = env.<LinkedList<ExElement.Interpreted<?>>> modifyTemp(ModelValueElement.MODEL_PARENT_ELEMENTS, //
-				LinkedList::new, //
-				list -> list.add(this), //
-				LinkedList::removeLast)) {
+			try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 				for (String name : env.getModels().getComponentNames()) {
 					InterpretedModelComponentNode<?, ?> mv = env.getModels().getLocalComponent(name).interpret(env);
 					ModelValueElement.Interpreted<?, ?, ?> modelValue = findModelValue(mv.getValue());
@@ -186,6 +239,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * @param modelPath The path of the model element to get
+		 * @return This model element or one of its {@link #getSubModels() sub-models} with the given model path, or null if no such model
+		 *         element exists
+		 */
 		public Interpreted<?> getInterpretingModel(String modelPath) {
 			if (modelPath.startsWith(getDefinition().getModelPath())) {
 				if (modelPath.length() == getDefinition().getModelPath().length())
@@ -201,7 +259,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				if (parent != null)
 					return ((ModelSetElement.Interpreted<?>) parent).getInterpretingModel(modelPath);
 			}
-			throw new IllegalStateException("Could not find model for path " + modelPath);
+			return null;
 		}
 
 		private ModelValueElement.Interpreted<?, ?, ?> findModelValue(InterpretedValueSynth<?, ?> value) {
@@ -215,87 +273,81 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			return findModelValue(components.get(0));
 		}
 
+		/**
+		 * @param parent The parent element for the model element
+		 * @return The model element
+		 */
 		public abstract ObservableModelElement create(ExElement parent);
 	}
 
-	private final List<ModelValueElement<?, ?>> theValues;
+	private final List<ModelValueElement<?>> theValues;
 
+	/** @param id The element identifier for this model element */
 	protected ObservableModelElement(Object id) {
 		super(id);
 		theValues = new ArrayList<>();
 	}
 
+	/** @return This model's values */
 	public List<? extends ExElement> getValues() {
 		return Collections.unmodifiableList(theValues);
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
-		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
+		// Find all the model value instances and initialize them with this as their parent before they are initialized properly
+		for (ModelComponentId name : getModels().getComponents()) {
+			ModelValueInstantiator<?> component = getModels().getComponent(name);
+			if (component instanceof ModelValueElement)
+				theValues.add((ModelValueElement<?>) component);
+		}
 
-		CollectionUtils.synchronize(theValues, myInterpreted.getValues(), //
-			(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.adjust(new CollectionUtils.CollectionSynchronizer<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>>() {
-			@Override
-			public boolean getOrder(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
-				return true;
-			}
+		ObservableModelElement.Interpreted<?> myInterpreted = (ObservableModelElement.Interpreted<?>) interpreted;
 
-			@Override
-			public ElementSyncAction leftOnly(
-				ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
-				return element.remove();
-			}
-
-			@Override
-			public ElementSyncAction rightOnly(
-				ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
-				ModelValueElement<?, ?> instance = element.getRightValue().create();
-				if (instance != null) {
-					instance.update(element.getRightValue(), ObservableModelElement.this);
-					return element.useValue(instance);
-				} else
-					return element.remove();
-			}
-
-			@Override
-			public ElementSyncAction common(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
-				element.getLeftValue().update(element.getRightValue(), ObservableModelElement.this);
-				return element.preserve();
-			}
-		}, CollectionUtils.AdjustmentOrder.RightOrder);
+		Collections.sort(theValues,
+			(mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(), mv2.reporting().getPosition().getPosition()));
+		for (int v = 0; v < theValues.size(); v++)
+			theValues.get(v).update(myInterpreted.getValues().get(v), this);
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
-		for (ModelValueElement<?, ?> value : theValues)
+		for (ModelValueElement<?> value : theValues)
 			value.instantiated();
 	}
 
-	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
-		for (ModelValueElement<?, ?> value : theValues)
-			value.instantiate(myModels);
-	}
-
+	/** Represents a &lt;models> element consisting of some number of models */
 	public static class ModelSetElement extends ExElement.Abstract {
-		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "models", interpretation = Interpreted.class)
+		/**
+		 * Definition of a {@link ModelSetElement}
+		 *
+		 * @param <M> The sub-type of {@link ModelSetElement} to create
+		 */
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+			qonfigType = "models",
+			interpretation = Interpreted.class,
+			instance = ModelSetElement.class)
 		public static class Def<M extends ModelSetElement> extends ExElement.Def.Abstract<M> {
 			private final List<ObservableModelElement.Def<?, ?>> theSubModels;
 
+			/**
+			 * @param parent The parent element for this models element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
 			}
 
+			/** @return The {@link ObservableModelElement.Def ObservableModelElement.Def} sub-type for this model set's models */
 			protected Class<? extends ObservableModelElement.Def<?, ?>> getModelType() {
 				return (Class<? extends ObservableModelElement.Def<?, ?>>) (Class<?>) ObservableModelElement.Def.class;
 			}
 
+			/** @return The models in this &lt;models> element */
 			// Would rather name this "getModels", but that name's taken in ExElement.Def
 			@QonfigChildGetter("model")
 			public List<? extends ObservableModelElement.Def<?, ?>> getSubModels() {
@@ -324,7 +376,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				CollectionUtils
 				.synchronize(theSubModels, session.forChildren("model"),
 					(me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))//
-				.<QonfigInterpretationException> simpleE(ms -> {
+				.<QonfigInterpretationException> simpleX(ms -> {
 					ObservableModelElement.Def<?, ?> subModelEl = ms.interpret(ObservableModelElement.Def.class);
 					sessionUpdater.accept(subModelEl, ms);
 					subModelEl.update(ms);
@@ -350,14 +402,27 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return false;
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted model set
+			 * @return The interpreted model set
+			 */
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
 		}
 
+		/**
+		 * Interpretation of a {@link ModelSetElement}
+		 *
+		 * @param <M> The sub-type of {@link ModelSetElement} to create
+		 */
 		public static class Interpreted<M extends ModelSetElement> extends ExElement.Interpreted.Abstract<M> {
 			private final List<ObservableModelElement.Interpreted<?>> theSubModels;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this model set element
+			 */
 			public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theSubModels = new ArrayList<>();
@@ -368,6 +433,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Def<? super M>) super.getDefinition();
 			}
 
+			/** @return The models in this &lt;models> element */
 			public List<ObservableModelElement.Interpreted<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
@@ -381,6 +447,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
 			}
 
+			/**
+			 * @param modelPath The path of the model element to get
+			 * @return One of this model set's {@link #getSubModels() sub-models} with the given model path, or null if no such model
+			 *         element exists
+			 */
 			public ObservableModelElement.Interpreted<?> getInterpretingModel(String modelPath) {
 				for (ObservableModelElement.Interpreted<?> subModel : getSubModels()) {
 					if (modelPath.startsWith(subModel.getDefinition().getModelPath()))
@@ -392,33 +463,35 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		private final List<ObservableModelElement> theSubModels;
 
-		public ModelSetElement(Object id) {
+		/** @param id The element identifier for this model set element */
+		protected ModelSetElement(Object id) {
 			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
+		/** @return The models in this &lt;models> element */
 		@QonfigChildGetter("model")
 		public List<? extends ObservableModelElement> getSubModels() {
 			return Collections.unmodifiableList(theSubModels);
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.simple(child -> child.create(ModelSetElement.this))//
+			.<ModelInstantiationException> simpleX(child -> child.create(ModelSetElement.this))//
 			.rightOrder()//
-			.onRight(element -> {
+			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), ModelSetElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
-			.onCommon(element -> {
+			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), ModelSetElement.this);
 				} catch (RuntimeException | Error e) {
@@ -429,7 +502,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			for (ObservableModelElement subModel : theSubModels)
 				subModel.instantiated();
@@ -443,12 +516,25 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 	}
 
+	/** Default {@link ObservableModelElement} implementation for the &lt;model> element type */
 	public static class DefaultModelElement extends ObservableModelElement {
-		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model", interpretation = Interpreted.class)
+		/**
+		 * Definition for a {@link ObservableModelElement.DefaultModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.DefaultModelElement} to create
+		 */
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+			qonfigType = "model",
+			interpretation = Interpreted.class,
+			instance = DefaultModelElement.class)
 		public static class Def<M extends DefaultModelElement>
 		extends ObservableModelElement.Def<M, ModelValueElement.CompiledSynth<?, ?>> {
 			private final List<DefaultModelElement.Def<?>> theSubModels;
 
+			/**
+			 * @param parent The parent element of this model element
+			 * @param qonfigType The Qonfig type of this model element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
@@ -459,10 +545,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Class<ModelValueElement.CompiledSynth<?, ?>>) (Class<?>) ModelValueElement.CompiledSynth.class;
 			}
 
+			/**
+			 * @return The {@link ObservableModelElement.DefaultModelElement.Def DefaultModelElement.Def} sub-type for this model's
+			 *         sub-models
+			 */
 			protected Class<? extends DefaultModelElement.Def<?>> getModelType() {
 				return (Class<? extends DefaultModelElement.Def<?>>) (Class<?>) DefaultModelElement.Def.class;
 			}
 
+			/** @return This model's sub-models */
 			@QonfigChildGetter("sub-model")
 			public List<? extends DefaultModelElement.Def<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
@@ -486,10 +577,19 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link ObservableModelElement.DefaultModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.DefaultModelElement} to create
+		 */
 		public static class Interpreted<M extends DefaultModelElement> extends ObservableModelElement.Interpreted<M> {
 			private final List<Interpreted<?>> theSubModels;
 
-			public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this model element
+			 */
+			protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theSubModels = new ArrayList<>();
 			}
@@ -522,25 +622,27 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		private final List<DefaultModelElement> theSubModels;
 
-		public DefaultModelElement(Object id) {
+		/** @param id The element identifier for this model element */
+		protected DefaultModelElement(Object id) {
 			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
+		/** @return This model's sub-models */
 		public List<? extends DefaultModelElement> getSubModels() {
 			return Collections.unmodifiableList(theSubModels);
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
-			.simple(child -> child.create(DefaultModelElement.this))//
+			.<ModelInstantiationException> simpleX(child -> child.create(DefaultModelElement.this))//
 			.rightOrder()//
-			.onRight(element -> {
+			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), DefaultModelElement.this);
 				} catch (RuntimeException | Error e) {
@@ -548,7 +650,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						e);
 				}
 			})//
-			.onCommon(element -> {
+			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), DefaultModelElement.this);
 				} catch (RuntimeException | Error e) {
@@ -560,7 +662,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			for (DefaultModelElement subModel : theSubModels)
 				subModel.instantiated();
@@ -574,17 +676,35 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 	}
 
+	/** {@link ObservableModelElement.DefaultModelElement} sub-class for local &lt;model> declaration under an element */
 	public static class LocalModelElementDef extends DefaultModelElement.Def<DefaultModelElement> {
+		/**
+		 * @param parent The parent element for this element
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public LocalModelElementDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 	}
 
+	/** Default {@link ObservableModelElement} implementation for the &lt;ext-model> element */
 	public static class ExtModelElement extends ObservableModelElement {
-		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "ext-model", interpretation = Interpreted.class)
+		/**
+		 * Definition for a {@link ObservableModelElement.ExtModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.ExtModelElement} to create
+		 */
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+			qonfigType = "ext-model",
+			interpretation = Interpreted.class,
+			instance = ExtModelElement.class)
 		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M, ExtModelValueElement.Def<?>> {
 			private final List<ExtModelElement.Def<?>> theSubModels;
 
+			/**
+			 * @param parent The parent element of this model element
+			 * @param qonfigType The Qonfig type of this model element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
@@ -595,10 +715,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Class<ExtModelValueElement.Def<?>>) (Class<?>) ExtModelValueElement.Def.class;
 			}
 
+			/** @return The {@link ObservableModelElement.ExtModelElement.Def ExtModelElement.Def} sub-type for this model's sub-models */
 			protected Class<? extends ExtModelElement.Def<?>> getModelType() {
 				return (Class<? extends ExtModelElement.Def<?>>) (Class<?>) ExtModelElement.Def.class;
 			}
 
+			/** @return This model's sub-models */
 			@QonfigChildGetter("sub-model")
 			public List<? extends ExtModelElement.Def<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
@@ -616,10 +738,19 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link ObservableModelElement.ExtModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.ExtModelElement} to create
+		 */
 		public static class Interpreted<M extends ExtModelElement> extends ObservableModelElement.Interpreted<M> {
 			private final List<Interpreted<?>> theSubModels;
 
-			public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this model element
+			 */
+			protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theSubModels = new ArrayList<>();
 			}
@@ -657,25 +788,27 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		private final List<ExtModelElement> theSubModels;
 
-		public ExtModelElement(Object id) {
+		/** @param id The element ID for this model element */
+		protected ExtModelElement(Object id) {
 			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
+		/** @return This element's sub-models */
 		public List<ExtModelElement> getSubModels() {
 			return theSubModels;
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
-			.simple(child -> child.create(ExtModelElement.this))//
+			.<ModelInstantiationException> simpleX(child -> child.create(ExtModelElement.this))//
 			.rightOrder()//
-			.onRight(element -> {
+			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), ExtModelElement.this);
 				} catch (RuntimeException | Error e) {
@@ -683,7 +816,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						e);
 				}
 			})//
-			.onCommon(element -> {
+			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), ExtModelElement.this);
 				} catch (RuntimeException | Error e) {
@@ -695,17 +828,27 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			for (ExtModelElement subModel : theSubModels)
 				subModel.instantiated();
 		}
 	}
 
+	/** Default {@link ObservableModelElement} implementation for the &lt;config> element */
 	public static class ConfigModelElement extends ObservableModelElement {
+		/** Session key to store the {@link AppEnvironment} instance into to use in case of config load failure */
 		public static final String APP_ENVIRONMENT_KEY = "EXPRESSO.APP.ENVIRONMENT";
 
-		@ExElementTraceable(toolkit = ExpressoConfigV0_1.CONFIG, qonfigType = "config", interpretation = Interpreted.class)
+		/**
+		 * Definition for a {@link ObservableModelElement.ConfigModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.ConfigModelElement} to create
+		 */
+		@ExElementTraceable(toolkit = ExpressoConfigV0_1.CONFIG,
+			qonfigType = "config",
+			interpretation = Interpreted.class,
+			instance = ConfigModelElement.class)
 		public static class Def<M extends ConfigModelElement> extends ObservableModelElement.Def<M, ConfigModelValue.Def<M>> {
 			private String theConfigName;
 			private CompiledExpression theConfigDir;
@@ -713,26 +856,37 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			private boolean isBackup;
 			private AppEnvironment theApplicationEnvironment;
 
+			/**
+			 * @param parent The parent element for this model element
+			 * @param qonfigType The Qonfig type of this model element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theOldConfigNames = new ArrayList<>();
 			}
 
+			/** @return The config name for this model, determines where it attempts to load from */
 			@QonfigAttributeGetter("config-name")
 			public String getConfigName() {
 				return theConfigName;
 			}
 
+			/** @return The config directory for this model, determines where it attempts to load from */
 			@QonfigAttributeGetter("config-dir")
 			public CompiledExpression getConfigDir() {
 				return theConfigDir;
 			}
 
+			/** @return Old config names that this model may have had in the past */
 			@QonfigChildGetter("old-config-name")
 			public List<OldConfigName> getOldConfigNames() {
 				return Collections.unmodifiableList(theOldConfigNames);
 			}
 
+			/**
+			 * @return Whether this model attempts to back up its data in case of load failure or if the user desires to revert to a
+			 *         previous version of the data
+			 */
 			@QonfigAttributeGetter("backup")
 			public boolean isBackup() {
 				return isBackup;
@@ -764,33 +918,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
 				return new Interpreted<>(this, parent);
-			}
-
-			private static <T> ObservableConfigFormat<T> getDefaultConfigFormat(TypeToken<T> valueType) {
-				Format<T> f;
-				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
-				if (type == String.class)
-					f = (Format<T>) SpinnerFormat.NUMERICAL_TEXT;
-				else if (type == int.class)
-					f = (Format<T>) SpinnerFormat.INT;
-				else if (type == long.class)
-					f = (Format<T>) SpinnerFormat.LONG;
-				else if (type == double.class)
-					f = (Format<T>) Format.doubleFormat(4).build();
-				else if (type == float.class)
-					f = (Format<T>) Format.doubleFormat(4).buildFloat();
-				else if (type == boolean.class)
-					f = (Format<T>) Format.BOOLEAN;
-				else if (Enum.class.isAssignableFrom(type))
-					f = (Format<T>) Format.enumFormat((Class<Enum<?>>) type);
-				else if (type == Instant.class)
-					f = (Format<T>) SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
-				else if (type == Duration.class)
-					f = (Format<T>) SpinnerFormat.flexDuration(false);
-				else
-					return null;
-				T defaultValue = TypeTokens.get().getDefaultValue(valueType);
-				return ObservableConfigFormat.ofQommonFormat(f, () -> defaultValue);
 			}
 
 			private static class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
@@ -852,7 +979,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					}
 
 					@Override
-					public ModelValueInstantiator<SettableValue<ObservableConfig>> instantiate() {
+					public ModelValueInstantiator<SettableValue<ObservableConfig>> instantiate() throws ModelInstantiationException {
 						return new Instantiator(theInterpretedConfigDir == null ? null : theInterpretedConfigDir.instantiate(), //
 							theConfigName, isBackup, theOldConfigNames, //
 							theApplicationEnvironment == null ? null : theApplicationEnvironment.instantiate());
@@ -877,7 +1004,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					}
 
 					@Override
-					public void instantiate() {
+					public void instantiate() throws ModelInstantiationException {
 						if (theInterpretedConfigDir != null)
 							theInterpretedConfigDir.instantiate();
 					}
@@ -1114,8 +1241,17 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link ObservableModelElement.ConfigModelElement}
+		 *
+		 * @param <M> The sub-type of {@link ObservableModelElement.ConfigModelElement} to create
+		 */
 		public static class Interpreted<M extends ConfigModelElement> extends ObservableModelElement.Interpreted<M> {
-			public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for this model element
+			 */
+			protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -1142,7 +1278,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 		}
 
-		public ConfigModelElement(Object id) {
+		/** @param id The element id for this model element */
+		protected ConfigModelElement(Object id) {
 			super(id);
 		}
 

@@ -63,8 +63,8 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 	}
 
 	@ExElementTraceable(toolkit = TESTING, qonfigType = "watch", interpretation = WatchedValue.Interpreted.class)
-	static class WatchedValue extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, ?>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ?>> {
+	static class WatchedValue extends ExElement.Def.Abstract<ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<?>> {
 		private String theModelPath;
 		private CompiledExpression theValue;
 
@@ -103,8 +103,8 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<T>>> implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<?>, SettableValue<T>>> {
+		static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<T>>>
+		implements ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<T>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
 			public Interpreted(WatchedValue definition, ExElement.Interpreted<?> parent) {
@@ -149,31 +149,24 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
-				return new Instantiator<>(theValue.instantiate());
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<T>> create() {
-				return null;
+			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
-			private final ModelValueInstantiator<SettableValue<T>> theSource;
-
-			Instantiator(ModelValueInstantiator<SettableValue<T>> source) {
-				theSource = source;
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
+			Instantiator(WatchedValue.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 			}
 
 			@Override
-			public void instantiate() {
-				theSource.instantiate();
+			public ModelValueInstantiator<SettableValue<T>> getElementValue() {
+				return (ModelValueInstantiator<SettableValue<T>>) super.getElementValue();
 			}
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<T> value = theSource.get(models);
+				SettableValue<T> value = getElementValue().get(models);
 				SettableValue<T> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
 				value.noInitChanges().takeUntil(models.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
 				return copy.disableWith(ObservableValue.of("A watched value cannot be modified"));

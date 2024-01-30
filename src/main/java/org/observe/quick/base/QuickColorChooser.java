@@ -95,7 +95,7 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
@@ -103,7 +103,7 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		isWithAlphaInstantiator.instantiate();
 	}

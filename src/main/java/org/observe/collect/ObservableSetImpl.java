@@ -52,7 +52,7 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils.AdjustmentOrder;
-import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -1680,7 +1680,7 @@ public class ObservableSetImpl {
 		 */
 		public DataControlledSetImpl(ObservableSet<E> backing, Supplier<? extends List<? extends V>> backingData,
 			DataControlAutoRefresher autoRefresh, boolean refreshOnAccess, BiPredicate<? super E, ? super V> equals,
-			CollectionSynchronizerE<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
+			CollectionSynchronizerX<E, ? super V, ?> synchronizer, AdjustmentOrder adjustmentOrder) {
 			super(backing, backingData, autoRefresh, refreshOnAccess, equals, synchronizer, adjustmentOrder);
 		}
 

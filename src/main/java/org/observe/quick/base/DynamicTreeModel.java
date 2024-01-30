@@ -186,7 +186,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<N> myInterpreted = (Interpreted<N>) interpreted;
 		theActivePathVariable = myInterpreted.getDefinition().getActivePathVariable();
@@ -213,7 +213,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		theRootInstantiator.instantiate();
 		theChildren.instantiate();

@@ -115,7 +115,7 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickField.Interpreted myInterpreted = (QuickField.Interpreted) interpreted;
 		theFieldLabelInstantiator = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().instantiate();

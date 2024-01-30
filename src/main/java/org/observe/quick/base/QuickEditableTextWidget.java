@@ -147,7 +147,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
 			theErrorVariable = myInterpreted.getDefinition().getErrorVariable();

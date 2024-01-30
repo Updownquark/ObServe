@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -109,7 +110,7 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -117,7 +118,7 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		theModels.instantiate();
 
 		super.instantiated();

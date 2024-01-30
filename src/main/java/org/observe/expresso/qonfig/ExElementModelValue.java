@@ -6,15 +6,15 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigMetadata;
 
-public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?, ?>> {
+public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?>> {
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
 		qonfigType = "element-model-value",
 		interpretation = Interpreted.class,
 		instance = ExElementModelValue.class)
-	public static class Def<AO extends ExElementModelValue> extends ExAddOn.Def.Abstract<ExtModelValueElement<?, ?>, AO> {
+	public static class Def<AO extends ExElementModelValue> extends ExAddOn.Def.Abstract<ExtModelValueElement<?>, AO> {
 		private ElementModelValue.Identity theElementValue;
 
-		public Def(QonfigAddOn type, ExElement.Def<? extends ExtModelValueElement<?, ?>> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends ExtModelValueElement<?>> element) {
 			super(type, element);
 		}
 
@@ -29,7 +29,7 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?, ?>> element)
+		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?>> element)
 			throws QonfigInterpretationException {
 			super.update(session, element);
 			if (session.getElement().getDocument() instanceof QonfigMetadata) {
@@ -47,7 +47,7 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 	}
 
 	protected static class Interpreted<AO extends ExElementModelValue>
-	extends ExAddOn.Interpreted.Abstract<ExtModelValueElement<?, ?>, AO> {
+		extends ExAddOn.Interpreted.Abstract<ExtModelValueElement<?>, AO> {
 		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
@@ -58,12 +58,12 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
-		public AO create(ExtModelValueElement<?, ?> element) {
+		public AO create(ExtModelValueElement<?> element) {
 			return (AO) new ExElementModelValue(element);
 		}
 	}
 
-	protected ExElementModelValue(ExtModelValueElement<?, ?> element) {
+	protected ExElementModelValue(ExtModelValueElement<?> element) {
 		super(element);
 	}
 

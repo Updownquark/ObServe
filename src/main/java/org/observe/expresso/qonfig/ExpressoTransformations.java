@@ -63,8 +63,8 @@ public class ExpressoTransformations {
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "transform",
 		interpretation = ExpressoTransformedElement.Interpreted.class)
-	public static class ExpressoTransformedElement<M1, M2> extends ExElement.Def.Abstract<ModelValueElement<M2, ?>>
-	implements ModelValueElement.CompiledSynth<M2, ModelValueElement<M2, ?>> {
+	public static class ExpressoTransformedElement<M1, M2> extends ExElement.Def.Abstract<ModelValueElement<?>>
+	implements ModelValueElement.CompiledSynth<M2, ModelValueElement<?>> {
 		private String theModelPath;
 		private CompiledExpression theSource;
 		private final List<Operation<?, ?, ?>> theOperations;
@@ -188,8 +188,8 @@ public class ExpressoTransformations {
 		}
 
 		public static class Interpreted<M1, MV1 extends M1, M2, MV2 extends M2>
-		extends ExElement.Interpreted.Abstract<ModelValueElement<M2, MV2>>
-		implements ModelValueElement.InterpretedSynth<M2, MV2, ModelValueElement<M2, MV2>> {
+		extends ExElement.Interpreted.Abstract<ModelValueElement<MV2>>
+		implements ModelValueElement.InterpretedSynth<M2, MV2, ModelValueElement<MV2>> {
 			private InterpretedValueSynth<M1, MV1> theSource;
 			private final List<Operation.Interpreted<?, ?, ?, ?, ?>> theOperations;
 
@@ -273,44 +273,43 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV2> instantiate() {
-				List<Operation.Instantiator<?, ?>> operations = new ArrayList<>(theOperations.size());
-				boolean efficientCopy = true;
-				TransformInstantiator<M1, ?> fullTransform = TransformInstantiator.unity();
-				for (Operation.Interpreted<?, ?, ?, ?, ?> op : theOperations) {
-					Operation.Instantiator<?, ?> opInst = op.instantiate();
-					operations.add(opInst);
-					if (efficientCopy)
-						efficientCopy = opInst instanceof Operation.EfficientCopyingInstantiator
-						&& ((Operation.EfficientCopyingInstantiator<?, ?>) opInst).isEfficientCopy();
-					fullTransform = ((Operation.Instantiator<Object, ?>) opInst).after((TransformInstantiator<M1, Object>) fullTransform);
-				}
-				return new Instantiator<>(theSource.instantiate(), Collections.unmodifiableList(operations), efficientCopy,
-					(TransformInstantiator<MV1, MV2>) fullTransform);
+			public ModelValueElement<MV2> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 
 			@Override
-			public ModelValueElement<M2, MV2> create() {
+			public ModelValueElement<MV2> create() {
 				return null;
 			}
 		}
 
-		static class Instantiator<MV1, MV2> implements ModelValueInstantiator<MV2> {
+		static class Instantiator<MV1, MV2> extends ModelValueElement.Abstract<MV2> {
 			private final ModelValueInstantiator<MV1> theSource;
 			private final List<Operation.Instantiator<?, ?>> theOperations;
 			private final boolean isEfficientCopy;
 			private final TransformInstantiator<MV1, MV2> theFullTransform;
 
-			public Instantiator(ModelValueInstantiator<MV1> source, List<Operation.Instantiator<?, ?>> operations, boolean efficientCopy,
-				TransformInstantiator<MV1, MV2> fullTransform) {
-				theSource = source;
+			public Instantiator(ExpressoTransformedElement.Interpreted<?, MV1, ?, MV2> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theSource = interpreted.getSource().instantiate();
+				List<Operation.Instantiator<?, ?>> operations = new ArrayList<>(interpreted.getOperations().size());
+				boolean efficientCopy = true;
+				TransformInstantiator<MV1, ?> fullTransform = TransformInstantiator.unity();
+				for (Operation.Interpreted<?, ?, ?, ?, ?> op : interpreted.getOperations()) {
+					Operation.Instantiator<?, ?> opInst = op.instantiate();
+					operations.add(opInst);
+					if (efficientCopy)
+						efficientCopy = opInst instanceof Operation.EfficientCopyingInstantiator
+						&& ((Operation.EfficientCopyingInstantiator<?, ?>) opInst).isEfficientCopy();
+					fullTransform = ((Operation.Instantiator<Object, ?>) opInst).after((TransformInstantiator<MV1, Object>) fullTransform);
+				}
 				theOperations = operations;
 				isEfficientCopy = efficientCopy;
-				theFullTransform = fullTransform;
+				theFullTransform = (TransformInstantiator<MV1, MV2>) fullTransform;
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theSource.instantiate();
 				for (Operation.Instantiator<?, ?> op : theOperations)
 					op.instantiate();
@@ -408,14 +407,14 @@ public class ExpressoTransformations {
 			/** @return Any model values used by this transformation */
 			BetterList<InterpretedValueSynth<?, ?>> getComponents();
 
-			Instantiator<MV1, MV2> instantiate();
+			Instantiator<MV1, MV2> instantiate() throws ModelInstantiationException;
 		}
 
 		public interface Instantiator<MV1, MV2> extends TransformInstantiator<MV1, MV2> {
-			void instantiate();
+			void instantiate() throws ModelInstantiationException;
 
 			/**
-			 * Helps support the {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
+			 * Helps support the {@link ModelValueInstantiator#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
 			 *
 			 * @param sourceModels The source model instance
 			 * @param newModels The new model instance
@@ -454,10 +453,21 @@ public class ExpressoTransformations {
 			return new DefaultCombined<>(before, this);
 		}
 
+		/**
+		 * @param <T> The type of the transformer
+		 * @return A transformer that does nothing, simply returning the value it's given
+		 */
 		static <T> TransformInstantiator<T, T> unity() {
 			return (v, models) -> v;
 		}
 
+		/**
+		 * Default {@link TransformInstantiator} implementation for the combination of two other transforms
+		 *
+		 * @param <S> The type of the source value given to the first component transform
+		 * @param <I> The type of the source value given to the second component transform
+		 * @param <T> The type of the value produced by the second transform (and this transform)
+		 */
 		public static class DefaultCombined<S, I, T> implements TransformInstantiator<S, T> {
 			private final TransformInstantiator<S, ? extends I> theBefore;
 			private final TransformInstantiator<I, T> theAfter;
@@ -751,7 +761,7 @@ public class ExpressoTransformations {
 			TypeToken<T> getTargetValueType();
 
 			@Override
-			Instantiator<S, T, MV1, MV2> instantiate();
+			Instantiator<S, T, MV1, MV2> instantiate() throws ModelInstantiationException;
 		}
 
 		public interface Instantiator<S, T, MV1, MV2> extends Operation.Instantiator<MV1, MV2> {
@@ -806,11 +816,11 @@ public class ExpressoTransformations {
 			/** @return Any component model values that are used by this reverse */
 			List<? extends InterpretedValueSynth<?, ?>> getComponents();
 
-			Instantiator<S, T> instantiate();
+			Instantiator<S, T> instantiate() throws ModelInstantiationException;
 		}
 
 		public interface Instantiator<S, T> {
-			void instantiate();
+			void instantiate() throws ModelInstantiationException;
 
 			/**
 			 * @param transformation The transformation to reverse
@@ -1074,7 +1084,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				theMapWith.instantiate();
 				for (CombineWith.Instantiator<?> combinedValue : theCombinedValues)
@@ -1240,7 +1250,7 @@ public class ExpressoTransformations {
 				return BetterList.of(theMap);
 			}
 
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theSourceType, theMap.instantiate(), isTesting);
 			}
 		}
@@ -1264,7 +1274,7 @@ public class ExpressoTransformations {
 				return theMap;
 			}
 
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theMap.instantiate();
 			}
 
@@ -1400,7 +1410,7 @@ public class ExpressoTransformations {
 				getValue(env);
 			}
 
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(theValue.instantiate(), getDefinition().getValueVariable());
 			}
 		}
@@ -1414,7 +1424,7 @@ public class ExpressoTransformations {
 				theValueVariable = valueVariable;
 			}
 
-			void instantiate() {
+			void instantiate() throws ModelInstantiationException {
 				theValue.instantiate();
 			}
 
@@ -1665,7 +1675,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				if (theEnabled != null)
 					theEnabled.instantiate();
@@ -1853,7 +1863,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getDefinition().getTargetVariable(), //
 					getEnabled() == null ? null : getEnabled().instantiate(), getAccept() == null ? null : getAccept().instantiate(), //
 						getAdd() == null ? null : getAdd().instantiate(), getAddAccept() == null ? null : getAddAccept().instantiate(),
@@ -1936,7 +1946,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public Instantiator<S, T> instantiate() {
+			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getDefinition().getTargetVariable(), //
 					getEnabled() == null ? null : getEnabled().instantiate(), getAccept() == null ? null : getAccept().instantiate(), //
 						getAdd() == null ? null : getAdd().instantiate(), getAddAccept() == null ? null : getAddAccept().instantiate(),
@@ -2047,7 +2057,7 @@ public class ExpressoTransformations {
 
 			public abstract BetterList<InterpretedValueSynth<?, ?>> getComponents();
 
-			public abstract Instantiator<S, T> instantiate();
+			public abstract Instantiator<S, T> instantiate() throws ModelInstantiationException;
 		}
 
 		public static abstract class Instantiator<S, T> {
@@ -2064,7 +2074,7 @@ public class ExpressoTransformations {
 				}
 			}
 
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theLocalModels != null)
 					theLocalModels.instantiate();
 			}
@@ -2175,7 +2185,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public ScalarOp.Instantiator<S, T> instantiate() {
+			public ScalarOp.Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
@@ -2186,7 +2196,7 @@ public class ExpressoTransformations {
 			private final List<ModelValueInstantiator<SettableValue<Boolean>>> theIfConditions;
 			private final List<ScalarOp.Instantiator<S, T>> theIfs;
 
-			protected Instantiator(Interpreted<S, T> interpreted){
+			protected Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theTargetType = interpreted.getTargetValueType();
 				theValue=interpreted.getValue().instantiate();
@@ -2199,7 +2209,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theValue.instantiate();
 				for (ScalarOp.Instantiator<S, T> iff : theIfs)
@@ -2401,7 +2411,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public ScalarOp.Instantiator<S, T> instantiate() {
+			public ScalarOp.Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
@@ -2412,7 +2422,7 @@ public class ExpressoTransformations {
 			private final List<ModelValueInstantiator<SettableValue<S>>> theCaseValues;
 			private final List<ScalarOp.Instantiator<S, T>> theCases;
 
-			Instantiator(Interpreted<S, T> interpreted){
+			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theTargetType = interpreted.getTargetValueType();
 				theDefault = interpreted.getDefault().instantiate();
@@ -2425,7 +2435,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theDefault.instantiate();
 				for (ScalarOp.Instantiator<S, T> caase : theCases)
@@ -2615,7 +2625,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public ScalarOp.Instantiator<S, T> instantiate() {
+			public ScalarOp.Instantiator<S, T> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
@@ -2623,13 +2633,13 @@ public class ExpressoTransformations {
 		static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
 			private final ModelValueInstantiator<SettableValue<T>> theValue;
 
-			Instantiator(Interpreted<S, T> interpreted) {
+			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theValue = interpreted.getValue().instantiate();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theValue.instantiate();
 			}

@@ -203,7 +203,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public ModelValueInstantiator<ObservableCollection<T>> instantiate() {
+		public ModelValueInstantiator<ObservableCollection<T>> instantiate() throws ModelInstantiationException {
 			List<ModelValueInstantiator<SettableValue<T>>> values = new ArrayList<>(theValues.size());
 			for (EvaluatedExpression<SettableValue<?>, SettableValue<T>> value : theValues)
 				values.add(value.instantiate());
@@ -221,7 +221,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			for (ModelValueInstantiator<SettableValue<T>> value : theValues)
 				value.instantiate();
 		}

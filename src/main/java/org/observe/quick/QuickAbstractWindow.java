@@ -177,7 +177,7 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 			super.update(interpreted, element);
 			QuickAbstractWindow.Interpreted<?> myInterpreted = (QuickAbstractWindow.Interpreted<?>) interpreted;
 			theTitleInstantiator = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate();

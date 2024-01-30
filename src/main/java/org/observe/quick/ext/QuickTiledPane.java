@@ -212,7 +212,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		QuickTiledPane.Interpreted<T> myInterpreted = (QuickTiledPane.Interpreted<T>) interpreted;
@@ -246,7 +246,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theValuesInstantiator.instantiate();

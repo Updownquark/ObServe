@@ -303,7 +303,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			QuickWithBackground.Interpreted<?> myInterpreted = (QuickWithBackground.Interpreted<?>) interpreted;
@@ -466,7 +466,8 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				QuickBackgroundStyle.Interpreted myInterpreted = (QuickBackgroundStyle.Interpreted) interpreted;

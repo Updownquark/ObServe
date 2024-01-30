@@ -95,22 +95,22 @@ public class QuickMenu<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		CollectionUtils
 		.synchronize(theMenuItems, myInterpreted.getMenuItems(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.simple(interp -> interp.create())//
+		.<ModelInstantiationException> simpleX(interp -> interp.create())//
 		.onLeft(el -> el.getLeftValue().destroy())//
-		.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 		.rightOrder()//
 		.adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		for (QuickAbstractMenuItem<?> menuItem : theMenuItems)

@@ -1134,7 +1134,7 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
-		public ModelValueInstantiator<MVT> instantiate() {
+		public ModelValueInstantiator<MVT> instantiate() throws ModelInstantiationException {
 			return new ConvertedInstantiator<>(theSource.instantiate(), theConverter);
 		}
 
@@ -1171,7 +1171,7 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theSource.instantiate();
 		}
 

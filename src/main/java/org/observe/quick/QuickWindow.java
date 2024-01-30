@@ -247,7 +247,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();

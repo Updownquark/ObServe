@@ -384,7 +384,7 @@ public class NameExpression implements ObservableExpression, Named {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			if (theContext != null)
 				theContext.instantiate();
 		}

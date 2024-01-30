@@ -221,8 +221,9 @@ public interface ExAddOn<E extends ExElement> {
 	 *
 	 * @param interpreted The interpretation producing this add-on
 	 * @param element The element that this add-on is for
+	 * @throws ModelInstantiationException If any model values fail to initialize
 	 */
-	void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element);
+	void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) throws ModelInstantiationException;
 
 	/**
 	 * Called from the {@link #getElement() element}'s
@@ -249,12 +250,18 @@ public interface ExAddOn<E extends ExElement> {
 	/**
 	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated} before {@link #instantiated()} has been
 	 * called on any add-ons
+	 *
+	 * @throws ModelInstantiationException If any model values fail to initialize
 	 */
-	default void preInstantiated() {
+	default void preInstantiated() throws ModelInstantiationException {
 	}
 
-	/** Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated} */
-	void instantiated();
+	/**
+	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated}
+	 *
+	 * @throws ModelInstantiationException If any model values fail to initialize
+	 */
+	void instantiated() throws ModelInstantiationException;
 
 	/**
 	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiate(ModelSetInstance) instantiate} before
@@ -311,11 +318,11 @@ public interface ExAddOn<E extends ExElement> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) {
+		public void update(ExAddOn.Interpreted<? extends E, ?> interpreted, E element) throws ModelInstantiationException {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 		}
 
 		@Override

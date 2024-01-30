@@ -167,18 +167,18 @@ public class ExpressoTesting extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			CollectionUtils.synchronize(theActions, myInterpreted.getActions(), (a, i) -> a.getIdentity() == i.getIdentity())//
-			.simple(i -> i.create(this))//
-			.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.<ModelInstantiationException> simpleX(i -> i.create(this))//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			for (TestActionElement action : theActions)
 				action.instantiated();
@@ -321,7 +321,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(Interpreted<?> interpreted) {
+			protected void doUpdate(Interpreted<?> interpreted) throws ModelInstantiationException {
 				super.doUpdate(interpreted);
 				TestAction.Interpreted myInterpreted = (TestAction.Interpreted) interpreted;
 				theActionInstantiator = myInterpreted.instantiate();
@@ -438,7 +438,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -447,7 +447,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theTargetTest.instantiated();

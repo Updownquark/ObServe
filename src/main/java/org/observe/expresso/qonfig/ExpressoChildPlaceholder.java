@@ -152,7 +152,7 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 	}
 
 	@Override
-	public void update(QonfigPromise.Interpreted<?> interpreted) {
+	public void update(QonfigPromise.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.update(interpreted, null);
 		ExpressoChildPlaceholder.Interpreted<?> myInterpreted = (ExpressoChildPlaceholder.Interpreted<?>) interpreted;
 		Object dpi = myInterpreted.getDefinition().getDocumentParent().getIdentity();
@@ -182,7 +182,7 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theExtLocalModels != null)
 			theExtLocalModels.instantiate();

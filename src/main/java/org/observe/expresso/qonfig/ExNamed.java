@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import org.observe.expresso.ModelInstantiationException;
 import org.qommons.Named;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -89,7 +90,7 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		theName = myInterpreted.getDefinition().getName();

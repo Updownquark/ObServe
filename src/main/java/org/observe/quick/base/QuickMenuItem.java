@@ -91,7 +91,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
@@ -99,7 +99,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theActionInstantiator.instantiate();

@@ -6,14 +6,14 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigInterpretationException;
 
-public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElement<?, ?>> {
+public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElement<?>> {
 	public static final String ATTR_BACKED_MODEL_VALUE = "attr-backed-model-value";
 
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
 		qonfigType = ATTR_BACKED_MODEL_VALUE,
 		interpretation = Interpreted.class,
 		instance = AttributeBackedModelValue.class)
-	public static class Def extends ExAddOn.Def.Abstract<ModelValueElement<?, ?>, AttributeBackedModelValue> {
+	public static class Def extends ExAddOn.Def.Abstract<ModelValueElement<?>, AttributeBackedModelValue> {
 		private QonfigAttributeDef theSourceAttribute;
 
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
@@ -26,7 +26,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends ModelValueElement<?, ?>> element)
+		public void update(ExpressoQIS session, ExElement.Def<? extends ModelValueElement<?>> element)
 			throws QonfigInterpretationException {
 			super.update(session, element);
 
@@ -66,7 +66,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 	}
 
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ModelValueElement<?, ?>, AttributeBackedModelValue> {
+	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ModelValueElement<?>, AttributeBackedModelValue> {
 		Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
@@ -82,12 +82,12 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 
 		@Override
-		public AttributeBackedModelValue create(ModelValueElement<?, ?> element) {
+		public AttributeBackedModelValue create(ModelValueElement<?> element) {
 			return null;
 		}
 	}
 
-	AttributeBackedModelValue(ModelValueElement<?, ?> element) {
+	AttributeBackedModelValue(ModelValueElement<?> element) {
 		super(element);
 	}
 

@@ -19,8 +19,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SPLIT = "split";
 
@@ -123,7 +121,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
@@ -131,7 +129,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theSplitPositionInstantiator != null)
 			theSplitPositionInstantiator.instantiate();

@@ -20,8 +20,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	public static final String SLIDER = "slider";
 
@@ -166,7 +164,7 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -175,7 +173,7 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theMinInstantiator.instantiate();

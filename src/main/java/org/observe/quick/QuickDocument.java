@@ -148,8 +148,9 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 	 * Initializes or updates this document
 	 *
 	 * @param interpreted The interpreted document to use to initialize this document
+	 * @throws ModelInstantiationException If any model values fail to initialize
 	 */
-	public void update(QuickDocument.Interpreted interpreted) {
+	public void update(QuickDocument.Interpreted interpreted) throws ModelInstantiationException {
 		update(interpreted, null);
 	}
 
@@ -166,7 +167,7 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		QuickDocument.Interpreted myInterpreted = (QuickDocument.Interpreted) interpreted;
@@ -176,7 +177,7 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		theBody.instantiated();
 	}

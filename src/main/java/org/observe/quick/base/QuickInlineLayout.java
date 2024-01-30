@@ -1,5 +1,6 @@
 package org.observe.quick.base;
 
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -131,7 +132,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) {
+	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();

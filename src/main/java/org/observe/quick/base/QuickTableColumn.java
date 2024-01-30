@@ -351,7 +351,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 
@@ -397,7 +397,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			if (theEditableInstantiator != null)
@@ -641,7 +641,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element) {
+			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element)
+				throws ModelInstantiationException {
 				super.update(interpreted, element);
 				RowModifyEditType.Interpreted<R, C> myInterpreted = (RowModifyEditType.Interpreted<R, C>) interpreted;
 				isRowUpdate = myInterpreted.getDefinition().isRowUpdate();
@@ -750,7 +751,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element) {
+			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element)
+				throws ModelInstantiationException {
 				super.update(interpreted, element);
 				RowReplaceEditType.Interpreted<R, C> myInterpreted = (RowReplaceEditType.Interpreted<R, C>) interpreted;
 				theReplacementInstantiator = myInterpreted.getReplacement() == null ? null : myInterpreted.getReplacement().instantiate();
@@ -1058,7 +1060,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
 			TypeToken<R> rowType;
@@ -1113,7 +1115,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 			if (theRenderer != null)
 				theRenderer.instantiated();

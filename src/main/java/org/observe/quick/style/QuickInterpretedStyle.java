@@ -302,10 +302,11 @@ public interface QuickInterpretedStyle {
 		/**
 		 * @param models The interpreted models to instantiate for
 		 * @return An instantiator for style values for this attribute
+		 * @throws ModelInstantiationException If any model values fail to initialize
 		 */
-		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) {
+		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) throws ModelInstantiationException {
 			return new QuickStyleAttributeInstantiator<>(theAttribute,
-				QommonsUtils.map(theValues, v -> v.instantiate(models), true));
+				QommonsUtils.filterMapE(theValues, v -> true, v -> v.instantiate(models)));
 		}
 
 		@Override
@@ -342,8 +343,12 @@ public interface QuickInterpretedStyle {
 			return theValues;
 		}
 
-		/** Instantiates model values in this instantiator. Must be called once after creation. */
-		public void instantiate() {
+		/**
+		 * Instantiates model values in this instantiator. Must be called once after creation.
+		 *
+		 * @throws ModelInstantiationException If any model values fail to initialize
+		 */
+		public void instantiate() throws ModelInstantiationException {
 			for (InterpretedStyleValue.StyleValueInstantiator<T> value : theValues)
 				value.instantiate();
 		}

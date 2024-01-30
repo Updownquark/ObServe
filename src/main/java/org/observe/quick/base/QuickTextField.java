@@ -17,8 +17,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
 
@@ -131,7 +129,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();
@@ -140,7 +138,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		thePasswordInstantiator.instantiate();
 		if (theEmptyTextInstantiator != null)

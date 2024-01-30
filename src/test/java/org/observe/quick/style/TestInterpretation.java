@@ -30,6 +30,7 @@ import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
@@ -60,7 +61,8 @@ public class TestInterpretation implements QonfigInterpretation {
 	}
 
 	@Override
-	public void init(QonfigToolkit toolkit) {}
+	public void init(QonfigToolkit toolkit) {
+	}
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
@@ -71,8 +73,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		return interpreter;
 	}
 
-	static abstract class StyledTestElement<T> extends ModelValueElement.Default<SettableValue<?>, SettableValue<T>>
-	implements QuickStyledElement {
+	static abstract class StyledTestElement<T> extends ModelValueElement.Abstract<SettableValue<T>> implements QuickStyledElement {
 		static abstract class Def<T> extends QuickStyledElement.Def.Abstract<StyledTestElement<T>>
 		implements ModelValueElement.CompiledSynth<SettableValue<?>, StyledTestElement<T>> {
 			private String theModelPath;
@@ -97,7 +98,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {}
+			public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {
+			}
 		}
 
 		static abstract class Interpreted<T> extends QuickStyledElement.Interpreted.Abstract<StyledTestElement<T>>
@@ -134,14 +136,48 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public StyledTestElement<T> create() {
-				return null;
+			public StyledTestElement<T> instantiate() throws ModelInstantiationException {
+				return create();
 			}
+
+			@Override
+			public abstract StyledTestElement<T> create() throws ModelInstantiationException;
 		}
 
-		public StyledTestElement(Object id) {
-			super(id);
-			throw new IllegalStateException();
+		private final QuickInstanceStyle theStyle;
+		private final List<QuickStyleElement<?>> theStyleElements;
+
+		protected StyledTestElement(StyledTestElement.Interpreted<T> interpreted) throws ModelInstantiationException {
+			super(interpreted);
+			theStyleElements = new ArrayList<>();
+			theStyle = interpreted.getStyle().create(this);
+		}
+
+		@Override
+		public QuickInstanceStyle getStyle() {
+			return theStyle;
+		}
+
+		@Override
+		public List<QuickStyleElement<?>> getStyleElements() {
+			return Collections.unmodifiableList(theStyleElements);
+		}
+
+		@Override
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
+			super.doUpdate(interpreted);
+
+			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
+
+			theStyle.update(myInterpreted.getStyle(), this);
+
+			CollectionUtils
+			.synchronize(theStyleElements, myInterpreted.getStyleElements(),
+				(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
+			.<ModelInstantiationException> simpleX(interp -> interp.create())//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.adjust();
 		}
 	}
 
@@ -244,12 +280,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<A>> instantiate() {
+			public StyledTestElement<A> create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<A>> {
+		static class Instantiator extends StyledTestElement<A> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Boolean>> a;
 			private final ModelValueInstantiator<SettableValue<Boolean>> b;
@@ -260,7 +296,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			private final QuickStyleAttributeInstantiator<Integer> s1;
 			private final QuickStyleAttributeInstantiator<Boolean> s2;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(A.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				InterpretedModelSet models = interpreted.getExpressoEnv().getModels();
 				theLocalModel = models.instantiate();
 
@@ -275,7 +312,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				a.instantiate();
 				b.instantiate();
@@ -416,7 +453,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				Interpreted myInterpreted = (Interpreted) interpreted;
@@ -574,12 +612,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+			public StyledTestElement<T> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T extends B> implements ModelValueInstantiator<SettableValue<T>> {
+		static class Instantiator<T extends B> extends StyledTestElement<T> {
 			private final ModelInstantiator theLocalModel;
 
 			private final ModelValueInstantiator<SettableValue<Boolean>> e;
@@ -590,7 +628,8 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			private final List<ModelValueInstantiator<SettableValue<A>>> theChildren;
 
-			Instantiator(Interpreted<T> interpreted) {
+			Instantiator(B.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				InterpretedModelSet model = interpreted.getExpressoEnv().getModels();
 				theLocalModel = model.instantiate();
 
@@ -600,11 +639,11 @@ public class TestInterpretation implements QonfigInterpretation {
 				s3 = interpreted.getStyle().getS3().instantiate(model);
 				s4 = interpreted.getStyle().getS4().instantiate(model);
 
-				theChildren = QommonsUtils.map(interpreted.theChildren, ch -> ch.instantiate(), true);
+				theChildren = QommonsUtils.filterMapE(interpreted.theChildren, null, ch -> ch.instantiate());
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				e.instantiate();
 				f.instantiate();
@@ -722,7 +761,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 				Interpreted myInterpreted = (Interpreted) interpreted;
 
@@ -826,7 +866,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<C>> instantiate() {
+			public StyledTestElement<C> instantiate() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -836,7 +876,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			private final QuickStyleAttributeInstantiator<Boolean> s5;
 
-			public Instantiator(Interpreted interpreted) {
+			public Instantiator(C.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 
 				g = interpreted.g.instantiate();
@@ -845,7 +885,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				g.instantiate();
 			}
@@ -916,7 +956,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				Interpreted myInterpreted = (Interpreted) interpreted;
@@ -1009,7 +1050,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<D>> instantiate() {
+			public StyledTestElement<D> instantiate() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -1019,7 +1060,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			private final QuickStyleAttributeInstantiator<Integer> s6;
 
-			public Instantiator(Interpreted interpreted) {
+			public Instantiator(D.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 
 				h = interpreted.h.instantiate();
@@ -1028,7 +1069,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				h.instantiate();
 			}

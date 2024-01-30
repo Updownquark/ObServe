@@ -358,7 +358,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() {
+			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 				if (theSatisfier != null)
 					return theSatisfier.instantiate();
 				else

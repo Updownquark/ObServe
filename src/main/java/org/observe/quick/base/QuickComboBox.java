@@ -95,7 +95,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
@@ -111,7 +111,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theRenderer != null)
 			theRenderer.instantiated();

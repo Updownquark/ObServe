@@ -68,9 +68,8 @@ public class TestInterpretation implements QonfigInterpretation {
 	}
 
 	@ExElementTraceable(toolkit = TESTING, qonfigType = "stateful-struct", interpretation = StatefulStruct.Interpreted.class)
-	static class StatefulStruct extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>>
-	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> {
+	static class StatefulStruct extends ExElement.Def.Abstract<ModelValueElement<SettableValue<StatefulTestStructure>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<StatefulTestStructure>>> {
 		private String theModelPath;
 		private CompiledExpression theDerivedState;
 		private ModelComponentId theInternalStateVariable;
@@ -120,9 +119,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			return new Interpreted(this, parent);
 		}
 
-		static class Interpreted
-		extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<StatefulTestStructure>, ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> {
+		static class Interpreted extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<StatefulTestStructure>>> implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<StatefulTestStructure>, ModelValueElement<SettableValue<StatefulTestStructure>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theDerivedState;
 
 			Interpreted(StatefulStruct def, ExElement.Interpreted<?> parent) {
@@ -132,6 +130,10 @@ public class TestInterpretation implements QonfigInterpretation {
 			@Override
 			public StatefulStruct getDefinition() {
 				return (StatefulStruct) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getDerivedState() {
+				return theDerivedState;
 			}
 
 			@Override
@@ -161,31 +163,25 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<StatefulTestStructure>> instantiate() {
-				return new Instantiator(getExpressoEnv().getModels().instantiate(), theDerivedState.instantiate(),
-					getDefinition().getInternalStateVariable());
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>> create() {
-				return null;
+			public ModelValueElement<SettableValue<StatefulTestStructure>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<StatefulTestStructure>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<StatefulTestStructure>> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Integer>> theDerivedState;
 			private final ModelComponentId theInternalStateVariable;
 
-			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<Integer>> derivedState,
-				ModelComponentId internalStateVariable) {
-				theLocalModel = localModel;
-				theDerivedState = derivedState;
-				theInternalStateVariable = internalStateVariable;
+			Instantiator(StatefulStruct.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theDerivedState = interpreted.getDerivedState().instantiate();
+				theInternalStateVariable = interpreted.getDefinition().getInternalStateVariable();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				theDerivedState.instantiate();
 			}
@@ -211,8 +207,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		qonfigType = "dynamic-type-stateful-struct",
 		interpretation = DynamicTypeStatefulStruct.Interpreted.class)
 	static class DynamicTypeStatefulStruct
-	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
+	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> {
 		private String theModelPath;
 		private CompiledExpression theInternalState;
 		private CompiledExpression theDerivedState;
@@ -256,7 +252,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theInternalStateValue = elModels.getElementValueModelId("internalState");
 			elModels.satisfyElementValueType(theInternalStateValue, ModelTypes.Value,
-				(interp, env) -> ((Interpreted<?>) interp).getInternalState().getType());
+				(interp, env) -> ((Interpreted<?>) interp).getOrCreateInternalState().getType());
 		}
 
 		@Override
@@ -268,9 +264,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends
-		ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
+		static class Interpreted<T>
+		extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>, ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInternalState;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDerivedState;
 
@@ -293,7 +289,16 @@ public class TestInterpretation implements QonfigInterpretation {
 				return ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class);
 			}
 
-			protected InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInternalState() throws ExpressoInterpretationException {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInternalState() {
+				return theInternalState;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getDerivedState() {
+				return theDerivedState;
+			}
+
+			protected InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrCreateInternalState()
+				throws ExpressoInterpretationException {
 				if (theInternalState == null)
 					theInternalState = interpret(getDefinition().getInternalState(), ModelTypes.Value.<SettableValue<T>> anyAs());
 				return theInternalState;
@@ -310,7 +315,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				super.doUpdate(env);
 				System.out.println("Interpret " + getDefinition().getModelPath());
 				// Satisfy the internalState value with the internalState container
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", getInternalState());
+				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", getOrCreateInternalState());
 				theDerivedState = interpret(getDefinition().getDerivedState(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
@@ -320,31 +325,25 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> instantiate() {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theInternalState.instantiate(),
-					theDerivedState.instantiate());
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create() {
-				return null;
+			public ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> {
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<DynamicTypeStatefulTestStructure>> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
 			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
 
-			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> internalState,
-				ModelValueInstantiator<SettableValue<T>> derivedState) {
-				theLocalModel = localModel;
-				theInternalState = internalState;
-				theDerivedState = derivedState;
+			Instantiator(DynamicTypeStatefulStruct.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theInternalState = interpreted.getInternalState().instantiate();
+				theDerivedState = interpreted.getDerivedState().instantiate();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				theInternalState.instantiate();
 				theDerivedState.instantiate();
@@ -371,8 +370,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		qonfigType = "dynamic-type-stateful-struct2",
 		interpretation = DynamicTypeStatefulStruct.Interpreted.class)
 	static class DynamicTypeStatefulStruct2
-	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
+	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> {
 		private String theModelPath;
 		private CompiledExpression theInternalState;
 		private CompiledExpression theDerivedState;
@@ -423,9 +422,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends
-		ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
+		static class Interpreted<T>
+		extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>, ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInternalState;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDerivedState;
 
@@ -446,6 +445,14 @@ public class TestInterpretation implements QonfigInterpretation {
 			@Override
 			public ModelInstanceType<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> getType() {
 				return ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class);
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInternalState() {
+				return theInternalState;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getDerivedState() {
+				return theDerivedState;
 			}
 
 			@Override
@@ -471,31 +478,25 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> instantiate() {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theInternalState.instantiate(),
-					theDerivedState.instantiate());
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create() {
-				return null;
+			public ModelValueElement<SettableValue<DynamicTypeStatefulTestStructure>> create() throws ModelInstantiationException {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> {
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<DynamicTypeStatefulTestStructure>> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
 			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
 
-			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> internalState,
-				ModelValueInstantiator<SettableValue<T>> derivedState) {
-				theLocalModel = localModel;
-				theInternalState = internalState;
-				theDerivedState = derivedState;
+			Instantiator(DynamicTypeStatefulStruct2.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theInternalState = interpreted.getInternalState().instantiate();
+				theDerivedState = interpreted.getDerivedState().instantiate();
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
 				theInternalState.instantiate();
 				theDerivedState.instantiate();

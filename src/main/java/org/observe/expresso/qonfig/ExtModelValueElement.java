@@ -10,7 +10,6 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
@@ -20,7 +19,7 @@ import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
-public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
+public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 	public static final String EXT_MODEL_VALUE = "ext-model-value";
 	public static final String EXT_MODEL_VALUE_HANDLER = "Ext.Model.Value.Handler";
 
@@ -30,7 +29,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 	}
 
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = EXT_MODEL_VALUE, interpretation = Interpreted.class)
-	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<M, ?>> implements ExtValueRef<M> {
+	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<?>> implements ExtValueRef<M> {
 		private CompiledExpression theDefault;
 
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
@@ -110,7 +109,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 			return getElement().getPositionInFile();
 		}
 
-		public static class UnTyped<M> extends ExtModelValueElement.Def<M> {
+		public static class UnTyped<M> extends Def<M> {
 			private final String theTypeName;
 
 			public UnTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.UnTyped<M> modelType, String typeName) {
@@ -129,7 +128,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 			}
 		}
 
-		public static class Single<M> extends ExtModelValueElement.Def<M> {
+		public static class Single<M> extends Def<M> {
 			private final String theTypeName;
 
 			public Single(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<M> modelType, String typeName) {
@@ -213,7 +212,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 	}
 
 	public static abstract class Interpreted<M, MV extends M>
-	extends ModelValueElement.Interpreted.Abstract<M, MV, ExtModelValueElement<M, MV>> {
+	extends ModelValueElement.Interpreted.Abstract<M, MV, ExtModelValueElement<MV>> {
 		private InterpretedValueSynth<M, MV> theDefault;
 
 		protected Interpreted(Def<M> definition, ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
@@ -237,34 +236,21 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		}
 	}
 
-	private ModelValueInstantiator<MV> theDefaultInstantiator;
-	private MV theDefault;
-
-	public ExtModelValueElement(Object id) {
-		super(id);
-	}
-
-	public MV getDefault() {
-		return theDefault;
+	private ExtModelValueElement() throws ModelInstantiationException {
+		super(null);
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
-		super.doUpdate(interpreted);
-		Interpreted<M, MV> myInterpreted = (Interpreted<M, MV>) interpreted;
-		theDefaultInstantiator = myInterpreted.getDefault() == null ? null : myInterpreted.getDefault().instantiate();
+	public void instantiate() {
 	}
 
 	@Override
-	public void instantiated() {
-		super.instantiated();
-		if (theDefaultInstantiator != null)
-			theDefaultInstantiator.instantiate();
+	public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+		return null;
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
-		theDefault = theDefaultInstantiator == null ? null : theDefaultInstantiator.get(myModels);
+	public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+		return null;
 	}
 }

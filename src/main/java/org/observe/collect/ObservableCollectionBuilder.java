@@ -19,7 +19,7 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionBuilder;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.CollectionUtils.CollectionSynchronizerE;
+import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.ex.ExFunction;
@@ -165,7 +165,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		/**
 		 * @param adjustmentOrder The adjustment order for refreshes
-		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerE,
+		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerX,
 		 *      org.qommons.collect.CollectionUtils.AdjustmentOrder)
 		 * @return This refresher
 		 */
@@ -202,7 +202,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 * @param synchronizer The synchronizer to perform the refresh operation between the collection and the source data
 		 * @return The data-controlled collection
 		 */
-		DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+		DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerX<E, ? super V, ?> synchronizer);
 
 		/**
 		 * @param <X> The type of exception that may be thrown by the synchronization operation
@@ -212,7 +212,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 */
 		default <X extends Throwable> DataControlledCollection<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
 			Consumer<CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?>> synchronizer) {
-			CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?> sync = CollectionUtils.simpleSyncE(map);
+			CollectionUtils.SimpleCollectionSynchronizer<E, ? super V, X, ?> sync = CollectionUtils.simpleSyncX(map);
 			if (synchronizer != null)
 				synchronizer.accept(sync);
 			return build(sync);
@@ -229,7 +229,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	interface DataControlledSortedCollectionBuilder<E, V, B extends DataControlledSortedCollectionBuilder<E, V, ? extends B>>
 	extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
-		DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+		DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer);
 
 		@Override
 		default <X extends Throwable> DataControlledCollection.Sorted<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
@@ -248,7 +248,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	interface DataControlledSetBuilder<E, V, B extends DataControlledSetBuilder<E, V, ? extends B>>
 	extends DataControlledCollectionBuilder<E, V, B> {
 		@Override
-		DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+		DataControlledCollection.Set<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer);
 
 		@Override
 		default <X extends Throwable> DataControlledCollection.Set<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
@@ -267,7 +267,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	interface DataControlledSortedSetBuilder<E, V, B extends DataControlledSortedSetBuilder<E, V, ? extends B>>
 	extends DataControlledSetBuilder<E, V, B>, DataControlledSortedCollectionBuilder<E, V, B> {
 		@Override
-		DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer);
+		DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer);
 
 		@Override
 		default <X extends Throwable> DataControlledCollection.SortedSet<E, V> build(ExFunction<? super V, ? extends E, ? extends X> map,
@@ -448,7 +448,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		/**
 		 * @return Affects the synchronization between existing data and backing data on refresh
-		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerE,
+		 * @see org.qommons.collect.CollectionUtils.CollectionAdjustment#adjust(CollectionSynchronizerX,
 		 *      org.qommons.collect.CollectionUtils.AdjustmentOrder)
 		 */
 		protected CollectionUtils.AdjustmentOrder getAdjustmentOrder() {
@@ -511,7 +511,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+		public DataControlledCollection<E, V> build(CollectionUtils.CollectionSynchronizerX<E, ? super V, ?> synchronizer) {
 			return new ObservableCollectionImpl.DataControlledCollectionImpl<>(theBackingCollection, theBackingData, theAutoRefresh,
 				isRefreshingOnAccess, theEqualsTester, synchronizer, theAdjustmentOrder)//
 				.setMaxRefreshFrequency(theMaxRefreshFrequency);
@@ -615,7 +615,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+		public DataControlledCollection.Sorted<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer) {
 			return new ObservableSortedCollectionImpl.DataControlledSortedCollectionImpl<>(getBackingCollection(), getBackingData(),
 				getAutoRefresh(), isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
@@ -674,7 +674,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public DataControlledCollection.Set<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+		public DataControlledCollection.Set<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer) {
 			return new ObservableSetImpl.DataControlledSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());
@@ -757,7 +757,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerE<E, ? super V, ?> synchronizer) {
+		public DataControlledCollection.SortedSet<E, V> build(CollectionSynchronizerX<E, ? super V, ?> synchronizer) {
 			return new ObservableSortedSetImpl.DataControlledSortedSetImpl<>(getBackingCollection(), getBackingData(), getAutoRefresh(),
 				isRefreshingOnAccess(), getEqualsTester(), synchronizer, getAdjustmentOrder())//
 				.setMaxRefreshFrequency(getMaxRefreshFrequency());

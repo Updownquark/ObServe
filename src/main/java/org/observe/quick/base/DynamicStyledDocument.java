@@ -263,7 +263,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		theNodeValueId = myInterpreted.getDefinition().getNodeValue();
@@ -291,7 +291,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theRootInstantiator.instantiate();

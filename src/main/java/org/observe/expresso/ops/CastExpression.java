@@ -177,7 +177,7 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theValue.instantiate();
 		}
 
@@ -220,7 +220,7 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theValue.instantiate();
 		}
 

@@ -49,13 +49,6 @@ public class QuickToggleButton extends QuickCheckBox {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
-		super.doUpdate(interpreted);
-
-		Interpreted myInterpreted = (Interpreted) interpreted;
-	}
-
-	@Override
 	public QuickToggleButton copy(ExElement parent) {
 		return (QuickToggleButton) super.copy(parent);
 	}

@@ -1,6 +1,6 @@
 package org.observe.expresso.qonfig;
 
-import java.util.List;
+import java.util.Iterator;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -12,10 +12,11 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
+import org.qommons.Transaction;
+import org.qommons.collect.CircularArrayList;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -23,55 +24,131 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * <p>
- * This class is the unification of {@link ObservableModelSet} with {@link ExElement}.
+ * This class is the value component of the unification of {@link ObservableModelSet} with {@link ExElement}. {@link ObservableModelElement}
+ * is the model component of the unification.
  * </p>
  *
  * <p>
- * I have to say, this code is kind of a mess. The {@link CompiledSynth} class is cool, because it's both an {@link ExElement.Def} and a
- * {@link org.observe.expresso.ObservableModelSet.CompiledModelValue}, and it produces an {@link InterpretedSynth}, which is both an
- * {@link ExElement.Interpreted} and an {@link org.observe.expresso.ObservableModelSet.InterpretedValueSynth}.
+ * The {@link ModelValueElement.CompiledSynth CompiledSynth} interface extends both a {@link ExElement.Def ExElement.Def} and
+ * {@link org.observe.expresso.ObservableModelSet.CompiledModelValue ObservableModelSet.CompiledModelValue}.
  * </p>
  *
  * <p>
- * But I also have the {@link Def} and {@link Interpreted} classes here, which are ExElement types, but not {@link ObservableModelSet}
- * types. And {@link ModelValueElement} is a first-class type with its own file, but it's never actually instantiated.
+ * CompiledSynth's {@link ModelValueElement.CompiledSynth#interpret(InterpretedExpressoEnv) interpret} method produces an
+ * {@link ModelValueElement.InterpretedSynth InterpretedSynth} instance, which extends both {@link ExElement.Interpreted} and
+ * {@link org.observe.expresso.ObservableModelSet.InterpretedValueSynth ObservableModelSet.InterpretedValueSynth}.
+ * </p>
+ * <p>
+ * InterpretedSynth's {@link ModelValueElement.InterpretedSynth#create() create} method creates a {@link ModelValueElement}, which extends
+ * both {@link ExElement} and {@link ModelValueInstantiator}.
  * </p>
  *
- * <p>
- * Ideally, ModelValueElement should be what {@link CompiledSynth} is, with the {@link Interpreted} inner class being with
- * {@link InterpretedSynth} is, and all the other inner classes being deleted. But there are probably hundreds of extensions of these
- * classes, so the work required to do this is immense, and I also have a nagging feeling that not all {@link Def} extensions could easily
- * be made into {@link CompiledSynth} extensions.
- * </p>
- *
- * <p>
- * Basically, this works, it does what I need to use Expresso with Qonfig. But it's ugly. It could be a lot better, but it will take a lot
- * of work to get there.
- * </p>
+ * @param <MV> The instance type of the model value to instantiate
  */
-public interface ModelValueElement<M, MV extends M> extends ExElement {
-	static final String MODEL_PARENT_ELEMENTS = "Model.Parent.Elements";
+public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator<MV> {
+	/** Session key containing a model value's path */
+	String PATH_KEY = "model-path";
 
+	/** Mechanism for resolving interpreted element parents from lower on the call stack */
+	public static class ModelValueParent {
+		private final ThreadLocal<CircularArrayList<ExElement.Interpreted<?>>> theParents;
+
+		/** Creates the parent resolver */
+		public ModelValueParent() {
+			theParents = ThreadLocal.withInitial(CircularArrayList::new);
+		}
+
+		/**
+		 * @param parent The parent to install on the call stack
+		 * @return A transaction whose {@link Transaction#close() close} method will remove the parent from the call stack
+		 */
+		public Transaction installParent(ExElement.Interpreted<?> parent) {
+			CircularArrayList<ExElement.Interpreted<?>> parents = theParents.get();
+			parents.add(parent);
+			return parents::removeLast;
+		}
+
+		/**
+		 * @param definition The definition of the parent to get
+		 * @return The parent on the current call chain with the given {@link ExElement.Interpreted#getDefinition() definition}
+		 */
+		public ExElement.Interpreted<?> getParent(ExElement.Def<?> definition) {
+			if (definition == null)
+				return null;
+			Iterator<ExElement.Interpreted<?>> iter = theParents.get().descendingIterator();
+			while (iter.hasNext()) {
+				ExElement.Interpreted<?> parent = iter.next();
+				if (parent.getDefinition() == definition)
+					return parent;
+				else if (parent instanceof ObservableModelElement.Interpreted && definition instanceof ObservableModelElement.Def) {
+					parent = ((ObservableModelElement.Interpreted<?>) parent).getInterpretingModel(//
+						((ObservableModelElement.Def<?, ?>) definition).getModelPath());
+					if (parent != null && parent.getDefinition() == definition)
+						return parent;
+				}
+			}
+			return null;
+		}
+	}
+
+	/** The parent resolver for element interpretations */
+	public static final ModelValueParent INTERPRETING_PARENTS = new ModelValueParent();
+
+	/**
+	 * Definition for a {@link ModelValueElement}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <E> The sub-type of {@link ModelValueElement} to create
+	 */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model-value", interpretation = Interpreted.class)
-	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
+	public interface Def<M, E extends ModelValueElement<?>> extends ExElement.Def<E> {
+		/** @return The model path of this model value (e.g. "app.value") */
 		String getModelPath();
 
+		/**
+		 * @param env The expresso environment to use to interpret expressions
+		 * @return The model type of the value to create
+		 */
 		ModelType<M> getModelType(CompiledExpressoEnv env);
 
 		@Override
 		@QonfigAttributeGetter
 		CompiledExpression getElementValue();
 
+		/**
+		 * Populates a model builder with this element's value
+		 *
+		 * @param builder The model builder to populate
+		 * @param session The interpretation session to use to parse Qonfig members
+		 * @throws QonfigInterpretationException If this model value cannot be interpreted
+		 */
 		void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException;
 
+		/**
+		 * Prepares the model value
+		 *
+		 * @param session The interpretation session to use to parse Qonfig members
+		 * @throws QonfigInterpretationException If this model value cannot be interpreted
+		 */
 		void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException;
 
-		public abstract class Abstract<M, E extends ModelValueElement<M, ?>> extends ExElement.Def.Abstract<E> implements Def<M, E> {
+		/**
+		 * Abstract {@link ModelValueElement} definition implementation
+		 *
+		 * @param <M> The model type of the value to create
+		 * @param <E> The sub-type of {@link ModelValueElement} to create
+		 */
+		public abstract class Abstract<M, E extends ModelValueElement<?>> extends ExElement.Def.Abstract<E> implements Def<M, E> {
 			private final ModelType<M> theModelType;
 			private CompiledExpression theValue;
 			private String theModelPath;
 			private boolean isPrepared;
 
+			/**
+			 * @param parent The parent element of this element
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of this value
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
 				super(parent, qonfigType);
 				theModelType = modelType;
@@ -116,12 +193,30 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				doPrepare(session);
 			}
 
+			/**
+			 * Performs implementation-specific model preparation on this value
+			 *
+			 * @param session The interpretation session to use to parse Qonfig members
+			 * @throws QonfigInterpretationException If this model value cannot be interpreted
+			 */
 			protected abstract void doPrepare(ExpressoQIS session) throws QonfigInterpretationException;
 		}
 
-		public abstract class SingleTyped<M, E extends ModelValueElement<M, ?>> extends Abstract<M, E> {
+		/**
+		 * Abstract {@link ModelValueElement} definition implementation for values with {@link org.observe.expresso.ModelType.SingleTyped
+		 * singular} model types
+		 *
+		 * @param <M> The model type of the value to create
+		 * @param <E> The sub-type of {@link ModelValueElement} to create
+		 */
+		public abstract class SingleTyped<M, E extends ModelValueElement<?>> extends Abstract<M, E> {
 			private VariableType theValueType;
 
+			/**
+			 * @param parent The parent element of this element
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of this value
+			 */
 			protected SingleTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<M> modelType) {
 				super(parent, qonfigType, modelType);
 			}
@@ -131,6 +226,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				return (ModelType.SingleTyped<M>) super.getModelType(env);
 			}
 
+			/** @return The specified value type for the instance type */
 			public VariableType getValueType() {
 				return theValueType;
 			}
@@ -141,14 +237,26 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				theValueType = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
 			}
 
+			/** @return Whether to use wrapper types (e.g. {@link Integer} instead of int) for this model value */
 			protected boolean useWrapperType() {
 				return false;
 			}
 
-			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
+			/**
+			 * Abstract {@link SingleTyped} interpretation
+			 *
+			 * @param <M> The model type of the value to create
+			 * @param <MV> The instance type of the value to create
+			 * @param <E> The sub-type of {@link ModelValueElement} to create
+			 */
+			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<MV>>
 			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
 				private ModelInstanceType<M, MV> theTargetType;
 
+				/**
+				 * @param definition The definition to interpret
+				 * @param parent The interpreted parent for this element
+				 */
 				protected Interpreted(SingleTyped<M, ? super E> definition, ExElement.Interpreted<?> parent) {
 					super(definition, parent);
 				}
@@ -177,12 +285,24 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			}
 		}
 
-		public abstract class DoubleTyped<M, E extends ModelValueElement<M, ?>> extends Abstract<M, E> {
+		/**
+		 * Abstract {@link ModelValueElement} definition implementation for values with {@link org.observe.expresso.ModelType.DoubleTyped
+		 * double} model types
+		 *
+		 * @param <M> The model type of the value to create
+		 * @param <E> The sub-type of {@link ModelValueElement} to create
+		 */
+		public abstract class DoubleTyped<M, E extends ModelValueElement<?>> extends Abstract<M, E> {
 			private VariableType theValueType1;
 			private VariableType theValueType2;
 
-			protected DoubleTyped(ExElement.Def<?> parent, QonfigElementOrAddOn element, ModelType.DoubleTyped<M> modelType) {
-				super(parent, element, modelType);
+			/**
+			 * @param parent The parent element of this element
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of this value
+			 */
+			protected DoubleTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
+				super(parent, qonfigType, modelType);
 			}
 
 			@Override
@@ -190,10 +310,12 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				return (ModelType.DoubleTyped<M>) super.getModelType(env);
 			}
 
+			/** @return The specified type for the first component of the instance type */
 			public VariableType getValueType1() {
 				return theValueType1;
 			}
 
+			/** @return The specified type for the second component of the instance type */
 			public VariableType getValueType2() {
 				return theValueType2;
 			}
@@ -205,14 +327,26 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				theValueType2 = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
 			}
 
+			/** @return Whether to use wrapper types (e.g. {@link Integer} instead of int) for this model value */
 			protected boolean useWrapperType() {
 				return false;
 			}
 
-			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
+			/**
+			 * Abstract {@link DoubleTyped} interpretation
+			 *
+			 * @param <M> The model type of the value to create
+			 * @param <MV> The instance type of the value to create
+			 * @param <E> The sub-type of {@link ModelValueElement} to create
+			 */
+			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<MV>>
 			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
 				private ModelInstanceType<M, MV> theTargetType;
 
+				/**
+				 * @param definition The definition to interpret
+				 * @param parent The interpreted parent for this element
+				 */
 				protected Interpreted(DoubleTyped<M, ? super E> definition, ExElement.Interpreted<?> parent) {
 					super(definition, parent);
 				}
@@ -257,22 +391,52 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 		}
 	}
 
-	public interface Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>> extends ExElement.Interpreted<E> {
+	/**
+	 * Interpretation for a {@link ModelValueElement}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The instance type of the value
+	 * @param <E> The sub-type of {@link ModelValueElement} to create
+	 */
+	public interface Interpreted<M, MV extends M, E extends ModelValueElement<MV>> extends ExElement.Interpreted<E> {
 		@Override
 		Def<M, ? super E> getDefinition();
 
+		/** @return The type of the value to create */
 		ModelInstanceType<M, MV> getType();
 
+		/** @return The interpreted expression in this element's element value */
 		InterpretedValueSynth<?, ?> getElementValue();
 
+		/**
+		 * Initializes or updates this value
+		 *
+		 * @param env The expresso environment to use to interpret expressions
+		 * @throws ExpressoInterpretationException If this value cannot be interpreted
+		 */
 		void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		E create();
+		/**
+		 * @return The instantiator for this value
+		 * @throws ModelInstantiationException If the value could not be instantiated
+		 */
+		E create() throws ModelInstantiationException;
 
-		public abstract class Abstract<M, MV extends M, E extends ModelValueElement<M, MV>> extends ExElement.Interpreted.Abstract<E>
+		/**
+		 * Abstract {@link ModelValueElement} interpretation implementation
+		 *
+		 * @param <M> The model type of the value to create
+		 * @param <MV> The instance type of the value to create
+		 * @param <E> The sub-type of {@link ModelValueElement} to create
+		 */
+		public abstract class Abstract<M, MV extends M, E extends ModelValueElement<MV>> extends ExElement.Interpreted.Abstract<E>
 		implements Interpreted<M, MV, E> {
 			private InterpretedValueSynth<M, MV> theValue;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The interpreted parent for this element
+			 */
 			protected Abstract(Def<M, ? super E> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -287,6 +451,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				return theValue;
 			}
 
+			/** @return The type to attempt to interpret this element's element value as */
 			protected abstract ModelInstanceType<M, MV> getTargetType();
 
 			@Override
@@ -311,58 +476,18 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				else
 					theValue = interpret(getDefinition().getElementValue(), getTargetType());
 			}
-
-			@Override
-			public E create() {
-				return (E) new ModelValueElement.Default<>(getIdentity());
-			}
 		}
 	}
 
-	/** Session key containing a model value's path */
-	String PATH_KEY = "model-path";
-
-	Object getElementValue();
-
-	public class Default<M, MV extends M> extends ExElement.Abstract implements ModelValueElement<M, MV> {
-		private ModelValueInstantiator<?> theElementValueInstantiator;
-		private Object theElementValue;
-
-		public Default(Object id) {
-			super(id);
-		}
-
-		@Override
-		public Object getElementValue() {
-			return theElementValue;
-		}
-
-		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
-			super.doUpdate(interpreted);
-
-			theElementValue = instantiateElementValue((ModelValueElement.Interpreted<M, MV, ?>) interpreted);
-		}
-
-		@Override
-		public void instantiated() {
-			super.instantiated();
-			if (theElementValueInstantiator != null)
-				theElementValueInstantiator.instantiate();
-		}
-
-		protected ModelValueInstantiator<?> instantiateElementValue(ModelValueElement.Interpreted<M, MV, ?> interpreted) {
-			return interpreted.getElementValue() == null ? null : interpreted.getElementValue().instantiate();
-		}
-
-		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
-			theElementValue = theElementValueInstantiator == null ? null : theElementValueInstantiator.get(myModels);
-		}
-	}
-
-	public interface CompiledSynth<M, E extends ModelValueElement<M, ?>> extends ModelValueElement.Def<M, E>, CompiledModelValue<M> {
+	/**
+	 * Definition of a {@link ModelValueElement}. Most {@link ModelValueElement} definitions will implement this. Fulfills both
+	 * {@link ExElement.Def ExElement.Def} and {@link org.observe.expresso.ObservableModelSet.CompiledModelValue
+	 * ObservableModelSet.CompiledModelValue} roles.
+	 *
+	 * @param <M> The model type of the value to create
+	 * @param <E> The sub-type of {@link ModelValueElement} to create
+	 */
+	public interface CompiledSynth<M, E extends ModelValueElement<?>> extends ModelValueElement.Def<M, E>, CompiledModelValue<M> {
 		@Override
 		default void populate(ObservableModelSet.Builder builder, ExpressoQIS session) throws QonfigInterpretationException {
 			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
@@ -373,34 +498,85 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		@Override
 		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			List<ExElement.Interpreted<?>> parents = env.get(MODEL_PARENT_ELEMENTS, List.class);
-			if (parents == null)
-				throw new ExpressoInterpretationException("No " + MODEL_PARENT_ELEMENTS + " installed in environment",
-					reporting().getFileLocation());
-			for (ExElement.Interpreted<?> parent : parents) {
-				if (parent.getDefinition() != getParentElement()) {
-					if (parent instanceof ObservableModelElement.Interpreted && getParentElement() instanceof ObservableModelElement.Def) {
-						try {
-							parent = ((ObservableModelElement.Interpreted<?>) parent).getInterpretingModel(//
-								((ObservableModelElement.Def<?, ?>) getParentElement()).getModelPath());
-						} catch (IllegalStateException e) {
-							throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation(), e);
-						}
-					}
-				}
-				if (parent.getDefinition() == getParentElement()) {
-					InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
-					interpreted.updateValue(env);
-					return interpreted;
-				}
-			}
-			throw new ExpressoInterpretationException("Correct model not installed in environment", reporting().getFileLocation());
+			ExElement.Interpreted<?> parent = INTERPRETING_PARENTS.getParent(getParentElement());
+			if (parent == null)
+				throw new ExpressoInterpretationException("Correct model not installed in environment", reporting().getFileLocation());
+			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
+			interpreted.updateValue(env);
+			return interpreted;
 		}
 
+		/**
+		 * Interprets this value
+		 *
+		 * @param parent The interpreted parent element (may not be available, i.e. will be null)
+		 * @return The interpreted model value
+		 */
 		InterpretedSynth<M, ?, ? extends E> interpretValue(ExElement.Interpreted<?> parent);
 	}
 
-	public interface InterpretedSynth<M, MV extends M, E extends ModelValueElement<M, MV>>
+	/**
+	 * Interpretation of a {@link ModelValueElement}. Moste {@link ModelValueElement} interpretations will implement this. Fulfills both
+	 * {@link ExElement.Interpreted ExElement.Interpreted} and {@link org.observe.expresso.ObservableModelSet.InterpretedValueSynth
+	 * ObservableModelSet.InterpretedValueSynth} roles.
+	 *
+	 * @param <M> The model type of the value to create
+	 * @param <MV> The instance type of the value to create
+	 * @param <E> The sub-type of {@link ModelValueElement} to create
+	 */
+	public interface InterpretedSynth<M, MV extends M, E extends ModelValueElement<MV>>
 	extends ModelValueElement.Interpreted<M, MV, E>, InterpretedValueSynth<M, MV> {
+		@Override
+		default ModelValueElement<MV> instantiate() throws ModelInstantiationException {
+			return create();
+		}
+	}
+
+	/** @return The model path of this model value (e.g. "app.value") */
+	String getModelPath();
+
+	/** @return The interpreted expression in this element's element value */
+	ModelValueInstantiator<?> getElementValue();
+
+	@Override
+	default void instantiate() throws ModelInstantiationException {
+		instantiated();
+	}
+
+	/**
+	 * Abstract {@link ModelValueElement} implementation
+	 *
+	 * @param <MV> The instance type of the value
+	 */
+	public abstract class Abstract<MV> extends ExElement.Abstract implements ModelValueElement<MV> {
+		private final String theModelPath;
+		private ModelValueInstantiator<?> theElementValue;
+
+		/**
+		 * @param interpreted The interpretation to instantiate
+		 * @throws ModelInstantiationException If this value could not be instantiated
+		 */
+		protected Abstract(ModelValueElement.Interpreted<?, MV, ?> interpreted) throws ModelInstantiationException {
+			super(interpreted.getIdentity());
+			theModelPath = interpreted.getDefinition().getModelPath();
+			theElementValue = interpreted.getElementValue() == null ? null : interpreted.getElementValue().instantiate();
+		}
+
+		@Override
+		public String getModelPath() {
+			return theModelPath;
+		}
+
+		@Override
+		public ModelValueInstantiator<?> getElementValue() {
+			return theElementValue;
+		}
+
+		@Override
+		public void instantiated() throws ModelInstantiationException {
+			super.instantiated();
+			if (theElementValue != null)
+				theElementValue.instantiate();
+		}
 	}
 }

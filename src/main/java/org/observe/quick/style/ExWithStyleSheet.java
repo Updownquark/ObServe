@@ -119,7 +119,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -127,7 +127,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theStyleSheetModels != null)

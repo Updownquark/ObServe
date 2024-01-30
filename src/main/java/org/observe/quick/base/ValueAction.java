@@ -266,7 +266,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
 			theValueType = myInterpreted.getValueType();
@@ -279,7 +279,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			if (theNameInstantiator != null)
@@ -438,7 +438,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueVariable = myInterpreted.getDefinition().getValueVariable();
@@ -545,7 +545,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesVariable = myInterpreted.getDefinition().getValuesVariable();
@@ -581,7 +581,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 
 			@Override
 			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
-					throws ExpressoInterpretationException {
+				throws ExpressoInterpretationException {
 				return new Interpreted(this, (ValueAction.Interpreted<?, ?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
 					getWrapped().interpret(parentEl, parent, env));
 			}

@@ -138,7 +138,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		theOnConfirmInstantiator = myInterpreted.getOnConfirm().instantiate();
@@ -147,7 +147,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theOnConfirmInstantiator.instantiate();

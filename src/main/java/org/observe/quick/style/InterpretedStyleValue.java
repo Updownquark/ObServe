@@ -3,6 +3,7 @@ package org.observe.quick.style;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
@@ -65,8 +66,9 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	/**
 	 * @param models The interpreted models to create the instantiator with
 	 * @return An instantiator for this style value
+	 * @throws ModelInstantiationException If any model values cannot be initialized
 	 */
-	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) {
+	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) throws ModelInstantiationException {
 		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(models), theValue.instantiate(), theModelContext);
 	}
 
@@ -105,7 +107,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 			this.modelContext = modelContext;
 		}
 
-		void instantiate() {
+		void instantiate() throws ModelInstantiationException {
 			if (condition != null)
 				condition.instantiate();
 			value.instantiate();

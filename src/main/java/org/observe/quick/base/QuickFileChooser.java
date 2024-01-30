@@ -221,7 +221,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -236,7 +236,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (theDirectoryInstantiator != null)

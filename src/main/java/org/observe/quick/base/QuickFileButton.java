@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import java.io.File;
 
 import org.observe.SettableValue;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.qonfig.ExElement;
@@ -76,7 +77,7 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		isOpen = myInterpreted.getDefinition().isOpen();

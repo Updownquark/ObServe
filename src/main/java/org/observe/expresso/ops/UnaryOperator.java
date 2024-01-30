@@ -245,7 +245,7 @@ public class UnaryOperator implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theValue.instantiate();
 		}
 
@@ -310,7 +310,7 @@ public class UnaryOperator implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theSource.instantiate();
 		}
 

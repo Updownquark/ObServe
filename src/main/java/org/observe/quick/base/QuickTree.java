@@ -336,7 +336,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<N, ?> myInterpreted = (Interpreted<N, ?>) interpreted;
 		theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
@@ -393,16 +393,16 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity())//
-		.simple(action -> action.create())//
+		.<ModelInstantiationException> simpleX(action -> action.create())//
 		.rightOrder()//
 		.onLeftX(element -> element.getLeftValue().destroy())//
-		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
-		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		theModel.instantiated();
 		if (thePathSelectionInstantiator != null)

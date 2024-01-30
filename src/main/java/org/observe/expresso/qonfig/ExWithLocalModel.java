@@ -96,7 +96,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -110,7 +110,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theLocalModelElement != null)
 			theLocalModelElement.instantiated();

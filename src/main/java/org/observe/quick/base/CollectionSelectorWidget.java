@@ -136,7 +136,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		TypeToken<T> valueType = (TypeToken<T>) myInterpreted.getValue().getType().getType(0);
@@ -152,7 +152,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		if (theValuesInstantiator != null)
 			theValuesInstantiator.instantiate();

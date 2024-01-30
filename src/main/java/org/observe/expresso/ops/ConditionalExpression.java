@@ -189,7 +189,7 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() {
+			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(resultType, conditionV.instantiate(), primaryV.instantiate(), secondaryV.instantiate());
 			}
 
@@ -229,7 +229,7 @@ public class ConditionalExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theCondition.instantiate();
 			thePrimary.instantiate();
 			theSecondary.instantiate();

@@ -137,7 +137,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -157,7 +157,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		if (isCollapsedInstantiator != null)

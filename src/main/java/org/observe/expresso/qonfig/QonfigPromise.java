@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -31,7 +32,7 @@ public interface QonfigPromise extends ExElement {
 		QonfigPromise create(ExElement content);
 	}
 
-	void update(Interpreted<?> interpreted);
+	void update(Interpreted<?> interpreted) throws ModelInstantiationException;
 
 	ModelInstantiator getExtModels();
 

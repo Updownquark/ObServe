@@ -89,30 +89,66 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
 	public static final String CONFIG_NAME = "$CONFIG$";
 
+	/**
+	 * Validation for a format, prevents a text sequence from being assigned to a value based on some condition
+	 *
+	 * @param <T> The type of the value to validate
+	 */
 	public interface FormatValidation<T> {
+		/**
+		 * Definition for a {@link FormatValidation}
+		 *
+		 * @param <E> The type of the instantiator for the format
+		 */
 		public interface Def<E extends Instantiator<?, ?>> extends ExElement.Def<E> {
+			/**
+			 * @param parent The parent element for the interpreted validation
+			 * @return The interpreted validation
+			 */
 			Interpreted<?, ? extends E> interpret(ExElement.Interpreted<?> parent);
 		}
 
+		/**
+		 * Interpretation for a {@link FormatValidation}
+		 *
+		 * @param <T> The type of the value to validate
+		 * @param <E> The type of the instantiator for the format
+		 */
 		public interface Interpreted<T, E extends Instantiator<T, ?>> extends ExElement.Interpreted<E> {
+			/**
+			 * @param env The expresso environment to use to interpret expressions
+			 * @param valueType The type of the value being validated
+			 * @throws ExpressoInterpretationException If this interpretation could not be updated
+			 */
 			void updateFormat(InterpretedExpressoEnv env, TypeToken<T> valueType) throws ExpressoInterpretationException;
 
+			/** @return All model values that this format will use to do validation */
 			List<? extends InterpretedValueSynth<?, ?>> getComponents();
 
+			/** @return The instantiator for the validation */
 			Instantiator<T, ?> create();
 		}
 
+		/**
+		 * Instantiator for a {@link FormatValidation}
+		 *
+		 * @param <T> The type of the value to validate
+		 * @param <V> The sub-type of {@link FormatValidation} to create
+		 */
 		public interface Instantiator<T, V extends FormatValidation<T>> extends ExElement, ModelValueInstantiator<V> {
 			@Override
-			default void instantiate() {
+			default void instantiate() throws ModelInstantiationException {
 				instantiated();
 			}
 		}
 
+		/**
+		 * @param value The parsed value to test
+		 * @param text The text that the value was parsed from
+		 * @return Null if the value is acceptable to this validation, or a user-readable message why it is not
+		 */
 		String test(T value, CharSequence text);
 	}
-
-	private QonfigToolkit theConfig;
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -131,7 +167,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
-		theConfig = toolkit;
 	}
 
 	@Override
@@ -152,7 +187,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		// TODO sorted-map, multi-map, sorted-multi-map
 	}
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = "config-value", interpretation = ConfigValue.Interpreted.class)
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = "config-value",
+		interpretation = ConfigValue.Interpreted.class,
+		instance = ConfigValue.Instantiator.class)
 	static class ConfigValue extends ConfigModelValue.Def.Abstract<SettableValue<?>> {
 		private CompiledExpression theDefaultValue;
 
@@ -209,22 +247,27 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+			public ConfigModelValue<T, SettableValue<T>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> extends ConfigModelValue.Instantiator<T, SettableValue<T>> {
+		static class Instantiator<T> extends ConfigModelValue<T, SettableValue<T>> {
 			private final ModelValueInstantiator<SettableValue<T>> theDefaultValue;
 
-			Instantiator(Interpreted<T> interpreted) {
-				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
-					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+			Instantiator(ConfigValue.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
+					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
+						interpreted.getFormatSet());
 				theDefaultValue = interpreted.getDefaultValue() == null ? null : interpreted.getDefaultValue().instantiate();
 			}
 
+			public ModelValueInstantiator<SettableValue<T>> getDefaultValue() {
+				return theDefaultValue;
+			}
+
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				if (theDefaultValue != null)
 					theDefaultValue.instantiate();
@@ -267,15 +310,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableValueSet<T>> instantiate() {
+			public ConfigModelValue<T, ObservableValueSet<T>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> extends ConfigModelValue.Instantiator<T, ObservableValueSet<T>> {
-			public Instantiator(Interpreted<T> interpreted) {
-				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
-					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+		static class Instantiator<T> extends ConfigModelValue<T, ObservableValueSet<T>> {
+			public Instantiator(ConfigValueSet.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
+					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
+						interpreted.getFormatSet());
 			}
 
 			@Override
@@ -286,17 +330,29 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/**
+	 * Add on for map model values in &lt;config> models
+	 *
+	 * @param <K> The key type of the map
+	 */
 	public static class ConfigMap<K> extends ExMapModelValue<K> {
+		/** The XML name of this type */
 		public static final String CONFIG_MAP = "config-map";
 
+		/** Definition for a {@link ConfigMap} */
 		@ExElementTraceable(toolkit = CONFIG, qonfigType = CONFIG_MAP, interpretation = Interpreted.class, instance = ConfigMap.class)
 		public static class Def extends ExMapModelValue.Def<ConfigMap<?>> {
 			private CompiledExpression theKeyFormat;
 
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The map element being affected
+			 */
 			public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 				super(type, element);
 			}
 
+			/** @return The model value for the format specified for keys in the map */
 			@QonfigAttributeGetter("key-format")
 			public CompiledExpression getKeyFormat() {
 				return theKeyFormat;
@@ -315,6 +371,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link ConfigMap}
+		 *
+		 * @param <K> The key type of the map
+		 */
 		public static class Interpreted<K> extends ExMapModelValue.Interpreted<K, ConfigMap<K>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
@@ -327,6 +388,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return The model value for the format specified for keys in the map */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> getKeyFormat() {
 				return theKeyFormat;
 			}
@@ -352,16 +414,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		private ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
-		public ConfigMap(ExElement element) {
+		ConfigMap(ExElement element) {
 			super(element);
 		}
 
+		/** @return The model value for the format specified for keys in the map */
 		public ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> getKeyFormat() {
 			return theKeyFormat;
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 			super.update(interpreted, element);
 
 			Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
@@ -457,18 +520,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableMap<K, V>> instantiate() {
+			public ConfigModelValue<V, ObservableMap<K, V>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<K, V> extends ConfigModelValue.Instantiator<V, ObservableMap<K, V>> {
+		static class Instantiator<K, V> extends ConfigModelValue<V, ObservableMap<K, V>> {
 			private TypeToken<K> theKeyType;
 			private ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
-			public Instantiator(Interpreted<K, V> interpreted) {
-				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
-					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+			public Instantiator(ExConfigMap.Interpreted<K, V> interpreted) throws ModelInstantiationException {
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
+					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
+						interpreted.getFormatSet());
 				theKeyType = interpreted.getKeyType();
 				theKeyFormat = interpreted.getKeyFormat() == null ? null : interpreted.getKeyFormat().instantiate();
 			}
@@ -523,15 +587,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	@ExElementTraceable(toolkit = CONFIG,
 		qonfigType = ExArchiveEnabledFileSource.ARCHIVE_ENABLED_FILE_SOURCE,
 		interpretation = ExArchiveEnabledFileSource.Interpreted.class)
-	static class ExArchiveEnabledFileSource extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>>
-	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> {
+	static class ExArchiveEnabledFileSource
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource>>> {
 		public static final String ARCHIVE_ENABLED_FILE_SOURCE = "archive-enabled-file-source";
 
 		private CompiledExpression theWrapped;
 		private CompiledExpression theMaxArchiveDepth;
-		private final List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>>> theArchiveMethods;
+		private final List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.FileArchival>>>> theArchiveMethods;
 
 		public ExArchiveEnabledFileSource(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
@@ -549,7 +612,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@QonfigChildGetter("archive-method")
-		public List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>>> getArchiveMethods() {
+		public List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.FileArchival>>>> getArchiveMethods() {
 			return Collections.unmodifiableList(theArchiveMethods);
 		}
 
@@ -561,15 +624,15 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> interpretValue(
+		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<SettableValue<ArchiveEnabledFileSource>>> interpretValue(
 			ExElement.Interpreted<?> parent) {
 			return new Interpreted(this, parent);
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<ArchiveEnabledFileSource>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<ArchiveEnabledFileSource>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> theWrapped;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaxArchiveDepth;
 			private final List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>> theArchiveMethods;
@@ -623,24 +686,25 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource>> instantiate() {
+			public ModelValueElement<SettableValue<ArchiveEnabledFileSource>> create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<ArchiveEnabledFileSource>> {
 			private final ModelValueInstantiator<SettableValue<FileDataSource>> theWrapped;
 			private final ModelValueInstantiator<SettableValue<Integer>> theMaxArchiveDepth;
 			private final List<ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.FileArchival>>> theArchiveMethods;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(ExArchiveEnabledFileSource.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theWrapped = interpreted.getWrapped() == null ? null : interpreted.getWrapped().instantiate();
 				theMaxArchiveDepth = interpreted.getMaxArchiveDepth().instantiate();
-				theArchiveMethods = QommonsUtils.filterMap(interpreted.getArchiveMethods(), null, am -> am.instantiate());
+				theArchiveMethods = QommonsUtils.filterMapE(interpreted.getArchiveMethods(), null, am -> am.instantiate());
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theWrapped != null)
 					theWrapped.instantiate();
 				theMaxArchiveDepth.instantiate();
@@ -695,9 +759,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	}
 
 	static class ZipCompression extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>>>
+	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.ZipCompression>>>
 	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>>> {
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.ZipCompression>>> {
 		public static final String ZIP_ARCHIVAL = "zip-archival";
 
 		public ZipCompression(Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -714,10 +778,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.ZipCompression>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>>> {
-
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.ZipCompression>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.ZipCompression>>> {
 			Interpreted(ZipCompression definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -728,12 +791,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.ZipCompression>> instantiate() {
-				return new Instantiator();
+			public ModelValueElement<SettableValue<ArchiveEnabledFileSource.ZipCompression>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.ZipCompression>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<ArchiveEnabledFileSource.ZipCompression>> {
+			Instantiator(ZipCompression.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+			}
+
 			@Override
 			public void instantiate() {
 
@@ -756,9 +823,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	}
 
 	static class GZCompression extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>>>
+	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.GZipCompression>>>
 	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>>> {
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.GZipCompression>>> {
 		public static final String GZ_ARCHIVAL = "gz-archival";
 
 		public GZCompression(Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -775,9 +842,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.GZipCompression>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.GZipCompression>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.GZipCompression>>> {
 
 			Interpreted(GZCompression definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -789,12 +856,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.GZipCompression>> instantiate() {
-				return new Instantiator();
+			public ModelValueElement<SettableValue<ArchiveEnabledFileSource.GZipCompression>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.GZipCompression>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<ArchiveEnabledFileSource.GZipCompression>> {
+			Instantiator(GZCompression.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+			}
+
 			@Override
 			public void instantiate() {
 
@@ -816,10 +887,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	static class TarArchival extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>>>
+	static class TarArchival
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.TarArchival>>>
 	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>>> {
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.TarArchival>>> {
 		public static final String TAR_ARCHIVAL = "tar-archival";
 
 		public TarArchival(Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -836,9 +907,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.TarArchival>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.TarArchival>, ModelValueElement<SettableValue<ArchiveEnabledFileSource.TarArchival>>> {
 
 			Interpreted(TarArchival definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -850,12 +921,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.TarArchival>> instantiate() {
-				return new Instantiator();
+			public ModelValueElement<SettableValue<ArchiveEnabledFileSource.TarArchival>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.TarArchival>> {
+		static class Instantiator extends ModelValueElement.Abstract<SettableValue<ArchiveEnabledFileSource.TarArchival>> {
+			Instantiator(TarArchival.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+			}
+
 			@Override
 			public void instantiate() {
 
@@ -877,10 +952,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = AbstractFormat.FORMAT, interpretation = AbstractFormat.Interpreted.class)
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = AbstractFormat.FORMAT,
+		interpretation = AbstractFormat.Interpreted.class,
+		instance = AbstractFormat.Instantiator.class)
 	static abstract class AbstractFormat<T>
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>> {
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<Format<T>>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<Format<T>>>> {
 		public static final String FORMAT = "format";
 
 		private final List<FormatValidation.Def<?>> theValidation;
@@ -904,9 +982,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		public abstract Interpreted<T> interpretValue(ExElement.Interpreted<?> parent);
 
 		public static abstract class Interpreted<T> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Format<T>>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Format<T>>, ModelValueElement<SettableValue<Format<T>>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<T>>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<T>>, ModelValueElement<SettableValue<Format<T>>>> {
 			private final List<FormatValidation.Interpreted<T, ?>> theValidation;
 
 			protected Interpreted(AbstractFormat<T> definition, ExElement.Interpreted<?> parent) {
@@ -947,14 +1025,15 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public abstract Instantiator<T> instantiate();
+			public abstract Instantiator<T> create() throws ModelInstantiationException;
 		}
 
-		public static abstract class Instantiator<T> implements ModelValueInstantiator<SettableValue<Format<T>>> {
+		public static abstract class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<Format<T>>> {
 			private final TypeToken<Format<T>> theFormatType;
 			private final List<FormatValidation.Instantiator<T, ?>> theValidation;
 
-			protected Instantiator(Interpreted<T> interpreted) {
+			protected Instantiator(AbstractFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theFormatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(interpreted.getValueType());
 				theValidation = new ArrayList<>(interpreted.getValidation().size());
 				for (FormatValidation.Interpreted<T, ?> validation : interpreted.getValidation()) {
@@ -969,7 +1048,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				for (FormatValidation.Instantiator<T, ?> validation : theValidation)
 					validation.instantiated();
 			}
@@ -1197,7 +1276,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = FileFormat.FILE_FORMAT, interpretation = FileFormat.Interpreted.class)
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = FileFormat.FILE_FORMAT,
+		interpretation = FileFormat.Interpreted.class,
+		instance = FileFormat.Instantiator.class)
 	static class FileFormat extends AbstractFormat<BetterFile> {
 		public static final String FILE_FORMAT = "file-format";
 
@@ -1280,7 +1362,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator instantiate() {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -1290,7 +1372,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final ModelValueInstantiator<SettableValue<BetterFile>> theWorkingDir;
 			private final boolean isAllowEmpty;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(FileFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theFileSource = interpreted.getFileSource() == null ? null : interpreted.getFileSource().instantiate();
 				theWorkingDir = interpreted.getWorkingDir() == null ? null : interpreted.getWorkingDir().instantiate();
@@ -1298,7 +1380,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				if (theFileSource != null)
 					theFileSource.instantiate();
@@ -1356,7 +1438,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = DoubleFormat.DOUBLE_FORMAT, interpretation = DoubleFormat.Interpreted.class)
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = DoubleFormat.DOUBLE_FORMAT,
+		interpretation = DoubleFormat.Interpreted.class,
+		instance = DoubleFormat.Instantiator.class)
 	static class DoubleFormat extends AbstractFormat<Double> {
 		public static final String DOUBLE_FORMAT = "double-format";
 
@@ -1469,7 +1554,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator instantiate() {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -1482,7 +1567,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private boolean isMetricPrefixedP2;
 			private Map<String, Double> thePrefixMults;
 
-			public Instantiator(Interpreted interpreted) {
+			public Instantiator(DoubleFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theSignificantDigits = interpreted.getSignificantDigits().instantiate();
 				theUnit = interpreted.getDefinition().getUnit();
@@ -1493,7 +1578,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				theSignificantDigits.instantiate();
 			}
@@ -1580,7 +1665,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = DateFormat.INSTANT_FORMAT, interpretation = DateFormat.Interpreted.class)
+	@ExElementTraceable(toolkit = CONFIG,
+		qonfigType = DateFormat.INSTANT_FORMAT,
+		interpretation = DateFormat.Interpreted.class,
+		instance = DateFormat.Instantiator.class)
 	static class DateFormat extends AbstractFormat<Instant> {
 		public static final String INSTANT_FORMAT = "instant-format";
 
@@ -1706,7 +1794,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator instantiate() {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -1719,7 +1807,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final TimeUtils.RelativeInstantEvaluation theRelativeEvaluation;
 			private final ModelValueInstantiator<SettableValue<Instant>> theRelativeTo;
 
-			Instantiator(Interpreted interpreted) {
+			Instantiator(DateFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theDayFormat = interpreted.getDefinition().getDayFormat();
 				theTimeZone = interpreted.getDefinition().getTimeZone();
@@ -1730,7 +1818,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
 				if (theRelativeTo != null)
 					theRelativeTo.instantiate();
@@ -1772,7 +1860,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@ExElementTraceable(toolkit = CONFIG,
 		qonfigType = RegexStringFormat.REGEX_FORMAT_STRING,
-		interpretation = RegexStringFormat.Interpreted.class)
+		interpretation = RegexStringFormat.Interpreted.class,
+		instance = RegexStringFormat.Instantiator.class)
 	static class RegexStringFormat extends AbstractFormat<String> {
 		public static final String REGEX_FORMAT_STRING = "regex-format-string";
 
@@ -1830,13 +1919,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator instantiate() {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
 
 		static class Instantiator extends AbstractFormat.Instantiator<String> {
-			public Instantiator(Interpreted interpreted) {
+			public Instantiator(RegexStringFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 			}
 
@@ -1918,7 +2007,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
@@ -1926,7 +2015,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		static class Instantiator<T> extends AbstractFormat.Instantiator<T> {
 			private Format<T> theFormat;
 
-			Instantiator(Interpreted<T> interpreted) {
+			Instantiator(StandardTextFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theFormat = interpreted.getFormat();
 			}
@@ -2042,7 +2131,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 				super.doUpdate(interpreted);
 
 				FilterValidation.Interpreted<T> myInterpreted = (FilterValidation.Interpreted<T>) interpreted;
@@ -2052,7 +2141,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiated() {
+			public void instantiated() throws ModelInstantiationException {
 				super.instantiated();
 				theTest.instantiate();
 			}
@@ -2108,11 +2197,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@ExElementTraceable(toolkit = CONFIG,
 		qonfigType = TextConfigFormat.TEXT_CONFIG_FORMAT,
-		interpretation = TextConfigFormat.Interpreted.class)
+		interpretation = TextConfigFormat.Interpreted.class,
+		instance = TextConfigFormat.Instantiator.class)
 	static class TextConfigFormat extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>>
+	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<? extends SettableValue<? extends ObservableConfigFormat<?>>>>
 	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
 		public static final String TEXT_CONFIG_FORMAT = "text-config-format";
 		public static final String INTERPRETED_TYPE_MANAGED = "Expresso.Config.Text.Format.Type.Managed";
 
@@ -2163,9 +2253,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted<T> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<ObservableConfigFormat<T>>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<ObservableConfigFormat<T>>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theTextFormat;
 			private Format<T> theDefaultFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefaultValue;
@@ -2245,12 +2335,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Instantiator<T> instantiate() {
+			public Instantiator<T> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> {
+		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<ObservableConfigFormat<T>>> {
 			private final TypeToken<T> theType;
 			private final ModelValueInstantiator<SettableValue<Format<T>>> theTextFormat;
 			private final Format<T> theDefaultFormat;
@@ -2258,7 +2348,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final String theDefaultText;
 			private final ErrorReporting theReporting;
 
-			Instantiator(Interpreted<T> interpreted) {
+			Instantiator(TextConfigFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theType = interpreted.getValueType();
 				theTextFormat = interpreted.getTextFormat() == null ? null : interpreted.getTextFormat().instantiate();
 				theDefaultFormat = interpreted.getDefaultFormat();
@@ -2268,7 +2359,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theTextFormat != null)
 					theTextFormat.instantiate();
 				if (theDefaultValue != null)
@@ -2342,15 +2433,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@ExElementTraceable(toolkit = CONFIG,
 		qonfigType = EntityConfigFormat.ENTITY_CONFIG_FORMAT,
-		interpretation = EntityConfigFormat.Interpreted.class)
+		interpretation = EntityConfigFormat.Interpreted.class,
+		instance = EntityConfigFormat.Instantiator.class)
 	static class EntityConfigFormat extends
-	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>>
+	ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<? extends SettableValue<? extends ObservableConfigFormat<?>>>>
 	implements
-	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
+	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<? extends ObservableConfigFormat<?>>>> {
 		public static final String ENTITY_CONFIG_FORMAT = "entity-config-format";
 
 		private CompiledExpression theFormatSet;
-		private final Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> theFields;
+		private final Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> theFields;
 
 		public EntityConfigFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
@@ -2363,14 +2455,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@QonfigChildGetter("field")
-		public Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> getFields() {
+		public Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> getFields() {
 			return Collections.unmodifiableMap(theFields);
 		}
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			theFormatSet = getAttributeExpression("format-set", session);
-			List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> fields;
+			List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> fields;
 			fields = new ArrayList<>(theFields.values());
 			syncChildren(ModelValueElement.CompiledSynth.class, fields, session.forChildren("field"), (f, s) -> {
 				s = s.put(ExTyped.VALUE_TYPE_KEY, null).putLocal(TextConfigFormat.INTERPRETED_TYPE_MANAGED, true);
@@ -2378,7 +2470,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				f.prepareModelValue(s);
 			});
 			theFields.clear();
-			for (ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>> field : fields) {
+			for (ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>> field : fields) {
 				String fieldName = field.getAddOn(EntityConfigField.class).getFieldName();
 				if (theFields.containsKey(fieldName))
 					reporting().warn("Multiple fields specified named '" + fieldName + "': using the first specification");
@@ -2393,11 +2485,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted<E> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>
 		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>> {
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> theFormatSet;
-			private final Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> theFields;
+			private final Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>> theFields;
 
 			Interpreted(EntityConfigFormat definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -2413,7 +2505,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return theFormatSet;
 			}
 
-			public Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> getFields() {
+			public Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>> getFields() {
 				return Collections.unmodifiableMap(theFields);
 			}
 
@@ -2439,10 +2531,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				Set<String> fieldNames = new LinkedHashSet<>(getDefinition().getFields().keySet());
 				TypeToken<E> entityType = getAddOn(ExTyped.Interpreted.class).getValueType();
 				EntityReflector<E> reflector = EntityReflector.build(entityType, true).build();
-				List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>>> defFields;
+				List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> defFields;
 				defFields = new ArrayList<>();
 				for (int f = 0; f < reflector.getFields().keySize(); f++) {
-					ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ? extends SettableValue<ObservableConfigFormat<?>>>> defField;
+					ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>> defField;
 					String fieldName = reflector.getFields().keySet().get(f);
 					defField = getDefinition().getFields().get(fieldName);
 					if (defField == null)
@@ -2459,10 +2551,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					msg += "\nAvailable fields are " + reflector.getFields().keySet();
 					reporting().warn(msg);
 				}
-				List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> fields;
+				List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>> fields;
 				fields = new ArrayList<>(theFields.values());
 				syncChildren(defFields, fields,
-					f -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>) f
+					f -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>) f
 					.interpretValue(this),
 					(i, mEnv) -> {
 						String fieldName = i.getDefinition().getAddOn(EntityConfigField.class).getFieldName();
@@ -2470,28 +2562,29 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						i.updateValue(mEnv);
 					});
 				theFields.clear();
-				for (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>> field : fields)
+				for (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>> field : fields)
 					theFields.put(field.getDefinition().getAddOn(EntityConfigField.class).getFieldName(), field);
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<ObservableConfigFormat<E>>> instantiate() {
+			public ModelValueElement<SettableValue<ObservableConfigFormat<E>>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
 
-		static class Instantiator<E> implements ModelValueInstantiator<SettableValue<ObservableConfigFormat<E>>> {
+		static class Instantiator<E> extends ModelValueElement.Abstract<SettableValue<ObservableConfigFormat<E>>> {
 			private final TypeToken<E> theEntityType;
 			private final ModelValueInstantiator<SettableValue<ObservableConfigFormatSet>> theFormatSet;
 			private final Map<String, String> theFieldConfigNames;
 			private final Map<String, ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>>> theFields;
 
-			Instantiator(Interpreted<E> interpreted) {
+			Instantiator(EntityConfigFormat.Interpreted<E> interpreted) throws ModelInstantiationException {
+				super(interpreted);
 				theEntityType = interpreted.getAddOn(ExTyped.Interpreted.class).getValueType();
 				theFormatSet = interpreted.getFormatSet() == null ? null : interpreted.getFormatSet().instantiate();
 				theFieldConfigNames = new LinkedHashMap<>();
 				theFields = new LinkedHashMap<>();
-				for (Map.Entry<String, InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>>>> field : interpreted
+				for (Map.Entry<String, InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>> field : interpreted
 					.getFields().entrySet()) {
 					String configName = field.getValue().getDefinition().getAddOn(EntityConfigField.class).getConfigName();
 					if (configName != null)
@@ -2501,7 +2594,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public void instantiate() {
+			public void instantiate() throws ModelInstantiationException {
 				if (theFormatSet != null)
 					theFormatSet.instantiate();
 				for (ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>> field : theFields.values())

@@ -91,7 +91,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
+			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
 			exHandler.handle1(new ExpressoInterpretationException("An array access expression can only be evaluated as a value",
 				env.reporting().getPosition(), getExpressionLength()));
@@ -148,7 +148,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+			public ModelValueInstantiator<SettableValue<T>> instantiate() throws ModelInstantiationException {
 				return new Instantiator<>(targetType, arrayValue.instantiate(), arrayReporting, indexValue.instantiate(), indexReporting);
 			}
 
@@ -196,7 +196,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void instantiate() {
+		public void instantiate() throws ModelInstantiationException {
 			theArray.instantiate();
 			theIndex.instantiate();
 		}

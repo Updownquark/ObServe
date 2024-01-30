@@ -41,8 +41,6 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 public class QuickMultiSlider extends QuickWidget.Abstract {
 	public static final String MULTI_SLIDER = "multi-slider";
 	public static final String SLIDER_HANDLE_RENDERER = "slider-handle-renderer";
@@ -206,7 +204,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			Interpreted myInterpreted = (Interpreted) interpreted;
@@ -216,7 +214,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			if (theTooltipInstantiator != null)
@@ -313,7 +311,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			private ObservableValue<Color> theLineColor;
 			private ObservableValue<Integer> theLineThickness;
 
-			public SliderHandleStyle() {}
+			public SliderHandleStyle() {
+			}
 
 			public ObservableValue<Color> getLineColor() {
 				return theLineColor;
@@ -324,7 +323,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				SliderHandleStyle.Interpreted myInterpreted = (SliderHandleStyle.Interpreted) interpreted;
@@ -421,7 +421,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
 			Interpreted myInterpreted = (Interpreted) interpreted;
@@ -429,7 +429,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public void instantiated() {
+		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
 
 			if (theMaxValueInstantiator != null)
@@ -676,7 +676,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -698,16 +698,16 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 		CollectionUtils
 		.synchronize(theBgRenderers, myInterpreted.getBgRenderers(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.simpleE(interp -> interp.create())//
+		.<ModelInstantiationException> simpleX(interp -> interp.create())//
 		.onLeft(el -> el.getLeftValue().destroy())//
-		.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
-		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 		.rightOrder()//
 		.adjust();
 	}
 
 	@Override
-	public void instantiated() {
+	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
 		theValuesInstantiator.instantiate();

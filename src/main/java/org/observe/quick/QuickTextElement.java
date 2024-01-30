@@ -5,6 +5,7 @@ import java.awt.Color;
 import org.observe.ObservableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
@@ -343,7 +344,8 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
 				QuickTextStyle.Interpreted myInterpreted = (QuickTextStyle.Interpreted) interpreted;

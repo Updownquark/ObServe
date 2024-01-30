@@ -236,7 +236,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
 		theLeadingInstantiator = myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate();
