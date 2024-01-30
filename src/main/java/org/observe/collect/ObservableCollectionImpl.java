@@ -38,25 +38,10 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
-import org.qommons.ArrayUtils;
-import org.qommons.BiTuple;
-import org.qommons.Causable;
+import org.qommons.*;
 import org.qommons.Causable.CausableKey;
-import org.qommons.ConcurrentHashSet;
-import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.IdentityKey;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.QommonsUtils;
-import org.qommons.Stamped;
-import org.qommons.Ternian;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
-import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
@@ -590,8 +575,11 @@ public final class ObservableCollectionImpl {
 										if (refresh || data.containsKey("re-search")) {
 											// Means we need to find the new value in the collection
 											doRefresh(cause);
-										} else
-											setCurrentElement((SimpleElement) data.get("replacement"), cause);
+										} else {
+											SimpleElement replacement = (SimpleElement) data.get("replacement");
+											if (replacement != null)
+												setCurrentElement(replacement, cause);
+										}
 									}
 								});
 								theRefreshCauseKey = Causable.key((cause, data) -> {
@@ -4569,7 +4557,7 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollectionBuilder.DataControlAutoRefresher theAutoRefresh;
 		private boolean isRefreshOnAccess;
 		private final BiPredicate<? super E, ? super V> theEqualsTester;
-		private final CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> theSynchronizer;
+		private final CollectionUtils.CollectionSynchronizerX<E, ? super V, ?> theSynchronizer;
 		private final CollectionUtils.AdjustmentOrder theAdjustmentOrder;
 		private final SettableValue<Boolean> isRefreshing;
 
@@ -4588,7 +4576,7 @@ public final class ObservableCollectionImpl {
 		 */
 		public DataControlledCollectionImpl(ObservableCollection<E> backing, Supplier<? extends List<? extends V>> backingData,
 			ObservableCollectionBuilder.DataControlAutoRefresher autoRefresh, boolean refreshOnAccess,
-			BiPredicate<? super E, ? super V> equals, CollectionUtils.CollectionSynchronizerE<E, ? super V, ?> synchronizer,
+			BiPredicate<? super E, ? super V> equals, CollectionUtils.CollectionSynchronizerX<E, ? super V, ?> synchronizer,
 			CollectionUtils.AdjustmentOrder adjustmentOrder) {
 			theBacking = backing;
 			theBackingData = backingData;
