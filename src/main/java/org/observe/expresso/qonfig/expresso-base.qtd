@@ -8,8 +8,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 -->
 <qonfig-def name="Expresso-Base" version="0.1" xmlns:core="Expresso-Core v0.1">
 	<value-types>
+		<?DOC Pattern for a floating-point decimal number?>
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
 
+		<?DOC Used by the &lt;size> operation, defining whether to evaluate the number of keys or values in a map?>
 		<one-of name="size-type">
 			<literal>key</literal>
 			<literal>value</literal>
@@ -17,11 +19,12 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</value-types>
 
 	<add-ons>
+		<?DOC Adds the "onModelLoad" and "onBodyLoad" element model actions to be available for reference by expressions within the document?>
 		<add-on name="base-expresso-document" abstract="true" inherits="expresso-document,with-element-model">
 			<element-model>
 				<?DOC An event that fires after the application's model's have been loaded?>
 				<event name="onModelLoad" type="Void" />
-				<?DOC An event that fires after the application's body has been loaded?>
+				<?DOC An event that fires after the application's content has been loaded?>
 				<event name="onBodyLoad" type="Void" />
 			</element-model>
 		</add-on>
@@ -34,65 +37,130 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<?DOC The value with which to initialize this variable?>
 			<attribute name="init" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A collection of values in a &lt;model> element.  Allows specification of &lt;element> elements to populate the initial content
+			of the collection?>
 		<add-on name="int-list" requires="list" inherits="type-required">
+			<?DOC An element to initially populate into the list?>
 			<child-def name="element" type="element" min="0" max="inf" />
 		</add-on>
+		<?DOC A map of keys to values in a &lt;model> element.  Allows specification of &lt;entry> elements to populate the initial content
+			of the map?>
 		<add-on name="int-map" requires="map" inherits="type-required">
-			<attr-mod name="map.key-type" />
+			<?DOC A key/value pair to initially populate into the map?>
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</add-on>
 
+		<?DOC A model value for which a key-type must be specified?>
 		<add-on name="map-model-value" requires="model-value">
+			<?DOC The key type of the map?>
 			<attribute name="key-type" type="string" specify="required" />
+			<?DOC Can't specify a value for a map.
+				TODO This should be allowed--the expression would be evaluated as a map.?>
 			<value-mod specify="forbidden" />
 		</add-on>
+		<?DOC A model value that may specify sorting?>
 		<add-on name="sorted-model-value" requires="model-value">
+			<?DOC The sorting for the model value?>
 			<child-def name="sort" type="sort" min="0" />
 		</add-on>
 
+		<?DOC An mapping operation in which the source value of the operation can be referred to by some expressions?>
 		<add-on name="complex-operation" requires="operation" inherits="with-element-model">
 			<element-model>
+				<?DOC The variable in which the source value will be made available?>
 				<value name-attribute="source-as" />
 			</element-model>
+			<?DOC The name of the variable in which the source value will be made available to expressions?>
 			<attribute name="source-as" type="identifier" />
 		</add-on>
+		<?DOC Options for a mapping operation?>
 		<add-on name="abst-map-op" requires="operation" abstract="true" >
+			<?DOC Whether the mapping operation should be cached.<br>
+				Cached operations keep the mapped value in memory and only re-evaluate the mapping operation when any of the sources have changed.<br>
+				Un-cached operations don't keep the mapped value around and must re-evaluate the mapping operation each time the value is needed.?>
 			<attribute name="cache" type="boolean" default="true" />
+			<?DOC Whether the mapped value should be re-evaluated when a source value changes, even if the new source value is identical to the previous one?>
 			<attribute name="re-eval-on-update" type="boolean" default="true" />
+			<?DOC Whether to fire a new value from this mapped result if the mapped value is identical to the previous one?>
 			<attribute name="fire-if-unchanged" type="boolean" default="true" />
+			<?DOC If set to true, null sources will be mapped to null results without consulting the mapping operation?>
 			<attribute name="null-to-null" type="boolean" default="false" />
+			<?DOC Whether many source values may map to identical results.<br>
+				This subtle attribute is seldom needed and may be ignored most of the time.<br>
+				It influences, for example, how a result behaves when searching for result values, as optimizations can be made on one-to-one mappings.?>
 			<attribute name="many-to-one" type="boolean" default="false" />
+			<?DOC Whether a single source attribute may not always result in a single set result.<br>
+				This subtle attribute is seldom needed and may be ignored most of the time.<br>
+				Thought should generally be given to this only for the strictest testing.?>
 			<attribute name="one-to-many" type="boolean" default="false" />
 		</add-on>
 
+		<?DOC Abstract add-on extended by various methods of enacting changes to a mapped operation result?>
 		<add-on name="map-reverse-type" requires="map-reverse" abstract="true" />
+		<?DOC A reverse operation that produces a new source value for a given result?>
 		<add-on name="modify-source" inherits="map-reverse-type">
+			<?DOC Whether the reverse operation is currently enabled for modifying a current elemet in the source.  May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the operation is not currently available, or null if it is.?>
 			<attribute name="enabled" type="expression" specify="optional" />
+			<?DOC Whether the reverse operation is allowed for modifying a current elemet in the source with a given result value.<br>
+				May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the operation is not allowed for the given result, or null if it is.?>
 			<attribute name="accept" type="expression" specify="optional" />
+			<?DOC Whether the reverse operation is currently enabled for adding a new source value to the model structure.  May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not currently available, or null if it is.?>
 			<attribute name="add" type="expression" specify="optional" />
+			<?DOC Whether the reverse operation is allowed for adding a new source value to the model structure with a given result value.<br>
+				May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="add-accept" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A reverse operation that modifies source values with the result value?>
 		<add-on name="replace-source" inherits="modify-source">
+			<?DOC Whether the reverse modification operation will only be approximately effective.<br>
+				That is, values given to the reverse operation may change the source so that the new result is not equivalent to the result value that was given.<br>
+				A common example of this is an int-to-float mapping.  If there is an int-typed value, but a floating-point value is required by some attribute,
+				by default the mapped result will only accept floating-point values with no decimal component.<br>
+				This is not always desired.  The solution is to make a mapped value and set this attribute to true.
+				This will cause the result to accept all floating point values, though the mapped result will always be a floating-point number
+				with no decimal component.?>
 			<attribute name="inexact" type="boolean" default="false" />
 		</add-on>
 
+		<?DOC A conditional operation, like a collection filter?>
 		<add-on name="if-op" requires="scalar-operation">
+			<?DOC The condition to apply to the source value?>
 			<attribute name="if" type="expression" />
 		</add-on>
+		<?DOC A conditional operation that also requires the source value to be available for use in expressions?>
 		<add-on name="if-as-operation" requires="if" inherits="complex-operation, typed" />
 
+		<?DOC A case in a &lt;switch> operation?>
 		<add-on name="case-op" requires="scalar-operation">
+			<?DOC The case in which to apply this operation?>
 			<attribute name="case" type="expression" />
 		</add-on>
+		<?DOC A &lt;switch> operation in a &lt;transform>ation?>
 		<add-on name="switch-as-operation" requires="switch" inherits="typed" />
 
+		<?DOC Abstract add-on extended by various methods for accepting new result values on &lt;flatten>ed results?>
 		<add-on name="flatten-reverse-type" abstract="true" />
+		<?DOC Enables element setting in a flat-mapped result by defining a function able to produce source element values from target values.?>
 		<add-on name="flatten-replace-source" inherits="flatten-reverse-type">
+			<?DOC Produces source values from target values?>
 			<attribute name="function" type="expression" />
+			<?DOC Whether the reverse operation is allowed for a given result value. May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the reverse operation is not allowed for the given result, or null if it is.?>
 			<attribute name="accept" type="expression" />
 		</add-on>
+		<?DOC Enables element setting in a flat-mapped result by defining a function that performs some operation on the source value with the target value,
+			causing the mapping operation to produce the new target value?>
 		<add-on name="flatten-modify-source" inherits="flatten-replace-source">
+			<?DOC Whether the reverse operation is currently enabled for adding a new source value to the model structure.  May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not currently available, or null if it is.?>
 			<attribute name="add" type="expression" />
+			<?DOC Whether the reverse operation is allowed for adding a new source value to the model structure with a given result value.<br>
+				May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="add-accept" type="expression" />
 		</add-on>
 	</add-ons>
@@ -103,10 +171,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<?DOC An action that can be invoked?>
 		<element-def name="action" extends="model-value" inherits="allow-ext-model,with-local-model">
+			<?DOC Whether the action should be executed asynchronously.<br>
+				If true, the action will be queued for execution on a different thread
+				and the thread that initiated the action execution will be released to continue doing its work.?>
 			<attribute name="async" type="boolean" default="false" />
 		</element-def>
 		<?DOC An action that invokes a list of actions?>
 		<element-def name="action-group" extends="model-value" inherits="with-local-model">
+			<?DOC An action to execute in the group?>
 			<child-def name="action" type="action" min="0" max="inf" />
 		</element-def>
 		<?DOC A simple value. For internal models, this may be configured with:<ul>
@@ -117,13 +189,22 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<li>Nothing, in which case the initial value will be defaulted (same as a java field)</li>
 		</ul>?>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
+		<?DOC A settable value that may be sourced in a way that is not settable.<br>
+			An example is the field of an entity with a getter and a setter.<br>
+			The expression "entity.getValue()" is not settable, so any widgets that use this value will be disabled.<br>
+			If a &lt;field-value> is declared like so:<br>
+			&nbsp;&nbsp;&lt;field-value name="entityValue" source="entity.getValue()" save="entity.setValue(v)" source-as="v" /><br>
+			then entityValue will be a settable value operating on the value field of the entity.?>
 		<element-def name="field-value" extends="model-value" inherits="with-element-model">
 			<element-model>
-				<value name-attribute="source-as" />
+				<value name-attribute="target-as" />
 			</element-model>
-			<attribute name="source-as" type="identifier" />
+			<?DOC The source of the value. This value will always have the same value as this expression.?>
 			<attribute name="source" type="expression" />
+			<?DOC An action that will effectively modify the value returned by the source expression?>
 			<attribute name="save" type="expression" />
+			<?DOC The name of the model value that will contain the value that is attempting to be set on the value, for use by the save expression?>
+			<attribute name="target-as" type="identifier" />
 		</element-def>
 
 		<?DOC An ordered collection of values.  For internal models, this may be initialized with elements.?>
@@ -174,41 +255,57 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="operation" abstract="true" />
 		<?DOC Causes a model value or action to become unmodifiable or uninvokable on an expression?>
 
+		<?DOC Prevents modification to a transformed result depending on a condition?>
 		<element-def name="disable" extends="operation" inherits="complex-operation">
 			<attr-mod name="complex-operation.source-as" default="$SOURCE$" />
-			<?DOC The expression to disable the value or action with.  The expression can be String- or boolean-typed.<br>
-				If boolean-typed, the value will be enabled when the expression is <b>true</b>.<br>
-				If String-typed, the value will be enabled when the expression is null.
-				Otherwise the value may be displayed to the user for information.?>
+			<?DOC The expression to disable the value or action with.  May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="with" type="expression" />
 		</element-def>
 
+		<?DOC Prevents some modifications to a transformed result?>
 		<element-def name="filter-accept" extends="operation" inherits="complex-operation">
+			<?DOC The test to apply to determine if the operation is acceptable. May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="test" type="expression" />
 		</element-def>
 
+		<?DOC A mapping operation, producing a value as the result of some function on each element of the source structure?>
 		<element-def name="map-to" extends="operation" inherits="abst-map-op, complex-operation, typed">
 			<element-model>
 				<value name-attribute="combined-value/name" />
 			</element-model>
+			<?DOC The equivalence for the result. This can almost always be ignored.<br>
+				This affects operations like tests for containment.<br>
+				If specified, its requirements are implementation-specific.?>
 			<attribute name="equivalence" type="expression" specify="optional" />
+			<?DOC A value that will affect the result.  The value will be available to expressions in this operation as the name it's given here.?>
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
+			<?DOC The expression producing the mapped result from the source value and the value of any combined values?>
 			<child-def name="map" type="map-with" />
+			<?DOC A reverse operation to allow modification operations on the result?>
 			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
+		<?DOC Mapping function in a &lt;map-to> operation?>
 		<element-def name="map-with">
+			<?DOC The expression producing the mapped result from the source value and the value of any combined values?>
 			<value type="expression" />
 		</element-def>
+		<?DOC A value that will affect the result of a &lt;map-to> operation.  The value will be available to expressions in the operation as the name it's given here.?>
 		<element-def name="combine-with" inherits="named">
+			<?DOC The value to combine into the result?>
 			<value type="expression" specify="required" />
 		</element-def>
+		<?DOC A reverse operation in a &lt;map-to> operation to allow modification operations on the result?>
 		<element-def name="map-reverse" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="target-as" />
 			</element-model>
+			<?DOC The type of the reverse operation?>
 			<attribute name="type" type="map-reverse-type" />
-			<!-- Previous result reference? -->
+			<?DOC The name of the variable that will contain result values for reverse operation attempts?>
 			<attribute name="target-as" type="identifier" />
+			<?DOC Performs the work for the reverse operation, typically either producing a new source value or modifying the existing source value from a given result value?>
 			<value type="expression" />
 		</element-def>
 
@@ -217,6 +314,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 		<?DOC A simple scalar operation that just returns the given value?>
 		<element-def name="return" extends="scalar-operation">
+			<?DOC The result to return?>
 			<value type="expression" />
 		</element-def>
 
@@ -236,7 +334,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="case" type="scalar-operation" inherits="case-op" max="inf" />
 		</element-def>
 
+		<?DOC A filter operation on a model structure with multiple values?>
 		<element-def name="filter" extends="operation" inherits="complex-operation">
+			<?DOC The test to apply to a source value in a model structure, determining whether it will exist in the result. May be a boolean or a String.<br>
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="test" type="expression" />
 		</element-def>
 
@@ -247,22 +348,40 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="type" type="string" />
 		</element-def>
 
+		<?DOC Operation to reverse a model structure with multiple elements.  The result will have all the same elements as the source, but ordered oppositely.?>
 		<element-def name="reverse" extends="operation" />
 
+		<?DOC Causes update events on all elements in a model structure as a result of an external event.<br>
+			The resulting structure be identical to the source, but will fire extra update events when the target event fires.?>
 		<element-def name="refresh" extends="operation">
+			<?DOC The event that will cause an update on each element in the source structure.?>
 			<attribute name="on" type="expression" />
 		</element-def>
 
+		<?DOC Causes update events elements in a model structure as a result of events.<br>
+			Similar to the &lt;refresh> operation except that the events may be different for each element in the structure.<br>
+			The resulting structure be identical to the source, but will fire extra update events when the target event fires.?>
 		<element-def name="refresh-each" extends="operation" inherits="complex-operation">
+			<?DOC The event that will cause an update on each element in the source structure.<br>
+				This will be evaluated separately for each element in the structure, and repeatedly each time each element changes.?>
 			<attribute name="on" type="expression" />
 		</element-def>
 
+		<?DOC Produces a result structure containing all values from the source structure, but with multiple instances of equivalent elements eliminated.<br>
+			The notion of "equivalent" here may vary by the source structure.<br>
+			E.g. for sorted structures, equivalence will be based on the sorting--elements may have other different properties,
+				but if the properties being sorted are the same, they will be judged as equivalent.?>
 		<element-def name="distinct" extends="operation">
+			<?DOC The sorting for the result.  If this is not specified and the source is not sorted, the result will not be sorted.?>
 			<child-def name="sort" type="sort" min="0" />
+			<?DOC Whether, when two elements in the source structure are equivalent, to always use the first instance in the result.<br>
+				This option may produce more changes in the result an hence be slightly less performant.?>
 			<attribute name="use-first" type="boolean" default="false" />
+			<?DOC Whether to preserve the order of elements from the source in the result.  This option is incompatible with the specification of the &lt;sort> option.?>
 			<attribute name="preserve-source-order" type="boolean" default="false" />
 		</element-def>
 
+		<?DOC Produces a sorted structure. The result will have all the same elements as the source structure, but re-ordered in a given way.?>
 		<element-def name="sort" extends="operation" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="sort-value-as" />
@@ -290,20 +409,39 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value type="expression" />
 		</element-def>
 
+		<?DOC Produces a model structure that forbids most modification operations.<br>
+			The result will have all the same elements in the same order as the source, but will not allow most types of modification.?>
 		<element-def name="unmodifiable" extends="operation">
+			<?DOC Whether the result will allow elements to be assigned to their current value (i.e. an update)?>
 			<attribute name="allow-updates" type="boolean" default="true" />
 		</element-def>
 
+		<?DOC Produces a model structure that forbids some modification operations.<br>
+			The result will have all the same elements in the same order as the source, but will not allow certain types of modification.?>
 		<element-def name="filter-mod" extends="operation" inherits="complex-operation">
 			<!-- Obviously, some of these are incompatible -->
+			<?DOC If specified, the result will forbid adding new values.<br>
+				The value of this attribute should be a user-readable message declaring the reason additions are forbidden.?>
 			<attribute name="no-add" type="string" specify="optional" />
+			<?DOC If specified, the result will forbid removing values.<br>
+				The value of this attribute should be a user-readable message declaring the reason removals are forbidden.?>
 			<attribute name="no-remove" type="string" specify="optional" />
+			<?DOC If specified, the result will forbid moving values in the collection.<br>
+				The value of this attribute should be a user-readable message declaring the reason movements are forbidden.?>
 			<attribute name="no-move" type="string" specify="optional" />
+			<?DOC If specified, the result will forbid all values except updates (setting an element to its current value).<br>
+				The value of this attribute should be a user-readable message declaring the reason modifications are forbidden.?>
 			<attribute name="unmodifiable" type="string" specify="optional" />
+			<?DOC Forbids additions based on the value that would be added.  May be a boolean or a String.
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="filter-add" type="expression" specify="optional" />
+			<?DOC Forbids removals based on the value to be removed.  May be a boolean or a String.
+				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="filter-remove" type="expression" specify="optional" />
 		</element-def>
 
+		<?DOC A &lt;map-to> operation that also advertises that result values are in some way equivalent to source values.<br>
+			This may enable some optimizations in searching and other operations.?>
 		<element-def name="map-equivalent" extends="map-to">
 			<?DOC <p>The sorting for the mapped values. This sorting scheme must be equivalent to the sorting of the source collection for the mapped type.</p>
 				<p>For distinct, non-sorted flows, this may not be specified, and instead reverse must be specified.</p>
@@ -311,42 +449,74 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="sort" type="sort" min="0" />
 		</element-def>
 
+		<?DOC Produces a result structure containing all elements of model structures produced by a mapping operation on each element of the source.<br>
+			For example, this may be applied to a collection with the "to" attribute specifying a collection.
+				The result would be a collection containing every element of the collection produced for every element of the source.
+			Another example would be applying this to a collection with the "to" attribute specifying a value.
+				The result would be a collection containing all values produced for every element of the source.?>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
+			<?DOC The model structure for each element of the source whose elements to include in the result?>
 			<attribute name="to" type="string" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
+			<?DOC Whether, when an update occurs on the result, to propagate the update to the source element?>
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
+			<?DOC The equivalence for the result. This can almost always be ignored.<br>
+				This affects operations like tests for containment.<br>
+				If specified, its requirements are implementation-specific.?>
 			<attribute name="equivalence" type="expression" specify="optional" />
+			<?DOC A reverse operation to allow modification operations on the result?>
 			<child-def name="reverse" type="flatten-reverse" min="0" />
-			<!-- This is needed to flatten sorted collections or sets -->
+			<?DOC The optional sorting for the result?>
 			<child-def name="sort" type="sort" min="0" />
 		</element-def>
+		<?DOC A reverse operation in a &lt;flatten> operation to allow modification operations on the result?>
 		<element-def name="flatten-reverse">
+			<?DOC The type of the reverse operation?>
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 
+		<?DOC Produces a result that contains an element for each combination of a source element with an element of the model structure crossed with it.<br>
+			The result will have A x B elements, where A is the number of elements in the source structure and B is the number of elements in the structure crossed with it.<br>
+			Each element will be the result of an operation on one element in the source and one element in the crossed structure.?>
 		<element-def name="cross" extends="flatten">
+			<?DOC The structure to cross with the source structure?>
 			<attribute name="with" type="expression" />
 		</element-def>
 
+		<?DOC Produces a result containing only elements of the source which are, or are not, contained in a target structure.?>
 		<element-def name="where-contained" extends="operation">
+			<?DOC The structure to use for containment tests determining whether a given source element will be present in the result?>
 			<attribute name="filter" type="expression" />
+			<?DOC If true (the default), the result will contain only elements from the source for which an equivalent element exists in the filter structure.<br>
+				If false, the only elements NOT present in the filter structure will be present in the result.?>
 			<attribute name="inclusive" type="boolean" default="true" />
 		</element-def>
 
+		<?DOC Groups a collection into a multi-map.  The result will be a multi map containing all elements from the source structure as values.?>
 		<element-def name="group-by" extends="operation" inherits="complex-operation">
+			<?DOC Determines the key under which each element from the source will be grouped?>
 			<child-def name="key" type="operation" />
 		</element-def>
 
+		<?DOC For event structures fire an initial event, this operation produces an event structure that fires all events except this initial event.<br>
+			If the source event does not produce an initial event, this has no effect.?>
 		<element-def name="no-init" extends="operation" />
+		
+		<?DOC Produces an event structure that ignores the first few events?>
 		<element-def name="skip" extends="operation">
+			<?DOC The number of initial events to skip?>
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
 
+		<?DOC Produces an event structure that stops firing events after the first few?>
 		<element-def name="take" extends="operation">
+			<?DOC The number of events from the source to fire before quitting?>
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
 
+		<?DOC Produces an event structure that stops firing events when another event occurs?>
 		<element-def name="take-until" extends="operation">
+			<?DOC The event to cause the cessation of events firing from the result structure?>
 			<attribute name="until" type="expression" specify="required" />
 		</element-def>
 
@@ -358,10 +528,18 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="type" type="size-type" default="value" />
 		</element-def>
 
+		<?DOC Typically never needed.  This operation causes an intermediate result to be collected in the middle of a &lt;transform>ation.<br>
+			Typically operations in a transform are "stacked" internally into combined operations which are more efficient than producing result model structures after each operation.<br>
+			However, it is conceivable that collecting the results after certain heavyweight operations could produce efficiencies.<br>
+			Specifying this at the beginning or end of a transformation has no effect.?>
 		<element-def name="collect" extends="operation">
+			<?DOC Whether to collect the model structure as an actively-derived structure or a passive one.
+				Actively-derived structures keep their results in memory, updating them only when needed.  Passive ones re-evaluate their results each time they are needed.<br>
+				The utility may not exist for a passively-colected intermediary, but the option exists.?>
 			<attribute name="active" type="boolean" specify="optional" />
 		</element-def>
 
+		<?DOC Performs some action when an event occurs?>
 		<element-def name="hook" extends="model-value" inherits="with-element-model">
 			<element-model>
 				<value name="event" />
@@ -372,22 +550,40 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<!-- Just a little bit of code flow structure -->
+		<?DOC An action that performs some operation while a condition is true?>
 		<element-def name="loop" extends="model-value" inherits="with-local-model">
+			<?DOC An action that is performed as soon as this loop action is executed?>
 			<attribute name="init" type="expression" specify="optional" />
+			<?DOC An action that is performed just before each evaluation of the "while" condition?>
 			<attribute name="before-while" type="expression" specify="optional" />
+			<?DOC A boolean condition that determines if the loop should continue?>
 			<attribute name="while" type="expression" specify="required" />
-			<attribute name="before-body" type="expression" specify="optional" />
-			<attribute name="after-body" type="expression" specify="optional" />
+			<?DOC An action that executes after the "while" condition returns false?>
 			<attribute name="finally" type="expression" specify="optional" />
+			<?DOC An action that executes each time the "while" condition returns true?>
 			<child-def name="body" type="action" min="0" max="inf" />
 		</element-def>
 
 		<?DOC This structure is expressed as a value which is the Instant of the last time the timer executed
 			(or the start of the current execution if it is currently executing)?>
 		<element-def name="timer" extends="model-value" inherits="with-local-model">
+			<?DOC Controls whether the timer is currently running?>
 			<attribute name="active" type="expression" default="true" />
+			<?DOC Controls how often the timer executes?>
 			<attribute name="frequency" type="expression" />
+			<?DOC Whether the timer executes strictly on its frequency.<br>
+				For example, given a timer that executes every second and whose execution takes on average half a second,
+				a strictly-executing timer would execute every second, with a half second between one execution's end and the next one's beginning.<br>
+				A non-strict timer would execute every second and a half, with a full second between one execution's end and the next one's beginning.?>
 			<attribute name="strict-timing" type="boolean" default="false" />
+			<?DOC Determines the thread where the timer does its work.<br>
+				If false (the default), this timer will execute on a thread where the UI also does its work.
+					This typically means the user will not be able to interact with the application while this timer is executing,
+					but interactions with model structures used by the UI will be safe and efficient.<br>
+				If true, the timer will execute in the background, allowing interactions with the UI to occur simulataneously.
+					Interactions with model structures used by the UI may cause problems, especially if this timer executes frequently.<br>
+				Therefore this option is to be used EXTREMELY CAUTIOUSLY, and typically only to call external code whose interaction with
+					the UI is performed in a thread-safe way.?>
 			<attribute name="background" type="boolean" default="false" />
 			<?DOC Each time the timer executes and this value is not null, it is decremented.  When the value reaches zero, the timer will deactivate.?>
 			<attribute name="remaining-executions" type="expression" specify="optional" />
@@ -409,24 +605,30 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</elements>
 
 	<auto-inheritance>
+		<?DOC Adds the "onModelLoad" and "onBodyLoad" element model actions to be available for reference by expressions within the document?>
 		<auto-inherit inherits="base-expresso-document">
 			<target element="expresso-document" />
 		</auto-inherit>
 
+		<?DOC Allows the "init" attribute on values in a &lt;model>?>
 		<auto-inherit inherits="int-value">
 			<target element="value" role="model.value" />
 		</auto-inherit>
+		<?DOC Allows the specification of initial contents of a collection in a &lt;model> via &lt;element> elements?>
 		<auto-inherit inherits="int-list">
 			<target element="list" role="model.value" />
 		</auto-inherit>
+		<?DOC Allows the specification of initial contents of a map in a &lt;model> via &lt;entry> elements?>
 		<auto-inherit inherits="int-map">
 			<target element="map" role="model.value" />
 			<target element="multi-map" role="model.value" />
 		</auto-inherit>
 
+		<?DOC Provides the source value to &lt;if> expressions if specified in a &lt;transform>?>
 		<auto-inherit inherits="if-as-operation">
 			<target element="if" role="transform.op" />
 		</auto-inherit>
+		<?DOC Provides the source value to &lt;switch> expressions if specified in a &lt;transform>?>
 		<auto-inherit inherits="switch-as-operation">
 			<target element="switch" role="transform.op" />
 		</auto-inherit>

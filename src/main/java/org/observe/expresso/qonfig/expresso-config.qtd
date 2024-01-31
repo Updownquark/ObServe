@@ -5,21 +5,43 @@ This file defines the persisted config extension to the expresso toolkit.
 
 It builds on the Expresso-Base toolkit and allows specification of persisted config models.
 -->
+<?DOC This toolkit defines the &lt;config> extension of &lt;abst-model> and many tools for defining values and how they are persisted.<br>
+	A &lt;config> is a model that is capable of persisting its contents and re-loading them when the application is loaded.<br>
+	This makes it ideal for storing data such as:
+	<ul>
+		<li>The location of the application window and any movable dialogs</li>
+		<li>The location of sliders in split panes</li>
+		<li>Small-scale, non-shared application data</li>
+	</ul>
+	The data format is typically fairly verbose, and all the data is loaded into memory, so large-scale data should not be specified here.
+?>
 <qonfig-def name="Expresso-Config" version="0.1" xmlns:base="Expresso-Base v0.1">
 	<add-ons>
+		<?DOC Tag for &lt;model-value> types that may be specified in a &lt;config> model?>
 		<add-on name="allow-config-model" abstract="true" />
+		<?DOC Tag for &lt;model-value> elements in a &lt;config> model?>
 		<add-on name="config-model-value" requires="model-value" inherits="type-required">
+			<?DOC A path that determines how this value will be persisted in the &lt;config>'s persistence?>
 			<attribute name="config-path" type="string" specify="optional" />
+			<?DOC Determines how this model structure's values will be stored in the &lt;config>'s persistence?>
 			<attribute name="format" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A &lt;value> in a &lt;config> model?>
 		<add-on name="config-value" requires="value" inherits="config-model-value">
+			<?DOC The value for the model value if it does not exist in the &lt;config>'s persistence?>
 			<attribute name="default" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A &lt;map> or &lt;multi-map> in a &lt;config> model?>
 		<add-on name="config-map" requires="map" inherits="config-model-value">
+			<?DOC Determines how this map's keys will be stored in the &lt;config>'s persistence?>
 			<attribute name="key-format" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A field in an &lt;entity-config-format> representing a field of the entity to persist.<br>
+			This allows each field in the entity to be customized for its format and location in persistence.?>
 		<add-on name="entity-config-field" requires="config-format">
+			<?DOC The name of the field in the entity?>
 			<attribute name="field-name" type="string" />
+			<?DOC The name of the property to store the field under in the &lt;config>'s persistence?>
 			<attribute name="config-name" type="string" specify="optional" />
 		</add-on>
 	</add-ons>
@@ -28,84 +50,151 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<!-- Config models.  These function similarly to internal models, except that they represent persistent values from
 			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
 			 for the value has not been initialized. -->
+		<?DOC An extension of &lt;abst-model> capable of persisting its contents and re-loading them when the application is loaded.<br>
+			This makes it ideal for storing data such as:
+			<ul>
+				<li>The location of the application window and any movable dialogs</li>
+				<li>The location of sliders in split panes</li>
+				<li>Small-scale, non-shared application data</li>
+			</ul>
+			The data format is typically fairly verbose, and all the data is loaded into memory, so large-scale data should not be specified here.?>
 		<element-def name="config" extends="abst-model">
+			<?DOC The config name for the model.<br>
+				This determines the file name in which the data is stored.  E.g. a "config-name" of "application" may result in a persistence file called "application.xml".<br>
+				This property also influences where the persistence file will reside.<br>
+				If the "config-dir" property is not specified, a system property named "application.config" (in the case of the "application" example above)
+					may be specified when initializing the application with the path to a directory in which to load and store the model data.<br>
+				If neither "config-dir" nor the system property is not specified, the data will be written to a folder with the same name as this attribute.?>
 			<attribute name="config-name" type="string" />
+			<?DOC The location of the directory in which to store this model's data?>
 			<attribute name="config-dir" type="expression" specify="optional" />
+			<?DOC Any "config-name" values that this model may have had in the past.  This can be used to migrate old data if the application is renamed.?>
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
+			<?DOC Values for the model?>
 			<child-mod child="abst-model.value" requires="allow-config-model" inherits="config-model-value" />
+			<?DOC By default, &lt;config> maintains backup copies of all the data in the model, sampled at varying intervals.<br>
+				In the event that the primary data file cannot be loaded, the user will be prompted to select a backup to load.<br>
+				The corrupt file will be replaced with the backup and the application will be restarted.?>
 			<attribute name="backup" type="boolean" default="true" />
 		</element-def>
+		<?DOC An old "config-name" that a &lt;config> may have had in the past?>
 		<element-def name="old-config-name">
+			<?DOC The old "config-name"?>
 			<value type="string" />
 		</element-def>
 
-		<!-- Elements to support formats -->		
+		<!-- Elements to support formats -->	
+		<?DOC A format capable of representing certain types of values as text and of parsing text to create new values?>	
 		<element-def name="format" extends="model-value" abstract="true">
+			<?DOC A validation that prevents certain values from being assigned to a value?>
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>
+		<?DOC Validation on a &lt;format> that prevents certain values from being assigned to a value?>
 		<element-def name="validate" abstract="true" />
+		<?DOC Specifies that the format should be the "standard" (that is, implementation-specific) for a particular type.<br>
+			This format will fail to load if no such standard format is defined by the implementation for the given type.?>
 		<element-def name="standard-text-format" extends="format" inherits="type-required" />
+		<?DOC A custom text format?>
 		<element-def name="custom-text-format" extends="format" inherits="type-required,with-element-model">
 			<element-model>
+				<?DOC The variable containing the text specified by the user?>
 				<value name-attribute="text-name" />
+				<?DOC The variable containing the value to format?>
 				<value name-attribute="format-value-name" />
 			</element-model>
 			<?DOC <html>The name of the variable to place the text to parse in.<br>
 				If not specified, the format will only be able to print, but not parse.?>
 			<attribute name="text-name" type="identifier" specify="optional" />
+			<?DOC The name of the variable to place the value to format in?>
 			<attribute name="format-value-name" type="identifier" />
-			<?DOC <html>The expression to parse the text into a value.<br>
+			<?DOC <html>The expression to parse the text into a value.  Generally this will be an invocation to external code.<br>
 				If not specified, the format will only be able to print, but not parse.?>
 			<attribute name="parse" type="expression" specify="optional" />
+			<?DOC The expression to print the value to format?>
 			<attribute name="print" type="expression" />
 		</element-def>
+		<?DOC Text format for a file path?>
 		<element-def name="file-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
-			<!-- Default is native -->
+			<?DOC A reference to a &lt;file-source> to use to get the file by its path.  Default is native.?>
 			<attribute name="file-source" type="expression" specify="optional" />
+			<?DOC The path to the working directory to use for relative paths.  Default is the directory the application is running in.?>
 			<attribute name="working-dir" type="expression" specify="optional" />
+			<?DOC If true, empty text will be parsed as a null file?>
 			<attribute name="allow-empty" type="boolean" default="false" />
 		</element-def>
+		<?DOC A file source capable of providing path-specified file-like resources?>
 		<element-def name="file-source" extends="model-value">
 			<attr-mod name="typed.type" specify="forbidden" />
 		</element-def>
+		<?DOC Simple file source accessing the local system's directory structure?>
 		<element-def name="native-file-source" extends="file-source" />
+		<?DOC A file source accessing a remote system's directory structure via Secure File Transfer Protocol?>
 		<element-def name="sftp-file-source" extends="file-source">
+			<?DOC The host to connect to?>
 			<attribute name="host" type="expression" />
+			<?DOC The user name of the login to use to connect?>
 			<attribute name="user" type="expression" />
+			<?DOC The password of the login to use to connect?>
 			<attribute name="password" type="expression" />
+			<?DOC Evaluates to true while the file source is attempting to make a connection to the remote system?>
 			<attribute name="connecting" type="expression" />
+			<?DOC Evaluates to true when the file source is connected to the remote system and able to access its file resources?>
 			<attribute name="connected" type="expression" />
+			<?DOC The timeout to use when attempting to connect to the remote system?>
 			<attribute name="timeout" type="expression" default="100ms" />
+			<?DOC The number of times to re-attempt the connection upon initial failure?>
 			<attribute name="retry" type="expression" default="1" />
 		</element-def>
+		<?DOC A file source capable of accessing certain types of archive file structures as if they were simple directories.<br>
+			Write access may not be available.?>
 		<element-def name="archive-enabled-file-source" extends="file-source">
+			<?DOC The maximum number of nested archives to read.?>
 			<attribute name="max-archive-depth" type="expression" default="10" />
 			<!-- Default is native -->
+			<?DOC The file source for this file source to wrap.<br>
+				This file source will provide the same roots and files as the wrapped file source,
+				but will represent archive files from the wrapped file system as directories.?>
 			<attribute name="wrapped" type="expression" specify="optional" />
+			<?DOC An archive method to enable?>
 			<child-def name="archive-method" type="archive-method" min="0" max="inf" />
 		</element-def>
+		<?DOC An archive method to enable on an &lt;archive-enabled-file-source>?>
 		<element-def name="archive-method" extends="model-value" abstract="true">
 			<attr-mod name="model-value.type" specify="forbidden" default="" />
 		</element-def>
+		<?DOC Enables an &lt;archive-enabled-file-source> to treat zip files as directories?>
 		<element-def name="zip-archival" extends="archive-method" />
+		<?DOC Enables an &lt;archive-enabled-file-source> to treat tar files as directories?>
 		<element-def name="tar-archival" extends="archive-method" />
+		<?DOC Enables an &lt;archive-enabled-file-source> to treat g-zipped files as directories containing a single file?>
 		<element-def name="gz-archival" extends="archive-method" />
+		<?DOC A customizable format for integers?>
 		<element-def name="int-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
+			<?DOC The grouping separator to place between every 3 digits in the integer?>
 			<attribute name="grouping-separator" type="string" specify="optional" />
 		</element-def>
+		<?DOC A customizable format for long integers?>
 		<element-def name="long-format" extends="int-format" />
+		<?DOC A customizable format for double-precision floating-point values?>
 		<element-def name="double-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
+			<?DOC The number of significant digits to print?>
 			<attribute name="sig-digs" type="expression" />
+			<?DOC The base unit to print?>
 			<attribute name="unit" type="identifier" specify="optional" />
+			<?DOC Whether the unit must be included in text to be parsed?>
 			<attribute name="unit-required" type="boolean" default="true" />
+			<?DOC Whether to print and parse standard metric prefixes?>
 			<attribute name="metric-prefixes" type="boolean" default="false" />
+			<?DOC Whether to print and parse standard metric prefixes, interpreted as powers of 1024 instead of 1000?>
 			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
+			<?DOC A custom prefix to parse?>
 			<child-def name="prefix" type="prefix" min="0" max="inf" />
 			<!-- TODO -->
 		</element-def>
+		<?DOC A custom prefix for a &lt;double-format> with a unit?>
 		<element-def name="prefix">
 			<?DOC The name of the prefix, how it should be specified in text?>
 			<attribute name="name" type="string" />
@@ -114,15 +203,32 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<?DOC The multiplier of this prefix, how much it multiplies the value by.  May not be specified with an exp.?>
 			<attribute name="multiplier" type="float" specify="optional" />
 		</element-def>
+		<?DOC A customizable format for an instant in time?>
 		<element-def name="instant-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
+			<?DOC The format to use to represent the day of the instant:
+				<ul>
+					<li>Use "Y" or "YYYY" to print the full year, or "YY" to print the last two digits of the year.</li>
+					<li>Use "M" to print the full name of the month, "MMM" to print the first three letter's of the month's name, or "MM" to print the number of the month.</li>
+					<li>Use "d" to print the day of the month, or "dd" to pad with a zero for single digits.</li>
+					<li>Use "E" for the name of the day of the week, or "EEE" for the first three letters.</li>
+				</ul>
+			?>
 			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
+			<?DOC The time zone for formatting and parsing?>
 			<attribute name="time-zone" type="string" specify="optional" />
+			<?DOC The maximum resolution to print: Year, Month, Day, Hour, Minute, Second, Millisecond, Microsecond, Nanosecond?>
 			<attribute name="max-resolution" type="string" default="Second" />
+			<?DOC Whether to print the time in 24-hour time as opposed to 12-hour a.m./p.m. time?>
 			<attribute name="format-24h" type="boolean" default="false" />
+			<?DOC Whether to parse relative instant text as the "Closest" matching time to the "relative-to" value, the closest matching time in its "Past" it, or the closest matching time in its "Future"?>
 			<attribute name="relative-evaluation" type="string" default="Closest" />
+			<?DOC A time to parse times relative to.<br>
+				E.g. if the text "Wednesday 2pm" is entered, this instant is a reference point to provide which week the Wednesay refers to.<br>
+				The default is the current time.?> 
 			<attribute name="relative-to" type="expression" specify="optional" />
 		</element-def>
+		<?DOC Format to parse a regular expression?>
 		<element-def name="regex-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
 		</element-def>
@@ -130,41 +236,57 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="regex-format-string" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
 		</element-def>
-		
+
+		<?DOC A format validator that ensures the provided text matches a regular expression?>
 		<element-def name="regex-validation" extends="validate">
+			<?DOC The regular expression pattern to apply to the text?>
 			<attribute name="pattern" type="expression" />
 		</element-def>
+		<?DOC A simple validator that applies a custom condition to the parsed value?>
 		<element-def name="filter-validation" extends="validate" inherits="with-element-model">
 			<element-model>
+				<?DOC The variable containing the parsed value being validated?>
 				<value name-attribute="filter-value-name" />
 			</element-model>
+			<?DOC The name of the variable that will contain the parsed value being validated?>
 			<attribute name="filter-value-name" type="identifier" default="filterValue" />
+			<?DOC A test against the current parsed value to determine whether it passes the filter?>
 			<attribute name="test" type="expression" />
 		</element-def>
-		
-		<element-def name="config-format" extends="model-value" inherits="typed" abstract="true">
-		</element-def>
+
+		<?DOC A format to determine how certain types of values are persisted in a &lt;config> model?>
+		<element-def name="config-format" extends="model-value" inherits="typed" abstract="true" />
+		<?DOC Specifies that a value should be saved in a &lt;config> simply as text?>
 		<element-def name="text-config-format" extends="config-format">
+			<?DOC The text format to use to format the value?>
 			<attribute name="text-format" type="expression" specify="optional" />
+			<?DOC The value to return from "parsing" if it is not present in persistence?>
 			<attribute name="default" type="expression" specify="optional" />
+			<?DOC The text to parse if it is not present in persistence?>
 			<attribute name="default-text" type="string" specify="optional" />
 		</element-def>
+		<?DOC Config format for a value with named fields?>
 		<element-def name="entity-config-format" extends="config-format" inherits="type-required">
+			<?DOC A reference to a format set containing default formats to use for various types (implementation-specific)?>
 			<attribute name="format-set" type="expression" specify="optional" />
+			<?DOC Custom formats for fields of the entity?>
 			<child-def name="field" type="config-format" inherits="entity-config-field" max="inf" />
 		</element-def>
 	</elements>
 
 	<auto-inheritance>
+		<?DOC Allows &lt;value>s, &lt;list>s and &lt;map>s to be specified in &lt;config> models?>
 		<auto-inherit inherits="allow-config-model">
 			<target element="value" />
 			<target element="list" />
 			<target element="map" />
 		</auto-inherit>
 
+		<?DOC Allows specification of a default value for &lt;value>s for which the persistence is missing in a &lt;config>?>
 		<auto-inherit inherits="config-value">
 			<target element="value" role="config.value" />
 		</auto-inherit>
+		<?DOC Allows specification of the key format for &lt;map>s in &lt;config> models?>
 		<auto-inherit inherits="config-map">
 			<target element="map" role="config.value" />
 		</auto-inherit>

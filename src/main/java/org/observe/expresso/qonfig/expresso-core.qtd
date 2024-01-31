@@ -71,27 +71,32 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 
 		<?DOC Elements that inherit this add-on may declare model values that must be provided as input in some way?>
 		<add-on name="with-required-models" abstract="true">
+			<?DOC Models required, but not provided, by this element?>
 			<child-def name="required" type="ext-model" min="0" />
 		</add-on>
 
+		<?DOC A document with a head section containing expresso models?>
 		<add-on name="expresso-document" abstract="true">
 			<?DOC The head section of the document, containing application models, etc.?>
 			<child-def name="head" type="head" min="0" />
 		</add-on>
 
 		<!-- To support external content -->
+		<?DOC The &lt;head> section of &lt;expresso-external-content> specified in a separate file?>
 		<add-on name="external-head-section" requires="head">
 			<child-mod child="head.models" inherits="external-content-model" />
 		</add-on>
+		<?DOC Tagging add-on for the &lt;models> element in a &lt;head> section for &lt;expresso-external-content> specified in a separate file?>
 		<add-on name="external-content-model" requires="models" />
+		<?DOC Tags &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file ?>
 		<add-on name="attr-backed-ext-model" requires="ext-model">
 			<child-mod child="ext-model.value" inherits="attr-backed-model-value" />
 			<child-mod child="ext-model.sub-model" inherits="attr-backed-ext-model" />
 		</add-on>
+		<?DOC &lt;model-value>s specified in &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file?>
 		<add-on name="attr-backed-model-value" requires="model-value">
 			<attribute name="source-attr" type="qonfig-member" />
 		</add-on>
-		<add-on name="expresso-external-fulfillment" abstract="true" />
 	</add-ons>
 
 	<elements>
@@ -107,12 +112,14 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		</element-def>
 		
 		<!-- Models, values and transformations -->
+		<?DOC A container for model structures of some kind?>
 		<element-def name="abst-model" abstract="true">
-			<?DOC A value declared in the model?>
+			<?DOC A value or other model structure declared in the model?>
 			<child-def name="value" type="model-value" inherits="model-element" min="0" max="inf" />
 		</element-def>
+		<?DOC A value or other model structure declared in an &lt;abst-model>?>
 		<element-def name="model-value" abstract="true" inherits="typed">
-			<?DOC The value for the variable?>
+			<?DOC The primary value expression for the value or model structure?>
 			<value type="expression" specify="optional" />
 		</element-def>
 
@@ -121,16 +128,17 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="model" type="abst-model" min="0" max="inf" inherits="named" />
 		</element-def>
 
-		<!-- External models.  These serve only as markers that are later checked against the external models that are provided
+		<?DOC External models.  These serve only as markers that are later checked against the external models that are provided
 			 to the app.  Since they are only expectations of values that will be supplied externally,
-			 no values can be specified in the elements. -->
+			 no content can be specified in the value elements.?>
 		<element-def name="ext-model" extends="abst-model">
+			<?DOC Only model values tagged with &lt;allow-ext-model> can be included in an &lt;ext-model>?>
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="ext-model-value" />
 			<?DOC A sub-model defined under the parent model?>
 			<child-def name="sub-model" type="ext-model" min="0" max="inf" inherits="named" />
 		</element-def>
 
-		<!-- Internal models.  These function as variables that are defined and sometimes instantiated inside the app. -->
+		<?DOC Internal models.  The values in an internal model are provided and instantiated to the application by the model.?>
 		<element-def name="model" extends="abst-model">
 			<?DOC A sub-model defined under the parent model?>
 			<child-def name="sub-model" type="model" min="0" max="inf" inherits="named" />
@@ -142,19 +150,22 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="element-model-value" />
 		</element-def>
 
+		<?DOC The head section for an &lt;expresso-document> containing models and other information to be used by the document's content?>
 		<element-def name="head">
 			<child-def name="imports" type="imports" min="0" />
 			<?DOC The model of the document, defining values and other structures that can be used to control the behavior of elements in the document?>
 			<child-def name="models" type="models" />
 		</element-def>
 
+		<?DOC Expresso content specified in a separate file from the main application?>
 		<element-def name="expresso-external-content" extends="external-content" inherits="expresso-document">
 			<child-mod child="expresso-document.head" type="head" inherits="external-head-section" />
-			<child-mod child="external-content.fulfillment" inherits="expresso-external-fulfillment" />
 		</element-def>
 	</elements>
 
 	<auto-inheritance>
+		<?DOC Marks &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file to require
+			specification of the attribute on the promise that will populate the model value?>
 		<auto-inherit inherits="attr-backed-ext-model">
 			<target element="ext-model" role="external-content-model.model" />
 		</auto-inherit>

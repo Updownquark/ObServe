@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?DOC &lt;widget>s and UI tools that are a little more "out there" than the standard Quick-Base toolkits.<br>
+	Many Quick implementations may lack support for some or all of these, but they can provide great power, style, and user friendliness to a UI.?>
 <qonfig-def name="Quick-X" version="0.1" xmlns:base="Quick-Base v0.1">
 	<add-ons>
+		<?DOC A &lt;widget> whose background can be controlled with shading?>
 		<add-on name="shaded" inherits="styled">
 			<styles>
+				<?DOC The type of shading to use for the &lt;widget>?>
 				<style-attribute name="shading" type="org.observe.quick.ext.QuickShading" trickle-down="false" />
+				<?DOC The direction the light is coming from, in degrees clockwise from straight up?>
 				<style-attribute name="light-source" type="float" trickle-down="true" />
+				<?DOC The color of the light source?>
 				<style-attribute name="light-color" type="java.awt.Color" trickle-down="false" />
+				<?DOC The color to use for shadows?>
 				<style-attribute name="shadow-color" type="java.awt.Color" trickle-down="false" />
+				<?DOC The corner radius to use to render the corners of the &lt;widget>?>
 				<style-attribute name="corner-radius" type="org.observe.quick.base.QuickSize" trickle-down="false" />
+				<?DOC The maximum shading amount--the maximum proportion of the color that can be a result of shading.  A number between 0 and 1.?>
 				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
 			</styles>
 		</add-on>
@@ -16,44 +25,83 @@
 
 	<elements>
 		<!-- Shading -->
+		<?DOC A shader that allows custom specification of the amount of shading to use for each pixel?>
 		<element-def name="custom-shading" extends="model-value" inherits="with-element-model,with-local-model">
 			<element-model>
+				<?DOC The width of the widget?>
 				<value name="width" type="int" />
+				<?DOC The height of the widget?>
 				<value name="height" type="int" />
+				<?DOC The x-coordinate of the pixel being rendered within the current tile, in pixels to the right of the left edge of the tile?>
 				<value name="x" type="int" />
+				<?DOC The y-coordinate of the pixel being rendered within the current tile, in pixels below of the top edge of the tile?>
 				<value name="y" type="int" />
+				<?DOC The x-coordinate of the pixel being rendered within the current tile, expressed as a value between 0 and 1
+					where 0 is the left edge of the current tile and 1 is the right edge?>
 				<value name="px" type="float" />
+				<?DOC The y-coordinate of the pixel being rendered within the current tile, expressed as a value between 0 and 1
+					where 0 is the top edge of the current tile and 1 is the bottom edge?>
 				<value name="py" type="float" />
 			</element-model>
+			<?DOC The width of tiles to split the widget into, in pixels.  If unspecified, the tile width will be the full width of the &lt;widget>?>
 			<attribute name="unit-width" type="expression" specify="optional" />
+			<?DOC The height of tiles to split the widget into, in pixels.  If unspecified, the tile height will be the full height of the &lt;widget>?>
 			<attribute name="unit-height" type="expression" specify="optional" />
+			<?DOC If true, the entire width of the widget will be shaded by a single tile stretched across it.  If false, the tile will be repeated horizontally across the width of the widget.?>
 			<attribute name="stretch-x" type="boolean" default="true" />
+			<?DOC If true, the entire height of the widget will be shaded by a single tile stretched across it.  If false, the tile will be repeated vertically across the height of the widget.?>
 			<attribute name="stretch-y" type="boolean" default="true" />
+			<?DOC The shading for the current pixel.<br>
+				This should be a number between -1 and 1 where -1 represents full shadow, 1 represents fully lit, and 0 represents no shading.?>
 			<attribute name="lit" type="expression" />
+			<?DOC The opacity of the shading on the current pixel, a number between 0 (fully transparent, no shading influence) and 1 (max shading influence on color)?>
 			<attribute name="opacity" type="expression" specify="optional" />
+			<?DOC An optional event which will cause the shading to re-render?>
 			<attribute name="refresh" type="expression" specify="optional" />
 		</element-def>
+		<?DOC A shader that makes the &lt;widget> appear raised above the screen, like a button?>
 		<element-def name="raised-shading" extends="model-value">
+			<?DOC Whether to draw the corners as rounded or square?>
 			<attribute name="round" type="boolean" default="true" />
+			<?DOC Whether the left and right edges of the &lt;widget> should be shaded?>
 			<attribute name="horizontal" type="boolean" default="true" />
+			<?DOC Whether the top and bottom edges of the &lt;widget> should be shaded?>
 			<attribute name="vertical" type="boolean" default="true" />
+			<?DOC The opacity for the shading?>
 			<attribute name="opacity" type="expression" specify="optional" />
 		</element-def>
 
+		<?DOC A container with a title bar above it.  Clicking the title bar will toggle display of the widget.<br>
+			This allows many widgets that require a lot of space to be present in a container that is only big enough for one of them (and a little more)
+			by only having one visible at a time.?>
 		<element-def name="collapse-pane" extends="container">
 			<element-model>
+				<?DOC Whether the collapse pane is currently collapsed, meaning the content is not visible?>
 				<value name="collapsed" type="boolean" priority="50" />
 			</element-model>
+			<?DOC A expression controlling whether the collapse pane is collapsed, and that is assigned whenever the user changes the state?>
 			<attribute name="collapsed" type="expression" specify="optional" />
+			<?DOC Whether to animate the collapse/expand action as opposed to it being instantaneous?>
 			<attribute name="animated" type="boolean" default="false" />
+			<?DOC The title bar above the content for customization?>
 			<child-def name="header" type="widget" inherits="iconized" />
+			<?DOC The content to display when the collapse pane is expanded?>
 			<child-mod child="content" min="1" max="1" />
 		</element-def>
 
+		<?DOC A table whose first column displays a hierarchy of values.<br>
+			When a node in the tree is expanded, rows are shown in the table for each child node that becomes visible.<br>
+			This is an efficient way to display lots of information about a hierarchical structure whose nodes have similar properties.?>
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
 
+		<?DOC A button that, when pressed, displays a popup menu containing a list of actions that may be performed.<br>
+			This is very similar in appearance and behavior to a &lt;combo> box, but does not imply that a value is being edited.<br>
+			The actions are populated by the "values" attribute, and the selected value is available as the active value
+			(variable name controllable by the "active-value-name" attribute) to the button's action?>
 		<element-def name="combo-button" extends="button" inherits="rendering,multi-value-renderable">
+			<?DOC The renderer to control the appearance of each value representing an action?>
 			<label role="default-renderer" value="{active-value-name}" />
+			<?DOC A list of values representing the actions that the user may perform?>
 			<attribute name="values" type="expression" />
 		</element-def>
 
@@ -71,24 +119,31 @@
 			<attribute name="max" type="expression" />
 			<?DOC An optional renderer to color and otherwise style the slider's handles?>
 			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
-			<?DOC Optional renderers to color and style the slider's bar?>
+			<?DOC Optional renderers to color and style the slider's bar.<br>
+				Each renderer may specify a "max-value", so multiple renderers with different numerical domains can affect the slider's appearance throughout its range.?>
 			<child-def name="bg-renderer" type="slider-bg-renderer" min="0" max="inf" />
 		</element-def>
 		<?DOC Specifies the color, thickness, and tooltip for the handles in a &lt;multi-slider>?>
 		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
 			<styles>
+				<?DOC The thickness of the outline around the slider handle?>
 				<style-attribute name="line-thickness" type="int" trickle-down="false" />
+				<?DOC The color of the outline around the slider handle?>
 				<style-attribute name="line-color" type="java.awt.Color" trickle-down="false" />
 			</styles>
 			<element-model>
+				<?DOC The value of the slider handle being rendered?>
 				<value name="handleValue" type="double" priority="10" />
+				<?DOC The index of the slider handle being rendered?>
 				<value name="handleIndex" type="int" priority="10" />
 			</element-model>
+			<?DOC The tooltip to display for the slider handle being rendered?>
 			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
 		<?DOC Specifies the color and thickness for the slider line in a &lt;multi-slider>?>
 		<element-def name="slider-bg-renderer" inherits="with-background">
 			<styles>
+				<?DOC The thickness of the slider line?>
 				<style-attribute name="line-thickness" type="int" trickle-down="false" />
 			</styles>
 			<?DOC The maximum value of this renderer's domain?>
@@ -111,6 +166,7 @@
 	</elements>
 
 	<auto-inheritance>
+		<?DOC Allows shading on the &lt;box> type?>
 		<auto-inherit inherits="shaded">
 			<target element="box" />
 		</auto-inherit>

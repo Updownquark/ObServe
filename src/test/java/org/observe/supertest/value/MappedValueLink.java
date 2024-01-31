@@ -110,8 +110,7 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 		if (isMapVariable)
 			sourceValue = sourceValue.refresh(theMap.noInitChanges());
 		Consumer<XformOptions> options = opts -> {
-			opts.cache(theOptions.isCached()).reEvalOnUpdate(theOptions.isReEvalOnUpdate()).fireIfUnchanged(theOptions.isFireIfUnchanged())//
-			.manyToOne(isMapVariable || theMap.get().isManyToOne()).oneToMany(isMapVariable || theMap.get().isOneToMany());
+			opts.cache(theOptions.isCached()).reEvalOnUpdate(theOptions.isReEvalOnUpdate()).fireIfUnchanged(theOptions.isFireIfUnchanged());
 		};
 		TypeToken<T> type = (TypeToken<T>) getType().getType();
 		if (isReversible)

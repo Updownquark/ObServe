@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?DOC The core of the Quick architecture.  Contains types for defining an application with models and a user interface. ?>
+<?DOC The core of the Quick architecture.  Contains types for defining an application with models and a user interface.<br>
+	The core toolkit contains no widgets itself, but serves as a framework for building toolkits that do.?>
 <qonfig-def name="Quick-Core" version="0.1" xmlns:expresso="Expresso-Base v0.1" xmlns:style="Quick-Style v0.1">
 	<value-types>
+		<?DOC What should happen when the user closes a window?>
 		<one-of name="window-close-action">
 			<?DOC The window will remain visible when the user attempts to close it?>
 			<literal>do-nothing</literal>
@@ -14,6 +16,7 @@
 			<literal>exit</literal>
 		</one-of>
 
+		<?DOC Mouse buttons recognized by Quick?>
 		<one-of name="mouse-button">
 			<?DOC The left mouse button?>
 			<literal>left</literal>
@@ -23,16 +26,19 @@
 			<literal>middle</literal>
 		</one-of>
 
+		<?DOC A reference to a Qonfig element or add-on?>
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z0-9_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z0-9_\\-]+)</pattern>
 	</value-types>
 
 	<add-ons>
+		<?DOC A window in Quick?>
 		<add-on name="abstract-window" abstract="true">
+			<?DOC The title for the window?>
 			<attribute name="title" type="expression" specify="optional" />
 			<?DOC Controls when the window is displayed?>
 			<attribute name="visible" type="expression" specify="optional" />
-			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>
 		</add-on>
+		<?DOC A window in Quick with customizable position, size, and other attributes?>
 		<add-on name="window" inherits="abstract-window">
 			<?DOC The x-coordinate of the position of the top-left corner of the window in the graphics environment?>
 			<attribute name="x" type="expression" specify="optional" />
@@ -44,10 +50,11 @@
 			<attribute name="height" type="expression" specify="optional" />
 			<?DOC The icon for the window?>
 			<attribute name="window-icon" type="expression" specify="optional" />
-			<?DOC The title for the window?>
+			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
+		<?DOC Anything with a background that can be styled?>
 		<add-on name="with-background" inherits="styled" abstract="true">
 			<element-model>
 				<?DOC Whether the mouse is currently hovered over the widget?>
@@ -66,6 +73,7 @@
 				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
 			</styles>
 		</add-on>
+		<?DOC Anything that displays text to the user that can be styled?>
 		<add-on name="with-text" inherits="styled" abstract="true">
 			<styles>
 				<?DOC The color of the text?>
@@ -86,16 +94,23 @@
 				<style-attribute name="sub-script" type="boolean" trickle-down="false" />
 			</styles>
 		</add-on>
+		<?DOC Anything that may display an icon.  The icon may be specified directly via an attribute, or may be determined using styles.?>
 		<add-on name="iconized" inherits="styled" abstract="true">
 			<styles>
+				<?DOC The style attribute for the icon to display?>
 				<style-attribute name="icon" type="javax.swing.Icon" trickle-down="false" />
 			</styles>
-			<!-- The icon, to override the style, for ease of use -->
+			<?DOC The icon, to override the style, for ease of use?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</add-on>
 
+		<?DOC A renderer for a widget.  This is itself a widget, but it is used differently.<br>
+			Renderers are typically not first-class children in their parent, but are only used to paint, or render, themselves.<br>
+			Typically, they do not receive user interaction such as clicks and cannot receive focus.?>
 		<add-on name="renderer" requires="widget" abstract="true" />
+		<?DOC A widget with a renderer?>
 		<add-on name="rendering" abstract="true">
+			<?DOC Optionally rendering widgets may specify a renderer to be used by default if one is not specified on the element?>
 			<element-meta name="default-renderer" type="widget" inherits="renderer" min="0" />
 			<?DOC The widget used to render each value for this rendering widget?>
 			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
@@ -111,6 +126,7 @@
 			<child-def name="body" type="widget" min="1" />
 		</element-def>
 
+		<?DOC A widget in Quick.  This is an entity that has authority over the appearance of the screen and the mouse in its space.?>
 		<element-def name="widget" abstract="true" inherits="with-background,with-text">
 			<?DOC The name of the widget.  Typically only used for debugging?>
 			<attribute name="name" type="expression" specify="optional" />
@@ -126,6 +142,7 @@
 			<child-def name="dialog" type="dialog" min="0" max="inf" />
 		</element-def>
 
+		<?DOC Performs an action when some kind of event occurs on a &lt;widget>?>
 		<element-def name="event-listener" inherits="with-element-model,with-local-model" abstract="true">
 			<element-model>
 				<?DOC Whether the Alt button on the keyboard is being held down during the event?>
@@ -140,10 +157,12 @@
 			<?DOC The action to perform when the event occurs?>
 			<value type="expression" specify="required" />
 		</element-def>
+		<?DOC A test that an event must pass before an &lt;event-listener>'s action is invoked on it?>
 		<element-def name="event-filter">
 			<?DOC A boolean expression that must be true for the listener to be invoked?>
 			<value type="expression" specify="required" />
 		</element-def>
+		<?DOC A listener for mouse events over a &lt;widget>?>
 		<element-def name="mouse-listener" extends="event-listener" abstract="true">
 			<element-model>
 				<?DOC The x-coordinate of the mouse relative in the widget?>
@@ -152,6 +171,7 @@
 				<value name="y" type="int" />
 			</element-model>
 		</element-def>
+		<?DOC A listener for changes to the pressed state of mouse buttons that occur over a &lt;widget>?>
 		<element-def name="mouse-button-listener" extends="mouse-listener" abstract="true">
 			<element-model>
 				<?DOC The mouse button that the event is for?>
@@ -160,7 +180,7 @@
 			<?DOC The button that this listener will listen to.  If not specified, the listener will trigger for any button.?>
 			<attribute name="button" type="mouse-button" specify="optional" />
 		</element-def>
-		<?DOC Listens to mouse clicks, that is, the user pressing an releasing a mouse button in approximately the same location?>
+		<?DOC Listens to mouse clicks, that is, the user pressing and releasing a mouse button in approximately the same location over a &lt;widget>?>
 		<element-def name="on-click" extends="mouse-button-listener">
 			<element-model>
 				<?DOC The number of successive clicks that this event represents?>
@@ -169,24 +189,26 @@
 			<?DOC The number of consecutive clicks necessary to trigger this listener.  If not specified, the listener will trigger for any number of clicks.?>
 			<attribute name="click-count" type="expression" specify="optional" />
 		</element-def>
-		<?DOC Listens to mouse button presses?>
+		<?DOC Listens to mouse button presses over a &lt;widget>?>
 		<element-def name="on-mouse-press" extends="mouse-button-listener" />
-		<?DOC Listens to mouse button releases?>
+		<?DOC Listens to mouse button releases over a &lt;widget>?>
 		<element-def name="on-mouse-release" extends="mouse-button-listener" />
 		<?DOC Listens to the mouse's location over a widget. This listener may not be invoked during drag events.?>
 		<element-def name="on-mouse-move" extends="mouse-listener" />
-		<?DOC Notified when the mouse enters the widget from outside?>
+		<?DOC Notified when the mouse enters the widget from outside or from one of its children?>
 		<element-def name="on-mouse-enter" extends="mouse-listener" />
 		<?DOC Notified when the mouse leaves a widget?>
 		<element-def name="on-mouse-exit" extends="mouse-listener" />
-		<?DOC Listens to scroll events?>
+		<?DOC Listens to scroll events over a &lt;widget>?>
 		<element-def name="on-scroll" extends="mouse-listener">
 			<element-model>
 				<?DOC How much and in what direction the scroll event scrolled?> 
 				<value name="scrollAmount" type="int" />
 			</element-model>
 		</element-def>
+		<?DOC Listens to user interactions with the keyboard on the &lt;widget> that has focus?>
 		<element-def name="key-listener" extends="event-listener" abstract="true" />
+		<?DOC Listens to key presses state changes on the &lt;widget> that has focus?>
 		<element-def name="key-code-listener" extends="key-listener" abstract="true">
 			<element-model>
 				<?DOC The keyboard key that was pressed or release?>
@@ -195,11 +217,11 @@
 			<?DOC The key code that this listener will be notified for.  If not specified, this listener will be notified for any key.?>
 			<attribute name="key" type="identifier" specify="optional" />
 		</element-def>
-		<?DOC Listens to keyboard key presses?>
+		<?DOC Listens to keyboard key presses on the &lt;widget> that has focus?>
 		<element-def name="on-key-press" extends="key-code-listener" />
-		<?DOC Listens to keyboard key releases?>
+		<?DOC Listens to keyboard key releases on the &lt;widget> that has focus?>
 		<element-def name="on-key-release" extends="key-code-listener" />
-		<?DOC Listens to "effective" keyboard events--when a character is typed?>
+		<?DOC Listens to "effective" keyboard events--when a character is typed on the &lt;widget> that has focus?>
 		<element-def name="on-type" extends="key-listener">
 			<element-model>
 				<?DOC The character that was typed?>
@@ -209,11 +231,13 @@
 			<attribute name="char" type="string" specify="optional" />
 		</element-def>
 
+		<?DOC A &lt;widget> that may contain other &lt;widget>s to be displayed on top of itself?>
 		<element-def name="container" extends="widget" abstract="true">
 			<?DOC A widget displayed inside the container?>
 			<child-def name="content" type="widget" min="0" max="inf" />
 		</element-def>
 
+		<?DOC A border to be drawn around the outside of a &lt;widget>?>
 		<element-def name="border" abstract="true" inherits="styled">
 			<styles>
 				<?DOC The color of the border?>
@@ -222,23 +246,26 @@
 				<style-attribute name="thickness" type="int" />
 			</styles>
 		</element-def>
-		<?DOC A simple line border?>
+		<?DOC A simple line border around a &lt;widget>?>
 		<element-def name="line-border" extends="border" />
-		<?DOC A line border with text in it?>
+		<?DOC A line border with text in it around a &lt;widget>?>
 		<element-def name="titled-border" extends="line-border" inherits="with-text">
 			<?DOC The title to display for the border?>
 			<attribute name="title" type="expression" specify="required" />
 		</element-def>
 
+		<?DOC A separate window that pops up over the main window?>
 		<element-def name="dialog" abstract="true" inherits="abstract-window,with-local-model">
 			<attr-mod name="abstract-window.visible" specify="required" />
 			<attr-mod name="abstract-window.title" specify="required" />
 		</element-def>
+		<?DOC A separate window that pops up over the main window containing custom &lt;widget> content?>
 		<element-def name="content-dialog" extends="dialog" abstract="true">
 			<child-def name="content" type="widget" />
 		</element-def>
 
 		<!-- Now a basic outline of abstract Quick widgets -->
+		<?DOC A widget whose primary purpose is to render a representation of and perhaps allow modification of a single value?>
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<element-model>
 				<?DOC The current value being managed by the widget?>
@@ -251,6 +278,7 @@
 			<?DOC A value to disable this widget.  If the value is non-null, the widget will be disabled and the value will be displayed to the user.?>
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
+		<?DOC A &lt;value-widget> that renders its value as text?>
 		<element-def name="text-widget" extends="value-widget" abstract="true">
 			<?DOC The format to use to display the widget's value to the user and allow them to edit it.<br>
 			This may not need to be specified for certain standard types, e.g String, int, double.<br>

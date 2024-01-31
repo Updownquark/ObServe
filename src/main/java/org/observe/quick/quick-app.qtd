@@ -2,9 +2,12 @@
 
 <qonfig-def name="Quick-App" version="0.1" xmlns:qonfig-app="Qonfig-App 0.1">
 	<elements>
+		<?DOC An application whose appearance an behavior is controlled by Quick elements?>
 		<element-def name="quick-app" extends="qonfig-app">
+			<?DOC An interpretations to produce behaviors from Quick elements in this application?>
 			<child-def name="quick-interpretation" type="quick-interpretation" min="1" max="inf" />
 		</element-def>
+		<?DOC Interpretations to produce behaviors from Quick elements?>
 		<element-def name="quick-interpretation" extends="simple-configuration" />
 	</elements>
 </qonfig-def>

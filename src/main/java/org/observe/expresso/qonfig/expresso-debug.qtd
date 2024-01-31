@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-This file defines syntax for debugging expresso models
+This file defines syntax for debugging expresso models, typically used for testing or debugging
 -->
 <qonfig-def name="Expresso-Debug" version="0.1" xmlns:expresso="Expresso-Core v0.1">
 	<value-types>
@@ -16,6 +16,7 @@ This file defines syntax for debugging expresso models
 	</value-types>
 
 	<add-ons>
+		<?DOC Tagged onto a &lt;model-value> to catch a breakpoint as it is compiled, interpreted, or instantiated?>
 		<add-on name="debug-value" requires="model-value">
 			<attribute name="break-on" type="breakpoint-type" specify="optional" />
 		</add-on>
