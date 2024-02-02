@@ -20,6 +20,7 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickValueWidget.WidgetValueSupplier;
+import org.observe.quick.QuickWithBackground;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -177,18 +178,20 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 	}
 
-	public interface StyledTextAreaContext<T> {
+	public interface StyledTextAreaContext<T> extends QuickWithBackground.BackgroundContext {
 		SettableValue<T> getNodeValue();
 
-		public class Default<T> implements StyledTextAreaContext<T> {
+		public class Default<T> extends QuickWithBackground.BackgroundContext.Default implements StyledTextAreaContext<T> {
 			private final SettableValue<T> theNodeValue;
 
-			public Default(SettableValue<T> nodeValue) {
+			public Default(SettableValue<Boolean> hovered, SettableValue<Boolean> focused, SettableValue<Boolean> pressed,
+				SettableValue<Boolean> rightPressed, SettableValue<T> nodeValue) {
+				super(hovered, focused, pressed, rightPressed);
 				theNodeValue = nodeValue;
 			}
 
 			public Default(TypeToken<T> type) {
-				this(SettableValue.build(type).build());
+				theNodeValue = SettableValue.build(type).build();
 			}
 
 			@Override
@@ -231,7 +234,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
+		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
+			.build();
 		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
 		// After synthesizing and returning the children for the node, we can discard the model copy
 		return theChildrenSynth.get(modelCopy);
@@ -244,7 +248,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	public TextStyle getStyle(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		if (theTextStyle == null)
 			return null;
-		ModelSetInstance widgetModelCopy = getUpdatingModels().copy().build();
+		ModelSetInstance widgetModelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
+			.build();
 		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, widgetModelCopy, ctx.getNodeValue());
 		ModelSetInstance styleElementModelCopy = getTextStyle().getUpdatingModels().copy()//
 			.withAll(widgetModelCopy)//
@@ -256,7 +261,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
+		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
+			.build();
 		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
 		// After synthesizing and returning the post text, we can discard the model copy
 		return thePostTextSynth.get(modelCopy);

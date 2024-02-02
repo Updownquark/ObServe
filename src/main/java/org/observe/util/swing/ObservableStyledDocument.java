@@ -1,6 +1,10 @@
 package org.observe.util.swing;
 
+import java.awt.Color;
 import java.awt.EventQueue;
+import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -11,6 +15,8 @@ import java.util.function.Function;
 
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.Highlighter;
+import javax.swing.text.JTextComponent;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
 
@@ -27,7 +33,7 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
-public abstract class ObservableStyledDocument<T> {
+public abstract class ObservableStyledDocument<T> implements Highlighter {
 	private final ObservableValue<? extends T> theRoot;
 	private final Format<T> theFormat;
 	private final ThreadConstraint theThreading;
@@ -40,6 +46,7 @@ public abstract class ObservableStyledDocument<T> {
 	private final ListenerList<Consumer<? super ChangeEvent<T>>> theListeners;
 
 	private Function<? super T, String> thePostNodeText;
+	private boolean isHighlighterInstalled;
 
 	protected ObservableStyledDocument(ObservableValue<? extends T> root, Format<T> format, ThreadConstraint threading,
 		Observable<?> until) {
@@ -86,7 +93,12 @@ public abstract class ObservableStyledDocument<T> {
 			theRootNode.changed(theRoot.get(), cause, true, false);
 		else
 			EventQueue.invokeLater(() -> theRootNode.changed(theRoot.get(), Causable.broken(cause), true, false));
+	}
 
+	public void refresh(T value, Object cause) {
+		DocumentNode node = theNodesByValue.get(value);
+		if (node != null)
+			node.changed(value, cause, true, false);
 	}
 
 	protected abstract ObservableCollection<? extends T> getChildren(T value);
@@ -117,6 +129,128 @@ public abstract class ObservableStyledDocument<T> {
 		}
 	}
 
+	// Highlighter methods
+
+	private JTextComponent theEditor;
+
+	@Override
+	public void install(JTextComponent c) {
+		theEditor = c;
+	}
+
+	@Override
+	public void deinstall(JTextComponent c) {
+		theEditor = null;
+	}
+
+	@Override
+	public Object addHighlight(int p0, int p1, HighlightPainter p) throws BadLocationException {
+		return this;
+	}
+
+	@Override
+	public void removeHighlight(Object tag) {
+	}
+
+	@Override
+	public void removeAllHighlights() {
+	}
+
+	@Override
+	public void changeHighlight(Object tag, int p0, int p1) throws BadLocationException {
+	}
+
+	@Override
+	public Highlight[] getHighlights() {
+		return new Highlight[0];
+	}
+
+	@Override
+	public void paint(Graphics g) {
+		if (theEditor == null)
+			return;
+		Rectangle clip = g.getClipBounds();
+		int top = clip.y;
+		int textPosition = theEditor.viewToModel(new Point(0, top));
+
+		paintNode(g, theRootNode, textPosition, 0, clip.x + clip.width, clip.y + clip.height);
+	}
+
+	private boolean paintNode(Graphics g, DocumentNode node, int index, int modelOffset, int width,
+		int maxH) {
+		Color nodeColor = node.getBackground();
+		if (nodeColor != null)
+			g.setColor(nodeColor);
+		if (index < node.getLocalText().length()) {
+			if (nodeColor != null && paintText(g, node.getLocalText(), index, modelOffset, width) > maxH)
+				return false;
+			index = 0;
+		} else
+			index -= node.getLocalText().length();
+		modelOffset += node.getLocalText().length();
+		for (DocumentNode child : node.getChildNodes()) {
+			if (index < child.length()) {
+				if (!paintNode(g, child, index, modelOffset, width, maxH))
+					return false;
+				index = 0;
+			} else
+				index -= child.length();
+			modelOffset += child.length();
+		}
+		if (nodeColor != null && index < node.getPostText().length()) {
+			g.setColor(nodeColor);
+			if (paintText(g, node.getPostText(), index, modelOffset, width) > maxH)
+				return false;
+		}
+		return true;
+	}
+
+	private int paintText(Graphics g, String text, int start, int modelOffset, int width) {
+		Rectangle startBounds;
+		try {
+			startBounds = theEditor.modelToView(modelOffset + start);
+		} catch (BadLocationException e) {
+			return -1;
+		}
+		int lastStart = start;
+		int nextNewLine = text.indexOf('\n', start);
+		while (nextNewLine >= 0) {
+			paintTextRect(g, startBounds.x, startBounds.y, width - startBounds.x, startBounds.height);
+			lastStart = nextNewLine + 1;
+			try {
+				startBounds = theEditor.modelToView(modelOffset + lastStart);
+			} catch (BadLocationException e) {
+				return -1;
+			}
+			nextNewLine = text.indexOf('\n', lastStart);
+		}
+		if (lastStart < text.length()) {
+			try {
+				Rectangle endBounds = theEditor.modelToView(modelOffset + text.length());
+				if (endBounds.y > startBounds.y) {
+					paintTextRect(g, startBounds.x, startBounds.y, width - startBounds.x, startBounds.height);
+					if (endBounds.y > startBounds.y + startBounds.height)
+						g.fillRect(0, startBounds.y + startBounds.height, width, endBounds.y - startBounds.y - startBounds.height);
+					if (endBounds.x > CHAR_START_TOLERANCE)
+						g.fillRect(0, endBounds.y, endBounds.x, endBounds.height);
+				} else
+					paintTextRect(g, startBounds.x, startBounds.y, endBounds.x - startBounds.x, startBounds.height);
+				return endBounds.y;
+			} catch (BadLocationException e) {
+			}
+		}
+		return -1;
+	}
+
+	private static final int CHAR_START_TOLERANCE = 6;
+
+	private static void paintTextRect(Graphics g, int x, int y, int width, int height) {
+		if (x <= CHAR_START_TOLERANCE) // Make sure we paint all the way to the start for the first character
+			g.fillRect(0, y, width + x, height);
+		else
+			g.fillRect(x, y, width, height);
+	}
+
 	public class DocumentNode {
 		private final DocumentNode theParent;
 		private T theValue;
@@ -130,6 +264,8 @@ public abstract class ObservableStyledDocument<T> {
 		private final SimpleObservable<Void> theNodeUntil;
 		private ObservableCollection<? extends T> theChildren;
 		private final List<DocumentNode> theChildNodes;
+
+		private Color theBackground;
 
 		DocumentNode(DocumentNode parent, T value) {
 			theParent = parent;
@@ -197,6 +333,7 @@ public abstract class ObservableStyledDocument<T> {
 
 		public void adjustStyle(BgFontAdjuster style) {
 			ObservableStyledDocument.this.adjustStyle(theValue, style);
+			theBackground = style.getBackground();
 		}
 
 		public DocumentNode getNodeAt(int textPosition) {
@@ -215,6 +352,10 @@ public abstract class ObservableStyledDocument<T> {
 			}
 			// In the post-text. The post-text properly belongs to the parent
 			return theParent;
+		}
+
+		public Color getBackground() {
+			return theBackground;
 		}
 
 		void changed(T value, Object cause, boolean withEvents, boolean deep) {
@@ -408,14 +549,14 @@ public abstract class ObservableStyledDocument<T> {
 		if (init) {
 			if (!node.getLocalText().isEmpty())
 				swingDoc.insertString(index, node.getLocalText(), styleCopy);
-		} else if (node.getLocalText().equals(node.getPreviousText())) {
-			swingDoc.setCharacterAttributes(index, node.getLocalText().length(), styleCopy, true);
-		} else {
+		} else if (!node.getLocalText().equals(node.getPreviousText())) {
 			if (!node.getPreviousText().isEmpty())
 				swingDoc.remove(index, node.getPreviousText().length());
 			if (!node.getLocalText().isEmpty())
 				swingDoc.insertString(index, node.getLocalText(), styleCopy);
 		}
+		if (!node.getLocalText().isEmpty())
+			swingDoc.setCharacterAttributes(index, node.getLocalText().length(), styleCopy, init);
 
 		int offset = node.getLocalText().length();
 		if (deep) {
@@ -437,13 +578,15 @@ public abstract class ObservableStyledDocument<T> {
 		if (init) {
 			if (!node.getPostText().isEmpty())
 				swingDoc.insertString(index + offset, node.getPostText(), parentStyle);
-		} else if (node.getPostText().equals(node.getPreviousPostText())) {
-			swingDoc.setCharacterAttributes(index + offset, node.getPostText().length(), parentStyle, true);
-		} else {
+		} else if (!node.getPostText().equals(node.getPreviousPostText())) {
 			if (!node.getPreviousPostText().isEmpty())
 				swingDoc.remove(index + offset, node.getPreviousPostText().length());
 			if (!node.getPostText().isEmpty())
 				swingDoc.insertString(index + offset, node.getPostText(), parentStyle);
+		}
+		if (!node.getPostText().isEmpty()) {
+			swingDoc.setCharacterAttributes(index + offset, node.getPostText().length(), parentStyle, true);
+			offset += node.getPostText().length();
 		}
 	}
 }

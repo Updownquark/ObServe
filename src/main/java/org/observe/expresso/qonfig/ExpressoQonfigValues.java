@@ -2615,7 +2615,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<ObservableAction> create() throws ModelInstantiationException {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -2717,7 +2717,7 @@ public class ExpressoQonfigValues {
 		instance = ActionGroup.Instantiator.class)
 	public static class ActionGroup extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction>>
 	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction>> {
-		private final List<ModelValueElement.CompiledSynth<ObservableAction, ?>> theActions;
+		private final List<Action> theActions;
 
 		/**
 		 * @param parent The parent element of this value element
@@ -2806,15 +2806,15 @@ public class ExpressoQonfigValues {
 
 		/** {@link ActionGroup} instantiator */
 		public static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
-			private final List<ModelValueInstantiator<? extends ObservableAction>> theActions;
+			private final List<Action.Instantiator> theActions;
 
 			Instantiator(ActionGroup.Interpreted interpreted) throws ModelInstantiationException, RuntimeException {
 				super(interpreted);
-				theActions = QommonsUtils.filterMapE(interpreted.getActions(), null, a -> a.instantiate());
+				theActions = QommonsUtils.filterMapE(interpreted.getActions(), null, a -> a.create());
 			}
 
 			/** @return The actions to perform */
-			public List<ModelValueInstantiator<? extends ObservableAction>> getActions() {
+			public List<Action.Instantiator> getActions() {
 				return theActions;
 			}
 

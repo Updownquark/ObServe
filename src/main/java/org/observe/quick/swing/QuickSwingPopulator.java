@@ -2,7 +2,7 @@ package org.observe.quick.swing;
 
 import java.awt.Component;
 import java.awt.LayoutManager;
-import java.awt.event.MouseMotionListener;
+import java.awt.event.MouseAdapter;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -159,7 +159,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	public interface QuickSwingDocument<T> {
 		ObservableStyledDocument<T> interpret(StyledDocument<T> quickDoc, Observable<?> until) throws ModelInstantiationException;
 
-		MouseMotionListener mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+		MouseAdapter mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
 			Observable<?> until);
 
 		CaretListener caretListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,

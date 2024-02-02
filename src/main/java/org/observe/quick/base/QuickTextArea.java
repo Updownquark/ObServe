@@ -33,6 +33,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		instance = QuickTextArea.class)
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextArea<?>> {
 		private CompiledExpression theRows;
+		private boolean isHtml;
 		private StyledDocument.Def<?> theDocument;
 		private ModelComponentId theMousePositionVariable;
 
@@ -50,6 +51,11 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theRows;
 		}
 
+		@QonfigAttributeGetter("html")
+		public boolean isHtml() {
+			return isHtml;
+		}
+
 		@QonfigChildGetter("document")
 		public StyledDocument.Def<?> getDocument() {
 			return theDocument;
@@ -64,6 +70,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			theRows = getAttributeExpression("rows", session);
+			isHtml = session.getAttribute("html", boolean.class);
 			theDocument = syncChild(StyledDocument.Def.class, theDocument, session, "document");
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -169,6 +176,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	private StyledDocument<T> theDocument;
 	private ModelValueInstantiator<SettableValue<Integer>> theRowsInstantiator;
 	private SettableValue<SettableValue<Integer>> theRows;
+	private boolean isHtml;
 	private SettableValue<SettableValue<Integer>> theMousePosition;
 
 	public QuickTextArea(Object id) {
@@ -187,6 +195,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		return SettableValue.flatten(theRows, () -> 0);
 	}
 
+	public boolean isHtml() {
+		return isHtml;
+	}
+
 	public SettableValue<Integer> getMousePosition() {
 		return SettableValue.flatten(theMousePosition, () -> 0);
 	}
@@ -201,6 +213,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
 		theMousePositionVariable = myInterpreted.getDefinition().getMousePositionVariable();
 		theRowsInstantiator = myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate();
+		isHtml = myInterpreted.getDefinition().isHtml();
 		theDocument = myInterpreted.getDocument() == null ? null : myInterpreted.getDocument().create();
 		if (theDocument != null)
 			theDocument.update(myInterpreted.getDocument(), this);

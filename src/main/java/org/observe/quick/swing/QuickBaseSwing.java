@@ -2,13 +2,13 @@ package org.observe.quick.swing;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,6 +40,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.Iconized;
+import org.observe.quick.MouseCursor;
 import org.observe.quick.QuickAbstractWindow;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
@@ -343,7 +344,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {}
+			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+			}
 		};
 	}
 
@@ -516,6 +518,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTextArea<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
+			// TODO This currently doesn't handle mouse cursor for the <text-style> element. Not quite sure how to do that.
 			Format<T> format = quick.getFormat().get();
 			boolean commitOnType = quick.isCommitOnType();
 			SettableValue<Integer> rows = quick.getRows();
@@ -546,7 +549,9 @@ public class QuickBaseSwing implements QuickInterpretation {
 				panel.addStyledTextArea(null, docInst, tf -> {
 					modifier.accept(tf);
 					tf.modifyEditor(tf2 -> {
-						tf2.addMouseMotionListener(theDocument.mouseListener(quick.getDocument(), docInst, tf2, tf.getUntil()));
+						MouseAdapter mouse = theDocument.mouseListener(quick.getDocument(), docInst, tf2, tf.getUntil());
+						tf2.addMouseListener(mouse);
+						tf2.addMouseMotionListener(mouse);
 						tf2.addCaretListener(theDocument.caretListener(quick.getDocument(), docInst, tf2, tf.getUntil()));
 					});
 				});
@@ -561,8 +566,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 							quick.reporting().error(e.getMessage(), e);
 							return;
 						}
-						if (commitOnType)
-							tf2.setCommitOnType(commitOnType);
+						tf2.asHtml(quick.isHtml());
+						tf2.setCommitOnType(commitOnType);
 						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
 						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
 						tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
@@ -579,16 +584,20 @@ public class QuickBaseSwing implements QuickInterpretation {
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 		TypeToken<T> valueType = interpreted.getValueType();
 		return new QuickSwingDocument<T>() {
+			private JTextComponent theWidget;
+
 			@Override
 			public ObservableStyledDocument<T> interpret(StyledDocument<T> quickDoc, Observable<?> until)
 				throws ModelInstantiationException {
 				DynamicStyledDocument<T> doc = (DynamicStyledDocument<T>) quickDoc;
 				Format<T> format = doc.getFormat();
 				ObservableStyledDocument<T> swingDoc = new ObservableStyledDocument<T>(doc.getRoot(), format, ThreadConstraint.EDT, until) {
+					private boolean didSetCursor;
+
 					@Override
 					protected ObservableCollection<? extends T> getChildren(T value) {
 						try {
-							return doc.getChildren(staCtx(valueType, value));
+							return doc.getChildren(staCtx(valueType, value, false, false, false, false));
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
 							return ObservableCollection.of(valueType);
@@ -597,25 +606,47 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 					@Override
 					protected void adjustStyle(T value, BgFontAdjuster style) {
+						boolean hovered = doc.getNodeValue().get() == value;
+						boolean focused = doc.getSelectionStartValue().get() == value;
+						boolean pressed = hovered && QuickCoreSwing.isLeftPressed();
+						boolean rightPressed = hovered && QuickCoreSwing.isRightPressed();
 						StyledDocument.TextStyle textStyle;
 						try {
-							textStyle = doc.getStyle(staCtx(valueType, value));
+							textStyle = doc.getStyle(staCtx(valueType, value, hovered, focused, pressed, rightPressed));
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
 							return;
 						}
 						if (textStyle != null) {
 							QuickCoreSwing.adjustFont(style, textStyle);
-							Color bg = textStyle.getBackground().get();
-							if (bg != null)
-								style.withBackground(bg);
+							Color bgColor = textStyle.getColor().get();
+							if (bgColor != null)
+								style.withBackground(bgColor);
+							if (hovered) {
+								MouseCursor quickCursor = textStyle.getMouseCursor().get();
+								Cursor cursor = null;
+								if (quickCursor != null) {
+									try {
+										cursor = tx.transform(quickCursor, Cursor.class);
+									} catch (ExpressoInterpretationException e) {
+										doc.reporting().error("Unsupported cursor: " + quickCursor, e);
+									}
+								}
+								if (cursor != null) {
+									didSetCursor = true;
+									theWidget.setCursor(cursor);
+								} else if (didSetCursor) {
+									didSetCursor = false;
+									theWidget.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+								}
+							}
 						}
 					}
 				};
 				if (doc.hasPostText()) {
 					swingDoc.withPostNodeText(node -> {
 						try {
-							return doc.getPostText(staCtx(valueType, node)).get();
+							return doc.getPostText(staCtx(valueType, node, false, false, false, false)).get();
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
 							return null;
@@ -626,14 +657,39 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public MouseMotionListener mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+			public MouseAdapter mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
 				Observable<?> until) {
+				theWidget = widget;
 				return new MouseAdapter() {
+					@Override
+					public void mousePressed(MouseEvent e) {
+						T value = ((DynamicStyledDocument<T>) quickDoc).getNodeValue().get();
+						if (value != null)
+							doc.refresh(value, e);
+						widget.setCursor(null);
+					}
+
+					@Override
+					public void mouseReleased(MouseEvent e) {
+						T value = ((DynamicStyledDocument<T>) quickDoc).getNodeValue().get();
+						if (value != null)
+							doc.refresh(value, e);
+					}
+
+					@Override
+					public void mouseExited(MouseEvent e) {
+						T value = ((DynamicStyledDocument<T>) quickDoc).getNodeValue().get();
+						if (value != null)
+							doc.refresh(value, e);
+					}
+
 					@Override
 					public void mouseMoved(MouseEvent e) {
 						int docPos = widget.viewToModel(e.getPoint());
 						ObservableStyledDocument<T>.DocumentNode node = doc.getNodeAt(docPos);
 						((DynamicStyledDocument<T>) quickDoc).getNodeValue().set(node == null ? null : node.getValue(), e);
+						if (node != null)
+							doc.refresh(node.getValue(), e);
 					}
 				};
 			}
@@ -728,8 +784,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 		};
 	}
 
-	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value) {
-		return new DynamicStyledDocument.StyledTextAreaContext.Default<>(SettableValue.of(type, value, "Unmodifiable"));
+	private static final SettableValue<Boolean> TRUE = SettableValue.of(boolean.class, true, "Unmodifiable");
+	private static final SettableValue<Boolean> FALSE = SettableValue.of(boolean.class, false, "Unmodifiable");
+
+	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value, boolean hovered, boolean focused,
+		boolean pressed, boolean rightPressed) {
+		return new DynamicStyledDocument.StyledTextAreaContext.Default<>(//
+			hovered ? TRUE : FALSE, focused ? TRUE : FALSE, pressed ? TRUE : FALSE, rightPressed ? TRUE : FALSE, //
+				SettableValue.of(type, value, "Unmodifiable"));
 	}
 
 	static class SwingCheckBox extends QuickSwingPopulator.Abstract<QuickCheckBox> {

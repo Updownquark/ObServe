@@ -69,6 +69,8 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickBorder.TitledBorder.Def::new));
 		interpreter.createWith(Iconized.ICONIZED, Iconized.Def.class, ExAddOn.creator(Iconized.Def::new));
 
+		interpreter.createWith(QuickEventListener.EventFilter.EVENT_FILTER, QuickEventListener.EventFilter.Def.class,
+			ExElement.creator(QuickEventListener.EventFilter.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMouseClickListener.ON_MOUSE_CLICK,
 			QuickMouseListener.QuickMouseClickListener.Def.class, ExElement.creator(QuickMouseListener.QuickMouseClickListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMousePressedListener.ON_MOUSE_PRESSED,

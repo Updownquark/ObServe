@@ -230,7 +230,8 @@ public class PanelPopulation {
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
 		default <F> P addStyledTextArea(String fieldName, SettableValue<F> root, Format<F> format,
-			Function<? super F, ? extends ObservableCollection<? extends F>> children, BiConsumer<? super F, ? super BgFontAdjuster> style,
+			Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			BiConsumer<? super F, ? super BgFontAdjuster> style,
 				Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addStyledTextArea(fieldName, new ObservableStyledDocument<F>(root, format, ThreadConstraint.EDT, getUntil()) {
 				@Override
@@ -468,6 +469,7 @@ public class PanelPopulation {
 				editor.setDocument(styledDoc);
 			}
 			ObservableStyledDocument.synchronize(doc, styledDoc, getUntil());
+			editor.setHighlighter(doc);
 		}
 
 		@Override

@@ -708,7 +708,9 @@ public class ModelTypes {
 
 			@Override
 			public void satisfy(SettableValue<T> realValue) throws IllegalStateException {
-				if (realValue == null)
+				if (realValue == getWrapped())
+					return;
+				else if (realValue == null)
 					throw new NullPointerException("Cannot satisfy a hollow value (Value<" + getType() + ">) with null");
 				getWrapped().set(realValue, null);
 			}

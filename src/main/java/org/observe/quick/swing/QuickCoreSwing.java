@@ -185,6 +185,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 				Component[] component = new Component[1];
 				Cursor[] defaultCursor = new Cursor[1];
 				ObservableValue<Color> color = w.getStyle().getColor();
+				boolean[] didSetCursor = new boolean[1];
 				ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
 					try {
 						return quickCursor == null ? null : tx2.transform(quickCursor, Cursor.class);
@@ -206,8 +207,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 						component[0] = c;
 						defaultCursor[0] = c.getCursor();
 						Cursor cursorV = cursor.get();
-						if (cursorV != null && c.getCursor() != cursorV)
+						if (cursorV != null) {
+							didSetCursor[0] = true;
 							c.setCursor(cursorV);
+						}
 						if (propertyManagers.isEmpty() || propertyManagers.get(0) != scd.propertyMgr)
 							propertyManagers.add(0, scd.propertyMgr);
 						adjustFont(pmDecorator.reset(), w.getStyle());
@@ -249,20 +252,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 							}
 						}
 					});
-					Map<Component, Cursor>[] defaultCursors = new Map[1];
 					comp.modifyAssociatedComponents(c -> {
 						c.setName(name.get());
 						ComponentPropertyManager<Component> pm = new ComponentPropertyManager<>(c);
 						propertyManagers.add(pm);
 						pm.setForeground(pmDecorator.getForeground());
-						if (defaultCursors[0] == null)
-							defaultCursors[0] = new HashMap<>();
-						defaultCursors[0].computeIfAbsent(c, Component::getCursor);
-						Cursor cursorV = cursor.get();
-						if (cursorV != null)
-							c.setCursor(cursorV);
-						else
-							c.setCursor(defaultCursors[0].get(c));
 						Color bg = color.get();
 						pm.setBackground(bg);
 						pm.setOpaque(bg == null ? null : true);
@@ -287,8 +281,15 @@ public class QuickCoreSwing implements QuickInterpretation {
 				}
 				if (!renderer) { // Don't keep any subscriptions for renderers
 					adjustFont(pmDecorator, w.getStyle());
-					cursor.noInitChanges().takeUntil(comp.getUntil())
-					.act(evt -> component[0].setCursor(evt.getNewValue() == null ? defaultCursor[0] : evt.getNewValue()));
+					cursor.noInitChanges().takeUntil(comp.getUntil()).act(evt -> {
+						if (evt.getNewValue() != null)
+							component[0].setCursor(evt.getNewValue());
+						else if (didSetCursor[0]) {
+							didSetCursor[0] = false;
+							component[0].setCursor(defaultCursor[0]);
+						} else
+							defaultCursor[0] = component[0].getCursor();
+					});
 					Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
 						adjustFont(pmDecorator.reset(), w.getStyle());
 						for (ComponentPropertyManager<?> pm : propertyManagers) {
@@ -1164,6 +1165,14 @@ public class QuickCoreSwing implements QuickInterpretation {
 			}, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
 			isMouseListening = true;
 		}
+	}
+
+	public static boolean isLeftPressed() {
+		return isLeftPressed;
+	}
+
+	public static boolean isRightPressed() {
+		return isRightPressed;
 	}
 
 	static class ComponentIdentity {

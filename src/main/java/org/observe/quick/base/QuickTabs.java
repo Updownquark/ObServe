@@ -378,6 +378,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return theTabIdVariable;
 			}
 
+			@QonfigChildGetter("renderer")
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
 			}

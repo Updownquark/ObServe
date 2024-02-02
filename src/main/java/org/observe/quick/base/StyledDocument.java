@@ -17,7 +17,10 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.MouseCursor;
 import org.observe.quick.QuickTextElement;
+import org.observe.quick.QuickWithBackground;
+import org.observe.quick.QuickWithBackground.QuickBackgroundStyle;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
@@ -241,12 +244,12 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		return copy;
 	}
 
-	public static class TextStyleElement extends QuickStyledElement.Abstract implements QuickTextElement {
+	public static class TextStyleElement extends QuickWithBackground.Abstract implements QuickTextElement {
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TEXT_STYLE,
 			interpretation = Interpreted.class,
 			instance = TextStyleElement.class)
-		public static class Def extends QuickStyledElement.Def.Abstract<TextStyleElement>
+		public static class Def extends QuickWithBackground.Def.Abstract<TextStyleElement>
 		implements QuickTextElement.Def<TextStyleElement> {
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -272,7 +275,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 		}
 
-		public static class Interpreted extends QuickStyledElement.Interpreted.Abstract<TextStyleElement>
+		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<TextStyleElement>
 		implements QuickTextElement.Interpreted<TextStyleElement> {
 			public Interpreted(TextStyleElement.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -308,19 +311,27 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 	}
 
-	public static class TextStyle extends QuickTextElement.QuickTextStyle.Abstract {
-		public static class Def extends QuickTextElement.QuickTextStyle.Def.Abstract {
-			private QuickStyleAttributeDef theBackground;
+	public static class TextStyle extends QuickTextElement.QuickTextStyle.Abstract implements QuickWithBackground.QuickBackgroundStyle {
+		public static class Def extends QuickTextElement.QuickTextStyle.Def.Abstract implements QuickBackgroundStyle.Def {
+			private final QuickStyleAttributeDef theColor;
+			private final QuickStyleAttributeDef theMouseCursor;
 
 			public Def(QuickInstanceStyle.Def parent, TextStyleElement.Def styledElement, QuickCompiledStyle wrapped) {
 				super(parent, styledElement, wrapped);
 				QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
 					QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE);
-				theBackground = addApplicableAttribute(typeStyle.getAttribute("bg-color"));
+				theColor = addApplicableAttribute(typeStyle.getAttribute("color"));
+				theMouseCursor = addApplicableAttribute(typeStyle.getAttribute("mouse-cursor"));
 			}
 
-			public QuickStyleAttributeDef getBackground() {
-				return theBackground;
+			@Override
+			public QuickStyleAttributeDef getColor() {
+				return theColor;
+			}
+
+			@Override
+			public QuickStyleAttributeDef getMouseCursor() {
+				return theMouseCursor;
 			}
 
 			@Override
@@ -331,8 +342,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 		}
 
-		public static class Interpreted extends QuickTextElement.QuickTextStyle.Interpreted.Abstract {
-			private QuickElementStyleAttribute<Color> theBackground;
+		public static class Interpreted extends QuickTextElement.QuickTextStyle.Interpreted.Abstract
+			implements QuickBackgroundStyle.Interpreted {
+			private QuickElementStyleAttribute<Color> theColor;
+			private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
 			public Interpreted(Def definition, TextStyleElement.Interpreted styledElement, QuickInstanceStyle.Interpreted parent,
 				QuickInterpretedStyle wrapped) {
@@ -344,8 +357,14 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				return (Def) super.getDefinition();
 			}
 
-			public QuickElementStyleAttribute<Color> getBackground() {
-				return theBackground;
+			@Override
+			public QuickElementStyleAttribute<Color> getColor() {
+				return theColor;
+			}
+
+			@Override
+			public QuickElementStyleAttribute<MouseCursor> getMouseCursor() {
+				return theMouseCursor;
 			}
 
 			@Override
@@ -353,7 +372,8 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				throws ExpressoInterpretationException {
 				super.update(env, styleSheet, appCache);
 				QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-				theBackground = get(cache.getAttribute(getDefinition().getBackground(), Color.class, env));
+				theColor = get(cache.getAttribute(getDefinition().getColor(), Color.class, env));
+				theMouseCursor = get(cache.getAttribute(getDefinition().getMouseCursor(), MouseCursor.class, env));
 			}
 
 			@Override
@@ -362,16 +382,25 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 		}
 
-		private QuickStyleAttribute<Color> theBgAttr;
-		private ObservableValue<Color> theBackground;
+		private QuickStyleAttribute<Color> theColorAttr;
+		private QuickStyleAttribute<MouseCursor> theMouseCursorAttr;
+
+		private ObservableValue<Color> theColor;
+		private ObservableValue<MouseCursor> theMouseCursor;
 
 		@Override
 		public TextStyleElement getStyledElement() {
 			return (TextStyleElement) super.getStyledElement();
 		}
 
-		public ObservableValue<Color> getBackground() {
-			return theBackground;
+		@Override
+		public ObservableValue<Color> getColor() {
+			return theColor;
+		}
+
+		@Override
+		public ObservableValue<MouseCursor> getMouseCursor() {
+			return theMouseCursor;
 		}
 
 		@Override
@@ -380,15 +409,20 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			super.update(interpreted, styledElement);
 
 			TextStyle.Interpreted myInterpreted = (TextStyle.Interpreted) interpreted;
-			theBgAttr = myInterpreted.getBackground().getAttribute();
-			theBackground = getApplicableAttribute(theBgAttr);
+
+			theColorAttr = myInterpreted.getColor().getAttribute();
+			theMouseCursorAttr = myInterpreted.getMouseCursor().getAttribute();
+
+			theColor = getApplicableAttribute(theColorAttr);
+			theMouseCursor = getApplicableAttribute(theMouseCursorAttr);
 		}
 
 		@Override
 		public TextStyle copy(QuickStyledElement styledElement) {
 			TextStyle copy = (TextStyle) super.copy(styledElement);
 
-			copy.theBackground = copy.getApplicableAttribute(theBgAttr);
+			copy.theColor = copy.getApplicableAttribute(theColorAttr);
+			copy.theMouseCursor = copy.getApplicableAttribute(theMouseCursorAttr);
 
 			return copy;
 		}

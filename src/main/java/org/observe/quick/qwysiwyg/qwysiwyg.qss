@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<style-sheet xmlns:quick-base="Quick-Base v0.1">
+	<import-style-sheet name="base" ref="classpath://org/observe/quick/base/quick-base.qss" />
+	<head>
+		<imports>
+			<import>org.observe.quick.qwysiwyg.*</import>
+			<import>java.awt.Color</import>
+			<import>org.qommons.Colors.*</import>
+		</imports>
+		<models>
+			<model name="ss">
+				<constant name="toolkitColor" type="Color">`green`</constant>
+				<constant name="valueColor" type="Color">`dark-cyan`</constant>
+				<constant name="addOnColor" type="Color">`light-sky-blue`</constant>
+				<constant name="elementColor" type="Color">`dark-red`</constant>
+
+				<constant name="toolkitBgColor">bleach(toolkitColor, 0.75f)</constant>
+				<constant name="valueBgColor">bleach(valueColor, 0.75f)</constant>
+				<constant name="addOnBgColor">bleach(addOnColor, 0.75f)</constant>
+				<constant name="elementBgColor">bleach(elementColor, 0.85f)</constant>
+
+				<constant name="toolkitRefColor">toolkitColor</constant>
+				<constant name="valueRefColor">valueColor</constant>
+				<constant name="addOnRefColor">stain(addOnColor, 0.65f)</constant>
+				<constant name="elementRefColor">elementColor</constant>
+			</model>
+		</models>
+	</head>
+
+	<style-set name="documentStyle">
+		<ext-model>
+			<value name="node" type="StyledQuickDocument.DocumentComponent" />
+		</ext-model>
+		<style element="with-text">
+			<style attr="font-weight" if="node!=null &amp;&amp; node.isBold()">`bold`</style>
+			<style attr="font-color">node==null ? null : node.getFontColor()</style>
+			<style attr="underline" if="node!=null &amp;&amp; node.isActiveLink()">true</style>
+		</style>
+	</style-set>
+
+	<style-set name="toolkitStyle">
+		<ext-model>
+			<value name="node" type="StyledQonfigToolkit.Node" />
+		</ext-model>
+
+		<style element="text-style">
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`h1`)">
+				<style attr="font-size">20</style>
+				<style attr="font-weight">`bold`</style>
+			</style>
+
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`h2`)">
+				<style attr="font-size">16</style>
+				<style attr="font-weight">`bold`</style>
+			</style>
+
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`h3`)">
+				<style attr="font-size">14</style>
+				<style attr="font-weight">`bold`</style>
+			</style>
+
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`toolkit-name`)">
+				<style attr="font-size">24</style>
+				<style attr="font-weight">`bold`</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`toolkit`)">
+				<style attr="color">ss.toolkitBgColor</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`value-type`)">
+				<style attr="color">ss.valueBgColor</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`add-on`)">
+				<style attr="color">ss.addOnBgColor</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`element-def`)">
+				<style attr="color">ss.elementBgColor</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`toolkit-ref`)">
+				<style attr="font-color">ss.toolkitRefColor</style>
+				<style attr="underline">true</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`value-type-ref`)">
+				<style attr="font-color">ss.valueRefColor</style>
+				<style attr="underline">true</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`add-on-ref`)">
+				<style attr="font-color">ss.addOnRefColor</style>
+				<style attr="underline">true</style>
+			</style>
+	
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`element-def-ref`)">
+				<style attr="font-color">ss.elementRefColor</style>
+				<style attr="underline">true</style>
+			</style>
+
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`b`)">
+				<style attr="font-weight">`bold`</style>
+			</style>
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`i`)">
+				<style attr="font-slant">`italic`</style>
+			</style>
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`u`)">
+				<style attr="underline">true</style>
+			</style>
+			<style if="node!=null &amp;&amp; node.getNodeClass().equals(`error`)">
+				<style attr="font-color">`red`</style>
+				<style attr="font-weight">`bold`</style>
+			</style>
+		</style>
+	</style-set>
+</style-sheet>

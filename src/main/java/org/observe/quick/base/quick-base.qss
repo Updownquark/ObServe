@@ -36,7 +36,7 @@
 			<value name="node" type="org.observe.quick.base.SimpleStyledTextModel" />
 		</ext-model>
 		<style element="text-style">
-			<style if="node.bg().hasAttribute()" attr="bg-color">node.bg().get()</style>
+			<style if="node.bg().hasAttribute()" attr="color">node.bg().get()</style>
 			<style if="node.fg().hasAttribute()" attr="font-color">node.fg().get()</style>
 			<style if="node.fontWeight().hasAttribute()" attr="font-weight">node.fontWeight().get()</style>
 			<style if="node.fontSize().hasAttribute()" attr="font-size">node.fontSize().get()</style>

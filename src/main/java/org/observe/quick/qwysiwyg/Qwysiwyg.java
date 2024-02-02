@@ -23,6 +23,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.assoc.ObservableMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.*;
@@ -77,6 +78,7 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.AttributeValue;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.config.QonfigType;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
 import org.qommons.ex.ExceptionHandler;
@@ -484,6 +486,10 @@ public class Qwysiwyg {
 	public final SettableValue<QuickStyleAttribute<?>> selectedStyle;
 	public final ObservableCollection<StyleDebugValue<?>> styleDebugValues;
 
+	private final ObservableMap<QonfigToolkit, StyledQonfigToolkit> theToolkits;
+	public final ObservableCollection<StyledQonfigToolkit> toolkits;
+	public final SettableValue<StyledQonfigToolkit> selectedToolkit;
+
 	private final SimpleObservable<Void> theDocumentReplacement;
 	private final SimpleObservable<Void> theApplicationReplacement;
 	private String theAppLocation;
@@ -531,6 +537,9 @@ public class Qwysiwyg {
 					return null;
 				return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
 			}));
+		theToolkits = ObservableMap.build(QonfigToolkit.class, StyledQonfigToolkit.class).buildMap();
+		toolkits = theToolkits.values().flow().unmodifiable(false).collect();
+		selectedToolkit = SettableValue.build(StyledQonfigToolkit.class).build();
 
 		selectedNode.changes().act(evt -> {
 			if (evt.getOldValue() == evt.getNewValue())
@@ -626,6 +635,16 @@ public class Qwysiwyg {
 		}
 	}
 
+	public String getDocumentName() {
+		if (theDocumentURL == null)
+			return "?";
+		int lastSlash = theDocumentURL.lastIndexOf('/');
+		if (lastSlash < 0)
+			return theDocumentURL;
+		else
+			return theDocumentURL.substring(lastSlash + 1);
+	}
+
 	public void init(String documentLocation, List<String> unmatched) {
 		title.set("QWYSIWYG: " + documentLocation, null);
 		boolean sameDoc = Objects.equals(documentLocation, theAppLocation);
@@ -686,6 +705,11 @@ public class Qwysiwyg {
 
 			try {
 				theDocumentDef = quickApp.parseQuick(theDocumentDef);
+
+				theToolkits.clear();
+				for (QonfigToolkit toolkit : quickApp.getToolkits())
+					theToolkits.put(toolkit, new StyledQonfigToolkit(toolkit));
+
 				theCompiledEnv = theDocumentDef.getExpressoEnv();
 			} catch (IOException | RuntimeException e) {
 				logToConsole(e, null);
@@ -770,6 +794,25 @@ public class Qwysiwyg {
 		} finally {
 			renderText();
 		}
+	}
+
+	public void goToToolkitReference(Object reference) {
+		if (reference == null)
+			return;
+		StyledQonfigToolkit tk;
+		if (reference instanceof QonfigToolkit) {
+			tk = theToolkits.get(reference);
+			if (tk != null)
+				selectedToolkit.set(tk, null);
+		} else if (reference instanceof QonfigType) {
+			tk = theToolkits.get(((QonfigType) reference).getDeclarer());
+			if (tk != null) {
+				selectedToolkit.set(tk, null);
+				tk.goToReference((QonfigType) reference);
+			} else
+				System.err.println("Unrecognized toolkit: " + ((QonfigType) reference).getDeclarer());
+		} else
+			System.err.println("Unrecognized reference: " + reference.getClass().getSimpleName() + " " + reference);
 	}
 
 	public void controlPressed(boolean ctrl) {

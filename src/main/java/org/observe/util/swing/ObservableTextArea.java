@@ -32,7 +32,9 @@ import org.qommons.io.Format;
  * @param <E> The type of value edited by the text area
  */
 public class ObservableTextArea<E> extends JTextPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
+	/** A listener for text-positioned mouse events in a {@link ObservableTextArea} */
 	public interface TextAreaMouseListener {
+		/** @param position The document position of the mouse */
 		public void mouseMoved(int position);
 	}
 
@@ -291,6 +293,10 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 			super.setToolTipText(text);
 	}
 
+	/**
+	 * @param listener A listener for text-positioned mouse events
+	 * @return A runnable to remove the listener
+	 */
 	public Runnable addMouseListener(TextAreaMouseListener listener) {
 		return theMouseListeners.add(listener, true);
 	}

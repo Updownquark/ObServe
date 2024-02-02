@@ -259,7 +259,7 @@ public class StyledQuickDocument {
 
 		public void followLink() {
 			System.out.println("Go to " + target);
-			if (theLinkFollower != null) {
+			if (theLinkFollower != null && target != null) {
 				DocumentComponent targetComponent = getSourceComponent(theRoot, target.getPosition());
 				theLinkFollower.accept(targetComponent);
 			}

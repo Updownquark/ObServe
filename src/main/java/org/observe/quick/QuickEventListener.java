@@ -340,9 +340,9 @@ public interface QuickEventListener extends ExElement {
 			theActionInstantiator = myInterpreted.getAction().instantiate();
 
 			CollectionUtils.synchronize(theFilters, myInterpreted.getFilters(), (f, i) -> f.getIdentity() == i.getIdentity())
-				.<ModelInstantiationException> simpleX(f -> f.create(this))//
-				.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.<ModelInstantiationException> simpleX(f -> f.create(this))//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
 		}
 
@@ -387,9 +387,12 @@ public interface QuickEventListener extends ExElement {
 
 	/** A test that must be passed by an event if a listener's action is to be performed on it */
 	public class EventFilter extends ExElement.Abstract {
+		/** The XML name of this type */
+		public static final String EVENT_FILTER = "event-filter";
+
 		/** The definition of a {@link EventFilter} */
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
-			qonfigType = "event-filter",
+			qonfigType = EVENT_FILTER,
 			interpretation = Interpreted.class,
 			instance = EventFilter.class)
 		public static class Def extends ExElement.Def.Abstract<EventFilter> {
@@ -467,16 +470,16 @@ public interface QuickEventListener extends ExElement {
 			 * @return The filter instance
 			 */
 			public EventFilter create(ExElement parent) {
-				return new EventFilter(parent);
+				return new EventFilter(getIdentity());
 			}
 		}
 
 		private ModelValueInstantiator<SettableValue<Boolean>> theConditionInstantiator;
 		private SettableValue<Boolean> theCondition;
 
-		/** @param parent The owner of this filter (typically a {@link QuickEventListener}) */
-		public EventFilter(ExElement parent) {
-			super(parent);
+		/** @param id The element ID of this filter */
+		public EventFilter(Object id) {
+			super(id);
 		}
 
 		/** @return This filter's condition */

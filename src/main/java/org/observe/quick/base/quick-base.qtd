@@ -275,12 +275,7 @@
 			<attribute name="selection-end-offset" type="expression" specify="optional" />
 		</element-def>
 		<?DOC Controls the style of a section of text in a &lt;styled-document>?>
-		<element-def name="text-style" inherits="with-text">
-			<styles>
-				<?DOC The background color behind the text?>
-				<style-attribute name="bg-color" type="java.awt.Color" />
-			</styles>
-		</element-def>
+		<element-def name="text-style" inherits="with-background,with-text" />
 		<?DOC A document that may be applied to a <b>base-text-widget</b> that allows styling of the text.<br>
 		The format is used to render text for each element in the hierarchy. Style may be defined for each node based on the properties of the node.<br>
 		Then a list of children is provided for each node. Each node inherits its parent's style but may override it.?>
@@ -361,6 +356,8 @@
 			<attribute name="rows" type="expression" specify="optional" />
 			<?DOC The value to represent with this widget.  Either the 'value' attribute, the value text, or a document may specified.?>
 			<attr-mod name="value-widget.value" specify="optional" default="" />
+			<?DOC Whether to render the text as HTML?>
+			<attribute name="html" type="boolean" default="false" />
 			<?DOC The document for the text area, to be used instead of a formatted value?>
 			<child-def name="document" type="styled-document" min="0" />
 		</element-def>
