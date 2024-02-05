@@ -105,9 +105,11 @@ public abstract class ObservableValueLink<S, T> extends AbstractChainLink<S, T> 
 			ElementId element = ((ObservableElement<T>) theValue).getElementId();
 			if (element == null)
 				return "none";
-			else
+			else if (element.isPresent())
 				return "[" + ((ObservableCollectionLink<?, S>) getSourceLink()).getCollection().getElementsBefore(element) + "]: "
 				+ theValue.get();
+			else
+				return "[removed]: " + theValue.get();
 		} else
 			return String.valueOf(theValue.get());
 	}

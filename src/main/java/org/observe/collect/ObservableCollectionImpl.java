@@ -439,7 +439,7 @@ public final class ObservableCollectionImpl {
 		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
 		 * @param refreshStamp The stamp representing the refresh state
 		 */
-		public AbstractObservableElementFinder(ObservableCollection<E> collection,
+		protected AbstractObservableElementFinder(ObservableCollection<E> collection,
 			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh,
 			LongSupplier refreshStamp) {
 			theCollection = collection;
@@ -566,20 +566,21 @@ public final class ObservableCollectionImpl {
 							private boolean isChanging;
 							private boolean isRefreshNeeded;
 
+							private SimpleElement replacement;
+
 							{
 								theCollectionCauseKey = Causable.key((cause, data) -> {
 									synchronized (this) {
 										boolean refresh = isRefreshNeeded;
 										isRefreshNeeded = false;
 										isChanging = false;
-										if (refresh || data.containsKey("re-search")) {
+										SimpleElement replace = replacement;
+										replacement = null;
+										if (refresh) {
 											// Means we need to find the new value in the collection
 											doRefresh(cause);
-										} else {
-											SimpleElement replacement = (SimpleElement) data.get("replacement");
-											if (replacement != null)
-												setCurrentElement(replacement, cause);
-										}
+										} else if (replace != null)
+											setCurrentElement(replace, cause);
 									}
 								});
 								theRefreshCauseKey = Causable.key((cause, data) -> {
@@ -601,7 +602,7 @@ public final class ObservableCollectionImpl {
 									theLastMatch = null;
 									return; // We've lost track of the current best and will need to find it again later
 								}
-								SimpleElement current = (SimpleElement) causeData.getOrDefault("replacement", theCurrentElement);
+								SimpleElement current = replacement != null ? replacement : theCurrentElement;
 								boolean mayReplace;
 								boolean sameElement;
 								boolean better;
@@ -656,16 +657,16 @@ public final class ObservableCollectionImpl {
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
-									causeData.remove("replacement");
-									causeData.put("re-search", true);
+									replacement = null;
+									isRefreshNeeded = true;
 									theLastMatch = null;
 								} else {
 									if (evt.isFinal()) {
 										// The current element has been removed
 										// We need to search for the new value if we don't already know of a better match.
 										// The signal for this is a null replacement
-										causeData.remove("replacement");
-										causeData.put("re-search", true);
+										replacement = null;
+										isRefreshNeeded = true;
 										theLastMatch = null;
 									} else {
 										// Either:
@@ -675,14 +676,14 @@ public final class ObservableCollectionImpl {
 										// If we already know of a replacement element even better-positioned than the new element,
 										// ignore the new one
 										if (current == null || better) {
-											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
-											causeData.remove("re-search");
+											replacement = new SimpleElement(evt.getElementId(), evt.getNewValue());
+											isRefreshNeeded = false;
 											theLastMatchStamp = getStamp();
 											theLastMatch = evt.getElementId();
-										} else if (sameElement) {
+										} else {
 											// The current best element is removed or replaced with an inferior value. Need to re-search.
-											causeData.remove("replacement");
-											causeData.put("re-search", true);
+											replacement = null;
+											isRefreshNeeded = true;
 											theLastMatch = null;
 										}
 									}
@@ -1274,12 +1275,13 @@ public final class ObservableCollectionImpl {
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					ValueHolder<X> x = new ValueHolder<>();
 					ValueHolder<T> value = new ValueHolder<>();
+					Object[] tempX = new Object[1];
 					boolean[] init = new boolean[1];
 					Causable.CausableKey key = Causable.key((root, values) -> {
 						T oldV = value.get();
 						T v;
 						try {
-							v = getValue((X) values.get("x"));
+							v = getValue((X) tempX[0]);
 						} catch (RuntimeException e) {
 							v = null;
 							e.printStackTrace();
@@ -1312,8 +1314,8 @@ public final class ObservableCollectionImpl {
 							}
 							x.accept(newX);
 
-							Map<Object, Object> values = evt.getRootCausable().onFinish(key);
-							values.put("x", newX);
+							tempX[0] = newX;
+							evt.getRootCausable().onFinish(key);
 						});
 						init[0] = true;
 					}
@@ -2574,7 +2576,10 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public String toString() {
-				return new StringBuilder().append('[').append(treeNode.getNodesBefore()).append("]: ").append(element.get()).toString();
+				if (treeNode.getElementId().isPresent())
+					return new StringBuilder().append('[').append(treeNode.getNodesBefore()).append("]: ").append(element.get()).toString();
+				else
+					return new StringBuilder().append("[removed]: ").append(element.get()).toString();
 			}
 		}
 

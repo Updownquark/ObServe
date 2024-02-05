@@ -21,9 +21,9 @@ import org.qommons.tree.RedBlackNode;
 import org.qommons.tree.RedBlackTree;
 
 /**
- * Fires {@link CollectionChangeEvent}s in response to sets of changes on an {@link ObservableCollection}. CollectionChangeEvents
- * contain more information than the standard {@link ObservableCollectionEvent}, so listening to CollectionChangeEvents may result in
- * better application performance.
+ * Fires {@link CollectionChangeEvent}s in response to sets of changes on an {@link ObservableCollection}. CollectionChangeEvents contain
+ * more information than the standard {@link ObservableCollectionEvent}, so listening to CollectionChangeEvents may result in better
+ * application performance.
  *
  * @param <E> The type of values in the collection
  */
@@ -499,18 +499,20 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	 * Subscribes to this changes observable, with the option to flush accumulated changes on unsubscribe
 	 *
 	 * @param observer The observer to receive batch change events
-	 * @param flushOnUnsubscribe A boolean array, the first element of which determines whether, when the subscription is unsubscribed,
-	 *        this observable will flush accumulated changes to the observer.
+	 * @param flushOnUnsubscribe A boolean array, the first element of which determines whether, when the subscription is unsubscribed, this
+	 *        observable will flush accumulated changes to the observer.
 	 * @return The subscription to cease notification
 	 */
 	public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer, boolean[] flushOnUnsubscribe) {
 		Map<Object, Object>[] currentData = new Map[1];
 		Causable[] currentCause = new Causable[1];
 		boolean[] subscribed = new boolean[] { true };
+		SessionChangeTracker<E>[] accumulatedChanges = new SessionChangeTracker[1];
 		Causable.CausableKey key = Causable.key((cause, data) -> {
 			if (!subscribed[0])
 				return;
-			CollectionChangesObservable.SessionChangeTracker<E> tracker = (CollectionChangesObservable.SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY);
+			CollectionChangesObservable.SessionChangeTracker<E> tracker = accumulatedChanges[0];
+			accumulatedChanges[0] = null;
 			debug(//
 				s -> s.append("Transaction end, flushing ").append(tracker));
 			fireEventsFromSessionData(tracker, cause, observer);
@@ -526,10 +528,8 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			}
 			Causable cause = evt.getRootCausable();
 			Map<Object, Object> data = cause.onFinish(key);
-			Object newTracker = data.compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> {
-				tracker = accumulate((CollectionChangesObservable.SessionChangeTracker<E>) tracker, evt, observer);
-				return tracker;
-			});
+			SessionChangeTracker<E> newTracker = accumulate(accumulatedChanges[0], evt, observer);
+			accumulatedChanges[0] = newTracker;
 			if (newTracker == null) {
 				currentData[0] = null;
 				currentCause[0] = null;
@@ -542,7 +542,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			collSub.unsubscribe();
 			if (flushOnUnsubscribe != null && flushOnUnsubscribe[0]) {
 				if (currentData[0] != null) {
-					CollectionChangesObservable.SessionChangeTracker<E> tracker = (CollectionChangesObservable.SessionChangeTracker<E>) currentData[0].remove(SESSION_TRACKER_PROPERTY);
+					SessionChangeTracker<E> tracker = accumulatedChanges[0];
 					debug(//
 						s -> s.append("Unsusbcribe, flushing ").append(tracker));
 					fireEventsFromSessionData(tracker, currentCause[0], observer);
@@ -580,14 +580,14 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	 * @param observer The observer to fire events for, if necessary
 	 * @return The tracker to place in the session to have its changes fired later, if any
 	 */
-	private CollectionChangesObservable.SessionChangeTracker<E> accumulate(CollectionChangesObservable.SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
+	private SessionChangeTracker<E> accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
 		Observer<? super CollectionChangeEvent<E>> observer) {
 		int collIndex = event.getIndex();
 		if (tracker == null) {
 			debug(s -> s.append("From clean slate, tracking ").append(event));
 			return replace(tracker, event, observer);
 		}
-		CollectionChangesObservable.SessionChangeTracker<E> newTracker = tracker;
+		SessionChangeTracker<E> newTracker = tracker;
 		switch (tracker.type) {
 		case add:
 			switch (event.getType()) {
@@ -628,7 +628,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 					if (tracker.changes.size() == 0) {
 						replace = false;
 						debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
-						newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.set);
+						newTracker = new SessionChangeTracker<>(CollectionChangeType.set);
 						newTracker.changes.add(collIndex, oldValue, event.getNewValue(), null);
 					}
 				}
@@ -667,12 +667,12 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				E oldValue = tracker.changes.remove(collIndex);
 				if (oldSize == 1 && tracker.changes.size() == 0) {
 					debug(s -> s.append("\tSet element removed, replacing ").append(tracker).append(" with remove"));
-					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
+					newTracker = new SessionChangeTracker<>(CollectionChangeType.remove);
 					newTracker.changes.add(collIndex, oldValue, oldValue, event.getMovement());
 				} else if (tracker.changes.size() < oldSize) {
 					debug(s -> s.append("\tRemove after sets, flushing ").append(tracker).append(", now tracking remove [")
 						.append(collIndex).append("] ").append(oldValue));
-					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
+					newTracker = new SessionChangeTracker<>(CollectionChangeType.remove);
 					newTracker.changes.add(collIndex, oldValue, oldValue, event.getMovement());
 					fireEventsFromSessionData(tracker, event, observer);
 				} else {
@@ -690,10 +690,10 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		return newTracker;
 	}
 
-	private CollectionChangesObservable.SessionChangeTracker<E> replace(CollectionChangesObservable.SessionChangeTracker<E> tracker,
+	private SessionChangeTracker<E> replace(SessionChangeTracker<E> tracker,
 		ObservableCollectionEvent<? extends E> event, Observer<? super CollectionChangeEvent<E>> observer) {
 		fireEventsFromSessionData(tracker, event, observer);
-		tracker = new CollectionChangesObservable.SessionChangeTracker<>(event.getType());
+		tracker = new SessionChangeTracker<>(event.getType());
 		tracker.changes.add(event.getIndex(), event.getOldValue(), event.getNewValue(), event.getMovement());
 		return tracker;
 	}
@@ -705,7 +705,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	 * @param cause The overall cause of the change event
 	 * @param observer The observer on which to fire the change event
 	 */
-	private void fireEventsFromSessionData(CollectionChangesObservable.SessionChangeTracker<E> tracker, Object cause,
+	private void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause,
 		Observer<? super CollectionChangeEvent<E>> observer) {
 		if (tracker == null || tracker.changes.size() == 0)
 			return;

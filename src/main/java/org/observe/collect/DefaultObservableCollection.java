@@ -229,7 +229,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
 				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
-				null, value, theLock.getCurrentCauses());
+				null, value, theLock.getUnfinishedCauses());
 			fire(event);
 			return el;
 		}
@@ -250,7 +250,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			try (Transaction moveT = lock(true, move)) {
 				el = theValues.move(valueEl, after, before, first, () -> {
 					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, theValues.getElementsBefore(valueEl),
-						CollectionChangeType.remove, value, value, theLock.getCurrentCauses());
+						CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
 					fire(event);
 					if (afterRemove != null)
 						afterRemove.run();
@@ -259,7 +259,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (el.getElementId().equals(valueEl))
 					return getElement(valueEl);
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getCurrentCauses());
+					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getUnfinishedCauses());
 				fire(event);
 			}
 			return el;
@@ -331,7 +331,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
 					// Correct the storage structure
 					boolean[] thisMoved = new boolean[1];
-					RepairOperation op = new RepairOperation(theLock.getCurrentCauses());
+					RepairOperation op = new RepairOperation(theLock.getUnfinishedCauses());
 					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
 							new ValueStoredCollection.RepairListener<E, CollectionElementMove>() {
@@ -367,7 +367,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					return; // Don't throw errors on recursive updates
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set, old,
-					value, theLock.getCurrentCauses()));
+					value, theLock.getUnfinishedCauses()));
 			}
 
 			@Override
@@ -381,7 +381,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					E old = get();
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.remove,
-						old, old, theLock.getCurrentCauses()));
+						old, old, theLock.getUnfinishedCauses()));
 				}
 			}
 
