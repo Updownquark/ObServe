@@ -1988,6 +1988,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		Transformation2(TransformationBuilder<S, T, ?> source, ObservableValue<V> arg2) {
 			super(source);
+			if (arg2 == null)
+				throw new NullPointerException("Null combined value");
 			theArg2 = arg2;
 		}
 
@@ -2014,6 +2016,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		public Transformation3(TransformationBuilder2<S, V1, T, ?> source, ObservableValue<V2> arg3) {
 			super(source);
+			if (arg3 == null)
+				throw new NullPointerException("Null combined value");
 			theArg2 = source.getArg2();
 			theArg3 = arg3;
 		}
@@ -2044,6 +2048,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		TransformationN(TransformationBuilderImpl<S, T, ?> source, ObservableValue<?> arg) {
 			super(source);
+			if (arg == null)
+				throw new NullPointerException("Null combined value");
 			theArgs = new ArrayList<>(source.getArgs().size() + 1);
 			theArgs.addAll(source.getArgs());
 			theArgs.add(arg);

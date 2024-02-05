@@ -30,6 +30,7 @@ import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
 import org.observe.util.TypeTokens;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.CollectionUtils;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
@@ -46,14 +47,16 @@ import org.qommons.io.LocatedFilePosition;
  * @param <T> The type of the style's attribute (if any)
  */
 public class QuickStyleElement<T> extends ExElement.Abstract {
+	/** The XML name of this element */
+	public static final String STYLE = "style";
 	/** Session property in which to cache the {@link QuickTypeStyle.TypeStyleSet} */
 	public static final String STYLE_TYPE_SET = "Quick.Style.Type.Set";
 
 	/** Definition for a {@link QuickStyledElement} */
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
-		qonfigType = "style",
+		qonfigType = STYLE,
 		interpretation = Interpreted.class,
-		instance = QuickStyledElement.class)
+		instance = QuickStyleElement.class)
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement<?>> {
 		private QonfigElementOrAddOn theStyleElement;
 		private List<QonfigChildDef> theRoles;
@@ -295,17 +298,49 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
 						theValue.getFilePosition().getPosition(0), theValue.length());
 				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
-				theValue = theApplication.findModelValues(theValue, new HashSet<>(),
-					getExpressoEnv().getModels(), getQonfigType().getDeclarer(), ancestorSS != null, emvCache, reporting());
+				theValue = theApplication.findModelValues(theValue, new HashSet<>(), getExpressoEnv().getModels(),
+					getQonfigType().getDeclarer(), ancestorSS != null, emvCache, reporting());
 				theStyleValues.add(new QuickStyleValue(ancestorSS, styleSet, theApplication, theEffectiveAttribute, theValue));
 			}
 			QonfigValue styleSetName = session.attributes().get("style-set").get();
 			if (styleSetName != null) {
-				if (styleSheet == null)
-					throw new QonfigInterpretationException("No style-sheet available: Cannot refer to a style set", //
-						styleSetName.position == null ? null
-							: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
-							styleSetName.text.length());
+				if (styleSheet == null) {
+					// Need to check for a weird condition to fire a better error message
+					QonfigAddOn withStyleSheet = (QonfigAddOn) session.getType(ExWithStyleSheet.WITH_STYLE_SHEET);
+					QonfigChildDef.Declared styleSheetRole = null;
+					for (QonfigChildDef.Declared role : withStyleSheet.getDeclaredChildren().values()) {
+						if (role.getName().equals(QuickStyleSheet.STYLE_SHEET)) {
+							styleSheetRole = role;
+							break;
+						}
+					}
+					QonfigElement p, c;
+					for (c = session.getElement(), p = c.getParent(); p != null
+						&& !p.getInheritance().contains(withStyleSheet); c = p, p = p.getParent()) {
+					}
+					QonfigElement styleSheetEl = p == null ? null : p.getChildrenByRole().get(styleSheetRole).peekFirst();
+					if (styleSheetEl != null) {
+						// There actually is a style sheet that one might think would apply here,
+						// but the order in which Expresso loads things means that it isn't available here.
+						// This is a very confusing situation and needs a more descriptive error message to help the user understand
+						// and resolve it
+						throw new QonfigInterpretationException("No style-sheet available: Cannot refer to a style set.\n"
+							+ "\tThe style sheet at " + styleSheetEl.getFilePosition().getPosition(0)
+							+ " is not available due to loading order.\n"
+							+ "\tE.g. elements in a <model> element with a <style-sheet> sibling won't see the style sheet"
+							+ " because the models are loaded first.\n"
+							+ "\tTry moving " + styleSheetEl.toLocatedString() + " up in the hierarchy or " + c.toLocatedString()
+							+ " lower.",
+							styleSetName.position == null ? null
+								: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+								styleSetName.text.length());
+
+					} else
+						throw new QonfigInterpretationException("No style-sheet available: Cannot refer to a style set", //
+							styleSetName.position == null ? null
+								: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+								styleSetName.text.length());
+				}
 				if (theEffectiveAttribute != null)
 					throw new QonfigInterpretationException(
 						"Cannot refer to a style set when an attribute (" + theEffectiveAttribute + ") is specified", //
@@ -642,9 +677,9 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		if (theValue != null)
 			theValueInstantiator = myInterpreted.getValue().instantiate();
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-			.<ModelInstantiationException> simpleX(interp -> interp.create())//
-			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))
-			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this)).adjust();
+		.<ModelInstantiationException> simpleX(interp -> interp.create())//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), this)).adjust();
 	}
 
 	@Override

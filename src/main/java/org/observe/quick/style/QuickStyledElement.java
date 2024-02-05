@@ -585,8 +585,7 @@ public interface QuickStyledElement extends ExElement {
 
 			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different)
 				throws ModelInstantiationException {
-				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr)
-					.instantiate(interpreted.getStyledElement().getModels());
+				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr).instantiate();
 				theApplicableAttributes.computeIfAbsent(attr, __ -> {
 					different[0] = true;
 					return new StyleAttributeData<>(instantiator);

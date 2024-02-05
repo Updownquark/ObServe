@@ -13,20 +13,21 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.quick.base.MultiValueWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add on for an element that may have a style sheet */
 public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	/** The XML name of this type */
+	public static final String WITH_STYLE_SHEET = "with-style-sheet";
+	/** The session key to store the style sheet in */
 	public static final String QUICK_STYLE_SHEET = "Quick.Style.Sheet";
 
 	/** Definition for {@link ExWithStyleSheet} */
 	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
-		qonfigType = "with-style-sheet",
+		qonfigType = WITH_STYLE_SHEET,
 		interpretation = Interpreted.class,
-		instance = MultiValueWidget.class)
+		instance = ExWithStyleSheet.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithStyleSheet> {
 		private QuickStyleSheet theStyleSheet;
 

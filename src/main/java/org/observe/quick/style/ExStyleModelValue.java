@@ -11,12 +11,18 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** Add on for a model value in the metadata for a styled element */
 public class ExStyleModelValue extends ExElementModelValue {
+	/** The XML name of this type */
+	public static final String STYLE_MODEL_VALUE = "style-model-value";
+
 	/**
 	 * Definition for a {@link ExStyleModelValue}
 	 *
 	 * @param <AO> The sub-type of add-on to create
 	 */
-	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-model-value", interpretation = Interpreted.class)
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+		qonfigType = STYLE_MODEL_VALUE,
+		interpretation = Interpreted.class,
+		instance = ExStyleModelValue.class)
 	public static class Def<AO extends ExStyleModelValue> extends ExElementModelValue.Def<AO> {
 		private int thePriority;
 

@@ -12,7 +12,6 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.InterpretedStyleValue.StyleValueInstantiator;
 import org.observe.util.TypeTokens;
@@ -300,13 +299,12 @@ public interface QuickInterpretedStyle {
 		}
 
 		/**
-		 * @param models The interpreted models to instantiate for
 		 * @return An instantiator for style values for this attribute
 		 * @throws ModelInstantiationException If any model values fail to initialize
 		 */
-		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) throws ModelInstantiationException {
+		public QuickStyleAttributeInstantiator<T> instantiate() throws ModelInstantiationException {
 			return new QuickStyleAttributeInstantiator<>(theAttribute,
-				QommonsUtils.filterMapE(theValues, v -> true, v -> v.instantiate(models)));
+				QommonsUtils.filterMapE(theValues, v -> true, v -> v.instantiate()));
 		}
 
 		@Override

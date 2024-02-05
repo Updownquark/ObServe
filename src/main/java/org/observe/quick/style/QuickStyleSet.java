@@ -20,8 +20,12 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** A style set containing styles that can be applied to an element by name */
-@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-set")
+@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+	qonfigType = QuickStyleSet.STYLE_SET,
+	interpretation = QuickStyleSet.Interpreted.class)
 public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implements Named {
+	/** The XML name of this type */
+	public static final String STYLE_SET = "style-set";
 	/** The session key in which to install the currently parsing style set */
 	public static final String STYLE_SET_SESSION_KEY = "Quick.Style.Set";
 

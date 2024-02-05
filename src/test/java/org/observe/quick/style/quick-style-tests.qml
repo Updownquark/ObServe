@@ -16,6 +16,14 @@
 			</model>
 		</models>
 	</head>
+	<style-sheet>
+		<style-set name="testStyle">
+			<style element="a" attr="s1">217
+				<style if="d">856</style>
+			</style>
+			<style element="a" attr="s0">true</style> <!-- Just to test multiple styles in a style set -->
+		</style-set>
+	</style-sheet>
 	<test name="basicStyleNoWatch">
 		<model>
 			<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
@@ -253,29 +261,21 @@
 		But if that's so, I don't understand why the localStyleSheet test is fine.
 		
 		It should be noted that style sets are currently working (they are used in Quick applications I've written),
-		but it would be nice at some point to get this unit test working.
+		but it would be nice at some point to get this unit test working.-->
 	<test name="withStyleSets">
 		<model>
-			<!- a1 has a copy of all the same styles as are contained in the style set ->
+			<!-- a1 has a copy of all the same styles as are contained in the style set -->
 			<a name="a1" a="models.m0" b="true" c="0" d="models.m2">
 				<style if="a" attr="s1">217
 					<style if="d">856</style>
 				</style>
 			</a>
-			<!- a2 uses the style set.  Its style is the same as a1 when the style set applies to it, i.e. when a is true ->
+			<!-- a2 uses the style set.  Its style is the same as a1 when the style set applies to it, i.e. when a is true -->
 			<a name="a2" a="models.m0" b="true" c="0" d="models.m2">
 				<style attr="s0">false</style>
 				<style if="a" style-set="testStyle" />
 			</a>
 		</model>
-		<style-sheet>
-			<style-set name="testStyle">
-				<style element="a" attr="s1">217
-					<style if="d">856</style>
-				</style>
-				<style element="a" attr="s0">true</style> <!- Just to test multiple styles in a style set ->
-			</style-set>
-		</style-sheet>
 
 		<action>assertEquals(0, a1.s1)</action>
 		<action>models.m0=true</action>
@@ -299,5 +299,4 @@
 		<action>models.m0=true</action>
 		<action>assertEquals(true, a2.s0)</action>
 	</test>
-	-->
 </testing>

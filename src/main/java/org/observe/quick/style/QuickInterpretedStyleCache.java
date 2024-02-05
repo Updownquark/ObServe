@@ -108,11 +108,11 @@ public class QuickInterpretedStyleCache {
 
 		/**
 		 * @param definition The style application definition to interpret
-		 * @param env The expresso environment to interpret the application for
+		 * @param envs The expresso environments to interpret the application for
 		 * @return The interpreted style application for the definition environment
 		 * @throws ExpressoInterpretationException If the style application could not be interpreted
 		 */
-		public InterpretedStyleApplication getApplication(StyleApplicationDef definition, InterpretedExpressoEnv env)
+		public InterpretedStyleApplication getApplication(StyleApplicationDef definition, InterpretedExpressoEnv... envs)
 			throws ExpressoInterpretationException {
 			if (definition == null)
 				return null;
@@ -121,7 +121,7 @@ public class QuickInterpretedStyleCache {
 				synchronized (theApplications) {
 					app = theApplications.get(definition);
 					if (app == null) {
-						app = definition.interpret(env, this);
+						app = definition.interpret(this, envs);
 						theApplications.put(definition, app);
 					}
 				}

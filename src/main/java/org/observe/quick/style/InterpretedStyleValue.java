@@ -4,7 +4,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
@@ -64,12 +63,11 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	}
 
 	/**
-	 * @param models The interpreted models to create the instantiator with
 	 * @return An instantiator for this style value
 	 * @throws ModelInstantiationException If any model values cannot be initialized
 	 */
-	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) throws ModelInstantiationException {
-		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(models), theValue.instantiate(), theModelContext);
+	public StyleValueInstantiator<T> instantiate() throws ModelInstantiationException {
+		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(), theValue.instantiate(), theModelContext);
 	}
 
 	@Override

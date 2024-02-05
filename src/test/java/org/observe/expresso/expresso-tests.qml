@@ -1693,12 +1693,13 @@
 				<!-- This println is both for debugging as well as to give evidence that the tests are indeed executing -->
 				<action>System.out.println("index="+index+", list="+models.sortedEntityList)</action>
 			</action-group>
-			<loop name="modifyList" init="i=0" while="i&lt;25" after-body="i++">
+			<loop name="modifyList" init="i=0" while="i&lt;25">
 				<model>
 					<value name="i" type="int" />
 				</model>
 				<action>randomlyModifyEntity</action>
 				<action>checkEntityListOrder(models.sortedEntityList)</action>
+				<action>i++</action>
 			</loop>
 		</model>
 

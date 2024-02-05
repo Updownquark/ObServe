@@ -116,7 +116,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 				return old; // Don't throw errors on recursive updates
 			theStamp++;
 			theValue = value;
-			ObservableValueEvent<T> evt = createChangeEvent(old, value, getCurrentCauses());
+			ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
 			try (Transaction evtT = evt.use()) {
 				theEventer.onNext(evt);
 			}

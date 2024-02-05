@@ -1579,53 +1579,58 @@ public class QuickBaseSwing implements QuickInterpretation {
 				theContent = ce.getExtractedComponent();
 
 				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
-					Icon icon = theIcon == null ? null : theIcon.get();
-					int swingType;
-					String type = theType.get();
-					if (type == null)
-						swingType = JOptionPane.INFORMATION_MESSAGE;
-					else {
-						switch (type.toLowerCase()) {
-						case "info":
-						case "information":
+					ThreadConstraint.EDT.invoke(() -> {
+						Icon icon = theIcon == null ? null : theIcon.get();
+						int swingType;
+						String type = theType.get();
+						if (type == null)
 							swingType = JOptionPane.INFORMATION_MESSAGE;
-							break;
-						case "err":
-						case "error":
-							swingType = JOptionPane.ERROR_MESSAGE;
-							break;
-						case "warn":
-						case "warning":
-							swingType = JOptionPane.WARNING_MESSAGE;
-							break;
-						case "plain":
-							swingType = JOptionPane.PLAIN_MESSAGE;
-							break;
-						case "q":
-						case "question":
-						case "?":
-							swingType = JOptionPane.QUESTION_MESSAGE;
-							break;
-						default:
-							dialog.reporting().warn("Unrecognized message type: " + type);
-							swingType = JOptionPane.INFORMATION_MESSAGE;
-							break;
+						else {
+							switch (type.toLowerCase()) {
+							case "info":
+							case "information":
+							case ".":
+								swingType = JOptionPane.INFORMATION_MESSAGE;
+								break;
+							case "err":
+							case "error":
+							case "!":
+								swingType = JOptionPane.ERROR_MESSAGE;
+								break;
+							case "warn":
+							case "warning":
+								swingType = JOptionPane.WARNING_MESSAGE;
+								break;
+							case "plain":
+							case "":
+								swingType = JOptionPane.PLAIN_MESSAGE;
+								break;
+							case "q":
+							case "question":
+							case "?":
+								swingType = JOptionPane.QUESTION_MESSAGE;
+								break;
+							default:
+								dialog.reporting().warn("Unrecognized message type: " + type);
+								swingType = JOptionPane.INFORMATION_MESSAGE;
+								break;
+							}
 						}
-					}
-					if (icon != null)
-						JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, icon);
-					else
-						JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType);
-					Runnable[] resetVisible = new Runnable[1];
-					resetVisible[0] = () -> {
-						if (window.isVisible().isAcceptable(false) == null) {
-							if (window.isVisible().isEventing())
-								EventQueue.invokeLater(resetVisible[0]);
-							else
-								window.isVisible().set(false, null);
-						}
-					};
-					theOnClose.act(null);
+						if (icon != null)
+							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, icon);
+						else
+							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType);
+						Runnable[] resetVisible = new Runnable[1];
+						resetVisible[0] = () -> {
+							if (window.isVisible().isAcceptable(false) == null) {
+								if (window.isVisible().isEventing())
+									EventQueue.invokeLater(resetVisible[0]);
+								else
+									window.isVisible().set(false, null);
+							}
+						};
+						theOnClose.act(null);
+					});
 				});
 			}
 		};
@@ -1653,27 +1658,29 @@ public class QuickBaseSwing implements QuickInterpretation {
 				theContent = ce.getExtractedComponent();
 
 				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
-					int result;
-					Icon icon = theIcon == null ? null : theIcon.get();
-					if (icon != null)
-						result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION,
-							JOptionPane.QUESTION_MESSAGE, icon);
-					else
-						result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
-					Runnable[] resetVisible = new Runnable[1];
-					resetVisible[0] = () -> {
-						if (window.isVisible().isAcceptable(false) == null) {
-							if (window.isVisible().isEventing())
-								EventQueue.invokeLater(resetVisible[0]);
-							else
-								window.isVisible().set(false, null);
-						}
-					};
-					EventQueue.invokeLater(resetVisible[0]);
-					if (result == JOptionPane.OK_OPTION)
-						theOnConfirm.act(null);
-					else if (theOnCancel.isEnabled() == null)
-						theOnCancel.act(null);
+					ThreadConstraint.EDT.invoke(() -> {
+						int result;
+						Icon icon = theIcon == null ? null : theIcon.get();
+						if (icon != null)
+							result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION,
+								JOptionPane.QUESTION_MESSAGE, icon);
+						else
+							result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
+						Runnable[] resetVisible = new Runnable[1];
+						resetVisible[0] = () -> {
+							if (window.isVisible().isAcceptable(false) == null) {
+								if (window.isVisible().isEventing())
+									EventQueue.invokeLater(resetVisible[0]);
+								else
+									window.isVisible().set(false, null);
+							}
+						};
+						EventQueue.invokeLater(resetVisible[0]);
+						if (result == JOptionPane.OK_OPTION)
+							theOnConfirm.act(null);
+						else if (theOnCancel.isEnabled() == null)
+							theOnCancel.act(null);
+					});
 				});
 			}
 		};
@@ -1702,7 +1709,9 @@ public class QuickBaseSwing implements QuickInterpretation {
 				theSwingChooser.setFileSelectionMode(mode);
 				theSwingChooser.setMultiSelectionEnabled(theQuickChooser.isMultiSelectable());
 
-				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> display(window, parent));
+				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
+					ThreadConstraint.EDT.invoke(() -> display(window, parent));
+				});
 			}
 
 			void display(QuickAbstractWindow window, Component parent) {

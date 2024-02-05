@@ -1,15 +1,18 @@
 package org.observe.quick.style;
 
+import java.util.List;
+
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.Transformation;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 
 /** A {@link StyleApplicationDef} evaluated for an {@link InterpretedExpressoEnv environment} */
 public class InterpretedStyleApplication {
@@ -18,18 +21,18 @@ public class InterpretedStyleApplication {
 
 	private final InterpretedStyleApplication theParent;
 	private final StyleApplicationDef theDefinition;
-	private final InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
+	private final List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theConditions;
 
 	/**
 	 * @param parent The parent application (see {@link StyleApplicationDef#getParent()})
 	 * @param definition The application definition this structure is interpreted from
-	 * @param condition The condition value container
+	 * @param conditions The style conditions
 	 */
 	public InterpretedStyleApplication(InterpretedStyleApplication parent, StyleApplicationDef definition,
-		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> condition) {
+		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions) {
 		theParent = parent;
 		theDefinition = definition;
-		theCondition = condition;
+		theConditions = conditions;
 	}
 
 	/** @return The parent application (see {@link StyleApplicationDef#getParent()}) */
@@ -39,26 +42,25 @@ public class InterpretedStyleApplication {
 
 	/**
 	 * @return The application definition this structure is
-	 *         {@link StyleApplicationDef#interpret(InterpretedExpressoEnv, QuickInterpretedStyleCache.Applications) interpreted} from
+	 *         {@link StyleApplicationDef#interpret(QuickInterpretedStyleCache.Applications, InterpretedExpressoEnv[]) interpreted} from
 	 */
 	public StyleApplicationDef getDefinition() {
 		return theDefinition;
 	}
 
-	/** @return The condition value container */
-	public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
-		return theCondition;
+	/** @return The style conditions */
+	public List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> getConditions() {
+		return theConditions;
 	}
 
 	/**
-	 * @param models The interpreted models to use to create the instantiator
 	 * @return An instantiator for the condition returning whether and when this applies to the element
 	 * @throws ModelInstantiationException If the condition cannot be instantiated
 	 */
-	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator(InterpretedModelSet models)
+	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator()
 		throws ModelInstantiationException {
-		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(models),
-			theCondition == null ? null : theCondition.instantiate());
+		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(), //
+			QommonsUtils.filterMapE(theConditions, null, c -> c.instantiate()));
 	}
 
 	@Override
@@ -69,24 +71,24 @@ public class InterpretedStyleApplication {
 	/** An instantiator for a style element's condition */
 	public static class Instantiator implements ModelValueInstantiator<ObservableValue<Boolean>> {
 		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theParentCondition;
-		private final ModelValueInstantiator<? extends ObservableValue<Boolean>> theCondition;
+		private final List<ModelValueInstantiator<? extends ObservableValue<Boolean>>> theConditions;
 
 		/**
 		 * @param parentCondition The parent element's condition
-		 * @param condition The style element's condition
+		 * @param conditions The style element's conditions
 		 */
 		public Instantiator(ModelValueInstantiator<? extends ObservableValue<Boolean>> parentCondition,
-			ModelValueInstantiator<? extends ObservableValue<Boolean>> condition) {
+			List<ModelValueInstantiator<? extends ObservableValue<Boolean>>> conditions) {
 			theParentCondition = parentCondition;
-			theCondition = condition;
+			theConditions = conditions;
 		}
 
 		@Override
 		public void instantiate() throws ModelInstantiationException {
 			if(theParentCondition!=null)
 				theParentCondition.instantiate();
-			if(theCondition!=null)
-				theCondition.instantiate();
+			for (ModelValueInstantiator<? extends ObservableValue<Boolean>> condition : theConditions)
+				condition.instantiate();
 		}
 
 		@Override
@@ -97,23 +99,49 @@ public class InterpretedStyleApplication {
 			else
 				parentCond = theParentCondition.get(models);
 
-			ObservableValue<Boolean> localCond;
-			if (theCondition != null)
-				localCond = theCondition.get(models);
-			else
-				localCond = TRUE;
+			ObservableValue<Boolean>[] localCond = new ObservableValue[theConditions.size()];
+			for (int i = 0; i < localCond.length; i++)
+				localCond[i] = theConditions.get(i).get(models);
 
 			return combine(parentCond, localCond);
 		}
 
-		ObservableValue<Boolean> combine(ObservableValue<Boolean> parentCond, ObservableValue<Boolean> localCond) {
-			if (TRUE.equals(parentCond))
-				return localCond;
-			else if (TRUE.equals(localCond))
+		ObservableValue<Boolean> combine(ObservableValue<Boolean> parentCond, ObservableValue<Boolean>[] localCond) {
+			if (localCond.length == 0)
 				return parentCond;
-			else
-				return parentCond.transform(boolean.class, tx -> tx.combineWith(localCond)//
-					.combine(LambdaUtils.printableBiFn((c1, c2) -> Boolean.TRUE.equals(c1) && Boolean.TRUE.equals(c2), "&&", "&&")));
+			else if (TRUE.equals(parentCond)) {
+				if (localCond.length == 1)
+					return localCond[0];
+				else {
+					return localCond[0].transform(boolean.class, tx -> {
+						Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
+						for (int i = 1; i < localCond.length; i++)
+							txb = txb.combineWith(localCond[i]);
+						return txb.build(LambdaUtils.printableBiFn((c1, txv) -> {
+							if (!c1)
+								return false;
+							for (int i = 1; i < localCond.length; i++)
+								if (!txv.get(localCond[i]))
+									return false;
+							return true;
+						}, "&&", null));
+					});
+				}
+			} else {
+				return parentCond.transform(boolean.class, tx -> {
+					Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
+					for (int i = 0; i < localCond.length; i++)
+						txb = txb.combineWith(localCond[i]);
+					return txb.build(LambdaUtils.printableBiFn((pc, txv) -> {
+						if (!pc)
+							return false;
+						for (int i = 0; i < localCond.length; i++)
+							if (!txv.get(localCond[i]))
+								return false;
+						return true;
+					}, "&&", null));
+				});
+			}
 		}
 
 		@Override
@@ -123,11 +151,17 @@ public class InterpretedStyleApplication {
 			ObservableValue<Boolean> newParent = theParentCondition == null ? TRUE
 				: ((ModelValueInstantiator<ObservableValue<Boolean>>) theParentCondition).forModelCopy(sourceParent, sourceModels,
 					newModels);
-			ObservableValue<Boolean> sourceLocal = theCondition == null ? TRUE : theCondition.get(sourceModels);
-			ObservableValue<Boolean> newLocal = theCondition == null ? TRUE
-				: ((ModelValueInstantiator<ObservableValue<Boolean>>) theCondition).forModelCopy(sourceLocal, sourceModels, newModels);
+			ObservableValue<Boolean>[] sourceLocal = new ObservableValue[theConditions.size()];
+			ObservableValue<Boolean>[] newLocal = new ObservableValue[theConditions.size()];
+			boolean same = sourceParent == newParent;
+			for (int i = 0; i < sourceLocal.length; i++) {
+				sourceLocal[i] = theConditions.get(i).get(sourceModels);
+				newLocal[i] = ((ModelValueInstantiator<ObservableValue<Boolean>>) theConditions.get(i)).forModelCopy(sourceLocal[i],
+					sourceModels, newModels);
+				same &= sourceLocal[i] == newLocal[i];
+			}
 
-			if (sourceParent == newParent && sourceLocal == newLocal)
+			if (same)
 				return value;
 			else
 				return combine(newParent, newLocal);
@@ -136,12 +170,12 @@ public class InterpretedStyleApplication {
 		@Override
 		public String toString() {
 			if (theParentCondition != null) {
-				if (theCondition != null)
-					return theParentCondition + " && " + theCondition;
+				if (theConditions != null)
+					return theParentCondition + " && " + theConditions;
 				else
 					return theParentCondition.toString();
-			} else if (theCondition != null)
-				return theCondition.toString();
+			} else if (theConditions != null)
+				return theConditions.toString();
 			else
 				return "true";
 		}

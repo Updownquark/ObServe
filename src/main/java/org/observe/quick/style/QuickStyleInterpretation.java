@@ -59,8 +59,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				return value;
 			}
 		});
-		interpreter.createWith("with-style-sheet", ExWithStyleSheet.Def.class, ExAddOn.creator(ExWithStyleSheet.Def::new));
-		interpreter.modifyWith("with-style-sheet", Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
+		interpreter.createWith(ExWithStyleSheet.WITH_STYLE_SHEET, ExWithStyleSheet.Def.class, ExAddOn.creator(ExWithStyleSheet.Def::new));
+		interpreter.modifyWith(ExWithStyleSheet.WITH_STYLE_SHEET, Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
@@ -73,17 +73,17 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				return value;
 			}
 		});
-		interpreter.createWith("style", QuickStyleElement.Def.class, ExElement.creator(QuickStyleElement.Def::new));
-		interpreter.createWith("style-sheet", QuickStyleSheet.class, ExElement.creator(QuickStyleSheet::new));
-		interpreter.createWith("style-set", QuickStyleSet.class, session -> {
+		interpreter.createWith(QuickStyleElement.STYLE, QuickStyleElement.Def.class, ExElement.creator(QuickStyleElement.Def::new));
+		interpreter.createWith(QuickStyleSheet.STYLE_SHEET, QuickStyleSheet.class, ExElement.creator(QuickStyleSheet::new));
+		interpreter.createWith(QuickStyleSet.STYLE_SET, QuickStyleSet.class, session -> {
 			if (!(session.getElementRepresentation() instanceof QuickStyleSheet))
 				throw new QonfigInterpretationException("This interpretation is only valid as a child of a style-sheet",
 					session.reporting().getPosition(), 0);
 			return new QuickStyleSet((QuickStyleSheet) session.getElementRepresentation(), session.getFocusType());
 		});
-		interpreter.createWith("import-style-sheet", QuickStyleSheet.StyleSheetRef.class,
+		interpreter.createWith(QuickStyleSheet.IMPORT_STYLE_SHEET, QuickStyleSheet.StyleSheetRef.class,
 			ExElement.creator(QuickStyleSheet.class, QuickStyleSheet.StyleSheetRef::new));
-		interpreter.createWith("style-model-value", ExStyleModelValue.Def.class,
+		interpreter.createWith(ExStyleModelValue.STYLE_MODEL_VALUE, ExStyleModelValue.Def.class,
 			ExAddOn.creator(ExtModelValueElement.Def.class, ExStyleModelValue.Def::new));
 		return interpreter;
 	}

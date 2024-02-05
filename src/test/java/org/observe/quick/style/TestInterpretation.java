@@ -306,9 +306,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				c = interpreted.c.instantiate();
 				d = interpreted.d.instantiate();
 
-				s0 = interpreted.getStyle().getS0().instantiate(models);
-				s1 = interpreted.getStyle().getS1().instantiate(models);
-				s2 = interpreted.getStyle().getS2().instantiate(models);
+				s0 = interpreted.getStyle().getS0().instantiate();
+				s1 = interpreted.getStyle().getS1().instantiate();
+				s2 = interpreted.getStyle().getS2().instantiate();
 			}
 
 			@Override
@@ -636,8 +636,8 @@ public class TestInterpretation implements QonfigInterpretation {
 				e = interpreted.e.instantiate();
 				f = interpreted.f.instantiate();
 
-				s3 = interpreted.getStyle().getS3().instantiate(model);
-				s4 = interpreted.getStyle().getS4().instantiate(model);
+				s3 = interpreted.getStyle().getS3().instantiate();
+				s4 = interpreted.getStyle().getS4().instantiate();
 
 				theChildren = QommonsUtils.filterMapE(interpreted.theChildren, null, ch -> ch.instantiate());
 			}
@@ -881,7 +881,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 				g = interpreted.g.instantiate();
 
-				s5 = interpreted.getStyle().getS5().instantiate(interpreted.getExpressoEnv().getModels());
+				s5 = interpreted.getStyle().getS5().instantiate();
 			}
 
 			@Override
@@ -1065,7 +1065,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 				h = interpreted.h.instantiate();
 
-				s6 = interpreted.getStyle().getS6().instantiate(interpreted.getExpressoEnv().getModels());
+				s6 = interpreted.getStyle().getS6().instantiate();
 			}
 
 			@Override

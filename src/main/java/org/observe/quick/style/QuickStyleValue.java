@@ -102,7 +102,7 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	/**
 	 * @return The application of this value, determining which elements it
 	 *         {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to and
-	 *         {@link StyleApplicationDef#getCondition() when}
+	 *         {@link StyleApplicationDef#getConditions() when}
 	 */
 	public StyleApplicationDef getApplication() {
 		return theApplication;
@@ -151,17 +151,17 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 		else
 			styleSheet = styleSheet.findInterpretation(theStyleSheet);
 		QuickStyleSet.Interpreted styleSet = theStyleSet == null ? null : styleSheet.getStyleSets().get(theStyleSet.getName());
-		InterpretedExpressoEnv styleEnv;
+		InterpretedExpressoEnv[] styleEnvs;
 		if (styleSet != null)
-			styleEnv = styleSet.getExpressoEnv();
+			styleEnvs = new InterpretedExpressoEnv[] { styleSet.getExpressoEnv(), env };
 		else if (styleSheet != null)
-			styleEnv = styleSheet.getExpressoEnv();
+			styleEnvs = new InterpretedExpressoEnv[] { styleSheet.getExpressoEnv(), env };
 		else
-			styleEnv = env;
-		InterpretedStyleApplication application = appCache.getApplication(theApplication, styleEnv);
-		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(styleEnv);
-		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, styleEnv);
-		return _interpret(application, attribute, styleSheet, styleEnv, env);
+			styleEnvs = new InterpretedExpressoEnv[] { env };
+		InterpretedStyleApplication application = appCache.getApplication(theApplication, styleEnvs);
+		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(styleEnvs[0]);
+		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, styleEnvs[0]);
+		return _interpret(application, attribute, styleSheet, styleEnvs[0], env);
 	}
 
 	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,

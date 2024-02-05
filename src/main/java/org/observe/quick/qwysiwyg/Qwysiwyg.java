@@ -30,7 +30,6 @@ import org.observe.expresso.*;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -343,15 +342,32 @@ public class Qwysiwyg {
 			theSource = source;
 			theStyleValue = styleValue;
 			theConditionalValue = conditionalValue;
-			theConditionX = styleValue.getApplication().getCondition() == null ? null
-				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.thrower2());
+			ObservableExpression condition;
+			switch (styleValue.getApplication().getConditions().size()) {
+			case 0:
+				condition = null;
+				theConditionX = null;
+				break;
+			case 1:
+				condition = styleValue.getApplication().getConditions().get(0).getExpression();
+				theConditionX = condition.evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.thrower2());
+				break;
+			default:
+				LocatedAndExpression and = new LocatedAndExpression(//
+					styleValue.getApplication().getConditions().get(0), //
+					styleValue.getApplication().getConditions().get(1));
+				for (int i = 2; i < styleValue.getApplication().getConditions().size(); i++)
+					and = new LocatedAndExpression(and, styleValue.getApplication().getConditions().get(i));
+				condition = and.getExpression();
+				theConditionX = condition.evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.thrower2());
+			}
 			if (theConditionX != null) {
 				LocatedPositionedContent conditionContent = new LocatedPositionedContent.Default(styleValue + ".condition",
-					new PositionedContent.Simple(FilePosition.START, styleValue.getApplication().getCondition().toString()));
+					new PositionedContent.Simple(FilePosition.START, condition.toString()));
 				theConditionDoc = new StyledQuickDocument(conditionContent.getFileLocation(),
-					styleValue.getApplication().getCondition().toString(), Qwysiwyg.this::goTo);
+					condition.toString(), Qwysiwyg.this::goTo);
 				theConditionDoc.getRoot().end(conditionContent.getPosition(conditionContent.length()));
-				renderCompiledExpression(styleValue.getApplication().getCondition(), conditionContent, theConditionDoc.getRoot());
+				renderCompiledExpression(condition, conditionContent, theConditionDoc.getRoot());
 				renderInterpretedExpression(theConditionX, theConditionDoc.getRoot(), env, models);
 			} else
 				theConditionDoc = null;
@@ -583,15 +599,14 @@ public class Qwysiwyg {
 		theDebuggingStyle.changes().act(evt -> {
 			styleDebugValues.clear();
 			if (evt.getNewValue() != null)
-				populateDebugStyle(evt.getNewValue(), theStyledNode.interpreted.getExpressoEnv().getModels(),
-					((QuickStyledElement) theStyledNode.element).getStyle());
+				populateDebugStyle(evt.getNewValue(), ((QuickStyledElement) theStyledNode.element).getStyle());
 		});
 	}
 
-	private <T> void populateDebugStyle(QuickElementStyleAttribute<T> attr, InterpretedModelSet models, QuickInstanceStyle style) {
+	private <T> void populateDebugStyle(QuickElementStyleAttribute<T> attr, QuickInstanceStyle style) {
 		List<ObservableValue<QuickInterpretedStyle.ConditionalValue<T>>> values;
 		try {
-			values = attr.instantiate(models).getConditionalValues(theStyledNode.element.getUpdatingModels());
+			values = attr.instantiate().getConditionalValues(theStyledNode.element.getUpdatingModels());
 		} catch (ModelInstantiationException e) {
 			System.err.println("Could not debug style");
 			e.printStackTrace();

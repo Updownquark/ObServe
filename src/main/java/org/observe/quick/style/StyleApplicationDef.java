@@ -24,11 +24,10 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.ops.BinaryOperator;
-import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ElementModelValue.Identity;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.util.TypeTokens;
@@ -45,7 +44,6 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
-import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
@@ -58,26 +56,26 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	/** Inheritance scheme for {@link QonfigElementOrAddOn}s */
 	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = QonfigElementOrAddOn::isAssignableFrom;
 	/** An {@link StyleApplicationDef} that applies to all {@link QonfigElement}s */
-	public static final StyleApplicationDef ALL = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(), null,
+	public static final StyleApplicationDef ALL = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(), Collections.emptyList(),
 		Collections.emptyMap());
 	/** An {@link StyleApplicationDef} that applies to no {@link QonfigElement}s */
 	public static final StyleApplicationDef NONE = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(),
-		new LocatedExpression() {
-		@Override
-		public int length() {
-			return "false".length();
-		}
+		Collections.singletonList(new LocatedExpression() {
+			@Override
+			public int length() {
+				return "false".length();
+			}
 
-		@Override
-		public LocatedPositionedContent getFilePosition() {
-			return null;
-		}
+			@Override
+			public LocatedPositionedContent getFilePosition() {
+				return null;
+			}
 
-		@Override
-		public ObservableExpression getExpression() {
-			return new ObservableExpression.LiteralExpression<>("false", false);
-		}
-	}, Collections.emptyMap());
+			@Override
+			public ObservableExpression getExpression() {
+				return new ObservableExpression.LiteralExpression<>("false", false);
+			}
+		}), Collections.emptyMap());
 
 	/**
 	 * The {@link ObservableModelSet#getTagValue(ModelTag) model tag} that the styled {@link QonfigElement} will be stored in to enable
@@ -129,19 +127,19 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	private final QonfigChildDef theRole;
 	private final MultiInheritanceSet<QonfigElementOrAddOn> theTypes;
 	private final int theTypeComplexity;
-	private final LocatedExpression theCondition;
+	private final List<LocatedExpression> theConditions;
 	private final Map<ElementModelValue.Identity, Integer> theModelValues;
 	private final long thePriority;
 	private final int theConditionComplexity;
 
 	private StyleApplicationDef(StyleApplicationDef parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
-		LocatedExpression condition, Map<ElementModelValue.Identity, Integer> modelValues) {
+		List<LocatedExpression> conditions, Map<ElementModelValue.Identity, Integer> modelValues) {
 		if ((parent != null) != (role != null))
 			throw new IllegalArgumentException("A role must be accompanied by a parent style application and vice-versa");
 		theParent = parent;
 		theRole = role;
 		theTypes = MultiInheritanceSet.unmodifiable(types);
-		theCondition = condition;
+		theConditions = conditions;
 		theModelValues = modelValues;
 
 		// Put together derived fields
@@ -158,7 +156,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 		theTypeComplexity = localComplexity + (theParent == null ? 0 : theParent.getTypeComplexity());
 		thePriority = modelValues.values().stream().mapToLong(Integer::longValue).sum();
-		theConditionComplexity = condition == null ? 0 : getComplexity(condition.getExpression());
+		int complexity = 0;
+		for (LocatedExpression cond : theConditions)
+			complexity += getComplexity(cond.getExpression());
+		theConditionComplexity = complexity;
 	}
 
 	private static void addHierarchy(QonfigElementOrAddOn type, Set<QonfigElementOrAddOn> visited) {
@@ -517,19 +518,19 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	/** @return The condition that an element's model must pass for this application to {@link #applies(QonfigElement) apply} to it */
-	public ObservableExpression getCondition() {
-		return theCondition == null ? null : theCondition.getExpression();
+	public List<LocatedExpression> getConditions() {
+		return theConditions;
 	}
 
 	/**
-	 * @return All model values that this application's {@link #getCondition() condition} references, sorted by priority (in the key set,
+	 * @return All model values that this application's {@link #getConditions() condition} references, sorted by priority (in the key set,
 	 *         highest first) and mapped to their priority
 	 */
 	public Map<ElementModelValue.Identity, Integer> getModelValues() {
 		return theModelValues;
 	}
 
-	/** @return A heuristic of the complexity of this application's {@link #getCondition() condition} */
+	/** @return A heuristic of the complexity of this application's {@link #getConditions() conditions} */
 	public int getConditionComplexity() {
 		return theConditionComplexity;
 	}
@@ -559,7 +560,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(theParent, theRole, theTypes, theCondition);
+		return Objects.hash(theParent, theRole, theTypes, theConditions);
 	}
 
 	@Override
@@ -572,7 +573,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return Objects.equals(theParent, other.theParent)//
 			&& Objects.equals(theRole, other.theRole)//
 			&& theTypes.equals(other.theTypes)//
-			&& Objects.equals(theCondition, other.theCondition);
+			&& Objects.equals(theConditions, other.theConditions);
 	}
 
 	/**
@@ -659,7 +660,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 		if (newTypes == null)
 			return this; // All types already contained
-		return new StyleApplicationDef(theParent, theRole, newTypes, theCondition, theModelValues);
+		return new StyleApplicationDef(theParent, theRole, newTypes, theConditions, theModelValues);
 	}
 
 	/**
@@ -672,7 +673,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		if (child.getType() != null)
 			types.add(child.getType());
 		types.addAll(child.getInheritance());
-		return new StyleApplicationDef(this, child, types, null, theModelValues);
+		return new StyleApplicationDef(this, child, types, Collections.emptyList(), theModelValues);
 	}
 
 	/**
@@ -690,16 +691,12 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	public StyleApplicationDef forCondition(LocatedExpression condition, ObservableModelSet models,
 		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
-		LocatedExpression newCondition;
+		List<LocatedExpression> newConditions = new ArrayList<>(theConditions.size() + 1);
 		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
-		if (theCondition == null) {
-			newCondition = condition;
-			modelValues.putAll(theModelValues);
-		} else
-			newCondition = new LocatedAndExpression(theCondition, condition);
-
-		newCondition = getPrioritizedModelValues(newCondition, models, priorityAttr, styleSheet, dmvCache, modelValues, reporting);
-		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition, modelValues);
+		newConditions.addAll(theConditions);
+		modelValues.putAll(theModelValues);
+		newConditions.add(getPrioritizedModelValues(condition, models, priorityAttr, styleSheet, dmvCache, modelValues, reporting));
+		return new StyleApplicationDef(theParent, theRole, theTypes, Collections.unmodifiableList(newConditions), modelValues);
 	}
 
 	private LocatedExpression getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
@@ -753,187 +750,28 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		types.addAll(theTypes.values());
 		types.addAll(other.theTypes.values());
 
-		LocatedExpression condition;
+		List<LocatedExpression> conditions;
 		Map<Identity, Integer> modelValues;
-		if (theCondition != null) {
-			if (other.theCondition != null) {
-				// Would theoretically be possible here to search for impossible conditions
-				// like b && !b, but that's a lot of work
-				condition = new LocatedAndExpression(theCondition, other.theCondition);
-				modelValues = new LinkedHashMap<>();
-				modelValues.putAll(theModelValues);
-				modelValues.putAll(other.theModelValues);
-			} else {
-				condition = theCondition;
-				modelValues = theModelValues;
-			}
-		} else {
-			condition = other.theCondition;
+		if (theConditions.isEmpty()) {
+			conditions = other.theConditions;
 			modelValues = other.theModelValues;
+		} else if (other.theConditions.isEmpty()) {
+			conditions = theConditions;
+			modelValues = theModelValues;
+		} else {
+			conditions = new ArrayList<>(theConditions.size() + other.theConditions.size());
+			modelValues = new LinkedHashMap<>();
+			// Would theoretically be possible here to search for impossible conditions
+			// like b && !b, but that's a lot of work
+			conditions.addAll(theConditions);
+			conditions.addAll(other.theConditions);
+			modelValues.putAll(theModelValues);
+			modelValues.putAll(other.theModelValues);
+			conditions = Collections.unmodifiableList(conditions);
+			modelValues = Collections.unmodifiableMap(modelValues);
 		}
 
-		return new StyleApplicationDef(parent, role, types, condition, modelValues);
-	}
-
-	private static class LocatedAndExpression implements LocatedExpression {
-		private final LocatedExpression theLeft;
-		private final LocatedExpression theRight;
-		private final BinaryOperator theExpression;
-
-		public LocatedAndExpression(LocatedExpression left, LocatedExpression right) {
-			theLeft = left;
-			theRight = right;
-			theExpression = new BinaryOperator("&&", //
-				BufferedExpression.buffer(0, left.getExpression(), 1), //
-				BufferedExpression.buffer(1, right.getExpression(), 0));
-		}
-
-		@Override
-		public ObservableExpression getExpression() {
-			return theExpression;
-		}
-
-		@Override
-		public int length() {
-			return theExpression.getExpressionLength();
-		}
-
-		@Override
-		public LocatedPositionedContent getFilePosition() {
-			return new LocatedAndLocation(theLeft.getFilePosition(), " && ", theRight.getFilePosition());
-		}
-
-		@Override
-		public LocatedFilePosition getFilePosition(int offset) {
-			if (offset < theLeft.length())
-				return theLeft.getFilePosition(offset);
-			else if (offset < theLeft.length() + 4)
-				return new LocatedFilePosition("StyleApplicationDef.java", 0, 0, 0);
-			else
-				return theRight.getFilePosition(offset - theLeft.length() - 4);
-		}
-
-		@Override
-		public String toString() {
-			return theLeft + " && " + theRight;
-		}
-	}
-
-	private static class LocatedAndLocation implements LocatedPositionedContent {
-		private final LocatedPositionedContent theLeft;
-		private final String theOperator;
-		private final LocatedPositionedContent theRight;
-
-		LocatedAndLocation(LocatedPositionedContent left, String operator, LocatedPositionedContent right) {
-			theLeft = left;
-			theOperator = operator;
-			theRight = right;
-		}
-
-		@Override
-		public int length() {
-			return theLeft.length() + theOperator.length() + theRight.length();
-		}
-
-		@Override
-		public char charAt(int index) {
-			if (index < theLeft.length())
-				return theLeft.charAt(index);
-			else if (index < theLeft.length() + theOperator.length())
-				return theOperator.charAt(index - theLeft.length());
-			else
-				return theRight.charAt(index - theLeft.length() - theOperator.length());
-		}
-
-		@Override
-		public String getFileLocation() {
-			return theLeft.getFileLocation();
-		}
-
-		@Override
-		public LocatedFilePosition getPosition(int index) {
-			if (index < theLeft.length())
-				return theLeft.getPosition(index);
-			else if (index < theLeft.length() + theOperator.length())
-				return theRight.getPosition(0);
-			else
-				return theRight.getPosition(index);
-		}
-
-		@Override
-		public int getSourceLength(int from, int to) {
-			int leftLen = theLeft.length();
-			if (from < leftLen) {
-				if (to <= leftLen)
-					return theLeft.getSourceLength(from, to);
-				else if (to <= leftLen + theOperator.length())
-					return theLeft.getSourceLength(from, theLeft.length());
-				else
-					return theLeft.getSourceLength(from, theLeft.length()) + theOperator.length()
-					+ theRight.getSourceLength(0, to - leftLen - theOperator.length());
-			} else if (from < theLeft.length() + theOperator.length()) {
-				if (to < leftLen + theOperator.length())
-					return 0;
-				else
-					return theRight.getSourceLength(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
-			} else
-				return theRight.getSourceLength(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
-		}
-
-		@Override
-		public CharSequence getSourceContent(int from, int to) {
-			int leftLen = theLeft.length();
-			if (from < leftLen) {
-				if (to <= leftLen)
-					return theLeft.getSourceContent(from, to);
-				else if (to <= leftLen + theOperator.length())
-					return theLeft.getSourceContent(from, theLeft.length());
-				else
-					return theLeft.getSourceContent(from, theLeft.length()).toString() + theOperator
-						+ theRight.getSourceContent(0, to - leftLen - theOperator.length());
-			} else if (from < theLeft.length() + theOperator.length()) {
-				if (to < leftLen + theOperator.length())
-					return "";
-				else
-					return theRight.getSourceContent(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
-			} else
-				return theRight.getSourceContent(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
-		}
-
-		@Override
-		public LocatedPositionedContent subSequence(int startIndex) {
-			if (startIndex < theLeft.length())
-				return new LocatedAndLocation(theLeft.subSequence(startIndex), theOperator, theRight);
-			else if (startIndex < theLeft.length() + theOperator.length())
-				return theRight;
-			else
-				return theRight.subSequence(startIndex - theLeft.length() - theOperator.length());
-		}
-
-		@Override
-		public LocatedPositionedContent subSequence(int startIndex, int endIndex) {
-			int leftLen = theLeft.length();
-			if (startIndex < leftLen) {
-				if (endIndex <= leftLen)
-					return theLeft.subSequence(startIndex, endIndex);
-				else if (endIndex <= leftLen + theOperator.length())
-					return theLeft.subSequence(startIndex);
-				else
-					return new LocatedAndLocation(theLeft.subSequence(startIndex), theOperator,
-						theRight.subSequence(0, endIndex - leftLen - theOperator.length()));
-			} else if (startIndex < theLeft.length() + theOperator.length()) {
-				if (endIndex < leftLen + theOperator.length())
-					return theRight.subSequence(0, 0);
-				else
-					return theRight.subSequence(startIndex - leftLen - theOperator.length(), endIndex - leftLen - theOperator.length());
-			} else
-				return theRight.subSequence(startIndex - leftLen - theOperator.length(), endIndex - leftLen - theOperator.length());
-		}
-
-		@Override
-		public String toString() {
-			return theLeft.toString();
-		}
+		return new StyleApplicationDef(parent, role, types, conditions, modelValues);
 	}
 
 	/** @return 1 if this application has no {@link #getParent()}, else its parent's depth plus 1 */
@@ -954,25 +792,52 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 *
-	 * @param env The Expresso environment in which to
+	 * @param envs The Expresso environments in which to
 	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
-	 *        evaluate} {@link #getCondition() conditions}
+	 *        evaluate} {@link #getConditions() conditions}
 	 * @param appCache A cache of compiled applications for re-use
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
 	 * @throws ExpressoInterpretationException If a condition could not be
 	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *         evaluated}
 	 */
-	public InterpretedStyleApplication interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
+	public InterpretedStyleApplication interpret(QuickInterpretedStyleCache.Applications appCache, InterpretedExpressoEnv... envs)
 		throws ExpressoInterpretationException {
 		InterpretedStyleApplication parent;
 		if (theParent == null)
 			parent = null;
 		else
-			parent = appCache.getApplication(theParent, env);
-		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> condition = theCondition == null ? null : //
-			theCondition.interpret(ModelTypes.Value.BOOLEAN, env);
-		return new InterpretedStyleApplication(parent, this, condition);
+			parent = appCache.getApplication(theParent, envs);
+		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions;
+		if (theConditions.isEmpty())
+			conditions = Collections.emptyList();
+		else {
+			conditions = new ArrayList<>(theConditions.size());
+			for (LocatedExpression c : theConditions) {
+				boolean found = false;
+				ExpressoInterpretationException thrown = null;
+				for (InterpretedExpressoEnv env : envs) {
+					if (ExElement.documentsMatch(c.getFilePosition().getFileLocation(),
+						env.reporting().getFileLocation().getFileLocation())) {
+						try {
+							conditions.add(c.interpret(ModelTypes.Value.BOOLEAN, env));
+							found = true;
+							break;
+						} catch (ExpressoInterpretationException e) {
+							if (thrown == null)
+								thrown = e;
+						}
+					}
+				}
+				if (found) { // Well good then
+				} else if (thrown != null)
+					throw thrown;
+				else // Well, we'll try the first one then
+					conditions.add(c.interpret(ModelTypes.Value.BOOLEAN, envs[0]));
+			}
+			conditions = Collections.unmodifiableList(conditions);
+		}
+		return new InterpretedStyleApplication(parent, this, conditions);
 	}
 
 	@Override
@@ -1013,8 +878,18 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			} else if (count > 1)
 				str.append(']');
 		}
-		if (theCondition != null)
-			str.append('(').append(theCondition).append(')');
+		if (!theConditions.isEmpty()) {
+			str.append('(');
+			boolean first = true;
+			for (LocatedExpression c : theConditions) {
+				if (first)
+					first = false;
+				else
+					str.append(" && ");
+				str.append(c);
+			}
+			str.append(')');
+		}
 		return str.toString();
 	}
 }

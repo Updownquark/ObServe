@@ -52,12 +52,18 @@ import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.SimpleXMLParser;
 
 /** A structure containing many style values that may apply to all &lt;styled> elements in a document */
-@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-sheet")
+@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+	qonfigType = QuickStyleSheet.STYLE_SHEET,
+	interpretation = QuickStyleSheet.Interpreted.class)
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
+	/** The XML name for this type */
+	public static final String STYLE_SHEET = "style-sheet";
+	/** The XML name for {@link StyleSheetRef} */
+	public static final String IMPORT_STYLE_SHEET = "import-style-sheet";
 	private static final String SUB_SHEET_MODEL_NAME = "$MODELINSTANCE";
 
 	/** An imported style sheet */
-	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "import-style-sheet")
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = IMPORT_STYLE_SHEET)
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement.Void> {
 		private String theName;
 		private QuickStyleSheet theTarget;
