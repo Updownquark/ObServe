@@ -42,19 +42,8 @@ import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MultiEntryValueHandle;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
@@ -677,7 +666,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			private CollectionElement<E> immutable;
 			ValueHolder<E> modifying;
 
-			public ConfigElement(ObservableConfig config, ValueHolder<E> value, Observable<?> findRefs) {
+			protected ConfigElement(ObservableConfig config, ValueHolder<E> value, Observable<?> findRefs) {
 				this.theConfig = config;
 				theElementObservable = SimpleObservable.build().withLocking(theConfig).build();
 

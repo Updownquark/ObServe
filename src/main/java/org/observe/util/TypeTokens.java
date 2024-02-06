@@ -1541,7 +1541,7 @@ public class TypeTokens implements TypeParser {
 	 */
 	public <S, T, TX extends Throwable> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target,
 		TypeToken<S> source, boolean safe, boolean downCastOnly, ExceptionHandler.Single<IllegalArgumentException, TX> exHandler)
-		throws TX {
+			throws TX {
 		Class<S> rawSource = getRawType(source);
 		TypeKey<S> sourceKey = keyFor(rawSource);
 		if (target.equals(source)) {
@@ -1747,69 +1747,97 @@ public class TypeTokens implements TypeParser {
 		}
 		if (firstIsCommon)
 			return firstType;
-		List<? extends TypeToken<?>> extendedTypes = decompose(firstType);
-		for (TypeToken<?> extType : extendedTypes) {
+		List<Class<?>> rawTypes = decompose(getRawType(firstType));
+		Collections.sort(rawTypes, CLASS_PRIORITY);
+		for (Class<?> extType : rawTypes) {
 			first = true;
 			boolean extIsCommon = true;
 			for (TypeToken<? extends X> type : types) {
 				if (first)
 					first = false;
-				else if (!isAssignable(extType, type)) {
+				else if (!extType.isAssignableFrom(wrap(getRawType(type)))) {
 					extIsCommon = false;
 					break;
 				}
 			}
-			if (extIsCommon)
-				return extType;
+			if (extIsCommon) {
+				if (extType.getTypeParameters().length == 0)
+					return of(extType);
+				TypeToken<?>[] params = new TypeToken[extType.getTypeParameters().length];
+				for (int p = 0; p < params.length; p++) {
+					Type param = extType.getTypeParameters()[p];
+					params[p] = _commonType(QommonsUtils.map(types, t -> t.resolveType(param), false));
+				}
+				return keyFor(extType).parameterized(params);
+			}
 		}
 		return OBJECT;
 	}
 
-	private <X> List<TypeToken<? super X>> decompose(TypeToken<X> type) {
-		List<TypeToken<? super X>> decomposed = new LinkedList<>();
-		Class<?> raw = getRawType(type);
-		if (raw.isPrimitive()) {
-			decomposed.add(wrap(type));
-			if (raw != boolean.class)
-				decomposed.add((TypeToken<? super X>) of(Number.class));
-			while (true) {
-				decomposed.add((TypeToken<? super X>) of(raw));
-				if (raw == byte.class) {
-					decomposed.add((TypeToken<? super X>) of(char.class));
-					raw = short.class;
-				} else if (raw == short.class)
-					raw = int.class;
-				else if (raw == int.class) {
-					decomposed.add((TypeToken<? super X>) of(float.class));
-					decomposed.add((TypeToken<? super X>) of(double.class));
-					raw = long.class;
-				} else if (raw == float.class)
-					raw = double.class;
-				else
-					break;
-			}
+	private List<Class<?>> decompose(Class<?> type) {
+		Class<?> prim, wrapper;
+		if (type.isPrimitive()) {
+			prim = type;
+			wrapper = wrap(type);
+		} else {
+			prim = unwrap(type);
+			wrapper = type;
 		}
-		if (!raw.isInterface()) {
-			Class<X> c = (Class<X>) raw;
-			TypeToken<X> t = type;
+		List<Class<?>> decomposed = new LinkedList<>();
+		if (prim.isPrimitive()) {
+			decomposed.add(prim);
+			if (prim != boolean.class && prim != char.class)
+				decomposed.add(Number.class);
+		}
+		if (!prim.isInterface()) {
+			Class<?> c = prim.getSuperclass();
 			while (c != null && c != Object.class) {
-				decomposed.add(t);
-				c = (Class<X>) c.getSuperclass();
-				t = c == null ? null : (TypeToken<X>) t.getSupertype(c);
+				decomposed.add(c);
+				c = c.getSuperclass();
 			}
 		}
-		for (Class<?> intf : raw.getInterfaces())
-			this.<Object, X> decomposeInterfaces(decomposed, (Class<Object>) intf,
-				(TypeToken<Object>) type.getSupertype((Class<Object>) intf));
+
+		for (Class<?> intf : wrapper.getInterfaces())
+			decomposeInterfaces(decomposed, intf);
 		return decomposed;
 	}
 
-	private <I, X extends I> void decomposeInterfaces(List<TypeToken<? super X>> decomposed, Class<I> intf, TypeToken<I> intfType) {
-		decomposed.add(intfType);
+	private void decomposeInterfaces(List<Class<?>> decomposed, Class<?> intf) {
+		decomposed.add(intf);
 		for (Class<?> intf2 : intf.getInterfaces())
-			this.<Object, X> decomposeInterfaces(decomposed, (Class<Object>) intf2,
-				(TypeToken<Object>) intfType.getSupertype((Class<Object>) intf2));
+			decomposeInterfaces(decomposed, intf2);
 	}
+
+	private static final List<Class<?>> PRIORITY_CLASSES = Arrays.asList(CharSequence.class);
+	private static final List<Class<?>> DEPRIORITY_CLASSES = Arrays.asList(Comparable.class, java.io.Serializable.class);
+	private static final Comparator<Class<?>> CLASS_PRIORITY = (c1, c2) -> {
+		if (c1 == c2)
+			return 0;
+		else if (c1.isAssignableFrom(c2))
+			return 1;
+		else if (c2.isAssignableFrom(c1))
+			return -1;
+		int priIdx1 = PRIORITY_CLASSES.indexOf(c1);
+		int priIdx2 = PRIORITY_CLASSES.indexOf(c2);
+		if (priIdx1 >= 0) {
+			if (priIdx2 >= 0)
+				return Integer.compare(priIdx1, priIdx2);
+			else
+				return -1;
+		} else if (priIdx2 >= 0)
+			return 1;
+
+		priIdx1 = DEPRIORITY_CLASSES.indexOf(c1);
+		priIdx2 = DEPRIORITY_CLASSES.indexOf(c2);
+		if (priIdx1 >= 0) {
+			if (priIdx2 >= 0)
+				return -Integer.compare(priIdx1, priIdx2);
+			else
+				return 1;
+		} else if (priIdx2 >= 0)
+			return -1;
+		return 0;
+	};
 
 	/**
 	 * <p>

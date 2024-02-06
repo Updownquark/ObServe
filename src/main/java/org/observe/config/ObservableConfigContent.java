@@ -82,8 +82,7 @@ public class ObservableConfigContent {
 				if (inUse) {
 					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH)
 						.act(LambdaUtils.<ObservableConfigEvent> printableConsumer(evt -> {
-							int size = evt.relativePath.size();
-							if (size > thePathElements.length)
+							if (evt.relativePath.size() > thePathElements.length)
 								return;
 							int pathIndex = 0;
 							ObservableConfigEvent pathChange = evt;

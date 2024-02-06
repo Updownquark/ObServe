@@ -276,11 +276,6 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 
 	private void fire(CollectionChangeType eventType, CollectionElementMove move, BetterList<ObservableConfig> relativePath, String oldName,
 		String oldValue) {
-		_fire(eventType, move, relativePath, oldName, oldValue);
-	}
-
-	private void _fire(CollectionChangeType eventType, CollectionElementMove move, BetterList<ObservableConfig> relativePath,
-		String oldName, String oldValue) {
 		theModCount++;
 		if (!theListeners.isEmpty() && !theListeners.isFiring()) {
 			ObservableConfigEvent event = new ObservableConfigEvent(eventType, move, this, oldName, oldValue, relativePath,

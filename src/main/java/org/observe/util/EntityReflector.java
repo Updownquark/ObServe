@@ -11,20 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -975,6 +962,98 @@ public class EntityReflector<E> {
 	}
 
 	/**
+	 * An {@link ObservableField} representing a field getter that is defaulted, so it is not actually a field
+	 *
+	 * @param <E> The type of the entity that owns the method
+	 * @param <F> The return type of the method
+	 */
+	public static class DefaultedField<E, F> implements ObservableField<E, F> {
+		private final E theEntity;
+		private final TypeToken<F> theType;
+		private final Method theMethod;
+
+		DefaultedField(E entity, TypeToken<F> type, Method method) {
+			theEntity = entity;
+			theType = type;
+			theMethod = method;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			throw new UnsupportedOperationException("The getter for this field is defaulted and cannot be set");
+		}
+
+		@Override
+		public <V extends F> String isAcceptable(V value) {
+			return "The getter for this field is defaulted and cannot be set";
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return ObservableValue.of("The getter for this field is defaulted and cannot be set");
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return Collections.emptyList();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return null;
+		}
+
+		@Override
+		public long getStamp() {
+			return 0;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public F get() {
+			try {
+				return (F) theMethod.invoke(theEntity);
+			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+				throw new IllegalStateException("Unable to invoke default field getter", e);
+			}
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<F>> noInitChanges() {
+			return Observable.empty();
+		}
+
+		@Override
+		public TypeToken<F> getType() {
+			return theType;
+		}
+
+		@Override
+		public E getEntity() {
+			return theEntity;
+		}
+
+		@Override
+		public int getFieldIndex() {
+			return -1;
+		}
+	}
+
+	/**
 	 * Returned from the default {@link Identifiable#getIdentity()} method for entities that have {@link EntityReflector#getIdFields() ID
 	 * fields}.
 	 *
@@ -1745,12 +1824,34 @@ public class EntityReflector<E> {
 				else if (p.getReflector().getIdFields().isEmpty())
 					return false;
 				for (int id : p.getReflector().getIdFields()) {
-					Object f1 = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(proxy);
-					Object f2 = ((EntityReflector<Object>) p.getReflector()).getFields().get(id).get(args[0]);
-					if (!Objects.equals(f1, f2))
-						return false;
+					ReflectedField<Object, ?> field = ((EntityReflector<Object>) p.getReflector()).getFields().get(id);
+					Object f1 = field.get(proxy);
+					Object f2 = field.get(args[0]);
+					if (!Objects.equals(f1, f2)) {
+						if (f1 != null && f2 != null) {
+							// Special case: for floating-point values, allow approximate values.
+							// This technically breaks the hashCode()/equals() contract, but comparing floating-point values exactly is bad.
+							if (field.getType().getType() == double.class)
+								return compareDoubles(((Double) f1).doubleValue(), ((Double) f2).doubleValue());
+							else if (field.getType().getType() == float.class)
+								return compareFloats(((Float) f1).floatValue(), ((Float) f2).floatValue());
+							else
+								return false;
+						} else
+							return false;
+					}
 				}
 				return true;
+			}
+
+			private boolean compareDoubles(double v1, double v2) {
+				double ulp = Math.ulp(v1);
+				return Math.abs(v1 - v2) <= ulp * 5;
+			}
+
+			private boolean compareFloats(float v1, float v2) {
+				float ulp = Math.ulp(v1);
+				return Math.abs(v1 - v2) <= ulp * 5;
 			}
 		};
 		defaultObjectMethods.put(equals, OBJECT_EQUALS);
@@ -2409,6 +2510,40 @@ public class EntityReflector<E> {
 		return ((FieldGetter<E, F>) method).getField();
 	}
 
+	private <F> ObservableField<E, F> observeInstanceField(E entity, ObservableEntityInstanceBacking<E> backing,
+		EntityReflector<E>.ProxyMethodHandler handler, Function<? super E, F> fieldGetter) throws IllegalArgumentException {
+		Method invoked, first;
+		synchronized (this) {
+			theProxyHandler.reset(m -> {
+				String fieldName = theGetterFilter.apply(m);
+				return fieldName != null && theFields.keySet().contains(fieldName);
+			}, true);
+			fieldGetter.apply(theProxy);
+			invoked = theProxyHandler.getInvoked();
+			first = theProxyHandler.getFirstNoFilter();
+		}
+		if (invoked == null) {
+			if (first != null) {
+				for (List<MethodInterpreter<E, ?>> getters : theSuperFieldGetters) {
+					for (MethodInterpreter<E, ?> getter : getters) {
+						// Getters have no parameters, so this is sufficient to match the signatures
+						if (getter.getMethod().getName().equals(first.getName())) {
+							// The super's getter is overridden by a default method, so it's not a field in this entity.
+							return new DefaultedField<>(entity, (TypeToken<F>) TypeTokens.get().of(first.getGenericReturnType()), first);
+						}
+					}
+				}
+				throw new IllegalArgumentException(first + " is not a field getter");
+			}
+			throw new IllegalArgumentException("No " + theType + " method invoked");
+		}
+		MethodInterpreter<? super E, F> method = (MethodInterpreter<? super E, F>) getInterpreter(invoked);
+		if (!(method instanceof FieldGetter))
+			throw new IllegalArgumentException(method + " is not a field getter");
+		int fieldIndex = ((FieldGetter<E, F>) method).getField().getFieldIndex();
+		return (ObservableField<E, F>) backing.observeField(entity, handler.getReflector().getFields().get(fieldIndex));
+	}
+
 	/**
 	 * Retrieves the value from a default-ed method of the entity. This will only work if the default method's value does not depend on any
 	 * field values of the entity.
@@ -2546,9 +2681,8 @@ public class EntityReflector<E> {
 		EntityInstanceBacking backing = getHandler(entity).theBacking;
 		if (!(backing instanceof ObservableEntityInstanceBacking))
 			throw new UnsupportedOperationException("Observation is not supported by this entity's backing");
-		int fieldIndex = handler.getReflector().getField(getter).getFieldIndex();
-		return (ObservableField<? extends E, F>) ((ObservableEntityInstanceBacking<E>) backing).observeField(entity,
-			handler.getReflector().getFields().get(fieldIndex));
+		return (ObservableField<? extends E, F>) handler.getReflector().observeInstanceField(entity,
+			(ObservableEntityInstanceBacking<E>) backing, handler, getter);
 	}
 
 	@Override

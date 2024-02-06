@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.SortedMap;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -79,12 +79,12 @@ public class TypeTokensTest {
 	/** Tests {@link TypeTokens#getCommonType(TypeToken [])} with complex types */
 	@Test
 	public void testComplexCommonType() {
-		Assert.assertEquals(new TypeToken<Collection<? extends Map<? extends Number, ? extends CharSequence>>>() {
+		Assert.assertEquals(new TypeToken<Collection<Map<Number, CharSequence>>>() {
 		}, //
 			TypeTokens.get().getCommonType(//
 				new TypeToken<List<HashMap<Integer, String>>>() {
 				}, //
-				new TypeToken<Set<TreeMap<Double, StringBuilder>>>() {
+				new TypeToken<Set<SortedMap<Double, StringBuilder>>>() {
 				}));
 	}
 }

@@ -305,6 +305,12 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		return this;
 	}
 
+	@Override
+	default ObservableCollection<E> withAll(Collection<? extends E> values) {
+		BetterList.super.withAll(values);
+		return this;
+	}
+
 	/**
 	 * @param threading The thread constraint for the new collection to obey
 	 * @param until An observable to cease the safe observable's synchronization with this value

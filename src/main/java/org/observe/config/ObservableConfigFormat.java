@@ -3,6 +3,7 @@ package org.observe.config;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -1842,10 +1843,12 @@ public interface ObservableConfigFormat<E> {
 
 		abstract static class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
 			class FormatEvent extends AbstractCausable {
+				final E entity;
 				final int field;
 
-				public FormatEvent(Object cause, int field) {
+				public FormatEvent(Object cause, E entity, int field) {
 					super(cause);
+					this.entity = entity;
 					this.field = field;
 				}
 
@@ -2159,7 +2162,7 @@ public interface ObservableConfigFormat<E> {
 				F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
 				boolean[] added = new boolean[1];
 				boolean[] changed = new boolean[1];
-				FormatEvent formatCause = new FormatEvent(cause, field.index);
+				FormatEvent formatCause = new FormatEvent(cause, value, field.index);
 				try (Transaction causeT = Causable.use(formatCause); Transaction t = entityConfig.lock(true, formatCause)) {
 					if (fieldValue != null || field.childName == null) {
 						ObservableConfig fieldConfig;
@@ -2168,11 +2171,11 @@ public interface ObservableConfigFormat<E> {
 						} else {
 							fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
 								added[0] = true;
-								changed[0] = field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
+								changed[0] = field.format.format(session, fieldValue, previousValue, (__, ___) -> fc, onFieldValue, until);
 							});
 						}
 						if (!added[0])
-							changed[0] = field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue,
+							changed[0] = field.format.format(session, fieldValue, previousValue, (__, ___) -> fieldConfig, onFieldValue,
 								until);
 					} else {
 						ObservableConfig fieldConfig = entityConfig.getChild(field.childName);
@@ -2198,7 +2201,8 @@ public interface ObservableConfigFormat<E> {
 				if (entityCtx.getChange() != null && entityCtx.getChange().<Object> getCauseLike(evt -> {
 					if (evt instanceof AbstractComponentFormat.FormatEvent //
 						&& ((AbstractComponentFormat<?>.FormatEvent) evt).getFormat() == this//
-						&& ((AbstractComponentFormat<?>.FormatEvent) evt).field == fieldIdx)
+						&& ((AbstractComponentFormat<?>.FormatEvent) evt).field == fieldIdx //
+						&& ((AbstractComponentFormat<?>.FormatEvent) evt).entity == entity)
 						return evt;
 					return null;
 				}) != null)
@@ -2294,15 +2298,31 @@ public interface ObservableConfigFormat<E> {
 				}
 			}
 
+			class FieldSetEvent {
+				final E entity;
+				final int field;
+
+				FieldSetEvent(E entity, int field) {
+					this.entity = entity;
+					this.field = field;
+				}
+
+				EntityConfigFormatImpl<E> getFormat() {
+					return EntityConfigFormatImpl.this;
+				}
+			}
+
 			class EntityConfigInstanceBacking implements EntityReflector.ObservableEntityInstanceBacking<E> {
 				private final ObservableConfigParseContext<E> theContext;
 				private final QuickMap<String, Object> theFieldValues;
 				private QuickMap<String, ListenerList<? extends Consumer<EntityReflector.FieldChange<?>>>> theListeners;
 				private E theEntity;
+				private final BitSet isInvokingSet;
 
 				EntityConfigInstanceBacking(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) {
 					theContext = ctx;
 					theFieldValues = fieldValues;
+					isInvokingSet = new BitSet(fieldValues.keySize());
 				}
 
 				void setEntity(E entity) {
@@ -2319,9 +2339,14 @@ public interface ObservableConfigFormat<E> {
 						fieldChange = new FieldChange<>(oldValue, fieldValue, change);
 					} else
 						fieldChange = null;
-					if (field.isSettable(theEntity))
-						field.set(theEntity, fieldValue);
-					else {
+					if (field.isSettable(theEntity)) {
+						isInvokingSet.set(field.getIndex());
+						try {
+							field.set(theEntity, fieldValue);
+						} finally {
+							isInvokingSet.clear(field.getIndex());
+						}
+					} else {
 						if (fieldValue != null && !TypeTokens.get().isInstance(field.getFieldType(), fieldValue))
 							throw new IllegalArgumentException(
 								"Cannot set field " + field + " with value " + fieldValue + ", type " + fieldValue.getClass());
@@ -2341,8 +2366,11 @@ public interface ObservableConfigFormat<E> {
 				public void set(int fieldIndex, Object newValue) {
 					Object oldValue = theFieldValues.get(fieldIndex);
 					theFieldValues.put(fieldIndex, newValue);
-					formatField(theContext.getSession(), theEntity, (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue,
-						newValue, theContext.getConfig(true, false), v -> theFieldValues.put(fieldIndex, v), theContext.getUntil(), null);
+					if (!isInvokingSet.get(fieldIndex)) {
+						formatField(theContext.getSession(), theEntity, (ComponentField<E, Object>) getFields().get(fieldIndex), oldValue,
+							newValue, theContext.getConfig(true, false), v -> theFieldValues.put(fieldIndex, v), theContext.getUntil(),
+							new FieldSetEvent(theEntity, fieldIndex));
+					}
 				}
 
 				@Override
@@ -2478,8 +2506,7 @@ public interface ObservableConfigFormat<E> {
 
 					@Override
 					public <F> EntityConfigCreator<E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
-						ConfiguredValueField<? super E, F> field = theEntityType.getField((Function<E, F>) fieldGetter);
-						creator.with(field.getIndex(), value);
+						creator.with(theEntityType.getField((Function<E, F>) fieldGetter).getIndex(), value);
 						return this;
 					}
 
@@ -2654,6 +2681,15 @@ public interface ObservableConfigFormat<E> {
 			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx) throws ParseException {
 				ComponentField<E, F> field = (ComponentField<E, F>) getFields().get(fieldIdx);
 				E value = entityCtx.getPreviousValue();
+				if (entityCtx.getChange().getCauseLike(c -> {
+					if (!(c instanceof EntityConfigFormatImpl.FieldSetEvent) || ((FieldSetEvent) c).getFormat() != this)
+						return null;
+					FieldSetEvent fse = (FieldSetEvent) c;
+					if (fse.entity == value && fse.field == fieldIdx)
+						return c;
+					return null;
+				}) != null)
+					return;
 				F oldValue = value == null ? null : field.getter.apply(value);
 				super.parseUpdatedField(entityCtx, fieldIdx);
 				if (value != null) {

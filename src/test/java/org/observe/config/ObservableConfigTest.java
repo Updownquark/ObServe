@@ -1,6 +1,7 @@
 package org.observe.config;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
@@ -14,11 +15,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.observe.SimpleObservable;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.config.ObservableConfig.XmlEncoding;
+import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
@@ -358,7 +362,7 @@ public class ObservableConfigTest {
 				Assert.assertEquals(1, theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities")
 					.getValues().size());
 				Assert.assertEquals("60", theConfig.getContent("test-entities2/test-entity2").getValues().get(i)
-					.getContent("listed-entities/listed-entity").getValues().get(0).get("e"));
+					.getContent("listed-entities/test-entity4").getValues().get(0).get("e"));
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
@@ -384,7 +388,7 @@ public class ObservableConfigTest {
 				entity.getListedEntities().create().with(TestEntity4::getE, 9).create();
 				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
 				Assert.assertEquals("9", theConfig.getContent("test-entities2/test-entity2").getValues().get(i)
-					.getContent("listed-entities/listed-entity").getValues().get(2).get("e"));
+					.getContent("listed-entities/test-entity4").getValues().get(2).get("e"));
 
 				break;
 			default:
@@ -477,6 +481,7 @@ public class ObservableConfigTest {
 		TestHelper.createTester(ObservableConfigSuperTester.class)//
 		.revisitKnownFailures(true).withFailurePersistence(true)//
 		.withPlacemarks("modify").withRandomCases(100).withMaxFailures(1).withMaxCaseDuration(Duration.ofSeconds(10))//
+		.withPersistenceDir(new File("src/test/java/org/observe/config"), false)// Where to write the failure file
 		.withDebug(BreakpointHere.isDebugEnabled() != null)//
 		.execute().throwErrorIfFailed();
 	}
@@ -490,6 +495,7 @@ public class ObservableConfigTest {
 		private final List<TestEntity2> expected;
 		private final ObservableCollectionTester<TestEntity2> tester1;
 		private final ObservableCollectionTester<TestEntity2> tester2;
+		private final TestEntity2SetListener theCompleteListeners;
 
 		public ObservableConfigSuperTester() {
 			theEncoding = XmlEncoding.DEFAULT;
@@ -507,15 +513,21 @@ public class ObservableConfigTest {
 				.withSubType(TypeTokens.get().of(TestEntity5.class), //
 					sb -> sb.build("*", b -> b.withAttribute("type", "5").build()))//
 				.build());
+			// Test with 2 independent copies of the entity set. Changes to one should show up in the other via config events.
 			testEntities1 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
 				.buildEntitySet(null);
 			tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
 			testEntities2 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
 				.buildEntitySet(null);
 			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
+			// This structure is not updated by the test, but listens to all the fields of the entities to update itself.
+			// Only do this on one of the test entity sets, so we can verify that entity sets don't *need* listeners installed to work.
+			theCompleteListeners = new TestEntity2SetListener(testEntities1.getValues());
 			expected = new ArrayList<>();
 			for (int i = 0; i < testEntities1.getValues().size(); i++)
 				expected.add(new TestEntity2Tester(testEntities1.getValues().get(i), testEntities2.getValues().get(i)));
+
+			theCompleteListeners.check();
 		}
 
 		@Override
@@ -525,21 +537,26 @@ public class ObservableConfigTest {
 			double ticksPerMod = 100.0 / modifications;
 			int ticks = 0;
 			for (int i = 0; i < modifications; i++) {
-				SyncValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
-				int newTicks = (int) (i * ticksPerMod);
-				while (ticks < newTicks) {
-					System.out.print(".");
-					System.out.flush();
-					ticks++;
+				boolean modify1 = helper.getBoolean();
+				SyncValueSet<TestEntity2> testEntities = modify1 ? testEntities1 : testEntities2;
+				if (helper.isReproducing()) {
+					System.out.print("\tModify set " + (modify1 ? "1" : "2") + ": ");
+				} else {
+					int newTicks = (int) (i * ticksPerMod);
+					while (ticks < newTicks) {
+						System.out.print(".");
+						System.out.flush();
+						ticks++;
+					}
 				}
 
 				try (Transaction t = theConfig.lock(true, null)) {
 					helper.doAction(1, () -> { // Add element
-						if (helper.isReproducing())
-							System.out.println("\tAdd entity");
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
 						String randomString = randomString(helper);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Add entity text=\"" + randomString + "\"");
 						TestEntity2 newEntity = testEntities.create().after(after).towardBeginning(true)
 							.with(TestEntity2::getText, randomString)//
 							.create()//
@@ -549,78 +566,105 @@ public class ObservableConfigTest {
 						TestEntity2 entity2 = testEntities == testEntities1 ? testEntities1.getValues().get(index) : newEntity;
 						expected.add(index, new TestEntity2Tester(entity1, entity2));
 					}).or(1, () -> { // Remove element
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tRemove entity");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						if (helper.isReproducing())
+							System.out.println("Remove entity [" + index + "]");
 						testEntities.getValues().remove(index);
 						((TestEntity2Tester) expected.remove(index)).dispose();
 					}).or(1, () -> {// Modify text
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tModify text");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						String randomString = randomString(helper);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Modify text from \"" + modify.getText() + "\" to \"" + randomString + "\"");
 						modify.setText(randomString);
 						Assert.assertEquals(randomString, modify.getText());
 						expected.get(index).setText(randomString);
 					}).or(1, () -> {// Modify entity field.d
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tModify d");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int newD = helper.getAnyInt();
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Modify d from " + modify.getEntityField().getD() + " to " + newD);
 						modify.getEntityField().setD(newD);
 						Assert.assertEquals(newD, modify.getEntityField().getD());
 						expected.get(index).getEntityField().setD(newD);
 					}).or(1, () -> {// Add text
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tAdd text");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int textIndex = helper.getInt(0, modify.getTexts().size());
 						String randomString = randomString(helper);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Add text [" + textIndex + "] \"" + randomString + "\"");
 						modify.getTexts().add(textIndex, randomString);
 						Assert.assertEquals(randomString, modify.getTexts().get(textIndex));
 						expected.get(index).getTexts().add(textIndex, randomString);
 					}).or(1, () -> {// Remove text
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tRemove text");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getTexts().isEmpty())
+						if (modify.getTexts().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int textIndex = helper.getInt(0, modify.getTexts().size() - 1);
+						if (helper.isReproducing())
+							System.out
+							.println("[" + index + "] Remove text [" + textIndex + "] \"" + modify.getTexts().get(textIndex) + "\"");
 						modify.getTexts().remove(textIndex);
 						expected.get(index).getTexts().remove(textIndex);
 					}).or(1, () -> {// Update text
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tUpdate text");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getTexts().isEmpty())
+						if (modify.getTexts().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int textIndex = helper.getInt(0, modify.getTexts().size() - 1);
 						String randomString = randomString(helper);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Update text [" + textIndex + "] from \"" + modify.getTexts().get(textIndex)
+								+ "\" to \"" + randomString + "\"");
 						modify.getTexts().set(textIndex, randomString);
 						Assert.assertEquals(randomString, modify.getTexts().get(textIndex));
 						expected.get(index).getTexts().set(textIndex, randomString);
 					}).or(1, () -> {// Add listed entity
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tAdd listed");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size());
@@ -632,10 +676,15 @@ public class ObservableConfigTest {
 						SyncValueCreator<TestEntity4, ? extends TestEntity4> creator;
 						if (te5) {
 							newF = helper.getAnyDouble();
+							if (helper.isReproducing())
+								System.out.println("[" + index + "] Add listed5 [" + leIndex + "] e=" + newE + ", f=" + newF);
 							creator = modify.getListedEntities().create(TypeTokens.get().of(TestEntity5.class)).with(TestEntity5::getF,
 								newF);
-						} else
+						} else {
+							if (helper.isReproducing())
+								System.out.println("[" + index + "] Add listed4 [" + leIndex + "] e=" + newE);
 							creator = modify.getListedEntities().create();
+						}
 						TestEntity4 newLE = creator.after(after).towardBeginning(true).with(TestEntity4::getE, newE).create().get();
 						if (te5) {
 							Assert.assertTrue(newLE instanceof TestEntity5);
@@ -645,42 +694,63 @@ public class ObservableConfigTest {
 						Assert.assertEquals(newE, newLE.getE());
 						((List<TestEntity4>) expected.get(index).getListedEntities().getValues()).add(leIndex, deepCopy(newLE));
 					}).or(1, () -> {// Remove listed entity
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tRemove listed");
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getListedEntities().getValues().isEmpty())
+						if (modify.getListedEntities().getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Remove listed [" + leIndex + "]");
 						modify.getListedEntities().getValues().remove(leIndex);
 						expected.get(index).getListedEntities().getValues().remove(leIndex);
 					}).or(1, () -> {// Modify listed entity.e
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getListedEntities().getValues().isEmpty())
+						if (modify.getListedEntities().getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tRemove listed");
+						}
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
 						int newE = helper.getAnyInt();
-						modify.getListedEntities().getValues().get(leIndex).setE(newE);
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Modify listed[" + leIndex + "].e from "
+								+ modify.getListedEntities().getValues().get(leIndex).getE() + " to " + newE);
+						TestEntity4 listedEntity = modify.getListedEntities().getValues().get(leIndex);
+						listedEntity.setE(newE);
 						Assert.assertEquals(newE, modify.getListedEntities().getValues().get(leIndex).getE());
 						expected.get(index).getListedEntities().getValues().get(leIndex).setE(newE);
 					}).or(1, () -> {// Modify listed entity.x
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getListedEntities().getValues().isEmpty())
+						if (modify.getListedEntities().getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tModify listed.x");
+						}
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
 						double newX = helper.getAnyDouble();
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Modify listed[" + leIndex + "].x from "
+								+ modify.getListedEntities().getValues().get(leIndex).getX() + " to " + newX);
 						TestEntity4 listedEntity = modify.getListedEntities().getValues().get(leIndex);
 						try {
 							listedEntity.setX(newX);
@@ -694,26 +764,36 @@ public class ObservableConfigTest {
 								Assert.assertTrue("Should not have thrown exception", false);
 						}
 					}).or(1, () -> {// Modify listed entity.f (for TestEntity5 instances)
-						if (testEntities.getValues().isEmpty())
+						if (testEntities.getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
-						if (modify.getListedEntities().getValues().isEmpty())
+						if (modify.getListedEntities().getValues().isEmpty()) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
+						}
 						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
-						if (!(modify.getListedEntities().getValues().get(leIndex) instanceof TestEntity5))
+						if (!(modify.getListedEntities().getValues().get(leIndex) instanceof TestEntity5)) {
+							if (helper.isReproducing())
+								System.out.println("Abort");
 							return;
-						if (helper.isReproducing())
-							System.out.println("\tModify listed.f");
+						}
 						double newF = helper.getAnyDouble();
-						((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).setF(newF);
+						TestEntity5 listed = ((TestEntity5) modify.getListedEntities().getValues().get(leIndex));
+						if (helper.isReproducing())
+							System.out.println("[" + index + "] Modify listed[" + leIndex + "].f from " + listed.getF() + " to " + newF);
+						listed.setF(newF);
 						if (!checkEquals(newF, ((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).getF()))
 							Assert.assertEquals(newF, ((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).getF(),
 								newF * 1E-12);
 						((TestEntity5) expected.get(index).getListedEntities().getValues().get(leIndex)).setF(newF);
 					}).or(.05, () -> { // Persist/depersist
 						if (helper.isReproducing())
-							System.out.println("\tPersist/depersist");
+							System.out.println("Persist/depersist");
 						StringWriter writer = new StringWriter();
 						try {
 							ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
@@ -727,6 +807,7 @@ public class ObservableConfigTest {
 
 				tester1.check(expected);
 				tester2.check(expected);
+				theCompleteListeners.check();
 
 				for (int j = 0; j < expected.size(); j++) {
 					((TestEntity2Tester) expected.get(j)).check(testEntities1.getValues().get(j), testEntities2.getValues().get(j));
@@ -762,7 +843,7 @@ public class ObservableConfigTest {
 
 		TestEntity3 getEntityField();
 
-		List<String> getTexts();
+		ObservableCollection<String> getTexts();
 
 		SyncValueSet<TestEntity4> getListedEntities();
 	}
@@ -809,7 +890,7 @@ public class ObservableConfigTest {
 	private static class TestEntity2Tester implements TestEntity2 {
 		private String theText;
 		private final TestEntity3 theEntityField;
-		private final List<String> theTexts;
+		private final ObservableCollection<String> theTexts;
 		private final ObservableCollection<TestEntity4> theListedEntities;
 
 		private TestEntity2 theEntity1;
@@ -823,7 +904,8 @@ public class ObservableConfigTest {
 		TestEntity2Tester(TestEntity2 entity1, TestEntity2 entity2) {
 			theText = entity1.getText();
 			theEntityField = deepCopy(entity1.getEntityField());
-			theTexts = new ArrayList<>(entity1.getTexts());
+			theTexts = ObservableCollection.build(String.class).build()//
+				.withAll(entity1.getTexts());
 			theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class),
 				BetterTreeList.<TestEntity4> build().build());
 			for (TestEntity4 te4 : entity1.getListedEntities().getValues())
@@ -848,7 +930,7 @@ public class ObservableConfigTest {
 		}
 
 		@Override
-		public List<String> getTexts() {
+		public ObservableCollection<String> getTexts() {
 			return theTexts;
 		}
 
@@ -902,12 +984,12 @@ public class ObservableConfigTest {
 		void install(TestEntity2 entity1, TestEntity2 entity2) {
 			if (theEntity1 != entity1) {
 				theEntity1 = entity1;
-				theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
+				theTextsTester1 = new ObservableCollectionTester<>("texts", entity1.getTexts());
 				theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
 			}
 			if (theEntity2 != entity2) {
 				theEntity2 = entity2;
-				theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
+				theTextsTester2 = new ObservableCollectionTester<>("texts", entity2.getTexts());
 				theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
 			}
 		}
@@ -915,7 +997,7 @@ public class ObservableConfigTest {
 		void check(TestEntity2 entity1, TestEntity2 entity2) {
 			if (theEntity1 != entity1) {
 				theEntity1 = entity1;
-				theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
+				theTextsTester1 = new ObservableCollectionTester<>("texts", entity1.getTexts());
 				theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
 			} else {
 				theTextsTester1.check(theTexts);
@@ -923,7 +1005,7 @@ public class ObservableConfigTest {
 			}
 			if (theEntity2 != entity2) {
 				theEntity2 = entity2;
-				theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
+				theTextsTester2 = new ObservableCollectionTester<>("texts", entity2.getTexts());
 				theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
 			} else {
 				theTextsTester2.check(theTexts);
@@ -937,6 +1019,218 @@ public class ObservableConfigTest {
 			theLETester1.setSynced(false);
 			theTextsTester2.setSynced(false);
 			theLETester2.setSynced(false);
+		}
+	}
+
+	static class TestEntity2SetListener implements Subscription {
+		private final ObservableCollection<TestEntity2> theEntities;
+		private final List<TestEntity2Listener> theListeners;
+
+		private Subscription theSubscription;
+
+		TestEntity2SetListener(ObservableCollection<TestEntity2> entities) {
+			theEntities = entities;
+			theListeners = new ArrayList<>(QommonsUtils.map(entities, TestEntity2Listener::new, false));
+			theSubscription = entities.onChange(evt -> {
+				switch (evt.getType()) {
+				case add:
+					theListeners.add(evt.getIndex(), new TestEntity2Listener(evt.getNewValue()));
+					break;
+				case remove:
+					theListeners.remove(evt.getIndex()).unsubscribe();
+					break;
+				case set:
+					break;
+				}
+			});
+		}
+
+		void check() {
+			Assert.assertEquals(theEntities.size(), theListeners.size());
+			for (int i = 0; i < theListeners.size(); i++) {
+				Assert.assertTrue(theEntities.get(i) == theListeners.get(i).getEntity());
+				theListeners.get(i).check();
+			}
+		}
+
+		@Override
+		public void unsubscribe() {
+			theSubscription.unsubscribe();
+			theSubscription = null;
+		}
+	}
+
+	static class TestEntity2Listener implements Subscription {
+		private final TestEntity2 theEntity;
+		private String theText;
+		private TestEntity3Listener theEntityField;
+		private List<String> theTexts;
+		private List<TestEntity4Listener> theListedEntities;
+
+		private List<Subscription> theSubscriptions;
+
+		TestEntity2Listener(TestEntity2 entity) {
+			theEntity = entity;
+			theSubscriptions = new ArrayList<>();
+			theText = entity.getText();
+			theSubscriptions.add(EntityReflector.observeField(entity, TestEntity2::getText).noInitChanges().act(evt -> {
+				Assert.assertEquals(theText, evt.getOldValue());
+				theText = evt.getNewValue();
+			}));
+			theEntityField = new TestEntity3Listener(entity.getEntityField());
+			theTexts = new ArrayList<>(entity.getTexts());
+			theSubscriptions.add(entity.getTexts().onChange(evt -> {
+				switch (evt.getType()) {
+				case add:
+					theTexts.add(evt.getIndex(), evt.getNewValue());
+					break;
+				case remove:
+					Assert.assertEquals(theTexts.remove(evt.getIndex()), evt.getOldValue());
+					break;
+				case set:
+					Assert.assertEquals(theTexts.set(evt.getIndex(), evt.getNewValue()), evt.getOldValue());
+					break;
+				}
+			}));
+			theListedEntities = new ArrayList<>(
+				QommonsUtils.map(entity.getListedEntities().getValues(), TestEntity4Listener::create, false));
+			theSubscriptions.add(entity.getListedEntities().getValues().onChange(evt -> {
+				switch (evt.getType()) {
+				case add:
+					theListedEntities.add(evt.getIndex(), TestEntity4Listener.create(evt.getNewValue()));
+					break;
+				case remove:
+					theListedEntities.remove(evt.getIndex()).unsubscribe();
+					break;
+				case set:
+					break;
+				}
+			}));
+		}
+
+		TestEntity2 getEntity() {
+			return theEntity;
+		}
+
+		void check() {
+			Assert.assertEquals(theEntity.getText(), theText);
+			theEntityField.check();
+			QommonsTestUtils.assertThat(theTexts, QommonsTestUtils.collectionsEqual(theEntity.getTexts(), true));
+			Assert.assertEquals(theEntity.getListedEntities().getValues().size(), theListedEntities.size());
+			for (int i = 0; i < theListedEntities.size(); i++) {
+				Assert.assertTrue(theListedEntities.get(i).getEntity() == theEntity.getListedEntities().getValues().get(i));
+				theListedEntities.get(i).check();
+			}
+		}
+
+		@Override
+		public void unsubscribe() {
+			Subscription.forAll(theSubscriptions).unsubscribe();
+			theSubscriptions.clear();
+			theEntityField.unsubscribe();
+			for (TestEntity4Listener te4 : theListedEntities)
+				te4.unsubscribe();
+			theListedEntities.clear();
+		}
+	}
+
+	static class TestEntity3Listener implements Subscription {
+		private final TestEntity3 theEntity;
+		private int theD;
+
+		private Subscription theSubscription;
+
+		TestEntity3Listener(TestEntity3 entity) {
+			theEntity = entity;
+			theD = entity.getD();
+			theSubscription = EntityReflector.observeField(entity, TestEntity3::getD).noInitChanges().act(evt -> {
+				Assert.assertEquals(theD, evt.getOldValue().intValue());
+				theD = evt.getNewValue();
+			});
+		}
+
+		void check() {
+			Assert.assertEquals(theEntity.getD(), theD);
+		}
+
+		@Override
+		public void unsubscribe() {
+			theSubscription.unsubscribe();
+			theSubscription = null;
+		}
+	}
+
+	static class TestEntity4Listener implements Subscription {
+		private TestEntity4 theEntity;
+		private int theE;
+		private double theX;
+
+		private final List<Subscription> theSubscriptions;
+
+		TestEntity4Listener(TestEntity4 entity) {
+			theEntity = entity;
+			theSubscriptions = new ArrayList<>();
+			theE = entity.getE();
+			addSubscription(EntityReflector.observeField(entity, TestEntity4::getE).noInitChanges().act(evt -> {
+				Assert.assertEquals(theE, evt.getOldValue().intValue());
+				theE = evt.getNewValue();
+			}));
+			theX = entity.getX();
+			addSubscription(EntityReflector.observeField(entity, TestEntity4::getX).noInitChanges().act(evt -> {
+				Assert.assertEquals(theX, evt.getOldValue().doubleValue(), 1E-14);
+				theX = evt.getNewValue();
+			}));
+		}
+
+		TestEntity4 getEntity() {
+			return theEntity;
+		}
+
+		protected void addSubscription(Subscription sub) {
+			theSubscriptions.add(sub);
+		}
+
+		void check() {
+			Assert.assertEquals(theEntity.getE(), theE);
+			Assert.assertEquals(theEntity.getX(), theX, 1E-14);
+		}
+
+		@Override
+		public void unsubscribe() {
+			Subscription.forAll(theSubscriptions).unsubscribe();
+			theSubscriptions.clear();
+		}
+
+		static TestEntity4Listener create(TestEntity4 entity) {
+			if (entity instanceof TestEntity5)
+				return new TestEntity5Listener((TestEntity5) entity);
+			else
+				return new TestEntity4Listener(entity);
+		}
+	}
+
+	static class TestEntity5Listener extends TestEntity4Listener {
+		private double theF;
+
+		TestEntity5Listener(TestEntity5 entity) {
+			super(entity);
+
+			theF = entity.getF();
+			addSubscription(EntityReflector.observeField(entity, TestEntity5::getF).noInitChanges().act(evt -> {
+				Assert.assertEquals(theF, evt.getOldValue().doubleValue(), 1E-14);
+				theF = evt.getNewValue();
+			}));
+		}
+
+		@Override
+		TestEntity5 getEntity() {
+			return (TestEntity5) super.getEntity();
+		}
+
+		@Override
+		void check() {
+			super.check();
+			Assert.assertEquals(getEntity().getF(), theF, 1E-14);
 		}
 	}
 

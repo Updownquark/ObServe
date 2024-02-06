@@ -840,6 +840,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 						unsubscribe();
 						wrappedObserver.onCompleted(cause);
 					}
+
+					@Override
+					public String toString() {
+						return theWrappedObserver + ".until(" + theUntil + ")";
+					}
 				});
 			}
 
@@ -889,6 +894,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 			boolean isSubscribed() {
 				return theTargetSub != null;
+			}
+
+			@Override
+			public String toString() {
+				return theWrappedObserver + ".until(" + theUntil + ")";
 			}
 		}
 	}
