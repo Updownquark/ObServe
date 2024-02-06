@@ -35,8 +35,8 @@ import org.qommons.StringUtils;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.ParsedDuration;
 import org.qommons.TimeUtils.ParsedInstant;
-import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.SimpleImmutableList;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
 
@@ -1556,7 +1556,7 @@ public interface TableContentControl {
 
 		/** @param filters The component filters for this filter */
 		public JoinControl(TableContentControl... filters) {
-			theContent = BetterList.of(filters);
+			theContent = new SimpleImmutableList<>(filters);
 		}
 
 		/** @return This filter's component filters */
