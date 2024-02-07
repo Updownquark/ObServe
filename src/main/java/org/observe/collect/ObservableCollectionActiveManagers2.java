@@ -2004,6 +2004,7 @@ public class ObservableCollectionActiveManagers2 {
 					newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
 				else
 					newValue = theOptions.map(newSource, theParentEl.get(), null);
+				theDestCache=newValue;
 				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, cause);
 			}
 
