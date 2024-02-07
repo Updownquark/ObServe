@@ -14,6 +14,23 @@ import org.qommons.config.QonfigInterpretationException;
 public class QuickInlineLayout extends QuickLayout.Abstract {
 	public static final String INLINE_LAYOUT = "inline-layout";
 
+	public static JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText, ExpressoQIS session)
+		throws QonfigInterpretationException {
+		switch (attributeText) {
+		case "leading":
+			return JustifiedBoxLayout.Alignment.LEADING;
+		case "trailing":
+			return JustifiedBoxLayout.Alignment.TRAILING;
+		case "center":
+			return JustifiedBoxLayout.Alignment.CENTER;
+		case "justify":
+			return JustifiedBoxLayout.Alignment.JUSTIFIED;
+		default:
+			throw new QonfigInterpretationException("Unrecognized " + attributeName + ": '" + attributeText + "'",
+				session.attributes().get(attributeName).getLocatedContent());
+		}
+	}
+
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = INLINE_LAYOUT,
 		interpretation = Interpreted.class,
@@ -55,23 +72,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
 			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"), session);
 			thePadding = Integer.parseInt(session.getAttributeText("padding"));
-		}
-
-		public JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText, ExpressoQIS session)
-			throws QonfigInterpretationException {
-			switch (attributeText) {
-			case "leading":
-				return JustifiedBoxLayout.Alignment.LEADING;
-			case "trailing":
-				return JustifiedBoxLayout.Alignment.TRAILING;
-			case "center":
-				return JustifiedBoxLayout.Alignment.CENTER;
-			case "justify":
-				return JustifiedBoxLayout.Alignment.JUSTIFIED;
-			default:
-				throw new QonfigInterpretationException("Unrecognized " + attributeName + ": '" + attributeText + "'",
-					session.attributes().get(attributeName).getLocatedContent());
-			}
 		}
 
 		@Override

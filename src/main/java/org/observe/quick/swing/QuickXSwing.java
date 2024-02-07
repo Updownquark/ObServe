@@ -630,7 +630,7 @@ public class QuickXSwing implements QuickInterpretation {
 
 			TiledPane<T> tiledPane = new TiledPane<>(quick.getValues(), Observable.or(panel.getUntil(), quick.onDestroy()));
 
-			LayoutManager layoutInst = theLayout.create(quick.getLayout());
+			LayoutManager layoutInst = theLayout.create(panel, quick.getLayout());
 			if (layoutInst instanceof AbstractLayout)
 				tiledPane.setLayout(layoutInst);
 			else
@@ -689,6 +689,28 @@ public class QuickXSwing implements QuickInterpretation {
 			focusCopy.setContext(focusCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T> swingFocus = new QuickSwingTablePopulation.QuickSwingRenderer<>(focusCopy,
 				theValueType, focusCopy.getActiveValue(), focusCopy.getRenderer(), focusCtx, () -> populator[0], theRenderer);
+
+			// Support modifying values in the collection
+			hoverCtx.getActiveValue().noInitChanges().takeUntil(Observable.or(panel.getUntil(), quick.onDestroy())).act(evt -> {
+				if (!swingHover.isUpdating()) {
+					try {
+						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(hoverCtx.getRowIndex().get()).getElementId())//
+						.set(evt.getNewValue());
+					} catch (RuntimeException e) {
+						quick.reporting().error("Unable to modify value[" + hoverCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
+					}
+				}
+			});
+			focusCtx.getActiveValue().noInitChanges().takeUntil(Observable.or(panel.getUntil(), quick.onDestroy())).act(evt -> {
+				if (!swingFocus.isUpdating()) {
+					try {
+						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(focusCtx.getRowIndex().get()).getElementId())//
+						.set(evt.getNewValue());
+					} catch (RuntimeException e) {
+						quick.reporting().error("Unable to modify value[" + focusCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
+					}
+				}
+			});
 
 			tiledPane.setRendering(swingRenderer, swingHover, swingFocus);
 

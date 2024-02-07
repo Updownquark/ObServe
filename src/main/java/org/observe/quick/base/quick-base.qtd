@@ -7,6 +7,12 @@
 			<literal>horizontal</literal>
 			<literal>vertical</literal>
 		</one-of>
+		<one-of name="grid-flow-layout-edge">
+			<literal>left</literal>
+			<literal>right</literal>
+			<literal>top</literal>
+			<literal>bottom</literal>
+		</one-of>
 	</value-types>
 
 	<add-ons>
@@ -133,6 +139,37 @@
 		<?DOC A layout that places each widget in the container independently with a large amount of control over positioning and size?>
 		<add-on name="simple-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="simple-layout-child" />
+		</add-on>
+		<?DOC A layout that arranges components next to each other up to a maximum number of components before wrapping to a new row?>
+		<add-on name="grid-flow-layout" inherits="layout">
+			<?DOC The primary direction in which to lay out components.:
+				<ul>
+				<li>'left' means the components will be laid out left-to-right starting at the left edge.</li>
+				<li>'right' means right-to-left starting at the right edge.</li>
+				<li>'top' means top-to-bottom starting at the top edge.</li>
+				<li>'bottom' means bottom-to-top starting at the bottom edge.</li>
+				</ul>?>
+			<attribute name="primary-start" type="grid-flow-layout-edge" default="left" />
+			<?DOC The  direction in which to lay out multiple rows of components:
+				<ul>
+				<li>'left' or 'top' means rows will be wrapped left-to-right (for 'top' or 'bottom' primary-start)
+					or top-to-bottom (for 'left' or 'right' primary-direction).</li>
+				<li>'right' or 'bottom' means rows will be wrapped right-to-left (for 'top' or 'bottom' primary-start)
+					or bottom-to-top (for 'left' or 'right' primary-direction).</li>
+				</ul>
+				Although a primary-direction of 'left' or 'right' would logically imply requiring only 'top' or 'bottom'
+					and 'top' or 'bottom' primary would imply 'left' or 'right' secondary, this constraint is not enforced.?>
+			<attribute name="secondary-start" type="grid-flow-layout-edge" default="top" />
+			<?DOC The maximum number of components to lay out in the primary direction before wrapping to a new row?>
+			<attribute name="max-row-count" type="expression" />
+			<?DOC The alignment strategy determining how all the components will share space in each row of the layout?>
+			<attribute name="main-align" type="inline-alignment" default="leading" />
+			<?DOC The alignment strategy for each component along the cross axis in each row of the layout?>
+			<attribute name="cross-align" type="inline-alignment" default="justify" />
+			<?DOC The alignment strategy determining how all the rows in the layout will share space?>
+			<attribute name="row-align" type="inline-alignment" default="leading" />
+			<?DOC How much space to put between components in a row and between rows?>
+			<attribute name="padding" type="int" default="2" />
 		</add-on>
 
 		<?DOC A widget that renders multiple values?>

@@ -253,7 +253,9 @@ public class WindowPopulation {
 							}
 							if (sizeRefused) {
 								EventQueue.invokeLater(() -> {
-									theWindow.setSize(theWidth.get(), theHeight.get());
+									theWindow.setSize(//
+										theWidth == null ? theWindow.getWidth() : theWidth.get(), //
+										theHeight == null ? theWindow.getHeight() : theHeight.get());
 								});
 							}
 						} finally {

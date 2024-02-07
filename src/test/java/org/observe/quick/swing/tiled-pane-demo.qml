@@ -28,9 +28,9 @@
 		<scroll>
 			<tiled-pane role="content" values="app.values" active-value-name="entity" layout="inline-layout" orientation="vertical">
 				<model>
-					<field-value name="name" source="entity==null ? null : entity.getName()" source-as="source" save="entity.setName(source)" />
-					<field-value name="b" source="entity==null ? false : entity.getBoolean()" source-as="source" save="entity.setBoolean(source)" />
-					<field-value name="dbl" source="entity==null ? 0.0 : entity.getDouble()" source-as="source" save="entity.setDouble(source)" />
+					<field-value name="name" source="entity==null ? null : entity.getName()" target-as="newValue" save="entity.setName(newValue)" />
+					<field-value name="b" source="entity==null ? false : entity.getBoolean()" target-as="newValue" save="entity.setBoolean(newValue)" />
+					<field-value name="dbl" source="entity==null ? 0.0 : entity.getDouble()" target-as="newValue" save="entity.setDouble(newValue)" />
 				</model>
 				<box layout="simple-layout">
 					<line-border />

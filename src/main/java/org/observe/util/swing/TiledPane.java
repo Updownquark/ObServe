@@ -21,7 +21,6 @@ import java.util.List;
 
 import javax.swing.CellRendererPane;
 import javax.swing.JComponent;
-import javax.swing.JPanel;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 
@@ -29,14 +28,20 @@ import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
+import org.observe.util.swing.TiledPane.RenderChild;
+import org.observe.util.swing.TiledPane.SimpleFocusComponent;
+import org.observe.util.swing.TiledPane.TiledPanelRenderMC;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
+/**
+ * A component that renders each value of a collection as a separate component.  Only the hovered and focused components are proper children
+ * of this container, and all the rest are synthetically rendered, making it more efficient for large collections.
+ * @param <T> The type of the values in the collection
+ */
 public class TiledPane<T> extends JComponent implements Scrollable {
-	private static final JPanel EMPTY_PANEL = new JPanel();
-
 	private final ObservableCollection<T> theValues;
 	private ObservableCellRenderer<? super T, ? super T> theRenderer;
 
@@ -273,6 +278,10 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		thePostFocus.addFocusListener(focusManager);
 	}
 
+	public ObservableCollection<T> getValues() {
+		return theValues;
+	}
+
 	public TiledPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> renderer,
 		ObservableCellRenderer<? super T, ? super T> renderer2, ObservableCellRenderer<? super T, ? super T> renderer3) {
 		theRenderer = renderer;
@@ -397,7 +406,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 			else if (theFocus.component != null && theFocus.valueEquals(value.getElementId()))
 				continue; // Handled by the actual component
 
-			cell.set(value.get(), row);
+			cell.set(value.get(), row).setEnabled(theValues.mutableElement(value.getElementId()).isEnabled());
 			Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
 			theRenderPane.paintComponent(g, renderer, this, bounds.x, bounds.y, bounds.width, bounds.height, true);
 		}
@@ -438,7 +447,8 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 				value = newValue;
 				T v = newValue.get();
 				ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(v, v::toString, null), v, index, 0, focus,
-					focus, !focus, !focus, false, true);
+					focus, !focus, !focus, false, true)//
+					.setEnabled(theValues.mutableElement(newValue.getElementId()).isEnabled());
 				Component newRender = renderer.getCellRendererComponent(TiledPane.this, cell, CellRenderContext.DEFAULT);
 				if (component != newRender) {
 					repaint = true;
@@ -483,6 +493,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	static class TiledPanelRenderMC<T> implements ModelCell<T, T> {
 		private T theValue;
 		private int theRow;
+		private String isEnabled;
 
 		TiledPanelRenderMC<T> set(T value, int row) {
 			theValue = value;
@@ -527,7 +538,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 		@Override
 		public String isEnabled() {
-			return null;
+			return isEnabled;
 		}
 
 		@Override
@@ -552,6 +563,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 		@Override
 		public ModelCell<T, T> setEnabled(String enabled) {
+			isEnabled=enabled;
 			return this;
 		}
 	}

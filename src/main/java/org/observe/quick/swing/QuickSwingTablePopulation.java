@@ -15,7 +15,18 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import javax.swing.*;
+import javax.swing.AbstractButton;
+import javax.swing.Icon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPopupMenu;
+import javax.swing.ListCellRenderer;
+import javax.swing.UIDefaults;
+import javax.swing.UIManager;
 import javax.swing.text.StyledDocument;
 
 import org.observe.Observable;
@@ -40,11 +51,22 @@ import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.*;
+import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
+import org.observe.util.swing.ComponentDecorator;
+import org.observe.util.swing.ComponentPropertyManager;
+import org.observe.util.swing.FontAdjuster;
+import org.observe.util.swing.ModelCell;
+import org.observe.util.swing.MultiRangeSlider;
+import org.observe.util.swing.ObservableCellEditor;
+import org.observe.util.swing.ObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.AbstractObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
+import org.observe.util.swing.ObservableStyledDocument;
+import org.observe.util.swing.ObservableTextArea;
+import org.observe.util.swing.ObservableTextField;
+import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
@@ -55,6 +77,7 @@ import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
+import org.observe.util.swing.Shading;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
@@ -167,6 +190,8 @@ class QuickSwingTablePopulation {
 		private ObservableValue<String> theTooltip;
 		private Function<ModelCell<? extends R, ? extends C>, String> isEnabled;
 
+		private boolean isUpdating;
+
 		QuickSwingRenderer(QuickWidget quickParent, TypeToken<C> valueType, Supplier<C> value, QuickWidget renderer,
 			TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
 				QuickSwingPopulator<QuickWidget> swingRenderer) throws ModelInstantiationException {
@@ -233,6 +258,10 @@ class QuickSwingTablePopulation {
 			thePreRender = preRender;
 		}
 
+		public boolean isUpdating() {
+			return isUpdating;
+		}
+
 		public void setTooltip(ObservableValue<String> tooltip) {
 			theTooltip = tooltip;
 		}
@@ -258,22 +287,27 @@ class QuickSwingTablePopulation {
 
 		@Override
 		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-			setCellContext(cell, theRenderTableContext, false);
-			if (thePreRender != null)
-				thePreRender.run();
-			Component render;
-			try (Transaction t = QuickCoreSwing.rendering()) {
-				if (theDelegate != null)
-					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
-				else if (theComponent != null)
-					render = theComponent.getComponent();
-				else { // No renderer specified, use default
-					theDelegate = ObservableCellRenderer.formatted(String::valueOf);
-					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+			isUpdating = true;
+			try {
+				setCellContext(cell, theRenderTableContext, false);
+				if (thePreRender != null)
+					thePreRender.run();
+				Component render;
+				try (Transaction t = QuickCoreSwing.rendering()) {
+					if (theDelegate != null)
+						render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+					else if (theComponent != null)
+						render = theComponent.getComponent();
+					else { // No renderer specified, use default
+						theDelegate = ObservableCellRenderer.formatted(String::valueOf);
+						render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+					}
 				}
+				theRenderUntil.onNext(null);
+				return render;
+			} finally {
+				isUpdating = false;
 			}
-			theRenderUntil.onNext(null);
-			return render;
 		}
 
 		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx,

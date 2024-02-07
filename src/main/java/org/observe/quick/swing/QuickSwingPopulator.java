@@ -135,11 +135,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 */
 	public interface QuickSwingLayout<L extends QuickLayout> {
 		/**
+		 * @param panel The populator of the panel whose components to manage
 		 * @param quick The Quick layout to create the layout for
 		 * @return The swing layout interpretation of the Quick layout
 		 * @throws ModelInstantiationException If a problem occurs instantiating the layout
 		 */
-		LayoutManager create(L quick) throws ModelInstantiationException;
+		LayoutManager create(ContainerPopulator<?, ?> panel, L quick) throws ModelInstantiationException;
 
 		void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException;
 	}

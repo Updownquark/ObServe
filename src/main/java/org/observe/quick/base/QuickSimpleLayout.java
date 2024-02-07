@@ -6,6 +6,9 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 
 public class QuickSimpleLayout extends QuickLayout.Abstract {
+	public static final String SIMPLE_LAYOUT = "simple-layout";
+	public static final String SIMPLE_LAYOUT_CHILD = "simple-layout-child";
+
 	public static class Def extends QuickLayout.Def<QuickSimpleLayout> {
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);

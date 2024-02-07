@@ -8,7 +8,6 @@ import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -132,25 +131,25 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, ExElement.creator(QuickSplit.Def::new));
 		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, ExElement.creator(QuickScrollPane.Def::new));
 
-		// Box layouts
-		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickInlineLayout.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("simple-layout", QuickSimpleLayout.Def.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickSimpleLayout.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("simple-layout-child", QuickSimpleLayout.Child.Def.class, session -> QuickCoreInterpretation
-			.interpretAddOn(session, (p, ao) -> new QuickSimpleLayout.Child.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("border-layout", QuickBorderLayout.Def.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("border-layout-child", QuickBorderLayout.Child.Def.class, session -> QuickCoreInterpretation
-			.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Child.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("h-positionable", Positionable.Def.Horizontal.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Positionable.Def.Horizontal(ao, p)));
-		interpreter.createWith("v-positionable", Positionable.Def.Vertical.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Positionable.Def.Vertical(ao, p)));
-		interpreter.createWith("h-sizeable", Sizeable.Def.Horizontal.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Horizontal(ao, p)));
-		interpreter.createWith("v-sizeable", Sizeable.Def.Vertical.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Vertical(ao, p)));
+		// Layouts
+		interpreter.createWith(QuickInlineLayout.INLINE_LAYOUT, QuickInlineLayout.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickInlineLayout.Def::new));
+		interpreter.createWith(QuickSimpleLayout.SIMPLE_LAYOUT, QuickSimpleLayout.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickSimpleLayout.Def::new));
+		interpreter.createWith(QuickSimpleLayout.SIMPLE_LAYOUT_CHILD, QuickSimpleLayout.Child.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickSimpleLayout.Child.Def::new));
+		interpreter.createWith(QuickBorderLayout.BORDER_LAYOUT, QuickBorderLayout.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickBorderLayout.Def::new));
+		interpreter.createWith(QuickBorderLayout.Child.BORDER_LAYOUT_CHILD, QuickBorderLayout.Child.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickBorderLayout.Child.Def::new));
+		interpreter.createWith(QuickGridFlowLayout.GRID_FLOW_LAYOUT, QuickGridFlowLayout.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickGridFlowLayout.Def::new));
+		interpreter.createWith(Positionable.H_POSITIONABLE, Positionable.Def.Horizontal.class,
+			ExAddOn.creator(Positionable.Def.Horizontal::new));
+		interpreter.createWith(Positionable.V_POSITIONABLE, Positionable.Def.Vertical.class,
+			ExAddOn.creator(Positionable.Def.Vertical::new));
+		interpreter.createWith(Sizeable.H_SIZEABLE, Sizeable.Def.Horizontal.class, ExAddOn.creator(Sizeable.Def.Horizontal::new));
+		interpreter.createWith(Sizeable.V_SIZEABLE, Sizeable.Def.Vertical.class, ExAddOn.creator(Sizeable.Def.Vertical::new));
 
 		// Table
 		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, ExElement.creator(QuickTable.Def::new));

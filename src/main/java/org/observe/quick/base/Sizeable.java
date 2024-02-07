@@ -34,6 +34,9 @@ import org.qommons.ex.NeverThrown;
 import org.qommons.io.LocatedFilePosition;
 
 public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
+	public static final String H_SIZEABLE = "h-sizeable";
+	public static final String V_SIZEABLE = "v-sizeable";
+
 	public static abstract class Def<S extends Sizeable> extends ExAddOn.Def.Abstract<ExElement, S> {
 		private final Ternian isVertical;
 		private CompiledExpression theSize;
@@ -92,7 +95,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-			qonfigType = "v-sizeable",
+			qonfigType = V_SIZEABLE,
 			interpretation = Interpreted.Vertical.class,
 			instance = Sizeable.Vertical.class)
 		public static class Vertical extends Def<Sizeable.Vertical> {
@@ -135,6 +138,10 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 		}
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = H_SIZEABLE,
+			interpretation = Interpreted.Horizontal.class,
+			instance = Sizeable.Horizontal.class)
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.FALSE, type, element);

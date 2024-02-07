@@ -46,7 +46,55 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWindow;
-import org.observe.quick.base.*;
+import org.observe.quick.base.DynamicStyledDocument;
+import org.observe.quick.base.GeneralDialog;
+import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.Positionable;
+import org.observe.quick.base.QuickAbstractMenuItem;
+import org.observe.quick.base.QuickBorderLayout;
+import org.observe.quick.base.QuickBox;
+import org.observe.quick.base.QuickButton;
+import org.observe.quick.base.QuickCheckBox;
+import org.observe.quick.base.QuickCheckBoxMenuItem;
+import org.observe.quick.base.QuickColorChooser;
+import org.observe.quick.base.QuickComboBox;
+import org.observe.quick.base.QuickConfirm;
+import org.observe.quick.base.QuickEditableTextWidget;
+import org.observe.quick.base.QuickField;
+import org.observe.quick.base.QuickFieldPanel;
+import org.observe.quick.base.QuickFileButton;
+import org.observe.quick.base.QuickFileChooser;
+import org.observe.quick.base.QuickGridFlowLayout;
+import org.observe.quick.base.QuickInfoDialog;
+import org.observe.quick.base.QuickInlineLayout;
+import org.observe.quick.base.QuickLabel;
+import org.observe.quick.base.QuickLayout;
+import org.observe.quick.base.QuickMenu;
+import org.observe.quick.base.QuickMenuBar;
+import org.observe.quick.base.QuickMenuContainer;
+import org.observe.quick.base.QuickMenuItem;
+import org.observe.quick.base.QuickProgressBar;
+import org.observe.quick.base.QuickRadioButton;
+import org.observe.quick.base.QuickRadioButtons;
+import org.observe.quick.base.QuickScrollPane;
+import org.observe.quick.base.QuickSimpleLayout;
+import org.observe.quick.base.QuickSize;
+import org.observe.quick.base.QuickSlider;
+import org.observe.quick.base.QuickSpacer;
+import org.observe.quick.base.QuickSpinner;
+import org.observe.quick.base.QuickSplit;
+import org.observe.quick.base.QuickTable;
+import org.observe.quick.base.QuickTableColumn;
+import org.observe.quick.base.QuickTabs;
+import org.observe.quick.base.QuickTextArea;
+import org.observe.quick.base.QuickTextField;
+import org.observe.quick.base.QuickToggleButton;
+import org.observe.quick.base.QuickToggleButtons;
+import org.observe.quick.base.QuickTree;
+import org.observe.quick.base.Sizeable;
+import org.observe.quick.base.StyledDocument;
+import org.observe.quick.base.TabularWidget;
+import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDocument;
@@ -137,6 +185,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
 		tx.with(QuickSimpleLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretSimpleLayout);
 		tx.with(QuickBorderLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretBorderLayout);
+		tx.with(QuickGridFlowLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretGridFlowLayout);
 
 		// Table
 		tx.with(QuickTable.Interpreted.class, QuickSwingPopulator.class, SwingTable::new);
@@ -316,7 +365,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickBox quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			LayoutManager layoutInst = theLayout.create(quick.getLayout());
+			LayoutManager layoutInst = theLayout.create(panel, quick.getLayout());
 			panel.addHPanel(null, layoutInst, p -> {
 				component.accept(p);
 				int c = 0;
@@ -336,7 +385,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		Transformer<ExpressoInterpretationException> tx) {
 		return new QuickSwingLayout<QuickInlineLayout>() {
 			@Override
-			public LayoutManager create(QuickInlineLayout quick) throws ModelInstantiationException {
+			public LayoutManager create(ContainerPopulator<?, ?> panel, QuickInlineLayout quick) throws ModelInstantiationException {
 				return new JustifiedBoxLayout(quick.isVertical())//
 					.setMainAlignment(quick.getMainAlign())//
 					.setCrossAlignment(quick.getCrossAlign())//
@@ -353,7 +402,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		Transformer<ExpressoInterpretationException> tx) {
 		return new QuickSwingLayout<QuickSimpleLayout>() {
 			@Override
-			public LayoutManager create(QuickSimpleLayout quick) throws ModelInstantiationException {
+			public LayoutManager create(ContainerPopulator<?, ?> panel, QuickSimpleLayout quick) throws ModelInstantiationException {
 				return new SimpleLayout();
 			}
 
@@ -410,7 +459,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		Transformer<ExpressoInterpretationException> tx) {
 		return new QuickSwingLayout<QuickBorderLayout>() {
 			@Override
-			public LayoutManager create(QuickBorderLayout quick) throws ModelInstantiationException {
+			public LayoutManager create(ContainerPopulator<?, ?> panel, QuickBorderLayout quick) throws ModelInstantiationException {
 				return new BetterBorderLayout();
 			}
 
@@ -439,6 +488,29 @@ public class QuickBaseSwing implements QuickInterpretation {
 			return new BetterBorderLayout.Constraints(region, null, null, null, null);
 		return new BetterBorderLayout.Constraints(region, //
 			size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()), enforceAbsolute(size.getMaximum()));
+	}
+
+	static QuickSwingLayout<QuickGridFlowLayout> interpretGridFlowLayout(QuickGridFlowLayout.Interpreted interpreted,
+		Transformer<ExpressoInterpretationException> tx) {
+		return new QuickSwingLayout<QuickGridFlowLayout>() {
+			@Override
+			public LayoutManager create(ContainerPopulator<?, ?> panel, QuickGridFlowLayout quick) throws ModelInstantiationException {
+				GridFlowLayout layout = new GridFlowLayout()//
+					.setPrimaryStart(quick.getPrimaryStart()).setSecondaryStart(quick.getSecondaryStart())//
+					.setMainAlign(quick.getMainAlign()).setCrossAlign(quick.getCrossAlign()).setRowAlign(quick.getRowAlign())//
+					.setPadding(quick.getPadding());
+				quick.getMaxRowCount().changes().takeUntil(quick.getElement().onDestroy()).act(evt -> {
+					layout.setMaxRowCount(evt.getNewValue());
+					if (!evt.isInitial() && panel.getContainer() != null)
+						panel.getContainer().invalidate();
+				});
+				return layout;
+			}
+
+			@Override
+			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+			}
+		};
 	}
 
 	static class SwingSpacer extends QuickSwingPopulator.Abstract<QuickSpacer> {

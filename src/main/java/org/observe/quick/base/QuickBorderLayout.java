@@ -11,6 +11,8 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickBorderLayout extends QuickLayout.Abstract {
+	public static final String BORDER_LAYOUT = "border-layout";
+
 	public static class Def extends QuickLayout.Def<QuickBorderLayout> {
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);

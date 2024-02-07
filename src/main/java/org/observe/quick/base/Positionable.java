@@ -21,6 +21,9 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
+	public static final String H_POSITIONABLE = "h-positionable";
+	public static final String V_POSITIONABLE = "v-positionable";
+
 	public static abstract class Def<P extends Positionable> extends ExAddOn.Def.Abstract<ExElement, P> {
 		private final boolean isVertical;
 		private CompiledExpression theLeading;
@@ -63,7 +66,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-			qonfigType = "v-positionable",
+			qonfigType = V_POSITIONABLE,
 			interpretation = Interpreted.Vertical.class,
 			instance = Positionable.Vertical.class)
 		public static class Vertical extends Def<Positionable.Vertical> {
@@ -96,7 +99,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-			qonfigType = "h-positionable",
+			qonfigType = H_POSITIONABLE,
 			interpretation = Interpreted.Horizontal.class,
 			instance = Positionable.Horizontal.class)
 		public static class Horizontal extends Def<Positionable.Horizontal> {
