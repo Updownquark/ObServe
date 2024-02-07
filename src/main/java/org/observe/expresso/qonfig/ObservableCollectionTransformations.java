@@ -70,11 +70,14 @@ public class ObservableCollectionTransformations {
 		interpreter.createWith("unmodifiable", CollectionTransform.class, ExElement.creator(UnmodifiableCollectionTransform::new));
 		interpreter.createWith("filter-mod", CollectionTransform.class, ExElement.creator(FilterModCollectionTransform::new));
 		interpreter.createWith("map-equivalent", CollectionTransform.class, ExElement.creator(MapEquivalentCollectionTransform::new));
-		interpreter.createWith("flatten", CollectionTransform.class, ExElement.creator(FlattenCollectionTransform::new));
-		interpreter.createWith("cross", CollectionTransform.class, ExElement.creator(CrossCollectionTransform::new));
+		interpreter.createWith(FlattenCollectionTransform.FLATTEN, CollectionTransform.class,
+			ExElement.creator(FlattenCollectionTransform::new));
+		interpreter.createWith(CrossCollectionTransform.CROSS, CollectionTransform.class, ExElement.creator(CrossCollectionTransform::new));
 		interpreter.createWith("where-contained", CollectionTransform.class, ExElement.creator(WhereContainedCollectionTransform::new));
 		interpreter.createWith("group-by", CollectionTransform.class, ExElement.creator(GroupByCollectionTransform::new));
 		interpreter.createWith("size", CollectionTransform.class, ExElement.creator(SizeCollectionTransform::new));
+		interpreter.createWith(ReducedCollectionTransform.REDUCE, CollectionTransform.class,
+			ExElement.creator(ReducedCollectionTransform::new));
 		interpreter.createWith("collect", CollectionTransform.class, ExElement.creator(CollectCollectionTransform::new));
 
 		// TODO Probably should support value-set transformations here, just grabbing the values and returning a collection
@@ -255,6 +258,10 @@ public class ObservableCollectionTransformations {
 				return theSourceType;
 			}
 
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTest() {
+				return theTest;
+			}
+
 			@Override
 			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
@@ -269,29 +276,33 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+				return new Instantiator<>(this);
 			}
 		}
 
 		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final ModelInstantiator theModels;
 			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
 
-			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
-				theSourceType = sourceType;
-				theSourceVariable = sourceVariable;
-				theTest = test;
+			Instantiator(Interpreted<T, ?, CV> interpreted) throws ModelInstantiationException {
+				theModels = interpreted.getModels().instantiate();
+				theSourceType = interpreted.getSourceType();
+				theSourceVariable = interpreted.getDefinition().getSourceVariable();
+				theTest = interpreted.getTest().instantiate();
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
+				theModels.instantiate();
 				theTest.instantiate();
 			}
 
 			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
+				models = theModels.wrap(models);
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> testV = theTest.get(models);
@@ -1307,6 +1318,8 @@ public class ObservableCollectionTransformations {
 
 	static class FlattenCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
+		public static final String FLATTEN = "flatten";
+
 		private ModelType.SingleTyped<C2> theTargetModelType;
 		private ExSort.ExRootSort theSort;
 		private boolean isPropagateToParent;
@@ -1520,22 +1533,52 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = CrossCollectionTransform.CROSS,
+			interpretation = CrossCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = FlattenCollectionTransform.FLATTEN,
+		interpretation = CrossCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "abst-map-op",
+		interpretation = CrossCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "complex-operation",
+		interpretation = CrossCollectionTransform.Interpreted.class),//
+	})
 	static class CrossCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
 	implements CollectionTransform<C, ObservableCollection<?>, ExElement> {
-		private String theSourceAs;
+		public static final String CROSS = "cross";
+
+		private ModelComponentId theSourceAs;
+		private ModelComponentId theCrossAs;
 		private CompiledExpression theWith;
+		private CompiledExpression theValue;
 
 		public CrossCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public String getSourceAs() {
+		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
+		public ModelComponentId getSourceAs() {
 			return theSourceAs;
 		}
 
-		@QonfigAttributeGetter("with")
+		@QonfigAttributeGetter(asType = CROSS, value = "crossed-as")
+		public ModelComponentId getCrossAs() {
+			return theCrossAs;
+		}
+
+		@QonfigAttributeGetter(asType = CROSS, value = "with")
 		public CompiledExpression getWith() {
 			return theWith;
+		}
+
+		@Override
+		@QonfigAttributeGetter(asType = CROSS)
+		public CompiledExpression getElementValue() {
+			return theValue;
 		}
 
 		@Override
@@ -1546,14 +1589,138 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
-			theSourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def withElModel = getAddOn(ExWithElementModel.Def.class);
+			String sourceAs = session.getAttributeText("source-as");
+			theSourceAs = withElModel.getElementValueModelId(sourceAs);
+			String crossAs = session.getAttributeText("crossed-as");
+			theCrossAs = withElModel.getElementValueModelId(crossAs);
+			withElModel.satisfyElementValueType(theSourceAs, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(((CrossCollectionTransform.Interpreted<?, ?, ?, ?, ?>) interp).getSourceType()));
+			withElModel.satisfyElementValueType(theCrossAs, ModelTypes.Value, (interp, env) -> ModelTypes.Value
+				.forType(((CrossCollectionTransform.Interpreted<?, ?, ?, ?, ?>) interp).getWith().getType().getType(0)));
 			theWith = getAttributeExpression("with", session);
+			theValue = getValueExpression(session);
 		}
 
 		@Override
 		public ExpressoTransformations.Operation.Interpreted<C, ?, ObservableCollection<?>, ?, ? extends ExElement> interpret(
 			ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
-			throw new ExpressoInterpretationException("Not yet implemented", reporting().getFileLocation().getPosition(0), 0);
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<C1 extends ObservableCollection<?>, S, T, CV1 extends C1, X>
+		extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<C1, CV1, ObservableCollection<?>, ObservableCollection<T>, ExElement> {
+			private TypeToken<S> theSourceType;
+			private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<X>> theWith;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+
+			Interpreted(CrossCollectionTransform<C1> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public CrossCollectionTransform<C1> getDefinition() {
+				return (CrossCollectionTransform<C1>) super.getDefinition();
+			}
+
+			public TypeToken<S> getSourceType() {
+				return theSourceType;
+			}
+
+			public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<X>> getWith() {
+				return theWith;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getElementValue() {
+				return theValue;
+			}
+
+			@Override
+			public void update(ModelInstanceType<C1, CV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSourceType = (TypeToken<S>) sourceType.getType(0);
+				theWith = getDefinition().getWith().interpret(ModelTypes.Collection.anyAsV(), env);
+				super.update(env);
+				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.anyAsV(), getExpressoEnv());
+			}
+
+			@Override
+			public ModelInstanceType<? extends ObservableCollection<?>, ? extends ObservableCollection<T>> getTargetType() {
+				return ModelTypes.Collection.forType((TypeToken<T>) theValue.getType().getType(0));
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theWith, theValue);
+			}
+
+			@Override
+			public Operation.Instantiator<CV1, ObservableCollection<T>> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<CV1 extends ObservableCollection<?>, S, T, X>
+		implements FlowTransformInstantiator<CV1, ObservableCollection<T>, S, T> {
+			private final ModelInstantiator theModels;
+			private final TypeToken<S> theSourceType;
+			private final TypeToken<X> theCrossedType;
+			private final TypeToken<T> theTargetType;
+			private final ModelComponentId theSourceAs;
+			private final ModelComponentId theCrossedAs;
+			private final ModelValueInstantiator<ObservableCollection<X>> theWith;
+			private final ModelValueInstantiator<SettableValue<T>> theValue;
+
+			Instantiator(Interpreted<? super CV1, S, T, CV1, X> interpreted) throws ModelInstantiationException {
+				theModels = interpreted.getModels().instantiate();
+				theSourceType = interpreted.getSourceType();
+				theCrossedType = (TypeToken<X>) interpreted.getWith().getType().getType(0);
+				theTargetType = (TypeToken<T>) interpreted.getElementValue().getType().getType(0);
+				theSourceAs = interpreted.getDefinition().getSourceAs();
+				theCrossedAs = interpreted.getDefinition().getCrossAs();
+				theWith = interpreted.getWith().instantiate();
+				theValue = interpreted.getElementValue().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				theModels.instantiate();
+				theWith.instantiate();
+				theValue.instantiate();
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+				throws ModelInstantiationException {
+				models = theModels.wrap(models);
+				SettableValue<S> sourceAs = SettableValue.build(theSourceType).build();
+				SettableValue<X> crossedAs = SettableValue.build(theCrossedType).build();
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, sourceAs);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theCrossedAs, models, crossedAs);
+				SettableValue<T> result = theValue.get(models);
+				ObservableCollection<X> with = theWith.get(models);
+				return source.cross(theTargetType, with.flow(), opts -> opts.map((s, x) -> {
+					sourceAs.set(s, null);
+					crossedAs.set(x, null);
+					return result.get();
+				}));
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, T> transformToFlow(CV1 source, ModelSetInstance models) throws ModelInstantiationException {
+				return transformFlow((CollectionDataFlow<?, ?, S>) source.flow(), models);
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				ObservableCollection<X> sourceWith = theWith.get(sourceModels);
+				if (theWith.forModelCopy(sourceWith, sourceModels, newModels) != sourceWith)
+					return true;
+				SettableValue<T> sourceValue = theValue.get(sourceModels);
+				if (theValue.forModelCopy(sourceValue, sourceModels, newModels) != sourceValue)
+					return true;
+				return false;
+			}
 		}
 	}
 
@@ -1809,6 +1976,204 @@ public class ObservableCollectionTransformations {
 			@Override
 			public String toString() {
 				return theCollection.getIdentity() + ".size()";
+			}
+		}
+	}
+
+	@ExMultiElementTraceable({ //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = ReducedCollectionTransform.REDUCE,
+			interpretation = ReducedCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "complex-operation",
+		interpretation = ReducedCollectionTransform.Interpreted.class)//
+	})
+	static class ReducedCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
+	implements CollectionTransform<C, SettableValue<?>, ExElement> {
+		public static final String REDUCE = "reduce";
+
+		private ModelComponentId theSourceAs;
+		private ModelComponentId theTempAs;
+		private CompiledExpression theSeed;
+		private CompiledExpression theValue;
+
+		public ReducedCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
+		public ModelComponentId getSourceAs() {
+			return theSourceAs;
+		}
+
+		@QonfigAttributeGetter(asType = REDUCE, value = "temp-as")
+		public ModelComponentId getTempAs() {
+			return theTempAs;
+		}
+
+		@QonfigAttributeGetter(asType = REDUCE, value = "seed")
+		public CompiledExpression getSeed() {
+			return theSeed;
+		}
+
+		@Override
+		@QonfigAttributeGetter(asType = REDUCE)
+		public CompiledExpression getElementValue() {
+			return theValue;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
+			super.update(session);
+
+			ExWithElementModel.Def withElModel = getAddOn(ExWithElementModel.Def.class);
+			String sourceAs = session.getAttributeText("source-as");
+			theSourceAs = withElModel.getElementValueModelId(sourceAs);
+			String tempAs = session.getAttributeText("temp-as");
+			theTempAs = withElModel.getElementValueModelId(tempAs);
+			withElModel.satisfyElementValueType(theSourceAs, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(((ReducedCollectionTransform.Interpreted<?, ?, ?, ?>) interp).getSourceType()));
+			withElModel.satisfyElementValueType(theTempAs, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(((ReducedCollectionTransform.Interpreted<?, ?, ?, ?>) interp).getValueType()));
+			theSeed = getAttributeExpression("seed", session);
+			theValue = getValueExpression(session);
+		}
+
+		@Override
+		public Operation.Interpreted<C, ?, SettableValue<?>, ?, ? extends ExElement> interpret(ExElement.Interpreted<?> parent)
+			throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<C extends ObservableCollection<?>, CV extends C, S, T> extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<C, CV, SettableValue<?>, SettableValue<T>, ExElement> {
+			private TypeToken<S> theSourceType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSeed;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+
+			Interpreted(ReducedCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public ReducedCollectionTransform<C> getDefinition() {
+				return (ReducedCollectionTransform<C>) super.getDefinition();
+			}
+
+			public TypeToken<S> getSourceType() {
+				return theSourceType;
+			}
+
+			public TypeToken<T> getValueType() {
+				return (TypeToken<T>) theSeed.getType().getType(0);
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSeed() {
+				return theSeed;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
+				return theValue;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getElementValue() {
+				return theValue;
+			}
+
+			@Override
+			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSourceType = (TypeToken<S>) sourceType.getType(0);
+				theSeed = getDefinition().getSeed().interpret(ModelTypes.Value.anyAsV(), env);
+				super.update(env);
+				theValue = getDefinition().getElementValue().interpret(theSeed.getType(), getExpressoEnv());
+			}
+
+			@Override
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<T>> getTargetType() {
+				return theValue.getType();
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theSeed, theValue);
+			}
+
+			@Override
+			public Operation.Instantiator<CV, SettableValue<T>> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<C extends ObservableCollection<?>, S, T> implements Operation.Instantiator<C, SettableValue<T>> {
+			private final ModelInstantiator theModels;
+			private final TypeToken<S> theSourceType;
+			private final TypeToken<T> theTargetType;
+			private final ModelComponentId theSourceAs;
+			private final ModelComponentId theTempAs;
+			private final ModelValueInstantiator<SettableValue<T>> theSeed;
+			private final ModelValueInstantiator<SettableValue<T>> theValue;
+
+			Instantiator(Interpreted<?, C, S, T> interpreted) throws ModelInstantiationException {
+				theModels = interpreted.getModels().instantiate();
+				theSourceType = interpreted.getSourceType();
+				theTargetType = (TypeToken<T>) interpreted.getElementValue().getType().getType(0);
+				theSourceAs = interpreted.getDefinition().getSourceAs();
+				theTempAs = interpreted.getDefinition().getTempAs();
+				theSeed = interpreted.getSeed().instantiate();
+				theValue = interpreted.getElementValue().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				theModels.instantiate();
+				theSeed.instantiate();
+				theValue.instantiate();
+			}
+
+			@Override
+			public SettableValue<T> transform(C source, ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<T> seed = theSeed.get(models);
+				models = theModels.wrap(models);
+				SettableValue<S> sourceAs = SettableValue.build(theSourceType).build();
+				SettableValue<T> tempAs = SettableValue.build(theTargetType).build();
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, sourceAs);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theTempAs, models, tempAs);
+				SettableValue<T> value = theValue.get(models);
+				ObservableValue<T> reduced;
+				if (value.isEnabled() == null) {
+					reduced = ((ObservableCollection<S>) source).reduce(seed.get(), (temp, newValue) -> {
+						tempAs.set(temp, null);
+						sourceAs.set(newValue, null);
+						return value.get();
+					}, (temp, oldValue) -> {
+						sourceAs.set(oldValue, null);
+						value.set(temp, null);
+						return tempAs.get();
+					});
+				} else {
+					reduced = ((ObservableCollection<S>) source).reduce(seed.get(), (temp, newValue) -> {
+						tempAs.set(temp, null);
+						sourceAs.set(newValue, null);
+						return value.get();
+					});
+				}
+				return SettableValue.asSettable(reduced, __ -> "Reduced values are not modifiable");
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				SettableValue<T> seed = theSeed.get(sourceModels);
+				if (theValue.forModelCopy(seed, sourceModels, newModels) != seed)
+					return true;
+				SettableValue<T> value = theValue.get(sourceModels);
+				if (theValue.forModelCopy(value, sourceModels, newModels) != value)
+					return true;
+				return false;
 			}
 		}
 	}

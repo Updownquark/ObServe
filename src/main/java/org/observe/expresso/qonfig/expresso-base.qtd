@@ -478,9 +478,18 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC Produces a result that contains an element for each combination of a source element with an element of the model structure crossed with it.<br>
 			The result will have A x B elements, where A is the number of elements in the source structure and B is the number of elements in the structure crossed with it.<br>
 			Each element will be the result of an operation on one element in the source and one element in the crossed structure.?>
-		<element-def name="cross" extends="flatten">
+		<element-def name="cross" extends="flatten" inherits="complex-operation">
+			<element-model>
+				<?DOC The variable in which the current value from the crossed collection will be made available?>
+				<value name-attribute="crossed-as" />
+			</element-model>
+			<attr-mod name="flatten.to" specify="forbidden" default="Value" />
 			<?DOC The structure to cross with the source structure?>
 			<attribute name="with" type="expression" />
+			<?DOC The name of the variable for the element in the crossed collection?>
+			<attribute name="crossed-as" type="identifier" specify="required" />
+			<?DOC The expression to combine each combined value from the source and crossed collections into a value in the result?>
+			<value type="expression" specify="required" />
 		</element-def>
 
 		<?DOC Produces a result containing only elements of the source which are, or are not, contained in a target structure.?>
@@ -490,6 +499,21 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<?DOC If true (the default), the result will contain only elements from the source for which an equivalent element exists in the filter structure.<br>
 				If false, the only elements NOT present in the filter structure will be present in the result.?>
 			<attribute name="inclusive" type="boolean" default="true" />
+		</element-def>
+
+		<?DOC A reduction operation on a collection.  Produces a scalar value that is some combination of all the values in a collection.?>
+		<element-def name="reduce" extends="operation" inherits="complex-operation">
+			<element-model>
+				<?DOC The variable in which reduced value as accumulated thus far in the operation will be made available?>
+				<value name-attribute="temp-as" />
+			</element-model>
+			<?DOC The seed for the operation. This is the value of the reduction for an empty collection.
+				If the collection is not empty, this is the first value available in the 'temp-as' variable.?>
+			<attribute name="seed" type="expression" />
+			<?DOC The name of the variable that will hold the reduced value as accumulated thus far in the operation?>
+			<attribute name="temp-as" type="identifier" />
+			<?DOC The expression, using 'source-as' and 'temp-as', to produce the reduced value?>
+			<value type="expression" />
 		</element-def>
 
 		<?DOC Groups a collection into a multi-map.  The result will be a multi map containing all elements from the source structure as values.?>
