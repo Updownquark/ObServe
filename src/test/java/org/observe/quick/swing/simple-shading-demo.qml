@@ -10,7 +10,7 @@
 			<model name="app">
 				<value name="x" type="int" init="-1" />
 				<value name="y" type="int" init="-1" />
-				<value name="w" type="int" init="500" />
+				<value name="w" type="int" init="600" />
 				<value name="h" type="int" init="400" />
 			</model>
 			<model name="shading">
@@ -47,26 +47,32 @@
 			<value name="lightColorDialogVisible" init="false" />
 			<value name="shadowColorDialogVisible" init="false" />
 		</model>
-		<general-dialog visible="lightColorDialogVisible" title="`Select Light Color`" modal="true">
+		<general-dialog visible="lightColorDialogVisible" title="`Select Light Color`" modal="false">
 			<color-chooser value="shading.lightColor" />
 		</general-dialog>
-		<general-dialog visible="shadowColorDialogVisible" title="`Select Shadow Color`" modal="true">
+		<general-dialog visible="shadowColorDialogVisible" title="`Select Shadow Color`" modal="false">
 			<color-chooser value="shading.shadowColor" />
 		</general-dialog>
+		<label fill="true">This demo is to show off the ability to apply style-based shading to boxes,</label>
+		<label fill="true">as well as the ability to customize colors and animate display changes.</label>
 		<box field-label="`Light Source`" fill="true" layout="inline-layout" orientation="horizontal" main-align="justify">
 			<slider min="0" max="359.9999999" value="shading.lightSource" />
 			<label>&#x00b0;  Rotate:</label>
-			<check-box value="shading.rotateLight" />
+			<check-box value="shading.rotateLight" tooltip="`Causes the apparent direction of illumination to rotate around for boxes with raised shading`" />
 		</box>
 		<box field-label="`Max Shading`" fill="true" layout="inline-layout" orientation="horizontal" main-align="justify">
 			<slider min="0" max="100" value="shading.maxShading * 100" />
 			<label>%  Fade:</label>
-			<check-box value="shading.fadeShading" />
+			<check-box value="shading.fadeShading" tooltip="`Causes shading to fade in and out`"/>
 		</box>
-		<button field-label="`Light Color`" action="lightColorDialogVisible=true">Colors.toString(shading.lightColor)
+		<button field-label="`Light Color`" action="lightColorDialogVisible=true"
+			tooltip="`Selects the color of illumination for shaded boxes`">
+			Colors.toString(shading.lightColor)
 			<style attr="font-color">shading.lightColor</style>
 		</button>
-		<button field-label="`Shadow Color`" action="shadowColorDialogVisible=true">Colors.toString(shading.shadowColor)
+		<button field-label="`Shadow Color`" action="shadowColorDialogVisible=true"
+			tooltip="`Selects the color of shadow for shaded boxes`">
+			Colors.toString(shading.shadowColor)
 			<style attr="font-color">shading.shadowColor</style>
 		</button>
 		<slider field-label="`Corner Radius`" fill="true" min="0" max="25" value="shading.cornerRadius" />
@@ -90,14 +96,16 @@
 					<raised-shading name="myShading" round="false" horizontal="false" />
 				</model>
 				<style attr="shading">myShading</style>
-				<label>This box uses raised shading only in the vertical dimension</label>
+				<label>This box uses raised shading</label>
+				<label>only in the vertical dimension</label>
 			</box>
 			<box left="`50%`" width="`50%`" top="`33%`" height="`33%`" layout="inline-layout" orientation="vertical" main-align="center" cross-align="center">
 				<model>
 					<raised-shading name="myShading" round="false" vertical="false" />
 				</model>
 				<style attr="shading">myShading</style>
-				<label>This box uses raised shading only in the horizontal dimension</label>
+				<label>This box uses raised shading</label>
+				<label>only in the horizontal dimension</label>
 			</box>
 			<box left="0" width="`100%`" top="`66%`" height="`34%`" layout="inline-layout" orientation="vertical" main-align="center" cross-align="center">
 				<model>

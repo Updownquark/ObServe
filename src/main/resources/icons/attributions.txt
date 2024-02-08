@@ -1,1 +1,5 @@
 The file and folder icons are from https://icons8.com, specifically icon/11651/file and icon/21079/folder
+
+redDot.png and greenDot.png were generated using the org.qommons.Colors.generateSpecularDot() method.
+
+The rest are either pixel art made by me or icons I found on the internet for free use not requiring attribution.

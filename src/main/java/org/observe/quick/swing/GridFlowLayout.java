@@ -193,11 +193,13 @@ public class GridFlowLayout implements AbstractLayout {
 
 	static class LayoutRow extends AbstractList<LayoutChild> implements LayoutChild {
 		private final boolean isVertical;
+		private final int thePadding;
 		public final List<LayoutChild> components;
 		public final Dimension[][] sizes;
 
-		LayoutRow(boolean vertical, List<LayoutChild> components) {
+		LayoutRow(boolean vertical, int padding, List<LayoutChild> components) {
 			isVertical = vertical;
+			thePadding = padding;
 			this.components = components;
 			sizes = new Dimension[components.size()][3];
 		}
@@ -215,8 +217,12 @@ public class GridFlowLayout implements AbstractLayout {
 				if (isVertical) {
 					if (sizes[c][type + 1].width > w)
 						w = sizes[c][type + 1].width;
+					if (c > 0)
+						h += thePadding;
 					h += sizes[c][type + 1].height;
 				} else {
+					if (c > 0)
+						w += thePadding;
 					w += sizes[c][type + 1].width;
 					if (sizes[c][type + 1].height > h)
 						h = sizes[c][type + 1].height;
@@ -252,7 +258,8 @@ public class GridFlowLayout implements AbstractLayout {
 			int end = offset + theMaxRowCount;
 			if (components.size() < end)
 				end = components.size();
-			rows[r] = new LayoutRow(vertical, components.subList(offset, end));
+			rows[r] = new LayoutRow(vertical, theRowLayout.getPadding(), components.subList(offset, end));
+			offset = end;
 		}
 		return rows;
 	}
