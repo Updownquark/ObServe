@@ -59,8 +59,9 @@ public class ObservableCollectionTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("map-to", CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
-		interpreter.createWith("filter", CollectionTransform.class, ExElement.creator(FilterCollectionTransform::new));
+		interpreter.createWith(MapCollectionTransform.MAP_TO, CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
+		interpreter.createWith(FilterCollectionTransform.FILTER, CollectionTransform.class,
+			ExElement.creator(FilterCollectionTransform::new));
 		interpreter.createWith("filter-by-type", CollectionTransform.class, ExElement.creator(TypeFilteredCollectionTransform::new));
 		interpreter.createWith("reverse", CollectionTransform.class, ExElement.creator(ReverseCollectionTransform::new));
 		interpreter.createWith("refresh", CollectionTransform.class, ExElement.creator(RefreshCollectionTransform::new));
@@ -86,6 +87,8 @@ public class ObservableCollectionTransformations {
 
 	static class MapCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>> extends
 	ExpressoTransformations.AbstractCompiledTransformation<C1, C2, ExElement> implements CollectionTransform<C1, C2, ExElement> {
+		public static final String MAP_TO = "map-to";
+
 		private ModelType<C1> theSourceType;
 		private ModelType<C2> theTargetType;
 
@@ -208,8 +211,18 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({ //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = FilterCollectionTransform.FILTER,
+			interpretation = FilterCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "complex-operation",
+		interpretation = FilterCollectionTransform.Interpreted.class)//
+	})
 	static class FilterCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		public static final String FILTER = "filter";
+
 		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
@@ -217,10 +230,12 @@ public class ObservableCollectionTransformations {
 			super(parent, qonfigType);
 		}
 
+		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
 		public ModelComponentId getSourceVariable() {
 			return theSourceVariable;
 		}
 
+		@QonfigAttributeGetter(asType = FILTER, value = "test")
 		public CompiledExpression getTest() {
 			return theTest;
 		}
@@ -1316,6 +1331,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = FlattenCollectionTransform.FLATTEN,
+			interpretation = CrossCollectionTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "abst-map-op",
+			interpretation = CrossCollectionTransform.Interpreted.class) })
 	static class FlattenCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
 		public static final String FLATTEN = "flatten";
@@ -1323,17 +1345,55 @@ public class ObservableCollectionTransformations {
 		private ModelType.SingleTyped<C2> theTargetModelType;
 		private ExSort.ExRootSort theSort;
 		private boolean isPropagateToParent;
+		private boolean isCached;
+		private boolean isReEvalOnUpdate;
+		private boolean isFireIfUnchanged;
+		private boolean isNullToNull;
+		private boolean isManyToOne;
+		private boolean isOneToMany;
 
 		public FlattenCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		@QonfigChildGetter("sort")
 		public ExSort.ExRootSort getSort() {
 			return theSort;
 		}
 
+		@QonfigAttributeGetter(asType = FLATTEN, value = "propagate-update-to-parent")
 		public boolean isPropagateToParent() {
 			return isPropagateToParent;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "cache")
+		public boolean isCached() {
+			return isCached;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "re-eval-on-update")
+		public boolean isReEvalOnUpdate() {
+			return isReEvalOnUpdate;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "fire-if-unchanged")
+		public boolean isFireIfUnchanged() {
+			return isFireIfUnchanged;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "null-to-null")
+		public boolean isNullToNull() {
+			return isNullToNull;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "many-to-one")
+		public boolean isManyToOne() {
+			return isManyToOne;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "one-to-many")
+		public boolean isOneToMany() {
+			return isOneToMany;
 		}
 
 		@QonfigAttributeGetter("to")
@@ -1350,6 +1410,12 @@ public class ObservableCollectionTransformations {
 					session.attributes().get("reverse").getLocatedContent());
 			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			isPropagateToParent = session.attributes().get("propagate-to-parent").getValue(boolean.class, false);
+			isCached = session.attributes().get("cache").getValue(boolean.class, false);
+			isReEvalOnUpdate = session.attributes().get("re-eval-on-update").getValue(boolean.class, false);
+			isFireIfUnchanged = session.attributes().get("fire-if-unchanged").getValue(boolean.class, false);
+			isNullToNull = session.attributes().get("null-to-null").getValue(boolean.class, false);
+			isManyToOne = session.attributes().get("many-to-one").getValue(boolean.class, false);
+			isOneToMany = session.attributes().get("one-to-many").getValue(boolean.class, false);
 
 			String targetModelTypeName = session.getAttributeText("to");
 			switch (targetModelTypeName.toLowerCase()) {
@@ -1418,12 +1484,18 @@ public class ObservableCollectionTransformations {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableCollection.class.getTypeParameters()[0]);
-					theFlatten = flatCollections(resultType);
+					theFlatten = flatCollections(resultType, //
+						getDefinition().isPropagateToParent(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
+						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
+						getDefinition().isOneToMany());
 				} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
-					theFlatten = flatFlows(resultType);
+					theFlatten = flatFlows(resultType, //
+						getDefinition().isPropagateToParent(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
+						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
+						getDefinition().isOneToMany());
 				} else
 					throw new ExpressoInterpretationException("Cannot flatten a collection of type " + sourceType.getType(0),
 						reporting().getFileLocation().getPosition(0), 0);
@@ -1469,14 +1541,28 @@ public class ObservableCollectionTransformations {
 				null);
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatCollections(TypeToken<T> resultType) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow()),
+		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatCollections(TypeToken<T> resultType,
+			boolean propagateToParent, boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
+			boolean manyToOne, boolean oneToMany) {
+			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow(),
+				opts -> opts//
+					.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
+					.manyToOne(manyToOne).oneToMany(oneToMany)//
+					.propagateUpdateToParent(propagateToParent)//
+					.map((s, v) -> v)),
 				"FlatCollections", null);
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatFlows(TypeToken<T> resultType) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v), "flatFlows",
-				null);
+		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatFlows(TypeToken<T> resultType,
+			boolean propagateToParent, boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
+			boolean manyToOne, boolean oneToMany) {
+			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v,
+				opts -> opts//
+					.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
+					.manyToOne(manyToOne).oneToMany(oneToMany)//
+					.propagateUpdateToParent(propagateToParent)//
+					.map((s, v) -> v)),
+				"flatFlows", null);
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
@@ -1556,6 +1642,16 @@ public class ObservableCollectionTransformations {
 		private CompiledExpression theWith;
 		private CompiledExpression theValue;
 
+		// Flatten options
+		private boolean isPropagateToParent;
+		private ExSort.ExRootSort theSort;
+		private boolean isCached;
+		private boolean isReEvalOnUpdate;
+		private boolean isFireIfUnchanged;
+		private boolean isNullToNull;
+		private boolean isManyToOne;
+		private boolean isOneToMany;
+
 		public CrossCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -1563,6 +1659,11 @@ public class ObservableCollectionTransformations {
 		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
 		public ModelComponentId getSourceAs() {
 			return theSourceAs;
+		}
+
+		@QonfigAttributeGetter(asType = FlattenCollectionTransform.FLATTEN, value = "to")
+		public ModelType<SettableValue<?>> getTo() {
+			return ModelTypes.Value;
 		}
 
 		@QonfigAttributeGetter(asType = CROSS, value = "crossed-as")
@@ -1579,6 +1680,46 @@ public class ObservableCollectionTransformations {
 		@QonfigAttributeGetter(asType = CROSS)
 		public CompiledExpression getElementValue() {
 			return theValue;
+		}
+
+		@QonfigAttributeGetter(asType = FlattenCollectionTransform.FLATTEN, value = "propagate-update-to-parent")
+		public boolean isPropagateToParent() {
+			return isPropagateToParent;
+		}
+
+		@QonfigChildGetter(asType = FlattenCollectionTransform.FLATTEN, value = "sort")
+		public ExSort.ExRootSort getSort() {
+			return theSort;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "cache")
+		public boolean isCached() {
+			return isCached;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "re-eval-on-update")
+		public boolean isReEvalOnUpdate() {
+			return isReEvalOnUpdate;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "fire-if-unchanged")
+		public boolean isFireIfUnchanged() {
+			return isFireIfUnchanged;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "null-to-null")
+		public boolean isNullToNull() {
+			return isNullToNull;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "many-to-one")
+		public boolean isManyToOne() {
+			return isManyToOne;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "one-to-many")
+		public boolean isOneToMany() {
+			return isOneToMany;
 		}
 
 		@Override
@@ -1600,6 +1741,15 @@ public class ObservableCollectionTransformations {
 				.forType(((CrossCollectionTransform.Interpreted<?, ?, ?, ?, ?>) interp).getWith().getType().getType(0)));
 			theWith = getAttributeExpression("with", session);
 			theValue = getValueExpression(session);
+
+			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
+			isPropagateToParent = session.attributes().get("propagate-update-to-parent").getValue(boolean.class, false);
+			isCached = session.attributes().get("cache").getValue(boolean.class, false);
+			isReEvalOnUpdate = session.attributes().get("re-eval-on-update").getValue(boolean.class, false);
+			isFireIfUnchanged = session.attributes().get("fire-if-unchanged").getValue(boolean.class, false);
+			isNullToNull = session.attributes().get("null-to-null").getValue(boolean.class, false);
+			isManyToOne = session.attributes().get("many-to-one").getValue(boolean.class, false);
+			isOneToMany = session.attributes().get("one-to-many").getValue(boolean.class, false);
 		}
 
 		@Override
@@ -1614,6 +1764,8 @@ public class ObservableCollectionTransformations {
 			private TypeToken<S> theSourceType;
 			private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<X>> theWith;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+
+			private ExSort.ExRootSort.Interpreted<T> theSort;
 
 			Interpreted(CrossCollectionTransform<C1> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -1636,12 +1788,28 @@ public class ObservableCollectionTransformations {
 				return theValue;
 			}
 
+			public ExSort.ExRootSort.Interpreted<T> getSort() {
+				return theSort;
+			}
+
 			@Override
 			public void update(ModelInstanceType<C1, CV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<S>) sourceType.getType(0);
 				theWith = getDefinition().getWith().interpret(ModelTypes.Collection.anyAsV(), env);
 				super.update(env);
 				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.anyAsV(), getExpressoEnv());
+
+				if (getDefinition().getSort() == null) {
+					if (theSort != null)
+						theSort.destroy();
+					theSort = null;
+				} else if (theSort == null || theSort.getIdentity() != getDefinition().getSort().getIdentity()) {
+					if (theSort != null)
+						theSort.destroy();
+					theSort = (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSort().interpret(this);
+				}
+				if (theSort != null)
+					theSort.update(getExpressoEnv());
 			}
 
 			@Override
@@ -1671,6 +1839,16 @@ public class ObservableCollectionTransformations {
 			private final ModelValueInstantiator<ObservableCollection<X>> theWith;
 			private final ModelValueInstantiator<SettableValue<T>> theValue;
 
+			// Flatten options
+			private final ModelValueInstantiator<Comparator<? super T>> theSort;
+			private final boolean isPropagateToParent;
+			private final boolean isCached;
+			private final boolean isReEvalOnUpdate;
+			private final boolean isFireIfUnchanged;
+			private final boolean isNullToNull;
+			private final boolean isManyToOne;
+			private final boolean isOneToMany;
+
 			Instantiator(Interpreted<? super CV1, S, T, CV1, X> interpreted) throws ModelInstantiationException {
 				theModels = interpreted.getModels().instantiate();
 				theSourceType = interpreted.getSourceType();
@@ -1680,6 +1858,15 @@ public class ObservableCollectionTransformations {
 				theCrossedAs = interpreted.getDefinition().getCrossAs();
 				theWith = interpreted.getWith().instantiate();
 				theValue = interpreted.getElementValue().instantiate();
+
+				theSort = interpreted.getSort() == null ? null : interpreted.getSort().instantiateSort();
+				isPropagateToParent = interpreted.getDefinition().isPropagateToParent();
+				isCached = interpreted.getDefinition().isCached();
+				isReEvalOnUpdate = interpreted.getDefinition().isReEvalOnUpdate();
+				isFireIfUnchanged = interpreted.getDefinition().isFireIfUnchanged();
+				isNullToNull = interpreted.getDefinition().isNullToNull();
+				isManyToOne = interpreted.getDefinition().isManyToOne();
+				isOneToMany = interpreted.getDefinition().isOneToMany();
 			}
 
 			@Override
@@ -1687,6 +1874,8 @@ public class ObservableCollectionTransformations {
 				theModels.instantiate();
 				theWith.instantiate();
 				theValue.instantiate();
+				if (theSort != null)
+					theSort.instantiate();
 			}
 
 			@Override
@@ -1699,11 +1888,20 @@ public class ObservableCollectionTransformations {
 				ExFlexibleElementModelAddOn.satisfyElementValue(theCrossedAs, models, crossedAs);
 				SettableValue<T> result = theValue.get(models);
 				ObservableCollection<X> with = theWith.get(models);
-				return source.cross(theTargetType, with.flow(), opts -> opts.map((s, x) -> {
-					sourceAs.set(s, null);
-					crossedAs.set(x, null);
-					return result.get();
-				}));
+				Comparator<? super T> sort = theSort == null ? null : theSort.get(models);
+
+				CollectionDataFlow<?, ?, T> crossed = source.cross(theTargetType, with.flow(), opts -> opts//
+					.propagateUpdateToParent(isPropagateToParent)//
+					.cache(isCached).reEvalOnUpdate(isReEvalOnUpdate).fireIfUnchanged(isFireIfUnchanged).nullToNull(isNullToNull)
+					.manyToOne(isManyToOne).oneToMany(isOneToMany)//
+					.map((s, x) -> {
+						sourceAs.set(s, null);
+						crossedAs.set(x, null);
+						return result.get();
+					}));
+				if (theSort != null)
+					crossed = crossed.distinctSorted(sort, false);
+				return crossed;
 			}
 
 			@Override

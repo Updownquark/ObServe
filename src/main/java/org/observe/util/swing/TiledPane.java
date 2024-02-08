@@ -28,17 +28,28 @@ import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.TiledPane.RenderChild;
-import org.observe.util.swing.TiledPane.SimpleFocusComponent;
-import org.observe.util.swing.TiledPane.TiledPanelRenderMC;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
 /**
- * A component that renders each value of a collection as a separate component.  Only the hovered and focused components are proper children
+ * <p>
+ * A component that renders each value of a collection as a separate component. Only the hovered and focused components are proper children
  * of this container, and all the rest are synthetically rendered, making it more efficient for large collections.
+ * </p>
+ * <p>
+ * This is designed to support the &lt;tiled-pane> widget in the Quick-X toolkit. Outside of that use case there are a few things to know:
+ * <ul>
+ * <li>The {@link #setRendering(ObservableCellRenderer, ObservableCellRenderer, ObservableCellRenderer) setRendering} method must be called
+ * with 3 independent renderers.</li>
+ * <li>This container only supports layouts of type {@link AbstractLayout}, which don't require actual components or component
+ * constraints.<br>
+ * The two provided implementations of this at this moment are {@link JustifiedBoxLayout} and
+ * {@link org.observe.quick.swing.GridFlowLayout}.</li>
+ * </ul>
+ * </p>
+ *
  * @param <T> The type of the values in the collection
  */
 public class TiledPane<T> extends JComponent implements Scrollable {
@@ -56,6 +67,10 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 	private final List<Rectangle> theValueBounds;
 
+	/**
+	 * @param values The values to render
+	 * @param until The observable that will cause this tiled pane to unsubscribe from the collection
+	 */
 	public TiledPane(ObservableCollection<T> values, Observable<?> until) {
 		theValues = values.safe(ThreadConstraint.EDT, until);
 		super.setLayout(new JustifiedBoxLayout(true));
@@ -278,13 +293,36 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		thePostFocus.addFocusListener(focusManager);
 	}
 
+	/** @return The values that this component is rendering */
 	public ObservableCollection<T> getValues() {
 		return theValues;
 	}
 
-	public TiledPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> renderer,
+	/**
+	 * <p>
+	 * Installs renderers in this container to render values in the collection.
+	 * </p>
+	 * <p>
+	 * The first of these will be used to paint all the values in the collection that are not being interacted with by the user.
+	 * </p>
+	 * <p>
+	 * The second and third are to provide a component when the user is hovering the mouse over a value in the collection and when the user
+	 * is focused on a value in the collection. These two are used interchangeably--one may function as hover and another as focus, and then
+	 * this may switch as the user continues interacting with this component.
+	 * </p>
+	 * <p>
+	 * The components provided by the second and third renderers will be installed as first-class children of this container. That provided
+	 * by the first renderer will not, and will only be used to paint representations of collection elements.
+	 * </p>
+	 *
+	 * @param painter The renderer to paint all the values in the collection that are not being interacted with by the user
+	 * @param renderer2 A renderer to render and handle input for an element in the collection that the user is interacting with
+	 * @param renderer3 A second renderer to render and handle input for an element in the collection that the user is interacting with
+	 * @return This tiled pane
+	 */
+	public TiledPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> painter,
 		ObservableCellRenderer<? super T, ? super T> renderer2, ObservableCellRenderer<? super T, ? super T> renderer3) {
-		theRenderer = renderer;
+		theRenderer = painter;
 		theHover = new RenderChild(renderer2, thePreFocus, theMidFocus);
 		theFocus = new RenderChild(renderer3, theMidFocus, thePostFocus);
 		return this;

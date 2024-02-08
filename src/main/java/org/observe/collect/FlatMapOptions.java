@@ -91,6 +91,9 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	@Override
 	FlatMapOptions<S, V, X> fireIfUnchanged(boolean fire);
 
+	@Override
+	FlatMapOptions<S, V, X> nullToNull(boolean nullToNull);
+
 	/**
 	 * @param propagate Whether an operation on the result that does not affect the source value should cause an update event in the source.
 	 *        Default is true. This option requires {@link #cache(boolean) caching}.
@@ -740,6 +743,12 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 		@Override
 		public FlatMapOptions<S, V, X> fireIfUnchanged(boolean fire) {
 			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public FlatMapOptions<S, V, X> nullToNull(boolean nullToNull) {
+			super.nullToNull(nullToNull);
 			return this;
 		}
 
