@@ -6,18 +6,28 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** An add-on that allows an element to contain a &lt;model> element with model components usable by the element's contents */
 public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
+	/** The XML name of this add-on */
+	public static final String WITH_LOCAL_MODEL = "with-local-model";
+
+	/** Definition for {@link ExWithLocalModel} */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
-		qonfigType = "with-local-model",
+		qonfigType = WITH_LOCAL_MODEL,
 		interpretation = Interpreted.class,
 		instance = ExWithLocalModel.class)
 	public static class Def extends ExModelAugmentation.Def<ExElement, ExWithLocalModel> {
 		private ObservableModelElement.LocalModelElementDef theLocalModelElement;
 
+		/**
+		 * @param type The Qonfig type of this element
+		 * @param element The element to use the local model components
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
+		/** @return The local model element */
 		@QonfigChildGetter("model")
 		public ObservableModelElement.LocalModelElementDef getLocalModelElement() {
 			return theLocalModelElement;
@@ -44,13 +54,15 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		}
 	}
 
+	/** Interpretation for {@link ExWithLocalModel} */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExWithLocalModel> {
 		private ObservableModelElement.DefaultModelElement.Interpreted<?> theLocalModelElement;
 
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
+		/** @return The local model element */
 		public ObservableModelElement.DefaultModelElement.Interpreted<?> getLocalModelElement() {
 			return theLocalModelElement;
 		}
@@ -82,7 +94,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 
 	private ObservableModelElement.DefaultModelElement theLocalModelElement;
 
-	public ExWithLocalModel(ExElement element) {
+	ExWithLocalModel(ExElement element) {
 		super(element);
 	}
 
@@ -91,6 +103,7 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		return (Class<Interpreted>) (Class<?>) Interpreted.class;
 	}
 
+	/** @return The local model element */
 	public ObservableModelElement.DefaultModelElement getLocalModelElement() {
 		return theLocalModelElement;
 	}

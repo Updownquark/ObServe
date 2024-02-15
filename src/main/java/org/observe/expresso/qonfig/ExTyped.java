@@ -11,18 +11,32 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A model value for which the type may be specified
+ *
+ * @param <T> The type of the model value
+ */
 public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
+	/** The XML name of this add-on */
+	public static final String TYPED = "typed";
+
+	/** Definition for {@link ExTyped} */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
-		qonfigType = "typed",
+		qonfigType = TYPED,
 		interpretation = Interpreted.class,
 		instance = ExTyped.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped<?>> {
 		private VariableType theValueType;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The model value whose type this add-on configures
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
+		/** @return The type of the model value */
 		@QonfigAttributeGetter("type")
 		public VariableType getValueType() {
 			return theValueType;
@@ -45,10 +59,15 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
+	/**
+	 * Interpretation for {@link ExTyped}
+	 *
+	 * @param <T> The type of the model value
+	 */
 	public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<ExElement, ExTyped<T>> {
 		private TypeToken<T> theValueType;
 
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
@@ -57,6 +76,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The type of the model value */
 		public TypeToken<T> getValueType() {
 			return theValueType;
 		}
@@ -89,7 +109,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 	 */
 	public static final String VALUE_TYPE_KEY = "value-type";
 
-	public ExTyped(ExElement element) {
+	ExTyped(ExElement element) {
 		super(element);
 	}
 
@@ -98,6 +118,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
 	}
 
+	/** @return The type of the model value */
 	public TypeToken<T> getValueType() {
 		return theValueType;
 	}

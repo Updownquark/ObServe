@@ -6,9 +6,12 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A external model value backed by an attribute specified on the promise that resulted in this element being loaded */
 public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElement<?>> {
+	/** The XML name of this element */
 	public static final String ATTR_BACKED_MODEL_VALUE = "attr-backed-model-value";
 
+	/** {@link AttributeBackedModelValue} definition */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
 		qonfigType = ATTR_BACKED_MODEL_VALUE,
 		interpretation = Interpreted.class,
@@ -16,10 +19,15 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 	public static class Def extends ExAddOn.Def.Abstract<ModelValueElement<?>, AttributeBackedModelValue> {
 		private QonfigAttributeDef theSourceAttribute;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The model value element
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
 
+		/** @return The source attribute to use to provide the value for this model value */
 		@QonfigAttributeGetter("source-attr")
 		public QonfigAttributeDef getSourceAttribute() {
 			return theSourceAttribute;
@@ -66,6 +74,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 	}
 
+	/** {@link AttributeBackedModelValue} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ModelValueElement<?>, AttributeBackedModelValue> {
 		Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);

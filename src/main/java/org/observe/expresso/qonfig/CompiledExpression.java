@@ -13,8 +13,8 @@ import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
 /**
- * Returned by {@link ExpressoQIS#getValueExpression()} and other methods e.g. for attributes. This structure contains all the information
- * needed to evaluate an expression, including its environment, position, etc.
+ * Returned by {@link ExElement.Def#getValueExpression(ExpressoQIS)} and other methods e.g. for attributes. This structure contains all the
+ * information needed to evaluate an expression, including its environment, position, etc.
  */
 public class CompiledExpression implements LocatedExpression {
 	private final ObservableExpression theExpression;

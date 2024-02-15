@@ -10,22 +10,30 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** A simple structure consisting of a class view and models, the definition for a set of models for an application */
 public class ExpressoHeadSection extends ExElement.Abstract {
+	/** The XML name of this type */
 	public static final String HEAD = "head";
 
+	/** Definition for an {@link ExpressoHeadSection} */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = HEAD, interpretation = ExpressoHeadSection.class)
 	public static class Def extends ExElement.Def.Abstract<ExElement> {
 		private ClassViewElement theClassView;
 		private ObservableModelElement.ModelSetElement.Def<?> theModels;
 
+		/**
+		 * @param parent The parent element of this head element
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The &lt;imports> element in this head section */
 		@QonfigChildGetter("imports")
 		public ClassViewElement getClassViewElement() {
 			return theClassView;
 		}
 
+		/** @return The &lt;models> element in this head section */
 		@QonfigChildGetter("models")
 		public ObservableModelElement.ModelSetElement.Def<?> getModelElement() {
 			return theModels;
@@ -42,16 +50,21 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 			}
 		}
 
+		/**
+		 * @param parent The interpreted parent for the interpreted head section
+		 * @return The interpreted head section
+		 */
 		public Interpreted interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted(this, parent);
 		}
 	}
 
+	/** Interpretation for an {@link ExpressoHeadSection} */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<ExElement> {
 		private ClassView theClassView;
 		private ObservableModelElement.ModelSetElement.Interpreted<?> theModels;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -70,6 +83,10 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 			return theModels;
 		}
 
+		/**
+		 * @param env The expresso environment to use to interpret expressions
+		 * @throws ExpressoInterpretationException If anything in the head section could not be interpreted
+		 */
 		public void updateHead(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (getDefinition().getClassViewElement() != null)
 				env = env.with(getDefinition().getClassViewElement().configureClassView(env.getClassView().copy()).build());
@@ -98,6 +115,7 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 			super.doUpdate(env);
 		}
 
+		/** @return The head section instance */
 		public ExpressoHeadSection create() {
 			return new ExpressoHeadSection(getIdentity());
 		}
@@ -105,7 +123,7 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 
 	private ModelInstantiator theModels;
 
-	public ExpressoHeadSection(Object id) {
+	ExpressoHeadSection(Object id) {
 		super(id);
 	}
 

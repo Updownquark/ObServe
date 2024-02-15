@@ -225,13 +225,21 @@ public interface XformOptions {
 			return fireIfUnchanged;
 		}
 
-
-		/** @return Whether the mapping may produce the same output from different source values */
+		/**
+		 * @return Whether the mapping may produce the same output from different source values.<br>
+		 *         This subtle attribute is seldom needed and may be ignored most of the time.<br>
+		 *         It influences, for example, how a result behaves when searching for result values, as optimizations can be made on
+		 *         one-to-one mappings.
+		 */
 		public boolean isManyToOne() {
 			return isManyToOne;
 		}
 
-		/** @return Whether the reverse mapping may produce the same source value from different mapped values */
+		/**
+		 * @return Whether the reverse mapping may produce the same source value from different mapped values.<br>
+		 *         This subtle attribute is seldom needed and may be ignored most of the time.<br>
+		 *         Thought should generally be given to this only for the strictest testing.
+		 */
 		public boolean isOneToMany() {
 			return isOneToMany;
 		}

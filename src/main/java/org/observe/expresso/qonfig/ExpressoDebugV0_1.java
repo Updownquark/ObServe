@@ -48,19 +48,32 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 		return interpreter;
 	}
 
+	/** The &lt;debug-value> add-on */
 	public static class DebugValue extends ExAddOn.Abstract<ExElement> {
+		/** The type of the breakpoint to catch */
 		public enum BreakType {
-			compile, interpret, instantiate
+			/** Catches a break point when the value is being compiled */
+			compile,
+			/** Catches a break point when the value is being interpreted */
+			interpret,
+			/** Catches a break point when the value is being instantiated */
+			instantiate
 		}
 
+		/** Definition for a {@link DebugValue} */
 		@ExElementTraceable(toolkit = DEBUG, qonfigType = "debug-value", interpretation = Interpreted.class, instance = DebugValue.class)
 		public static class Def extends ExAddOn.Def.Abstract<ExElement, DebugValue> {
 			private BreakType theBreakType;
 
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The element to break for
+			 */
 			public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 				super(type, element);
 			}
 
+			/** @return The type of breakpoint to catch */
 			@QonfigAttributeGetter("break-on")
 			public BreakType getBreakType() {
 				return theBreakType;
@@ -90,8 +103,9 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 		}
 
+		/** Interpretation for a {@link DebugValue} */
 		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, DebugValue> {
-			public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+			Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 				super(definition, element);
 			}
 
@@ -120,7 +134,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 
 		private BreakType theBreakType;
 
-		public DebugValue(ExElement element, BreakType breakType) {
+		DebugValue(ExElement element, BreakType breakType) {
 			super(element);
 			theBreakType = breakType;
 		}

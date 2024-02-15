@@ -53,10 +53,16 @@ import org.qommons.io.PositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+/** Transformations for {@link ModelTypes#Value Value} model values */
 public class ObservableValueTransformations {
 	private ObservableValueTransformations() {
 	}
 
+	/**
+	 * Configures an interpreter with value transformation capabilities
+	 *
+	 * @param interpreter The interpretation builder to configure
+	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("disable", ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
 		interpreter.createWith(FilterAcceptValueTransform.FILTER_ACCEPT, ValueTransform.class,

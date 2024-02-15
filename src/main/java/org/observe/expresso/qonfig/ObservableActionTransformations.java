@@ -22,10 +22,16 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 
+/** Transformation for {@link ModelTypes#Action Action} model values */
 public class ObservableActionTransformations {
 	private ObservableActionTransformations() {
 	}
 
+	/**
+	 * Configures an interpreter with action transformation capabilities
+	 *
+	 * @param interpreter The interpretation builder to configure
+	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("disable", ActionTransform.class, ExElement.creator(DisabledActionTransform::new));
 	}

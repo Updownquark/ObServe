@@ -10,18 +10,32 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * Add-on for a &lt;value> element in a &lt;model> element, for which the initial value may be specified
+ *
+ * @param <T> The type of the model value
+ */
 public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
+	/** The XML name of this add-on */
+	public static final String INT_VALUE = "int-value";
+
+	/** Definition for {@link ExIntValue} */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "int-value",
+		qonfigType = INT_VALUE,
 		interpretation = Interpreted.class,
 		instance = ExIntValue.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue<?>> {
 		private CompiledExpression theInit;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The model value to configure the initial value for
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
+		/** @return The initial value for the model value */
 		@QonfigAttributeGetter("init")
 		public CompiledExpression getInit() {
 			return theInit;
@@ -39,10 +53,15 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
+	/**
+	 * Interpretation for {@link ExIntValue}
+	 *
+	 * @param <T> The type of the model value
+	 */
 	public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<ExElement, ExIntValue<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInit;
 
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
@@ -51,6 +70,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The initial value for the model value */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInit() {
 			return theInit;
 		}
@@ -82,7 +102,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	private ModelValueInstantiator<SettableValue<T>> theInitInstantiator;
 	private SettableValue<T> theInit;
 
-	public ExIntValue(ExElement element) {
+	ExIntValue(ExElement element) {
 		super(element);
 	}
 
@@ -91,7 +111,8 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
 	}
 
-	public SettableValue<?> getInit() {
+	/** @return The initial value for the model value */
+	public SettableValue<T> getInit() {
 		return theInit;
 	}
 

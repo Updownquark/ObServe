@@ -58,11 +58,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("with-element-model", ExWithElementModel.Def.class, ExAddOn.creator(ExWithElementModel.Def::new));
-		interpreter.createWith("element-model-value", ExElementModelValue.Def.class,
+		interpreter.createWith(ExWithElementModel.WITH_ELEMENT_MODEL, ExWithElementModel.Def.class,
+			ExAddOn.creator(ExWithElementModel.Def::new));
+		interpreter.createWith(ExElementModelValue.ELEMENT_MODEL_VALUE, ExElementModelValue.Def.class,
 			ExAddOn.creator(ModelValueElement.Def.class, ExElementModelValue.Def::new));
-		interpreter.createWith("with-local-model", ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
-		interpreter.createWith("with-required-models", ExWithRequiredModels.Def.class, ExAddOn.creator(ExWithRequiredModels.Def::new));
+		interpreter.createWith(ExWithLocalModel.WITH_LOCAL_MODEL, ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
+		interpreter.createWith(ExWithRequiredModels.WITH_REQUIRED_MODELS, ExWithRequiredModels.Def.class,
+			ExAddOn.creator(ExWithRequiredModels.Def::new));
 		interpreter.createWith(ExpressoDocument.EXPRESSO_DOCUMENT, ExpressoDocument.Def.class, ExAddOn.creator(ExpressoDocument.Def::new));
 
 		// To support external content
@@ -80,14 +82,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		for (QonfigToolkit toolkit : interpreter.getKnownToolkits())
 			supportExternalReferences(toolkit, interpreter, extReference, supported);
 
-		interpreter.createWith("named", ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
-		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
-		interpreter.createWith("map-model-value", ExMapModelValue.Def.class, ExAddOn.creator(ExMapModelValue.Def::new));
-		interpreter.createWith("int-value", ExIntValue.Def.class, ExAddOn.creator(ExIntValue.Def::new));
+		interpreter.createWith(ExNamed.NAMED, ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
+		interpreter.createWith(ExTyped.TYPED, ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
+		interpreter.createWith(ExMapModelValue.MAP_MODEL_VALUE, ExMapModelValue.Def.class, ExAddOn.creator(ExMapModelValue.Def::new));
+		interpreter.createWith(ExIntValue.INT_VALUE, ExIntValue.Def.class, ExAddOn.creator(ExIntValue.Def::new));
 		interpreter.createWith(ExpressoQonfigValues.FieldValueDef.FIELD_VALUE, FieldValueDef.class, ExElement.creator(FieldValueDef::new));
-		interpreter.createWith("complex-operation", ExComplexOperation.class, ExAddOn.creator(ExComplexOperation::new));
-		interpreter.createWith("sort", ExSort.ExRootSort.class, ExElement.creator(ExSort.ExRootSort::new));
-		interpreter.createWith("sort-by", ExSort.ExSortBy.class, ExElement.creator(ExSort.class, ExSort.ExSortBy::new));
+		interpreter.createWith(ExComplexOperation.COMPLEX_OPERATION, ExComplexOperation.class, ExAddOn.creator(ExComplexOperation::new));
+		interpreter.createWith(ExSort.SORT, ExSort.ExRootSort.class, ExElement.creator(ExSort.ExRootSort::new));
+		interpreter.createWith(ExSort.SORT_BY, ExSort.ExSortBy.class, ExElement.creator(ExSort.class, ExSort.ExSortBy::new));
 		interpreter.createWith(If.IF, If.class, ExElement.creator(If::new));
 		interpreter.createWith(IfOp.IF_OP, IfOp.class, ExAddOn.creator(IfOp::new));
 		interpreter.createWith(Switch.SWITCH, Switch.class, ExElement.creator(Switch::new));
@@ -113,9 +115,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("imports", ClassViewElement.class, ExElement.creator(ClassViewElement::new));
-		interpreter.createWith("import", ClassViewElement.ImportElement.class, ExElement.creator(ClassViewElement.ImportElement::new));
-		interpreter.createWith("models", ObservableModelElement.ModelSetElement.Def.class,
+		interpreter.createWith(ClassViewElement.IMPORTS, ClassViewElement.class, ExElement.creator(ClassViewElement::new));
+		interpreter.createWith(ClassViewElement.IMPORT, ClassViewElement.ImportElement.class,
+			ExElement.creator(ClassViewElement.ImportElement::new));
+		interpreter.createWith(ObservableModelElement.ModelSetElement.MODELS, ObservableModelElement.ModelSetElement.Def.class,
 			ExElement.creator(ObservableModelElement.ModelSetElement.Def::new));
 		interpreter.createWith(ExpressoHeadSection.HEAD, ExpressoHeadSection.Def.class, ExElement.creator(ExpressoHeadSection.Def::new));
 		interpreter.modifyWith("map", Object.class, new QonfigValueModifier<Object>() {

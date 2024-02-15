@@ -22,8 +22,10 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement> {
+	public static final String WITH_REQUIRED_MODELS = "with-required-models";
+
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
-		qonfigType = "with-required-models",
+		qonfigType = WITH_REQUIRED_MODELS,
 		interpretation = Interpreted.class,
 		instance = ExWithRequiredModels.class)
 	public static class Def extends ExFlexibleElementModelAddOn.Def<ExElement, ExWithRequiredModels> {

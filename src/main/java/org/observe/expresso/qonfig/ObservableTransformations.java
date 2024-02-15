@@ -35,10 +35,16 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+/** Transformations for {@link ModelTypes#Event Event} model values */
 public class ObservableTransformations {
 	private ObservableTransformations() {
 	}
 
+	/**
+	 * Configures an interpreter with event transformation capabilities
+	 *
+	 * @param interpreter The interpretation builder to configure
+	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("no-init", ObservableTransform.class, ExElement.creator(NoInitObservableTransform::new));
 		interpreter.createWith("skip", ObservableTransform.class, ExElement.creator(SkippingObservableTransform::new));

@@ -11,18 +11,36 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Annotation on model values that are maps, and so may require a key type
+ *
+ * @param <K> The key type of the map
+ */
 public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
+	/** The XML name of this add-on */
+	public static final String MAP_MODEL_VALUE = "map-model-value";
+
+	/**
+	 * Definition for {@link ExMapModelValue}
+	 *
+	 * @param <AO> The sub-type of add-on to create
+	 */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "map-model-value",
+		qonfigType = MAP_MODEL_VALUE,
 		interpretation = Interpreted.class,
 		instance = ExMapModelValue.class)
 	public static class Def<AO extends ExMapModelValue<?>> extends ExAddOn.Def.Abstract<ExElement, AO> {
 		private VariableType theKeyType;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The map-type model value element
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
+		/** @return The key type of the map */
 		@QonfigAttributeGetter("key-type")
 		public VariableType getKeyType() {
 			return theKeyType;
@@ -45,18 +63,25 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
+	/**
+	 * Interpretation for {@link ExMapModelValue}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <AO> The sub-type of add-on to create
+	 */
 	public static class Interpreted<K, AO extends ExMapModelValue<K>> extends ExAddOn.Interpreted.Abstract<ExElement, AO> {
 		private TypeToken<K> theKeyType;
 
-		public Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
 		@Override
-		public Def getDefinition() {
-			return (Def) super.getDefinition();
+		public Def<? super AO> getDefinition() {
+			return (Def<? super AO>) super.getDefinition();
 		}
 
+		/** @return The key type of the map */
 		public TypeToken<K> getKeyType() {
 			return theKeyType;
 		}
@@ -89,7 +114,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 	 */
 	public static final String KEY_TYPE_KEY = "key-type";
 
-	public ExMapModelValue(ExElement element) {
+	ExMapModelValue(ExElement element) {
 		super(element);
 	}
 
@@ -98,6 +123,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		return (Class<Interpreted<?, ?>>) (Class<?>) Interpreted.class;
 	}
 
+	/** @return The key type of the map */
 	public TypeToken<?> getKeyType() {
 		return theKeyType;
 	}

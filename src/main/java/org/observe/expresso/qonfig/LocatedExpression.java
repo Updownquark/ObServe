@@ -46,10 +46,24 @@ public interface LocatedExpression {
 		}
 	}
 
+	/**
+	 * @param <M> The model type for the value
+	 * @param <MV> The instance type for the value
+	 * @param <EX> The exception type thrown by the handler in response to non-fatal {@link ExpressoInterpretationException}s
+	 * @param <TX> The exception type thrown by the handler in response to {@link TypeConversionException}s
+	 * @param type The type to interpret this expression as
+	 * @param env The expresso environment to use to interpret the expression
+	 * @param exHandler The expression handler to handle non-fatal {@link ExpressoInterpretationException}s and
+	 *        {@link TypeConversionException}s
+	 * @return The interpreted model value
+	 * @throws ExpressoInterpretationException If a fatal exception occurs interpreting the expression
+	 * @throws EX If the handler throws it in response to a non-fatal {@link ExpressoInterpretationException}
+	 * @throws TX If the handler throws it in response to a {@link TypeConversionException}
+	 */
 	default <M, MV extends M, EX extends Throwable, TX extends Throwable> ObservableExpression.EvaluatedExpression<M, MV> interpret(
 		ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, TX> exHandler)
-		throws ExpressoInterpretationException, EX, TX {
+			throws ExpressoInterpretationException, EX, TX {
 		return getExpression()//
 			.evaluate(//
 				type, env.at(getFilePosition()), 0, exHandler);

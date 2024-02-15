@@ -54,10 +54,16 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+/** Transformations for {@link ModelTypes#Collection Collection} model values */
 public class ObservableCollectionTransformations {
 	private ObservableCollectionTransformations() {
 	}
 
+	/**
+	 * Configures an interpreter with collection transformation capabilities
+	 *
+	 * @param interpreter The interpretation builder to configure
+	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith(MapCollectionTransform.MAP_TO, CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
 		interpreter.createWith(FilterCollectionTransform.FILTER, CollectionTransform.class,
@@ -1336,8 +1342,8 @@ public class ObservableCollectionTransformations {
 			qonfigType = FlattenCollectionTransform.FLATTEN,
 			interpretation = CrossCollectionTransform.Interpreted.class), //
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-			qonfigType = "abst-map-op",
-			interpretation = CrossCollectionTransform.Interpreted.class) })
+		qonfigType = "abst-map-op",
+		interpretation = CrossCollectionTransform.Interpreted.class) })
 	static class FlattenCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
 		public static final String FLATTEN = "flatten";
@@ -1546,10 +1552,10 @@ public class ObservableCollectionTransformations {
 			boolean manyToOne, boolean oneToMany) {
 			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow(),
 				opts -> opts//
-					.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
-					.manyToOne(manyToOne).oneToMany(oneToMany)//
-					.propagateUpdateToParent(propagateToParent)//
-					.map((s, v) -> v)),
+				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
+				.manyToOne(manyToOne).oneToMany(oneToMany)//
+				.propagateUpdateToParent(propagateToParent)//
+				.map((s, v) -> v)),
 				"FlatCollections", null);
 		}
 
@@ -1558,10 +1564,10 @@ public class ObservableCollectionTransformations {
 			boolean manyToOne, boolean oneToMany) {
 			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v,
 				opts -> opts//
-					.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
-					.manyToOne(manyToOne).oneToMany(oneToMany)//
-					.propagateUpdateToParent(propagateToParent)//
-					.map((s, v) -> v)),
+				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
+				.manyToOne(manyToOne).oneToMany(oneToMany)//
+				.propagateUpdateToParent(propagateToParent)//
+				.map((s, v) -> v)),
 				"flatFlows", null);
 		}
 

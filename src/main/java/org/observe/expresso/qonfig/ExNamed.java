@@ -7,9 +7,12 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** Add-on for an expresso element with an identifier name */
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
+	/** The XML name of this add-on */
+	public static final String NAMED = "named";
+
 	/** Definition for a {@link ExNamed} */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
-		qonfigType = "named",
+		qonfigType = NAMED,
 		interpretation = Interpreted.class,
 		instance = ExNamed.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {

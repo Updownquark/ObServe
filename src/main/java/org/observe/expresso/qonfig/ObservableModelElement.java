@@ -322,6 +322,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 	/** Represents a &lt;models> element consisting of some number of models */
 	public static class ModelSetElement extends ExElement.Abstract {
+		/** The XML name of this element */
+		public static final String MODELS = "models";
+
 		/**
 		 * Definition of a {@link ModelSetElement}
 		 *

@@ -25,27 +25,19 @@ import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "sort", interpretation = ExSort.Interpreted.class)
+/** A &lt;sort> element to sort a collection, transformation results, etc., or a &lt;sort-by> in a &lt;sort> */
+@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = ExSort.SORT, interpretation = ExSort.Interpreted.class)
 public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
-	/** A structure parsed from a {@link QonfigElement} that is capable of generating a {@link Comparator} for sorting */
-	public interface CompiledSorting {
-		/**
-		 * @param <T> The type to sort
-		 * @param type The type to sort
-		 * @return A value container capable
-		 * @throws ExpressoInterpretationException
-		 */
-		<T> InterpretedValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
-			throws ExpressoInterpretationException;
-	}
+	/** The XML name of the &lt;sort> element */
+	public static final String SORT = "sort";
+	/** The XML name of the &lt;sort-by> element */
+	public static final String SORT_BY = "sort-by";
 
 	private ModelComponentId theSortValue;
 	private ModelComponentId theSortCompareValue;
@@ -53,31 +45,43 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	private final List<ExSortBy> theSortBy;
 	private boolean isAscending;
 
+	/**
+	 * @param parent The parent element of this sort
+	 * @param qonfigType The Qonfig type of this element
+	 */
 	protected ExSort(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 		super(parent, qonfigType);
 		theSortBy = new ArrayList<>();
 	}
 
+	/** @return The ID of the model value that the first value to be sorted will be available to expressions as */
 	@QonfigAttributeGetter("sort-value-as")
 	public ModelComponentId getSortValue() {
 		return theSortValue;
 	}
 
+	/** @return The ID of the model value that the second value to be sorted will be available to expressions as */
 	@QonfigAttributeGetter("sort-compare-value-as")
 	public ModelComponentId getSortCompareValue() {
 		return theSortCompareValue;
 	}
 
+	/**
+	 * @return The expression to return an integer determining how the values available as the {@link #getSortValue() sort-value-as} and
+	 *         {@link #getSortCompareValue() sort-compare-value-as} will be ordered
+	 */
 	@QonfigAttributeGetter("sort-with")
 	public CompiledExpression getSortWith() {
 		return theSortWith;
 	}
 
+	/** @return &lt;sort-by> elements in this sort to sort values by their qualities */
 	@QonfigChildGetter("sort-by")
 	public List<ExSortBy> getSortBy() {
 		return Collections.unmodifiableList(theSortBy);
 	}
 
+	/** @return If false, this sort will be reversed */
 	@QonfigAttributeGetter("ascending")
 	public boolean isAscending() {
 		return isAscending;
@@ -129,14 +133,29 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
+	/**
+	 * @param parent The parent for the interpreted sort
+	 * @return The interpreted sort
+	 */
 	public abstract Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent);
 
+	/**
+	 * Interpreted &lt;sort> element
+	 *
+	 * @param <OT> The outer type, the type of the value being sorted
+	 * @param <IT> The inner type, the type of the value that this sort compares, which may be that of a field or other characteristic of
+	 *        the outer type
+	 */
 	public static abstract class Interpreted<OT, IT> extends ExElement.Interpreted.Abstract<ExElement> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSortWith;
 		private final List<ExSortBy.Interpreted<IT, ?>> theSortBy;
 		private TypeToken<IT> theSortType;
 		private Comparator<? super IT> theDefaultSorting;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent of this sort
+		 */
 		protected Interpreted(ExSort definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theSortBy = new ArrayList<>();
@@ -147,26 +166,46 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			return (ExSort) super.getDefinition();
 		}
 
+		/**
+		 * @return The expression to return an integer determining how the values available as the {@link ExSort#getSortValue()
+		 *         sort-value-as} and {@link ExSort#getSortCompareValue() sort-compare-value-as} will be ordered
+		 */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSortWith() {
 			return theSortWith;
 		}
 
+		/** @return &lt;sort-by> elements in this sort to sort values by their qualities */
 		public List<ExSortBy.Interpreted<IT, ?>> getSortBy() {
 			return Collections.unmodifiableList(theSortBy);
 		}
 
+		/** @return The sorting to use if neither {@link #getSortWith() sort-with} nor {@link #getSortBy() sort-by} are specified */
 		public Comparator<? super IT> getDefaultSorting() {
 			return theDefaultSorting;
 		}
 
+		/** @return The type of the value being sorted */
 		public abstract TypeToken<OT> getSortType();
 
+		/** @return The type of value thiat expressions in this sort handle */
 		protected TypeToken<IT> getInternalSortType() {
 			return theSortType;
 		}
 
+		/**
+		 * Instantiates or updates this sorting
+		 *
+		 * @param type The type to sort
+		 * @param env The expresso environment to use to interpret expression
+		 * @throws ExpressoInterpretationException If anything in this sort could not be interpreted
+		 */
 		public abstract void update(TypeToken<OT> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/**
+		 * @param internalType The internal type, the type of values that this sort's expressions use
+		 * @param env The expresso environment to use to interpret expression
+		 * @throws ExpressoInterpretationException If anything in this sort could not be interpreted
+		 */
 		protected void updateInternal(TypeToken<IT> internalType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			theSortType = internalType;
 			super.update(env);
@@ -183,16 +222,29 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				theDefaultSorting = null;
 		}
 
+		/**
+		 * @return The instantiations of all this sort's &lt;sort-by> children
+		 * @throws ModelInstantiationException If anything in the &lt;sort-by> children could not be instantiated
+		 */
 		protected List<SortInstantiator<IT, ?>> instantiateSortBy() throws ModelInstantiationException {
 			return QommonsUtils.filterMapE(theSortBy, null, sb -> sb.doInstantiateSort());
 		}
 
+		/**
+		 * @return The instantiated sorting
+		 * @throws ModelInstantiationException If anything in this sorting could not be instantiated
+		 */
 		public ModelValueInstantiator<Comparator<? super OT>> instantiateSort() throws ModelInstantiationException {
 			return doInstantiateSort();
 		}
 
+		/**
+		 * @return The instantiated sorting
+		 * @throws ModelInstantiationException If anything in this sorting could not be instantiated
+		 */
 		protected abstract SortInstantiator<OT, IT> doInstantiateSort() throws ModelInstantiationException;
 
+		/** @return All expression components of this sort element */
 		public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 			if (theSortWith != null)
 				return BetterList.of(theSortWith);
@@ -257,16 +309,27 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 		}
 
+		/**
+		 * A comparator representing a &lt;sort-with> element
+		 *
+		 * @param <T> The type to sort
+		 */
 		public static class SortWithComparator<T> implements Comparator<T> {
 			private final SettableValue<T> theLeftValue;
 			private final SettableValue<T> theRightValue;
 			private final Supplier<Integer> theCompareResult;
 			private boolean isAscending;
 
-			public SortWithComparator(SettableValue<T> leftValue, SettableValue<T> rightValue, Supplier<Integer> compareResult,
+			/**
+			 * @param left The container for the left value to sort
+			 * @param right The container for the right value to sort
+			 * @param compareResult Provides the sorting result once the values are populated
+			 * @param ascending Whether to reverse the result
+			 */
+			public SortWithComparator(SettableValue<T> left, SettableValue<T> right, Supplier<Integer> compareResult,
 				boolean ascending) {
-				theLeftValue = leftValue;
-				theRightValue = rightValue;
+				theLeftValue = left;
+				theRightValue = right;
 				theCompareResult = compareResult;
 				isAscending = ascending;
 			}
@@ -303,9 +366,11 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 		}
 
+		/** An integer supplier composed of one or more others. Returns the value of the first one that is non-zero, or null. */
 		public static class CompositeIntSupplier implements Supplier<Integer> {
 			private final Supplier<Integer>[] theComponents;
 
+			/** @param components The components for this composite */
 			public CompositeIntSupplier(Supplier<Integer>[] components) {
 				theComponents = components;
 			}
@@ -340,11 +405,21 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 		}
 
+		/**
+		 * A comparator representing default sorting (when sorting is specified, but no mechanism is given)
+		 *
+		 * @param <T> The type to sort
+		 */
 		public static class DefaultSortSupplier<T> implements Supplier<Integer> {
 			private final Supplier<T> theLeft;
 			private final Supplier<T> theRight;
 			private final Comparator<? super T> theSorting;
 
+			/**
+			 * @param left The container for the left value to sort
+			 * @param right The container for the right value to sort
+			 * @param sorting The comparator for the values
+			 */
 			public DefaultSortSupplier(Supplier<T> left, Supplier<T> right, Comparator<? super T> sorting) {
 				theLeft = left;
 				theRight = right;
@@ -373,7 +448,12 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
+	/** A &lt;sort> element to sort a collection, transformation results, etc. */
 	public static class ExRootSort extends ExSort {
+		/**
+		 * @param parent The parent element for this sort
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public ExRootSort(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -383,8 +463,13 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			return new Interpreted<>(this, parent);
 		}
 
+		/**
+		 * Interpretation for {@link ExRootSort}
+		 *
+		 * @param <T> The type of value being sorted
+		 */
 		public static class Interpreted<T> extends ExSort.Interpreted<T, T> {
-			public Interpreted(ExRootSort definition, ExElement.Interpreted<?> parent) {
+			Interpreted(ExRootSort definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -442,10 +527,15 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "sort-by", interpretation = ExSortBy.Interpreted.class)
+	/** A &lt;sort-by> element in a &lt;sort> */
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = SORT_BY, interpretation = ExSortBy.Interpreted.class)
 	public static class ExSortBy extends ExSort {
 		private CompiledExpression theAttribute;
 
+		/**
+		 * @param parent The parent element for this sort
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public ExSortBy(ExSort parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -455,6 +545,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			return (ExSort) super.getParentElement();
 		}
 
+		/** @return The expression returning the attribute of sorted values to sort by */
 		@QonfigAttributeGetter
 		public CompiledExpression getAttribute() {
 			return theAttribute;
@@ -471,10 +562,17 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			return new Interpreted<>(this, (ExSort.Interpreted<?, ?>) parent);
 		}
 
+		/**
+		 * Interpretation of {@link ExSortBy}
+		 *
+		 * @param <OT> The outer type, the type of the value being sorted
+		 * @param <IT> The inner type, the type of the value that this sort compares--that of the field or other characteristic of the outer
+		 *        type
+		 */
 		public static class Interpreted<OT, IT> extends ExSort.Interpreted<OT, IT> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<IT>> theAttribute;
 
-			public Interpreted(ExSortBy definition, ExSort.Interpreted<?, OT> parent) {
+			Interpreted(ExSortBy definition, ExSort.Interpreted<?, OT> parent) {
 				super(definition, parent);
 			}
 
@@ -493,6 +591,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				return getParentElement().getInternalSortType();
 			}
 
+			/** @return The expression returning the attribute of sorted values to sort by */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<IT>> getAttribute() {
 				return theAttribute;
 			}
@@ -557,22 +656,12 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
-	public static CompiledSorting getDefaultSorting(LocatedFilePosition position) {
-		return new CompiledSorting() {
-			@Override
-			public <T> InterpretedValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
-				throws ExpressoInterpretationException {
-				Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(TypeTokens.get().wrap(type)));
-				if (compare != null)
-					return InterpretedValueSynth.literalValue(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
-						compare.toString());
-				else
-					throw new ExpressoInterpretationException(type + " is not Comparable, use either sort-with or sort-by", position, 0);
-			}
-
-		};
-	}
-
+	/**
+	 * @param <T> The type to sort
+	 * @param type The type to sort
+	 * @return A comparator that may be used to sort the type if sorting is specified but no mechanism is given, or null if default sorting
+	 *         is not available for the given type
+	 */
 	public static <T> Comparator<T> getDefaultSorting(Class<T> type) {
 		if (CharSequence.class.isAssignableFrom(type))
 			return (Comparator<T>) StringUtils.DISTINCT_NUMBER_TOLERANT;

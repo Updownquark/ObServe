@@ -21,8 +21,20 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExBiFunction;
 
+/**
+ * An add-on which, when inherited by a Qonfig element-def or add-on, allows the definition of the element or add-on to specify model values
+ * which will be available to the element's content. The types and contents of the model values must be managed by the element type.
+ */
 public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
+	/** The XML name of this add-on */
+	public static final String WITH_ELEMENT_MODEL = "with-element-model";
+
+	/** Definition for {@link ExWithElementModel} */
 	public static class Def extends ExFlexibleElementModelAddOn.Def<ExElement, ExWithElementModel> {
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The element to use the model value specified by the element's definition
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
@@ -115,10 +127,20 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			return builder;
 		}
 
+		/**
+		 * @param elementValueName The name of the model value to get
+		 * @return The identity element model value of the given name in this element's definition
+		 * @throws QonfigInterpretationException If no such element model value is found
+		 */
 		public ElementModelValue.Identity getElementValueId(String elementValueName) throws QonfigInterpretationException {
 			return (ElementModelValue.Identity) ((Identifiable) getElementValue(elementValueName)).getIdentity();
 		}
 
+		/**
+		 * @param elementValueName The name of the model value to get
+		 * @return The model component identity element model value of the given name in this element's definition
+		 * @throws QonfigInterpretationException If no such element model value is found
+		 */
 		public ModelComponentId getElementValueModelId(String elementValueName) throws QonfigInterpretationException {
 			return ((ElementModelValuePlaceholder<?>) super.getElementValue(elementValueName)).getModelId();
 		}
@@ -143,8 +165,9 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 	}
 
+	/** Interpretation for {@link ExWithElementModel} */
 	public static class Interpreted extends ExFlexibleElementModelAddOn.Interpreted<ExElement, ExWithElementModel> {
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
@@ -181,7 +204,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 	}
 
-	public ExWithElementModel(ExElement element) {
+	ExWithElementModel(ExElement element) {
 		super(element);
 	}
 
