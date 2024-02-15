@@ -1022,7 +1022,7 @@ class PanelPopulationImpl {
 			SimpleObservable<Void> tabEnd;
 			boolean isRemovable;
 			ObservableValue<String> theName;
-			ObservableValue<Icon> theIcon;
+			ObservableValue<Image> theIcon;
 			Observable<?> until;
 			Consumer<Object> onRemove;
 
@@ -1114,7 +1114,7 @@ class PanelPopulationImpl {
 			tab.theIcon = t.getIcon();
 			if (tab.theIcon != null)
 				t.theIcon.changes().takeUntil(tabUntil).act(evt -> {
-					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue());
+					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
 				});
 			if (t.getSelection() != null) {
 				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
@@ -1268,7 +1268,7 @@ class PanelPopulationImpl {
 						});
 					if (found.theIcon != null)
 						found.theIcon.changes().takeUntil(found.until).act(evt -> {
-							title.setIcon(evt.getNewValue());
+							title.setIcon(evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
 						});
 					tabC.add(title);
 					getEditor().setTabComponentAt(t, tabC);
@@ -1298,7 +1298,7 @@ class PanelPopulationImpl {
 		private final Object theID;
 		private final Component theComponent;
 		private ObservableValue<String> theName;
-		private ObservableValue<Icon> theIcon;
+		private ObservableValue<Image> theIcon;
 		private Observable<?> theSelection;
 		private SettableValue<Boolean> theOnSelect;
 		private boolean isRemovable;
@@ -1322,13 +1322,13 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P setIcon(ObservableValue<Icon> icon) {
+		public P setIcon(ObservableValue<Image> icon) {
 			theIcon = icon;
 			return (P) this;
 		}
 
 		@Override
-		public ObservableValue<Icon> getIcon() {
+		public ObservableValue<Image> getIcon() {
 			return theIcon;
 		}
 

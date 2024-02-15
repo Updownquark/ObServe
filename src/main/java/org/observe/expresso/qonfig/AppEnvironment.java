@@ -2,27 +2,42 @@ package org.observe.expresso.qonfig;
 
 import java.awt.Image;
 
-import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 
+/**
+ * <p>
+ * An application environment that can be used to create a dialog if initialization of the application fails.
+ * </p>
+ * <p>
+ * This is particularly to support the &lt;config> model. Upon initalization, the &lt;config> model will attempt to initialize itself using
+ * a configuration file written by a previous instance of the application. In the event that the configuration file is corrupt or cannot be
+ * read or parsed for any reason, a dialog will display informing the user of the situation, and allowing them to select a backup
+ * configuration to load instead.
+ * </p>
+ */
 public interface AppEnvironment {
-	InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle();
+	/**
+	 * Initializes model values in this environment
+	 *
+	 * @throws ModelInstantiationException If any model values could not be instantiated
+	 */
+	void instantiated() throws ModelInstantiationException;
 
-	InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon();
+	/**
+	 * @return The title of the application
+	 * @throws ModelInstantiationException If the title could not be evaluated
+	 */
+	String getApplicationTitle() throws ModelInstantiationException;
 
-	default Instantiator instantiate() throws ModelInstantiationException {
-		return new Instantiator(getTitle() == null ? null : getTitle().instantiate(), getIcon() == null ? null : getIcon().instantiate());
-	}
+	/**
+	 * @return The icon for the application's window
+	 * @throws ModelInstantiationException If the icon could not be evaluated
+	 */
+	Image getApplicationIcon() throws ModelInstantiationException;
 
-	public static class Instantiator {
-		public final ModelValueInstantiator<SettableValue<String>> title;
-		public final ModelValueInstantiator<SettableValue<Image>> icon;
-
-		public Instantiator(ModelValueInstantiator<SettableValue<String>> title, ModelValueInstantiator<SettableValue<Image>> icon) {
-			this.title = title;
-			this.icon = icon;
-		}
+	/** Something in which an {@link AppEnvironment} can be configured */
+	public interface EnvironmentConfigurable {
+		/** @param env The application environment to configure this thing with */
+		void setAppEnvironment(AppEnvironment env);
 	}
 }

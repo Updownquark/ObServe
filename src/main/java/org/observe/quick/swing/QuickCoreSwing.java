@@ -11,7 +11,6 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
-import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,7 +25,6 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
-import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -308,8 +306,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 		QuickSwingPopulator.<QuickWidget, Iconized, Iconized.Interpreted> modifyForAddOn(tx, Iconized.Interpreted.class,
 			(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
 				qsp.addModifier((comp, w) -> {
-					if (comp instanceof PanelPopulation.Iconized)
-						((PanelPopulation.Iconized<?>) comp).withIcon(w.getAddOn(Iconized.class).getIcon());
+					if (comp instanceof PanelPopulation.Iconized) {
+						((PanelPopulation.Iconized<?>) comp)
+						.withIcon(w.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
+					}
 				});
 			});
 		tx.with(MouseCursor.StandardCursors.class, Cursor.class, (quickCursor, tx2) -> {
@@ -368,7 +368,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 				FontAdjuster font = new FontAdjuster();
 				adjustFont(font, titled.getStyle());
 				revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
-				Observable.onRootFinish(
+				Observable
+				.onRootFinish(
 					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.noInitChanges(), fontChanges(titled.getStyle())))
 				.act(__ -> {
 					revert[0].run();
@@ -386,8 +387,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
 				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<QuickMouseListener.MouseButton> button = SettableValue.build(QuickMouseListener.MouseButton.class)
-					.build();
+				SettableValue<QuickMouseListener.MouseButton> button = SettableValue.build(QuickMouseListener.MouseButton.class).build();
 				SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 				SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
 
@@ -466,8 +466,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 				SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
 
 				QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
-				mml.setListenerContext(
-					new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
+				mml.setListenerContext(new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
 				switch (mml.getEventType()) {
 				case Move:
 					component.addMouseMotionListener(new MouseAdapter() {
@@ -660,18 +659,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
-	public static void applyIcon(WindowBuilder<?, ?> window, SettableValue<Icon> windowIcon) {
-		window.withIcon(windowIcon.map(icon -> {
-			if (icon == null)
-				return null;
-			else if (icon instanceof ImageIcon)
-				return ((ImageIcon) icon).getImage();
-			else {
-				BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
-				icon.paintIcon(window.getWindow(), image.getGraphics(), 0, 0);
-				return image;
-			}
-		}));
+	public static void applyIcon(WindowBuilder<?, ?> window, SettableValue<Image> windowIcon) {
+		window.withIcon(windowIcon);
 	}
 
 	public static void applyIcon(Window window, QuickWindow quckWindow, Observable<?> until) {
@@ -689,18 +678,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
-	public static void applyIcon(Window window, SettableValue<Icon> windowIcon, Observable<?> until) {
+	public static void applyIcon(Window window, SettableValue<Image> windowIcon, Observable<?> until) {
 		windowIcon.changes().takeUntil(until).act(evt -> {
-			Icon icon = evt.getNewValue();
-			if (icon == null)
+			Image img = evt.getNewValue();
+			if (img == null)
 				window.setIconImages(Collections.emptyList());
-			else if (icon instanceof ImageIcon)
-				window.setIconImage(((ImageIcon) icon).getImage());
-			else {
-				BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
-				icon.paintIcon(window, image.getGraphics(), 0, 0);
-				window.setIconImage(image);
-			}
+			window.setIconImage(img);
 		});
 	}
 
@@ -1189,7 +1172,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof QuickCoreSwing.ComponentIdentity && theComponent.equals(((QuickCoreSwing.ComponentIdentity) obj).theComponent);
+			return obj instanceof QuickCoreSwing.ComponentIdentity
+				&& theComponent.equals(((QuickCoreSwing.ComponentIdentity) obj).theComponent);
 		}
 
 		@Override
@@ -1202,8 +1186,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
-	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
-	implements SettableValue<Boolean>, MouseListener {
+	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, MouseListener {
 		private final Component theParent;
 		private final String theName;
 		private final Boolean theButton;

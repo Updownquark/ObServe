@@ -231,7 +231,7 @@ public class PanelPopulation {
 
 		default <F> P addStyledTextArea(String fieldName, SettableValue<F> root, Format<F> format,
 			Function<? super F, ? extends ObservableCollection<? extends F>> children,
-			BiConsumer<? super F, ? super BgFontAdjuster> style,
+				BiConsumer<? super F, ? super BgFontAdjuster> style,
 				Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addStyledTextArea(fieldName, new ObservableStyledDocument<F>(root, format, ThreadConstraint.EDT, getUntil()) {
 				@Override
@@ -1610,13 +1610,9 @@ public class PanelPopulation {
 
 		ObservableValue<String> getName();
 
-		default P setImage(ObservableValue<Image> icon) {
-			return setIcon(icon == null ? null : icon.map(img -> new ImageIcon(img)));
-		}
+		P setIcon(ObservableValue<Image> icon);
 
-		P setIcon(ObservableValue<Icon> icon);
-
-		ObservableValue<Icon> getIcon();
+		ObservableValue<Image> getIcon();
 
 		P selectOn(Observable<?> select);
 

@@ -2,6 +2,7 @@ package org.observe.quick.style;
 
 import java.awt.Image;
 import java.awt.MediaTracker;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Map;
@@ -76,25 +77,20 @@ public class QuickStyleUtils {
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated
 	 */
-	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(LocatedExpression expression,
+	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> evaluateIcon(LocatedExpression expression,
 		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		if (expression != null) {
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
 				.holder2();
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = expression.interpret(ModelTypes.Value.forType(Icon.class),
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imgV = expression.interpret(ModelTypes.Value.forType(Image.class),
 				env, tce);
-			if (iconV != null)
-				return iconV;
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imageV = expression
-				.interpret(ModelTypes.Value.forType(Image.class), env, tce.clear());
-			if (imageV != null)
-				return imageV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
-					.map(sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon(img)), __ -> "Unsettable")));
+			if (imgV != null)
+				return imgV;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<URL>> urlV = expression.interpret(ModelTypes.Value.forType(URL.class),
 				env, tce.clear());
 			if (urlV != null)
-				return urlV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
-					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url)), __ -> "unsettable")));
+				return urlV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(
+					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url).getImage()), __ -> "unsettable")));
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = expression
 				.interpret(ModelTypes.Value.forType(String.class), env, tce.clear());
 			ErrorReporting reporting = env.reporting().at(expression.getFilePosition());
@@ -105,13 +101,13 @@ public class QuickStyleUtils {
 					cache = new RuntimeCache();
 				env.putGlobal(RuntimeCache.ENV_KEY, cache);
 				RuntimeCache fCache = cache;
-				return stringV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
+				return stringV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
 					if (loc == null)
 						return null;
 					IconKey key = new IconKey(loc);
-					Icon icon = (Icon) fCache.getCacheItem(key);
-					if (icon != null)
-						return icon;
+					Image img = (Image) fCache.getCacheItem(key);
+					if (img != null)
+						return img;
 					String relLoc;
 					try {
 						relLoc = QommonsConfig.resolve(loc, QuickStyleUtils.class, sourceDocument);
@@ -121,21 +117,30 @@ public class QuickStyleUtils {
 						e.printStackTrace();
 						return null;
 					}
-					icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
+					Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
 					if (icon == null)
 						icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
 					if (icon == null)
 						reporting.at(expression.getFilePosition()).error("Icon file not found: '" + loc);
-					else if (icon instanceof ImageIcon && ((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
-						reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
-					if (icon != null)
-						fCache.setCacheItem(key, icon);
-					return icon;
+					else if (icon instanceof ImageIcon) {
+						if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
+							reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
+						else
+							img = ((ImageIcon) icon).getImage();
+					} else {
+						BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
+						// Hopefully the icon doesn't need the component argument
+						icon.paintIcon(null, image.getGraphics(), 0, 0);
+						img = image;
+					}
+					if (img != null)
+						fCache.setCacheItem(key, img);
+					return img;
 				}), __ -> "unsettable")));
 			}
 			reporting.warn("Cannot evaluate '" + expression + "' as an icon");
-			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
+			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Image.class), null, "Icon not provided");
 		} else
-			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "None provided");
+			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Image.class), null, "None provided");
 	}
 }

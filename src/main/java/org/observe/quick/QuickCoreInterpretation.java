@@ -1,9 +1,8 @@
 package org.observe.quick;
 
+import java.awt.Image;
 import java.util.Set;
 import java.util.function.BiFunction;
-
-import javax.swing.Icon;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -113,7 +112,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated
 	 */
-	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(CompiledExpression expression,
+	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> evaluateIcon(CompiledExpression expression,
 		ExElement.Interpreted<?> element, String sourceDocument) throws ExpressoInterpretationException {
 		return QuickStyleUtils.evaluateIcon(expression, element.getEnvironmentFor(expression));
 	}

@@ -5,6 +5,7 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
+import java.awt.Image;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
@@ -19,7 +20,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -46,55 +47,7 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWindow;
-import org.observe.quick.base.DynamicStyledDocument;
-import org.observe.quick.base.GeneralDialog;
-import org.observe.quick.base.MultiValueRenderable;
-import org.observe.quick.base.Positionable;
-import org.observe.quick.base.QuickAbstractMenuItem;
-import org.observe.quick.base.QuickBorderLayout;
-import org.observe.quick.base.QuickBox;
-import org.observe.quick.base.QuickButton;
-import org.observe.quick.base.QuickCheckBox;
-import org.observe.quick.base.QuickCheckBoxMenuItem;
-import org.observe.quick.base.QuickColorChooser;
-import org.observe.quick.base.QuickComboBox;
-import org.observe.quick.base.QuickConfirm;
-import org.observe.quick.base.QuickEditableTextWidget;
-import org.observe.quick.base.QuickField;
-import org.observe.quick.base.QuickFieldPanel;
-import org.observe.quick.base.QuickFileButton;
-import org.observe.quick.base.QuickFileChooser;
-import org.observe.quick.base.QuickGridFlowLayout;
-import org.observe.quick.base.QuickInfoDialog;
-import org.observe.quick.base.QuickInlineLayout;
-import org.observe.quick.base.QuickLabel;
-import org.observe.quick.base.QuickLayout;
-import org.observe.quick.base.QuickMenu;
-import org.observe.quick.base.QuickMenuBar;
-import org.observe.quick.base.QuickMenuContainer;
-import org.observe.quick.base.QuickMenuItem;
-import org.observe.quick.base.QuickProgressBar;
-import org.observe.quick.base.QuickRadioButton;
-import org.observe.quick.base.QuickRadioButtons;
-import org.observe.quick.base.QuickScrollPane;
-import org.observe.quick.base.QuickSimpleLayout;
-import org.observe.quick.base.QuickSize;
-import org.observe.quick.base.QuickSlider;
-import org.observe.quick.base.QuickSpacer;
-import org.observe.quick.base.QuickSpinner;
-import org.observe.quick.base.QuickSplit;
-import org.observe.quick.base.QuickTable;
-import org.observe.quick.base.QuickTableColumn;
-import org.observe.quick.base.QuickTabs;
-import org.observe.quick.base.QuickTextArea;
-import org.observe.quick.base.QuickTextField;
-import org.observe.quick.base.QuickToggleButton;
-import org.observe.quick.base.QuickToggleButtons;
-import org.observe.quick.base.QuickTree;
-import org.observe.quick.base.Sizeable;
-import org.observe.quick.base.StyledDocument;
-import org.observe.quick.base.TabularWidget;
-import org.observe.quick.base.ValueAction;
+import org.observe.quick.base.*;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDocument;
@@ -270,7 +223,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menuBar.withMenu(null, menu -> {
 					menu.withText(quick.getValue().map(fFormat::format));
-					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -295,7 +248,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withAction(null, quick.getAction(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 			});
 		}
 	}
@@ -319,7 +272,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			try {
 				menu.withSubMenu(null, subMenu -> {
 					subMenu.withText(quick.getValue().map(fFormat::format));
-					menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
+					menu.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 
 					try {
 						for (int m = 0; m < theMenuItemPopulators.size(); m++)
@@ -344,7 +297,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			Format<T> fFormat = format;
 			menu.withCheckBoxMenuItem(null, quick.isSelected(), menuItem -> {
 				menuItem.withText(quick.getValue().map(fFormat::format));
-				menu.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				menu.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 			});
 		}
 	}
@@ -530,7 +483,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
-				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 				lbl.withTooltip(quick.getTooltip());
 			});
 		}
@@ -895,7 +848,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addToggleButton(null, quick.getValue(), null, cb -> {
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 			});
 		}
 	}
@@ -935,7 +888,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				component.accept(btn);
 				if (quick.getText() != null)
 					btn.withText(quick.getText());
-				btn.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				btn.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 			});
 		}
 	}
@@ -1635,7 +1588,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		return new QuickSwingDialog<QuickInfoDialog>() {
 			private SettableValue<String> theType;
 			private SettableValue<String> theTitle;
-			private SettableValue<Icon> theIcon;
+			private SettableValue<Image> theIcon;
 			private Component theContent;
 			private ObservableAction theOnClose;
 
@@ -1652,7 +1605,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
 					ThreadConstraint.EDT.invoke(() -> {
-						Icon icon = theIcon == null ? null : theIcon.get();
+						Image icon = theIcon == null ? null : theIcon.get();
 						int swingType;
 						String type = theType.get();
 						if (type == null)
@@ -1689,7 +1642,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 							}
 						}
 						if (icon != null)
-							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, icon);
+							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, new ImageIcon(icon));
 						else
 							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType);
 						Runnable[] resetVisible = new Runnable[1];
@@ -1713,7 +1666,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContent(), QuickSwingPopulator.class);
 		return new QuickSwingDialog<QuickConfirm>() {
 			private SettableValue<String> theTitle;
-			private SettableValue<Icon> theIcon;
+			private SettableValue<Image> theIcon;
 			private Component theContent;
 			private ObservableAction theOnConfirm;
 			private ObservableAction theOnCancel;
@@ -1732,10 +1685,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
 					ThreadConstraint.EDT.invoke(() -> {
 						int result;
-						Icon icon = theIcon == null ? null : theIcon.get();
+						Image icon = theIcon == null ? null : theIcon.get();
 						if (icon != null)
 							result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION,
-								JOptionPane.QUESTION_MESSAGE, icon);
+								JOptionPane.QUESTION_MESSAGE, new ImageIcon(icon));
 						else
 							result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
 						Runnable[] resetVisible = new Runnable[1];

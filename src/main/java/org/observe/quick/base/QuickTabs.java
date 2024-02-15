@@ -1,11 +1,10 @@
 package org.observe.quick.base;
 
+import java.awt.Image;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-
-import javax.swing.Icon;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -106,7 +105,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, AbstractTab> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTabName;
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theTabIcon;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theTabIcon;
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theSelectOn;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 
@@ -123,7 +122,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return theTabName;
 			}
 
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getTabIcon() {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getTabIcon() {
 				return theTabIcon;
 			}
 
@@ -157,12 +156,12 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		private ModelValueInstantiator<SettableValue<String>> theTabNameInstantiator;
-		private ModelValueInstantiator<SettableValue<Icon>> theTabIconInstantiator;
+		private ModelValueInstantiator<SettableValue<Image>> theTabIconInstantiator;
 		private ModelValueInstantiator<ObservableAction> theOnSelectInstantiator;
 		private ModelComponentId isTabSelectedVariable;
 
 		private SettableValue<SettableValue<String>> theTabName;
-		private SettableValue<SettableValue<Icon>> theTabIcon;
+		private SettableValue<SettableValue<Image>> theTabIcon;
 		private ObservableAction theOnSelect;
 		private SettableValue<Boolean> isTabSelected;
 
@@ -171,7 +170,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 			theTabName = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			theTabIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Icon>> parameterized(Icon.class))
+			theTabIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
 				.build();
 			isTabSelected = SettableValue.build(boolean.class).withValue(false).build();
 		}
@@ -185,7 +184,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return SettableValue.flatten(theTabName);
 		}
 
-		public SettableValue<Icon> getTabIcon() {
+		public SettableValue<Image> getTabIcon() {
 			return SettableValue.flatten(theTabIcon);
 		}
 
@@ -611,7 +610,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
-			public ObservableValue<Icon> getTabIcon() {
+			public ObservableValue<Image> getTabIcon() {
 				return theAbstractTab.getTabIcon();
 			}
 
@@ -904,7 +903,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public ObservableValue<Icon> getTabIcon() {
+		public ObservableValue<Image> getTabIcon() {
 			return theAbstractTab.getTabIcon();
 		}
 
@@ -944,7 +943,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		ObservableValue<String> getTabName();
 
-		ObservableValue<Icon> getTabIcon();
+		ObservableValue<Image> getTabIcon();
 
 		ObservableValue<Boolean> isRemovable();
 

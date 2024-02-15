@@ -98,7 +98,7 @@
 		<add-on name="iconized" inherits="styled" abstract="true">
 			<styles>
 				<?DOC The style attribute for the icon to display?>
-				<style-attribute name="icon" type="javax.swing.Icon" trickle-down="false" />
+				<style-attribute name="icon" type="java.awt.Image" trickle-down="false" />
 			</styles>
 			<?DOC The icon, to override the style, for ease of use?>
 			<attribute name="icon" type="expression" specify="optional" />

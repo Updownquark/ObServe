@@ -77,7 +77,7 @@ public class ComboButton<E> extends JButton {
 	 * Creates a button with initial text and an icon.
 	 *
 	 * @param text the text of the button
-	 * @param icon the Icon image to display on the button
+	 * @param windowIcon the Icon image to display on the button
 	 */
 	public ComboButton(ObservableCollection<E> values, CategoryRenderStrategy<E, ?> column, Observable<?> until) {
 		setMargin(new Insets(2, 2, 2, 0));
@@ -483,7 +483,7 @@ public class ComboButton<E> extends JButton {
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
-		// Graphics gClone = g.create();//EDIT: Hervé Guillaume
+		// Graphics gClone = g.create();//EDIT: Hervï¿½ Guillaume
 		Color oldColor = g.getColor();
 		splitRectangle = new Rectangle(getWidth() - splitWidth, 0, splitWidth, getHeight());
 		g.translate(splitRectangle.x, splitRectangle.y);

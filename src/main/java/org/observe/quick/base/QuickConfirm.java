@@ -1,6 +1,6 @@
 package org.observe.quick.base;
 
-import javax.swing.Icon;
+import java.awt.Image;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
@@ -71,7 +71,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	public static class Interpreted extends QuickContentDialog.Interpreted.Abstract<QuickConfirm> {
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnConfirm;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnCancel;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theIcon;
 
 		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -90,7 +90,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 			return theOnCancel;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
 			return theIcon;
 		}
 
@@ -112,17 +112,18 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 
 	private ModelValueInstantiator<ObservableAction> theOnConfirmInstantiator;
 	private ModelValueInstantiator<ObservableAction> theOnCancelInstantiator;
-	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
+	private ModelValueInstantiator<SettableValue<Image>> theIconInstantiator;
 
 	private SettableValue<ObservableAction> theOnConfirm;
 	private SettableValue<ObservableAction> theOnCancel;
-	private SettableValue<SettableValue<Icon>> theIcon;
+	private SettableValue<SettableValue<Image>> theIcon;
 
 	QuickConfirm(Object id) {
 		super(id);
 		theOnConfirm = SettableValue.build(ObservableAction.class).build();
 		theOnCancel = SettableValue.build(ObservableAction.class).build();
-		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Icon>> parameterized(Icon.class)).build();
+		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
+			.build();
 	}
 
 	public ObservableAction getOnConfirm() {
@@ -133,7 +134,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 		return ObservableAction.flatten(theOnCancel);
 	}
 
-	public SettableValue<Icon> getIcon() {
+	public SettableValue<Image> getIcon() {
 		return SettableValue.flatten(theIcon);
 	}
 

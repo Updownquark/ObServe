@@ -1,6 +1,6 @@
 package org.observe.quick.base;
 
-import javax.swing.Icon;
+import java.awt.Image;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
@@ -71,7 +71,7 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 	public static class Interpreted extends QuickContentDialog.Interpreted.Abstract<QuickInfoDialog> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theType;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnClose;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theIcon;
 
 		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -90,7 +90,7 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 			return theOnClose;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
 			return theIcon;
 		}
 
@@ -112,18 +112,19 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 
 	private ModelValueInstantiator<SettableValue<String>> theTypeInstantiator;
 	private ModelValueInstantiator<ObservableAction> theOnCloseInstantiator;
-	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
+	private ModelValueInstantiator<SettableValue<Image>> theIconInstantiator;
 
 	private SettableValue<SettableValue<String>> theType;
 	private SettableValue<ObservableAction> theOnClose;
-	private SettableValue<SettableValue<Icon>> theIcon;
+	private SettableValue<SettableValue<Image>> theIcon;
 
 	QuickInfoDialog(Object id) {
 		super(id);
 		theType = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
 		theOnClose = SettableValue.build(ObservableAction.class).build();
-		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Icon>> parameterized(Icon.class)).build();
+		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
+			.build();
 	}
 
 	public SettableValue<String> getType() {
@@ -134,7 +135,7 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		return ObservableAction.flatten(theOnClose);
 	}
 
-	public SettableValue<Icon> getIcon() {
+	public SettableValue<Image> getIcon() {
 		return SettableValue.flatten(theIcon);
 	}
 

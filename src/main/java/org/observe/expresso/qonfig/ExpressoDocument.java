@@ -12,10 +12,22 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A document containing an expresso &lt;head> section, whose models will be usable by the document's content
+ *
+ * @param <B> The type of the document's body
+ */
 public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
-	public static final String EXPRESSO_DOCUMENT = "expresso-document";
+	/** The XML name of this type */
+	public static final String EXPRESSO_DOCUMENT = "base-expresso-document";
 
-	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+	/**
+	 * Definition for an {@link ExpressoDocument}
+	 *
+	 * @param <B> The type of the document's body
+	 * @param <BD> The definition of the document's body type
+	 */
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = EXPRESSO_DOCUMENT,
 		interpretation = Interpreted.class,
 		instance = ExpressoDocument.class)
@@ -25,6 +37,10 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		private ModelComponentId theModelLoadValue;
 		private ModelComponentId theBodyLoadValue;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The element this add-on will affect
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
@@ -40,10 +56,12 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 			return Collections.singleton(ExWithElementModel.Def.class);
 		}
 
+		/** @return The model value ID of the onModelLoad action */
 		public ModelComponentId getModelLoadValue() {
 			return theModelLoadValue;
 		}
 
+		/** @return The model value ID of the onBodyLoad action */
 		public ModelComponentId getBodyLoadValue() {
 			return theBodyLoadValue;
 		}
@@ -69,11 +87,20 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		}
 	}
 
+	/**
+	 * Interpretation of an {@link ExpressoDocument}
+	 *
+	 * @param <B> The type of the document's body
+	 * @param <BD> The definition of the document's body type
+	 */
 	public static class Interpreted<B extends ExElement, BD extends ExElement.Def<? super B>>
 	extends ExAddOn.Interpreted.Abstract<ExElement, ExpressoDocument<B>> {
 		private ExpressoHeadSection.Interpreted theHead;
-		private ExElement.Interpreted<B> theBody;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The element to affect
+		 */
 		protected Interpreted(Def<? super B, BD> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -83,12 +110,9 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 			return (Def<? super B, BD>) super.getDefinition();
 		}
 
+		/** @return This document's head section */
 		public ExpressoHeadSection.Interpreted getHead() {
 			return theHead;
-		}
-
-		public ExElement.Interpreted<B> getBody() {
-			return theBody;
 		}
 
 		@Override
@@ -118,6 +142,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	private SimpleObservable<java.lang.Void> theModelLoad;
 	private SimpleObservable<java.lang.Void> theBodyLoad;
 
+	/** @param element The element that this add-on will affect */
 	protected ExpressoDocument(ExElement element) {
 		super(element);
 
@@ -125,6 +150,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		theBodyLoad = new SimpleObservable<>();
 	}
 
+	/** @return The document's head section */
 	public ExpressoHeadSection getHead() {
 		return theHead;
 	}

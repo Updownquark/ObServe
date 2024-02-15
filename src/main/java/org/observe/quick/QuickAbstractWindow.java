@@ -13,6 +13,7 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -127,8 +128,8 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 			@Override
 			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 				super.update(element);
-				theTitle = getElement().interpret(getDefinition().getTitle(), ModelTypes.Value.STRING);
 				theVisible = getElement().interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
+				theTitle = getElement().interpret(getDefinition().getTitle(), ModelTypes.Value.STRING);
 			}
 
 			@Override
@@ -153,12 +154,16 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 	public static class Default extends ExAddOn.Abstract<ExElement> implements QuickAbstractWindow {
 		private ModelValueInstantiator<SettableValue<String>> theTitleInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
-		private SettableValue<String> theTitle;
-		private SettableValue<Boolean> theVisible;
+		private final SettableValue<SettableValue<String>> theTitle;
+		private final SettableValue<SettableValue<Boolean>> isVisible;
 
 		/** @param element The element that this add-on is added onto */
 		public Default(ExElement element) {
 			super(element);
+			theTitle = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
+				.build();
+			isVisible = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 		}
 
 		@Override
@@ -168,12 +173,27 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 
 		@Override
 		public SettableValue<String> getTitle() {
-			return theTitle;
+			return SettableValue.flatten(theTitle);
 		}
 
 		@Override
 		public SettableValue<Boolean> isVisible() {
-			return theVisible;
+			return SettableValue.flatten(isVisible, () -> true);
+		}
+
+		/**
+		 * Attempts to instantiate this window's title. Since no model instances are available here, this will fail if the title is not a
+		 * literal or a product of literals.
+		 *
+		 * @throws ModelInstantiationException If the title is not a literal or could not be instantiated
+		 */
+		protected void tryInstantiateTitle() throws ModelInstantiationException {
+			try {
+				theTitle.set(theTitleInstantiator == null ? null : theTitleInstantiator.get(null), null);
+			} catch (NullPointerException e) {
+				throw new ModelInstantiationException("Title is not a literal--could not evaluate", getElement().reporting().getPosition(),
+					0);
+			}
 		}
 
 		@Override
@@ -185,11 +205,20 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		}
 
 		@Override
+		public void instantiated() throws ModelInstantiationException {
+			super.instantiated();
+			if (theTitleInstantiator != null)
+				theTitleInstantiator.instantiate();
+			if (theVisibleInstantiator != null)
+				theVisibleInstantiator.instantiate();
+		}
+
+		@Override
 		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 			super.instantiate(models);
 
-			theTitle = theTitleInstantiator == null ? null : theTitleInstantiator.get(models);
-			theVisible = theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models);
+			theTitle.set(theTitleInstantiator == null ? null : theTitleInstantiator.get(models), null);
+			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models), null);
 		}
 	}
 }

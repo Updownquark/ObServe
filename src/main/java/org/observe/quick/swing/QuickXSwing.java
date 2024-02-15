@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -281,7 +282,7 @@ public class QuickXSwing implements QuickInterpretation {
 				combo[0] = cb;
 				component.accept(cb);
 				cb.withText(quick.getText());
-				cb.withIcon(quick.getAddOn(Iconized.class).getIcon());
+				cb.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
 				if (theRenderer != null) {
 					cb.renderWith(renderer);
 					cb.withValueTooltip(v -> renderer.getTooltip(v, v));

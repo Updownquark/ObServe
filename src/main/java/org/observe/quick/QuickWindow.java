@@ -1,25 +1,35 @@
 package org.observe.quick;
 
-import javax.swing.Icon;
+import java.awt.Image;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelComponentInstantiator;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.qonfig.AppEnvironment;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExpressoConfigV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
-public class QuickWindow extends QuickAbstractWindow.Default {
+public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvironment {
 	/** The name of the Qonfig add-on this implements */
 	public static final String WINDOW = "window";
 
@@ -47,6 +57,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		private CompiledExpression theHeight;
 		private CompiledExpression theWindowIcon;
 		private CloseAction theCloseAction;
+		private final List<ModelComponentId> theConfigVariables;
 
 		/**
 		 * @param type The add-on that the Qonfig toolkit uses to represent this type
@@ -54,6 +65,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
+			theConfigVariables = new ArrayList<>();
 		}
 
 		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */
@@ -92,6 +104,10 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 			return theCloseAction;
 		}
 
+		List<ModelComponentId> getConfigVariables() {
+			return Collections.unmodifiableList(theConfigVariables);
+		}
+
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
@@ -118,6 +134,22 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 				throw new QonfigInterpretationException("Unrecognized close action: " + closeAction,
 					session.attributes().get("close-action").getLocatedContent());
 			}
+			theConfigVariables.clear();
+			if (getElement() instanceof QuickDocument.Def) // Only set the environment if we're the root window
+				findConfigVariables(session.getExpressoEnv().getModels());
+		}
+
+		private void findConfigVariables(ObservableModelSet models) {
+			ModelComponentNode<?> configMV = models.getComponentIfExists(ExpressoConfigV0_1.CONFIG_NAME);
+			if (configMV != null)
+				theConfigVariables.add(configMV.getIdentity());
+			else {
+				for (String comp : models.getComponentNames()) {
+					ModelComponentNode<?> compMV = models.getComponentIfExists(comp);
+					if (compMV.getModel() != null)
+						findConfigVariables(compMV.getModel());
+				}
+			}
 		}
 
 		@Override
@@ -132,7 +164,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theHeight;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theWindowIcon;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theWindowIcon;
 
 		/**
 		 * @param definition The definition producing this interpretation
@@ -168,7 +200,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		}
 
 		/** @return The expression defining the icon to display for the window */
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getWindowIcon() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getWindowIcon() {
 			return theWindowIcon;
 		}
 
@@ -198,17 +230,25 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theHeightInstantiator;
-	private ModelValueInstantiator<SettableValue<Icon>> theWindowIconInstantiator;
+	private ModelValueInstantiator<SettableValue<Image>> theWindowIconInstantiator;
 	private CloseAction theCloseAction;
-	private SettableValue<Integer> theX;
-	private SettableValue<Integer> theY;
-	private SettableValue<Integer> theWidth;
-	private SettableValue<Integer> theHeight;
-	private SettableValue<Icon> theWindowIcon;
+	private final SettableValue<SettableValue<Integer>> theX;
+	private SettableValue<SettableValue<Integer>> theY;
+	private SettableValue<SettableValue<Integer>> theWidth;
+	private SettableValue<SettableValue<Integer>> theHeight;
+	private SettableValue<SettableValue<Image>> theWindowIcon;
+	private final List<ModelComponentId> theConfigVariables;
 
 	/** @param element The element that this add-on is added onto */
 	public QuickWindow(ExElement element) {
 		super(element);
+		theX = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+		theY = SettableValue.build(theX.getType()).build();
+		theWidth = SettableValue.build(theX.getType()).build();
+		theHeight = SettableValue.build(theX.getType()).build();
+		theWindowIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
+			.build();
+		theConfigVariables = new ArrayList<>();
 	}
 
 	@Override
@@ -223,27 +263,43 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 
 	/** @return The value defining the x-coordinate of the window--to move and be updated when the user moves it */
 	public SettableValue<Integer> getX() {
-		return theX;
+		return SettableValue.flatten(theX);
 	}
 
 	/** @return The value defining the y-coordinate of the window--to move and be updated when the user moves it */
 	public SettableValue<Integer> getY() {
-		return theY;
+		return SettableValue.flatten(theY);
 	}
 
 	/** @return The value defining the width of the window--to size and be updated when the user resizes it */
 	public SettableValue<Integer> getWidth() {
-		return theWidth;
+		return SettableValue.flatten(theWidth);
 	}
 
 	/** @return The value defining the height of the window--to size and be updated when the user resizes it */
 	public SettableValue<Integer> getHeight() {
-		return theHeight;
+		return SettableValue.flatten(theHeight);
 	}
 
 	/** @return The icon to display for the window */
-	public SettableValue<Icon> getWindowIcon() {
-		return theWindowIcon;
+	public SettableValue<Image> getWindowIcon() {
+		return SettableValue.flatten(theWindowIcon);
+	}
+
+	@Override
+	public String getApplicationTitle() throws ModelInstantiationException {
+		tryInstantiateTitle();
+		return getTitle().get();
+	}
+
+	@Override
+	public Image getApplicationIcon() throws ModelInstantiationException {
+		try {
+			theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(null), null);
+		} catch (NullPointerException e) {
+			throw new ModelInstantiationException("Title is not a literal--could not evaluate", getElement().reporting().getPosition(), 0);
+		}
+		return getWindowIcon().get();
 	}
 
 	@Override
@@ -256,16 +312,43 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		theWidthInstantiator = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate();
 		theHeightInstantiator = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate();
 		theWindowIconInstantiator = myInterpreted.getWindowIcon() == null ? null : myInterpreted.getWindowIcon().instantiate();
+		theConfigVariables.clear();
+		theConfigVariables.addAll(myInterpreted.getDefinition().getConfigVariables());
+	}
+
+	@Override
+	public void instantiated() throws ModelInstantiationException {
+		super.instantiated();
+		if (theXInstantiator != null)
+			theXInstantiator.instantiate();
+		if (theYInstantiator != null)
+			theYInstantiator.instantiate();
+		if (theWidthInstantiator != null)
+			theWidthInstantiator.instantiate();
+		if (theHeightInstantiator != null)
+			theHeightInstantiator.instantiate();
+		if (theWindowIconInstantiator != null)
+			theWindowIconInstantiator.instantiate();
+		// If there is a <config> model in the environment (and we're the root window),
+		// provide the config with the application environment in case of load failure.
+		// This will allow the application's title and icon to appear in the window asking the user to choose a backup.
+		// Since the model instances are not available at this point (and won't be when the error is encountered),
+		// only literal values for title and icon are supported. If either is not a literal, a default will be used in its place.
+		for (ModelComponentId configV : theConfigVariables) {
+			ModelComponentInstantiator<?> configMV = getElement().getModels().getComponent(configV);
+			if (configMV.getBacking() instanceof AppEnvironment.EnvironmentConfigurable)
+				((AppEnvironment.EnvironmentConfigurable) configMV.getBacking()).setAppEnvironment(this);
+		}
 	}
 
 	@Override
 	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 		super.instantiate(models);
 
-		theX = theXInstantiator == null ? null : theXInstantiator.get(models);
-		theY = theYInstantiator == null ? null : theYInstantiator.get(models);
-		theWidth = theWidthInstantiator == null ? null : theWidthInstantiator.get(models);
-		theHeight = theHeightInstantiator == null ? null : theHeightInstantiator.get(models);
-		theWindowIcon = theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models);
+		theX.set(theXInstantiator == null ? null : theXInstantiator.get(models), null);
+		theY.set(theYInstantiator == null ? null : theYInstantiator.get(models), null);
+		theWidth.set(theWidthInstantiator == null ? null : theWidthInstantiator.get(models), null);
+		theHeight.set(theHeightInstantiator == null ? null : theHeightInstantiator.get(models), null);
+		theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models), null);
 	}
 }

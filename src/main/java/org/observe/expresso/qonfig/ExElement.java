@@ -1116,7 +1116,7 @@ public interface ExElement extends Identifiable {
 		/** @return The promise that was specified to load this element's content */
 		QonfigPromise.Interpreted<?> getPromise();
 
-		/** @return Error reportig for this element */
+		/** @return Error reporting for this element */
 		default ErrorReporting reporting() {
 			return getDefinition().reporting();
 		}

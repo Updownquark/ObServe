@@ -171,7 +171,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		default InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		default InterpretedValueSynth<M, MV> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			return this;
 		}
 
@@ -741,7 +741,7 @@ public interface ObservableModelSet extends Identifiable {
 		ModelType<M> getModelType();
 
 		@Override
-		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) {
+		default InterpretedModelComponentNode<M, MV> interpret(InterpretedExpressoEnv env) {
 			return this;
 		}
 
@@ -763,6 +763,9 @@ public interface ObservableModelSet extends Identifiable {
 		default InterpretedModelComponentNode<M, ?> interpreted() {
 			return this;
 		}
+
+		@Override
+		ModelComponentInstantiator<MV> instantiate() throws ModelInstantiationException;
 	}
 
 	/**
@@ -773,6 +776,9 @@ public interface ObservableModelSet extends Identifiable {
 	public interface ModelComponentInstantiator<MV> extends ModelValueInstantiator<MV>, Identifiable {
 		@Override
 		ModelComponentId getIdentity();
+
+		/** @return The instantiator backing this component */
+		ModelValueInstantiator<MV> getBacking();
 
 		/**
 		 * Creates a value for this model component
@@ -1581,7 +1587,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return The value instantiator for the given component
 		 * @throws ModelInstantiationException IF the model component could not be instantiated
 		 */
-		ModelValueInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException;
+		ModelComponentInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException;
 
 		/** @return The IDs of all models that this instantiator's models inherit */
 		Set<ModelComponentId> getInheritance();
@@ -2299,7 +2305,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelValueInstantiator<MV> instantiate() throws ModelInstantiationException {
+			public ModelComponentInstantiator<MV> instantiate() throws ModelInstantiationException {
 				return new DefaultComponentInstantiator<>(this);
 			}
 
@@ -2359,6 +2365,11 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelComponentId getIdentity() {
 				return theIdentity;
+			}
+
+			@Override
+			public ModelValueInstantiator<MV> getBacking() {
+				return theInstantiator;
 			}
 
 			@Override
@@ -2919,7 +2930,7 @@ public interface ObservableModelSet extends Identifiable {
 		static class ModelInstantiatorImpl implements ModelInstantiator {
 			private final ModelComponentId theModelId;
 			private final Map<ModelTag<?>, Object> theTagValues;
-			private final Map<ModelComponentId, ModelValueInstantiator<?>> theComponents;
+			private final Map<ModelComponentId, ModelComponentInstantiator<?>> theComponents;
 			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelInstantiator> theInheritance;
 			private InterpretedModelSet theInterpretedModels;
@@ -2967,7 +2978,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelValueInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException {
+			public ModelComponentInstantiator<?> getComponent(ModelComponentId component) throws ModelInstantiationException {
 				ModelComponentId rootModelId = component.getRootId();
 				if (rootModelId != theModelId.getRootId()) {
 					ModelInstantiator inh = theInheritance.get(rootModelId);
@@ -2977,7 +2988,7 @@ public interface ObservableModelSet extends Identifiable {
 						throw new IllegalArgumentException(
 							"This model component (" + component + ") is for an unrelated model (" + rootModelId + ")");
 				}
-				ModelValueInstantiator<?> valueOrModel = theComponents.get(component);
+				ModelComponentInstantiator<?> valueOrModel = theComponents.get(component);
 				if (valueOrModel == null) {
 					if (theInterpretedModels != null) {
 						InterpretableModelComponentNode<?> interpretableNode;
@@ -2996,7 +3007,7 @@ public interface ObservableModelSet extends Identifiable {
 							} catch (ExpressoInterpretationException e) {
 								throw new IllegalStateException("Attempting to instantiate a model that is not completely interpreted", e);
 							}
-							ModelValueInstantiator<?> instantiated = interpreted.instantiate();
+							ModelComponentInstantiator<?> instantiated = interpreted.instantiate();
 							theComponents.put(interpreted.getIdentity(), instantiated);
 							return instantiated;
 						}

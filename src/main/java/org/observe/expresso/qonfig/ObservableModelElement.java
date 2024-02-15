@@ -1,9 +1,12 @@
 package org.observe.expresso.qonfig;
 
+import java.awt.EventQueue;
 import java.awt.Image;
+import java.awt.Window;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -11,9 +14,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 
-import javax.swing.JDialog;
-
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -54,6 +54,7 @@ import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.BetterFile;
+import org.qommons.io.ErrorReporting;
 import org.qommons.io.FileBackups;
 import org.qommons.io.Format;
 import org.qommons.io.NativeFileSource;
@@ -441,7 +442,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				// First create the models so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
+				});
 				super.doUpdate(env);
 				// Now call the update method
 				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
@@ -607,7 +609,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				// First, initialize the children so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
+				});
 				super.doUpdate(env);
 
 				// Now call the update methods
@@ -773,7 +776,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				// First, initialize the children so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {});
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
+				});
 				super.doUpdate(env);
 
 				// Now call the update methods
@@ -837,9 +841,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 	/** Default {@link ObservableModelElement} implementation for the &lt;config> element */
 	public static class ConfigModelElement extends ObservableModelElement {
-		/** Session key to store the {@link AppEnvironment} instance into to use in case of config load failure */
-		public static final String APP_ENVIRONMENT_KEY = "EXPRESSO.APP.ENVIRONMENT";
-
 		/**
 		 * Definition for a {@link ObservableModelElement.ConfigModelElement}
 		 *
@@ -854,7 +855,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			private CompiledExpression theConfigDir;
 			private final List<OldConfigName> theOldConfigNames;
 			private boolean isBackup;
-			private AppEnvironment theApplicationEnvironment;
 
 			/**
 			 * @param parent The parent element for this model element
@@ -905,10 +905,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				syncChildren(OldConfigName.class, theOldConfigNames, session.forChildren("old-config-name"));
 
 				isBackup = session.getAttribute("backup", boolean.class);
-				theApplicationEnvironment = session.get(APP_ENVIRONMENT_KEY, AppEnvironment.class);
 
 				ConfigValueMaker configValueMaker = new ConfigValueMaker(theConfigDir, theConfigName, isBackup(), //
-					QommonsUtils.map(getOldConfigNames(), ocn -> ocn.getOldConfigName(), true), theApplicationEnvironment);
+					QommonsUtils.map(getOldConfigNames(), ocn -> ocn.getOldConfigName(), true), reporting());
 				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
 					configValueMaker, session.getElement().getPositionInFile());
 
@@ -925,15 +924,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				private final String theConfigName;
 				private final boolean isBackup;
 				private final List<String> theOldConfigNames;
-				private final AppEnvironment theApplicationEnvironment;
+				private final ErrorReporting theReporting;
 
 				ConfigValueMaker(CompiledExpression configDir, String configName, boolean backup, List<String> oldConfigNames,
-					AppEnvironment applicationEnvironment) {
+					ErrorReporting reporting) {
 					theConfigDir = configDir;
 					isBackup = backup;
 					theConfigName = configName;
 					theOldConfigNames = oldConfigNames;
-					theApplicationEnvironment = applicationEnvironment;
+					theReporting = reporting;
 				}
 
 				@Override
@@ -981,32 +980,39 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					@Override
 					public ModelValueInstantiator<SettableValue<ObservableConfig>> instantiate() throws ModelInstantiationException {
 						return new Instantiator(theInterpretedConfigDir == null ? null : theInterpretedConfigDir.instantiate(), //
-							theConfigName, isBackup, theOldConfigNames, //
-							theApplicationEnvironment == null ? null : theApplicationEnvironment.instantiate());
+							theConfigName, isBackup, theOldConfigNames, theReporting);
 					}
 				}
 
-				static class Instantiator implements ModelValueInstantiator<SettableValue<ObservableConfig>> {
+				static class Instantiator
+				implements ModelValueInstantiator<SettableValue<ObservableConfig>>, AppEnvironment.EnvironmentConfigurable {
 					private final ModelValueInstantiator<SettableValue<BetterFile>> theInterpretedConfigDir;
 					private final String theConfigName;
 					private final boolean isBackup;
 					private final List<String> theOldConfigNames;
-					private final AppEnvironment.Instantiator theApplicationEnvironment;
+					private final ErrorReporting theReporting;
+					private AppEnvironment theAppEnv;
 
 					public Instantiator(ModelValueInstantiator<SettableValue<BetterFile>> interpretedConfigDir, String configName,
-						boolean backup, List<String> oldConfigNames,
-						org.observe.expresso.qonfig.AppEnvironment.Instantiator applicationEnvironment) {
+						boolean backup, List<String> oldConfigNames, ErrorReporting reporting) {
 						theInterpretedConfigDir = interpretedConfigDir;
 						theConfigName = configName;
 						isBackup = backup;
 						theOldConfigNames = oldConfigNames;
-						theApplicationEnvironment = applicationEnvironment;
+						theReporting = reporting;
+					}
+
+					@Override
+					public void setAppEnvironment(AppEnvironment env) {
+						theAppEnv = env;
 					}
 
 					@Override
 					public void instantiate() throws ModelInstantiationException {
 						if (theInterpretedConfigDir != null)
 							theInterpretedConfigDir.instantiate();
+						if (theAppEnv != null)
+							theAppEnv.instantiated();
 					}
 
 					@Override
@@ -1091,16 +1097,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 								}
 								loaded = true;
 							} catch (IOException | TextParseException e) {
-								System.out.println("Could not read config file " + configFile.getPath());
-								e.printStackTrace(System.out);
+								// Warning here so the loader doesn't throw an exception and abort.
+								// This may not be fatal, as the user can choose a backup, or we can start from scratch.
+								theReporting.warn("Could not read config file " + configFile.getPath(), e);
 							}
 						}
 						boolean[] closingWithoutSave = new boolean[1];
-						AppEnvironment.Instantiator app = theApplicationEnvironment != null ? theApplicationEnvironment
-							: new AppEnvironment.Instantiator(
-								ModelValueInstantiator.literal(SettableValue.of(String.class, "Unspecified Application", "Not Settable"),
-									"Unspecified Application"), //
-								ModelValueInstantiator.literal(SettableValue.of(Image.class, null, "Not Settable"), "No Image"));
 						if (loaded)
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
 						else if (backups != null && !backups.getBackups().isEmpty()) {
@@ -1110,7 +1112,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							}, () -> {
 								config.setName(theConfigName);
 								installConfigPersistence(config, configFile, backups, closingWithoutSave);
-							}, app, closingWithoutSave, models);
+							}, theAppEnv, closingWithoutSave, models, theReporting);
 						} else {
 							config.setName(theConfigName);
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
@@ -1175,8 +1177,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
-				Runnable onNoBackup, AppEnvironment.Instantiator app, boolean[] closingWithoutSave, ModelSetInstance msi)
-					throws ModelInstantiationException {
+				Runnable onNoBackup, AppEnvironment appEnv,
+				boolean[] closingWithoutSave, ModelSetInstance msi, ErrorReporting reporting) throws ModelInstantiationException {
 				BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 				if (backupTimes == null || backupTimes.isEmpty()) {
 					if (onNoBackup != null)
@@ -1187,43 +1189,78 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", opts -> opts
 					.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 				boolean[] backedUp = new boolean[1];
-				ObservableValue<String> title = (app == null || app.title == null) ? ObservableValue.of("Unnamed Application")
-					: app.title.get(msi);
-				ObservableValue<Image> icon = (app == null || app.icon == null) ? ObservableValue.of(Image.class, null) : app.icon.get(msi);
-				PanelPopulation.DialogBuilder<JDialog, ?> dialog = WindowPopulation.populateDialog(null, null, false);
-				dialog.modal(true)//
-				.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
-				.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
-				.withVContent(content -> {
-					if (fromError)
-						content.addLabel(null, "Your configuration is missing or has been corrupted", null);
-					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
-						.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
-					content.addLabel(null, "Please choose a backup to restore", null)//
-					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
-						table.fill()
-						.withColumn("Date", Instant.class, t -> t,
-							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
-						.withColumn("Age", Instant.class, t -> t,
-							col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90,
-								500))//
-						.withSelection(selectedBackup, true);
-					}).addButton("Backup", __ -> {
-						closingWithoutSave[0] = true;
-						try {
-							backups.restore(selectedBackup.get());
-							if (config != null)
-								populate(config, QommonsConfig
-									.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
-							backedUp[0] = true;
-						} catch (IOException e) {
-							e.printStackTrace();
-						} finally {
-							closingWithoutSave[0] = false;
+				String titleV;
+				try {
+					titleV = appEnv == null ? null : appEnv.getApplicationTitle();
+				} catch (ModelInstantiationException e) {
+					reporting.warn("Could not interpret application title", e);
+					titleV = null;
+				}
+				Image iconV;
+				try {
+					iconV = appEnv == null ? null : appEnv.getApplicationIcon();
+				} catch (ModelInstantiationException e) {
+					reporting.warn("Could not interpret application icon", e);
+					iconV = null;
+				}
+				String fTitle = titleV == null ? "Application" : titleV;
+				Image fIcon = iconV;
+				Window[] window = new Window[1];
+				boolean isEdt = EventQueue.isDispatchThread();
+				Runnable buildWindow = () -> {
+					PanelPopulation.WindowBuilder<?, ?> builder;
+					if (isEdt)
+						builder = WindowPopulation.populateDialog(null, null, true);
+					else
+						builder = WindowPopulation.populateWindow(null, null, true, false);
+					window[0] = builder.withTitle(fTitle + " Backup")//
+						.withIcon(fIcon)//
+						.withVContent(content -> {
+							if (fromError)
+								content.addLabel(null, "Your configuration has been corrupted", null);
+							TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
+								.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
+							content.addLabel(null, "Please choose a backup to restore", null)//
+							.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
+								table.fill()
+								.withColumn("Date", Instant.class, t -> t,
+									col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
+								.withColumn("Age", Instant.class, t -> t,
+									col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90,
+										500))//
+								.withSelection(selectedBackup, true);
+							}).addButton("Backup", __ -> {
+								closingWithoutSave[0] = true;
+								try {
+									backups.restore(selectedBackup.get());
+									if (config != null)
+										populate(config, QommonsConfig
+											.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
+									backedUp[0] = true;
+								} catch (IOException e) {
+									e.printStackTrace();
+								} finally {
+									closingWithoutSave[0] = false;
+								}
+								builder.getWindow().setVisible(false);
+							}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
+						}).run(null).getWindow();
+				};
+				if (isEdt)
+					buildWindow.run();
+				else {
+					try {
+						EventQueue.invokeAndWait(buildWindow);
+						while (window[0].isVisible()) {
+							try {
+								Thread.sleep(100);
+							} catch (InterruptedException e) {
+							}
 						}
-						dialog.getWindow().setVisible(false);
-					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
-				}).run(null).getWindow();
+					} catch (InvocationTargetException | InterruptedException e) {
+						reporting.error("Could not display backup dialog", e);
+					}
+				}
 			}
 
 			static void populate(ObservableConfig config, QommonsConfig initConfig) {
