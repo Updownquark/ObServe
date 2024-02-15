@@ -285,12 +285,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			if (dispose != null) {
 				if (m.getParameterTypes().length != 0)
 					throw new IllegalStateException(componentType + ": Dispose methods cannot accept parameters");
-				// Though this is deprecated as of Java 9, the suggested alternate to this, AccessibleObject.canAccess(Object),
-				// requires a target object, which we don't have here.
-				@SuppressWarnings("deprecation")
-				boolean accessible = m.isAccessible();
-				if (!accessible)
-					m.setAccessible(true);
+				ensureAccessible(m);
 				comp.disposes.add(new ComponentMethod<>(ct.method(m), false));
 				continue;
 			}
@@ -341,6 +336,14 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		}
 		builder.disposeWhenInactive(__ -> comp.dispose());
 		return builder.build();
+	}
+
+	private static void ensureAccessible(Method m) {
+		// Though this is deprecated as of Java 9, the suggested alternate to this, AccessibleObject.canAccess(Object),
+		// requires a target object, which we don't have here.
+		boolean accessible = m.isAccessible();
+		if (!accessible)
+			m.setAccessible(true);
 	}
 
 	private <T> void provide(DSComponent.Builder<Object> builder, Class<T> componentType) {
