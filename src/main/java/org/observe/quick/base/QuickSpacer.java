@@ -9,9 +9,12 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** An invisible widget that just adds space between other contents in a container managed by a layout */
 public class QuickSpacer extends QuickWidget.Abstract {
+	/** The XML name of this element */
 	public static final String SPACER = "spacer";
 
+	/** {@link QuickSpacer} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SPACER,
 		interpretation = Interpreted.class,
@@ -19,10 +22,15 @@ public class QuickSpacer extends QuickWidget.Abstract {
 	public static class Def extends QuickWidget.Def.Abstract<QuickSpacer> {
 		private int theLength;
 
-		public Def(ExElement.Def parent, QonfigElementOrAddOn type) {
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The size of the spacer */
 		@QonfigAttributeGetter("length")
 		public int getLength() {
 			return theLength;
@@ -40,8 +48,13 @@ public class QuickSpacer extends QuickWidget.Abstract {
 		}
 	}
 
+	/** {@link QuickSpacer} interpretation */
 	public static class Interpreted extends QuickWidget.Interpreted.Abstract<QuickSpacer> {
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -58,10 +71,12 @@ public class QuickSpacer extends QuickWidget.Abstract {
 
 	private int theLength;
 
-	public QuickSpacer(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickSpacer(Object id) {
 		super(id);
 	}
 
+	/** @return The size of the spacer */
 	public int getLength() {
 		return theLength;
 	}

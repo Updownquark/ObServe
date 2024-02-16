@@ -27,9 +27,12 @@ import org.qommons.Transaction;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A dialog that allows the user to browse the local file system for a file */
 public class QuickFileChooser extends ExElement.Abstract implements QuickDialog {
+	/** The XML name of this element */
 	public static final String FILE_CHOOSER = "file-chooser";
 
+	/** {@link QuickFileChooser} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = FILE_CHOOSER,
 		interpretation = Interpreted.class,
@@ -44,44 +47,56 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		private CompiledExpression theOnSelect;
 		private CompiledExpression theOnCancel;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param qonfigType The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The model ID of the variable containing the files chosen by the user */
 		public ModelComponentId getChosenFilesVariable() {
 			return theChosenFilesVariable;
 		}
 
+		/** @return Whether this dialog is to select files to open (that must exist) or to save (which may not exist) */
 		@QonfigAttributeGetter("open")
 		public boolean isOpen() {
 			return isOpen;
 		}
 
+		/** @return Whether to allow selection of files (i.e. not directories) */
 		@QonfigAttributeGetter("files-selectable")
 		public boolean isFilesSelectable() {
 			return isFilesSelectable;
 		}
 
+		/** @return Whether to allow selection of directories */
 		@QonfigAttributeGetter("directories-selectable")
 		public boolean isDirectoriesSelectable() {
 			return isDirectoriesSelectable;
 		}
 
+		/** @return Whether to allow selection of multiple files/directories */
 		@QonfigAttributeGetter("multi-selectable")
 		public boolean isMultiSelectable() {
 			return isMultiSelectable;
 		}
 
+		/** @return The current directory displayed to the user */
 		@QonfigAttributeGetter("directory")
 		public CompiledExpression getDirectory() {
 			return theDirectory;
 		}
 
+		/** @return The action to execute when the user makes a selection */
 		@QonfigAttributeGetter("on-select")
 		public CompiledExpression getOnSelect() {
 			return theOnSelect;
 		}
 
+		/** @return The action to execute when the user cancels the selection */
 		@QonfigAttributeGetter("on-cancel")
 		public CompiledExpression getOnCancel() {
 			return theOnCancel;
@@ -111,13 +126,18 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		}
 	}
 
+	/** {@link QuickFileChooser} interpretation */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickFileChooser>
 	implements QuickDialog.Interpreted<QuickFileChooser> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<File>> theDirectory;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnCancel;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -126,14 +146,17 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The current directory displayed to the user */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<File>> getDirectory() {
 			return theDirectory;
 		}
 
+		/** @return The action to execute when the user makes a selection */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnSelect() {
 			return theOnSelect;
 		}
 
+		/** @return The action to execute when the user cancels the selection */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnCancel() {
 			return theOnCancel;
 		}
@@ -172,7 +195,8 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	private SettableValue<ObservableAction> theOnCancel;
 	private ObservableCollection<File> theChosenFiles;
 
-	QuickFileChooser(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickFileChooser(Object id) {
 		super(id);
 		theDirectory = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<File>> parameterized(File.class))
 			.build();
@@ -181,34 +205,47 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		theChosenFiles = ObservableCollection.build(File.class).build();
 	}
 
+	/** @return Whether this dialog is to select files to open (that must exist) or to save (which may not exist) */
 	public boolean isOpen() {
 		return isOpen;
 	}
 
+	/** @return Whether to allow selection of files (i.e. not directories) */
 	public boolean isFilesSelectable() {
 		return isFilesSelectable;
 	}
 
+	/** @return Whether to allow selection of directories */
 	public boolean isDirectoriesSelectable() {
 		return isDirectoriesSelectable;
 	}
 
+	/** @return Whether to allow selection of multiple files/directories */
 	public boolean isMultiSelectable() {
 		return isMultiSelectable;
 	}
 
+	/** @return The current directory displayed to the user */
 	public SettableValue<File> getDirectory() {
 		return SettableValue.flatten(theDirectory);
 	}
 
+	/** @return The action to execute when the user makes a selection */
 	public ObservableAction getOnSelect() {
 		return ObservableAction.flatten(theOnSelect);
 	}
 
+	/** @return The action to execute when the user cancels the selection */
 	public ObservableAction getOnCancel() {
 		return ObservableAction.flatten(theOnCancel);
 	}
 
+	/**
+	 * Called when the user selects a file or set of files
+	 *
+	 * @param chosenFiles The selected files
+	 * @return Null if the selection was successful, or a message why the given files were not acceptable
+	 */
 	public String filesChosen(List<File> chosenFiles) {
 		try (Transaction t = theChosenFiles.lock(true, null)) {
 			theChosenFiles.clear();

@@ -22,9 +22,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A dialog that asks the user to choose "OK" or "Cancel" with a message */
 public class QuickConfirm extends QuickContentDialog.Abstract {
+	/** The XML name of this element */
 	public static final String CONFIRM = "confirm";
 
+	/** {@link QuickConfirm} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = CONFIRM,
 		interpretation = Interpreted.class,
@@ -34,20 +37,27 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 		private CompiledExpression theOnCancel;
 		private CompiledExpression theIcon;
 
+		/**
+		 * @param parent The parent element of the dialog
+		 * @param qonfigType The Qonfig type of the dialog
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The action to perform when the user selects "OK" */
 		@QonfigAttributeGetter("on-confirm")
 		public CompiledExpression getOnConfirm() {
 			return theOnConfirm;
 		}
 
+		/** @return The action to perform when the user selects "Cancel" */
 		@QonfigAttributeGetter("on-cancel")
 		public CompiledExpression getOnCancel() {
 			return theOnCancel;
 		}
 
+		/** @return The icon for the dialog */
 		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
@@ -68,12 +78,17 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 		}
 	}
 
+	/** {@link QuickConfirm} interpretation */
 	public static class Interpreted extends QuickContentDialog.Interpreted.Abstract<QuickConfirm> {
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnConfirm;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnCancel;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theIcon;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the dialog
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -82,14 +97,17 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The action to perform when the user selects "OK" */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnConfirm() {
 			return theOnConfirm;
 		}
 
+		/** @return The action to perform when the user selects "Cancel" */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnCancel() {
 			return theOnCancel;
 		}
 
+		/** @return The icon for the dialog */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
 			return theIcon;
 		}
@@ -118,7 +136,8 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	private SettableValue<ObservableAction> theOnCancel;
 	private SettableValue<SettableValue<Image>> theIcon;
 
-	QuickConfirm(Object id) {
+	/** @param id The element ID for this dialog */
+	protected QuickConfirm(Object id) {
 		super(id);
 		theOnConfirm = SettableValue.build(ObservableAction.class).build();
 		theOnCancel = SettableValue.build(ObservableAction.class).build();
@@ -126,14 +145,17 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 			.build();
 	}
 
+	/** @return The action to perform when the user selects "OK" */
 	public ObservableAction getOnConfirm() {
 		return ObservableAction.flatten(theOnConfirm);
 	}
 
+	/** @return The action to perform when the user selects "Cancel" */
 	public ObservableAction getOnCancel() {
 		return ObservableAction.flatten(theOnCancel);
 	}
 
+	/** @return The icon for the dialog */
 	public SettableValue<Image> getIcon() {
 		return SettableValue.flatten(theIcon);
 	}

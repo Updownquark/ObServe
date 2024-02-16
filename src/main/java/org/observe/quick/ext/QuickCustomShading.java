@@ -13,6 +13,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.swing.Shading;
 
+/** A custom shading class, allowing specification of the shading amount at each pixel independently */
 public class QuickCustomShading implements QuickShading {
 	private static final int MAX_SHADE_GRADATIONS = Byte.MAX_VALUE;
 	// These buffers are used by the rendering. Since rendering should always be on the EDT, all shaders can use the same buffers.
@@ -31,6 +32,19 @@ public class QuickCustomShading implements QuickShading {
 	private final SettableValue<Float> theOpacity;
 	private final Observable<?> theRefresh;
 
+	/**
+	 * @param containerWidth The value container for the width of the container widget
+	 * @param containerHeight The value container for the height of the container widget
+	 * @param pixelX The container for the x-coordinate of the pixel being shaded
+	 * @param pixelY The container for the y-coordinate of the pixel being shaded
+	 * @param unitWidth The width of the tile for the shader
+	 * @param unitHeight The height for the tile of the shader
+	 * @param stretchX Whether to stretch the tile across the container's width, or repeat it
+	 * @param stretchY Whether to stretch the tile across the container's height, or repeat it
+	 * @param lit The shading amount for the current pixel
+	 * @param opacity The opacity for the current shading
+	 * @param refresh The event that will cause this shading to redraw
+	 */
 	public QuickCustomShading(SettableValue<Integer> containerWidth, SettableValue<Integer> containerHeight, //
 		SettableValue<Integer> pixelX, SettableValue<Integer> pixelY, //
 		SettableValue<Integer> unitWidth, SettableValue<Integer> unitHeight, boolean stretchX, boolean stretchY, //
@@ -53,6 +67,7 @@ public class QuickCustomShading implements QuickShading {
 		return new CustomShading(this, box.getAddOn(QuickShaded.class), repaint);
 	}
 
+	/** Shading implementation for {@link QuickCustomShading} */
 	public static class CustomShading implements Shading {
 		private final SettableValue<Integer> theContainerWidth;
 		private final SettableValue<Integer> theContainerHeight;

@@ -24,9 +24,16 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Like a {@link QuickTextField}, but with multiple lines of text
+ *
+ * @param <T> The type of the value represented
+ */
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
+	/** The XML name of this element */
 	public static final String TEXT_AREA = "text-area";
 
+	/** {@link QuickTextArea} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = TEXT_AREA,
 		interpretation = Interpreted.class,
@@ -37,6 +44,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		private StyledDocument.Def<?> theDocument;
 		private ModelComponentId theMousePositionVariable;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -46,21 +57,25 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return true;
 		}
 
+		/** @return The number of rows of text to display at a time */
 		@QonfigAttributeGetter("rows")
 		public CompiledExpression getRows() {
 			return theRows;
 		}
 
+		/** @return Whether to render the formatted value as HTML */
 		@QonfigAttributeGetter("html")
 		public boolean isHtml() {
 			return isHtml;
 		}
 
+		/** @return The styled document for the text area */
 		@QonfigChildGetter("document")
 		public StyledDocument.Def<?> getDocument() {
 			return theDocument;
 		}
 
+		/** @return The model ID of the variable containing the position of the mouse over the text, offset from 0 */
 		public ModelComponentId getMousePositionVariable() {
 			return theMousePositionVariable;
 		}
@@ -83,12 +98,21 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickTextArea} interpretation
+	 *
+	 * @param <T> The type of the value represented
+	 */
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextArea<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
 		private StyledDocument.Interpreted<T, ?> theDocument;
 		private boolean isDocumentStale;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -106,10 +130,12 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 				return super.getValueType();
 		}
 
+		/** @return The number of rows of text to display at a time */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getRows() {
 			return theRows;
 		}
 
+		/** @return The styled document for the text area */
 		public StyledDocument.Interpreted<T, ?> getDocument() {
 			return theDocument;
 		}
@@ -151,16 +177,21 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	/** Model context for a {@link QuickTextArea} */
 	public interface QuickTextAreaContext {
+		/** @return The mouse position in the document, in characters from the start of the text */
 		SettableValue<Integer> getMousePosition();
 
+		/** Default {@link QuickTextAreaContext} implementation */
 		public class Default implements QuickTextAreaContext {
 			private final SettableValue<Integer> theMousePosition;
 
+			/** @param mousePosition The mouse position in the document, in characters from the start of the text */
 			public Default(SettableValue<Integer> mousePosition) {
 				theMousePosition = mousePosition;
 			}
 
+			/** Creates the context */
 			public Default() {
 				this(SettableValue.build(int.class).withDescription("mousePosition").withValue(0).build());
 			}
@@ -179,7 +210,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	private boolean isHtml;
 	private SettableValue<SettableValue<Integer>> theMousePosition;
 
-	public QuickTextArea(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTextArea(Object id) {
 		super(id);
 		theRows = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class))
 			.build();
@@ -187,22 +219,27 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
 	}
 
+	/** @return The styled document for the text area */
 	public StyledDocument<T> getDocument() {
 		return theDocument;
 	}
 
+	/** @return The number of rows of text to display at a time */
 	public SettableValue<Integer> getRows() {
 		return SettableValue.flatten(theRows, () -> 0);
 	}
 
+	/** @return Whether to render the formatted value as HTML */
 	public boolean isHtml() {
 		return isHtml;
 	}
 
+	/** @return The position of the mouse over the text, offset from 0 */
 	public SettableValue<Integer> getMousePosition() {
 		return SettableValue.flatten(theMousePosition, () -> 0);
 	}
 
+	/** @param ctx The model context for this text area */
 	public void setTextAreaContext(QuickTextAreaContext ctx) {
 		theMousePosition.set(ctx.getMousePosition(), null);
 	}

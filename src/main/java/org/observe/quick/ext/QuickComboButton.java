@@ -31,9 +31,20 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A button that, when clicked, displays a popup menu to the user, allowing them to select one of several actions to execute
+ *
+ * @param <T> The type of the values representing the action selected by the user
+ */
 public class QuickComboButton<T> extends QuickButton implements MultiValueRenderable<T> {
+	/** The XML name of this widget */
 	public static final String COMBO_BUTTON = "combo-button";
 
+	/**
+	 * {@link QuickComboBox} definition
+	 *
+	 * @param <B> The sub-type of combo button to create
+	 */
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = MultiValueRenderable.MULTI_VALUE_RENDERABLE,
@@ -53,10 +64,15 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		private ModelComponentId theActiveValueVariable;
 		private QuickWidget.Def<?> theRenderer;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The values representing actions to present to the user */
 		@QonfigAttributeGetter(asType = COMBO_BUTTON, value = "values")
 		public CompiledExpression getValues() {
 			return theValues;
@@ -68,6 +84,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			return theActiveValueVariable;
 		}
 
+		/** @return The renderer to represent the action values */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
 		public QuickWidget.Def<?> getRenderer() {
 			return theRenderer;
@@ -95,11 +112,21 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		}
 	}
 
+	/**
+	 * {@link QuickComboBox} definition
+	 *
+	 * @param <T> The type of the values representing the action selected by the user
+	 * @param <B> The sub-type of combo button to create
+	 */
 	public static class Interpreted<T, B extends QuickComboButton<T>> extends QuickButton.Interpreted<B>
 	implements MultiValueRenderable.Interpreted<T, B> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 		private QuickWidget.Interpreted<?> theRenderer;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
 		protected Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -109,14 +136,23 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			return (Def<? super B>) super.getDefinition();
 		}
 
+		/** @return The values representing actions to present to the user */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValues() {
 			return theValues;
 		}
 
+		/**
+		 * @return The type of values representing actions
+		 * @throws ExpressoInterpretationException If the type could not be interpreted
+		 */
 		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			return (TypeToken<T>) getOrInitValues().getType().getType(0);
 		}
 
+		/**
+		 * @return The values representing actions to present to the user
+		 * @throws ExpressoInterpretationException If the values could not be interpreted
+		 */
 		protected InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getOrInitValues()
 			throws ExpressoInterpretationException {
 			if (theValues == null)
@@ -124,6 +160,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			return theValues;
 		}
 
+		/** @return The renderer to represent the action values */
 		public QuickWidget.Interpreted<?> getRenderer() {
 			return theRenderer;
 		}
@@ -149,10 +186,12 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	private SettableValue<SettableValue<T>> theActiveValue;
 	private QuickWidget theRenderer;
 
+	/** @param id The element ID for this widget */
 	protected QuickComboButton(Object id) {
 		super(id);
 	}
 
+	/** @return The values representing actions to present to the user */
 	public ObservableCollection<T> getValues() {
 		return ObservableCollection.flattenValue(theValues);
 	}
@@ -167,6 +206,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		return null;
 	}
 
+	/** @return The renderer to represent the action values */
 	public QuickWidget getRenderer() {
 		return theRenderer;
 	}

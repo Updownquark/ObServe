@@ -17,9 +17,14 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** An add-on automatically inherited by widget contents in a {@link QuickFieldPanel} */
 public class QuickField extends ExAddOn.Abstract<QuickWidget> {
+	/** The XML name of this add-on */
+	public static final String FIELD = "field";
+
+	/** {@link QuickField} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = "field",
+		qonfigType = FIELD,
 		interpretation = Interpreted.class,
 		instance = QuickField.class)
 	public static class Def extends ExAddOn.Def.Abstract<QuickWidget, QuickField> {
@@ -27,20 +32,27 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		private boolean isFill;
 		private boolean isVFill;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The content widget
+		 */
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
 		}
 
+		/** @return The text label for the field widget */
 		@QonfigAttributeGetter("field-label")
 		public CompiledExpression getFieldLabel() {
 			return theFieldLabel;
 		}
 
+		/** @return Whether the widget should be stretched to fill the horizontal space of the container */
 		@QonfigAttributeGetter("fill")
 		public boolean isFill() {
 			return isFill;
 		}
 
+		/** @return Whether the widget should be stretched to fill the vertical space of the container */
 		@QonfigAttributeGetter("v-fill")
 		public boolean isVFill() {
 			return isVFill;
@@ -60,10 +72,15 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		}
 	}
 
+	/** {@link QuickField} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, QuickField> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 
-		public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The content widget
+		 */
+		protected Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -77,6 +94,7 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 			return (QuickWidget.Interpreted<?>) super.getElement();
 		}
 
+		/** @return The text label for the field widget */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFieldLabel() {
 			return theName;
 		}
@@ -101,10 +119,12 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	private ModelValueInstantiator<SettableValue<String>> theFieldLabelInstantiator;
 	private SettableValue<String> theFieldLabel;
 
-	public QuickField(QuickWidget widget) {
+	/** @param widget The content widget */
+	protected QuickField(QuickWidget widget) {
 		super(widget);
 	}
 
+	/** @return The text label for the field widget */
 	public SettableValue<String> getFieldLabel() {
 		return theFieldLabel;
 	}

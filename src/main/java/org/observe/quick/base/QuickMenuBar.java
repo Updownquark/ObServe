@@ -18,9 +18,12 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A menu bar along the top of the widget containing menus to control the application */
 public class QuickMenuBar extends ExElement.Abstract {
+	/** The XML name of this element */
 	public static final String MENU_BAR = "menu-bar";
 
+	/** {@link QuickMenuBar} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = MENU_BAR,
 		interpretation = Interpreted.class,
@@ -28,11 +31,16 @@ public class QuickMenuBar extends ExElement.Abstract {
 	public static class Def extends ExElement.Def.Abstract<QuickMenuBar> {
 		private final List<QuickMenu.Def<?>> theMenus;
 
+		/**
+		 * @param parent The parent element of the menu bar
+		 * @param qonfigType The Qonfig type of the menu bar
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theMenus = new ArrayList<>();
 		}
 
+		/** @return The menus in this menu bar */
 		@QonfigChildGetter("menu")
 		public List<QuickMenu.Def<?>> getMenus() {
 			return Collections.unmodifiableList(theMenus);
@@ -45,15 +53,24 @@ public class QuickMenuBar extends ExElement.Abstract {
 			syncChildren(QuickMenu.Def.class, theMenus, session.forChildren("menu"));
 		}
 
+		/**
+		 * @param parent The parent for the interpreted menu bar
+		 * @return The interpreted menu bar
+		 */
 		public Interpreted interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted(this, parent);
 		}
 	}
 
+	/** {@link QuickMenuBar} interpretation */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickMenuBar> {
 		private final List<QuickMenu.Interpreted<?, ?>> theMenus;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the menu bar
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theMenus = new ArrayList<>();
 		}
@@ -63,10 +80,17 @@ public class QuickMenuBar extends ExElement.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The menus in this menu bar */
 		public List<QuickMenu.Interpreted<?, ?>> getMenus() {
 			return Collections.unmodifiableList(theMenus);
 		}
 
+		/**
+		 * Initializes or updates the menu bar
+		 *
+		 * @param env The expresso environment for interpreting expressions
+		 * @throws ExpressoInterpretationException If this menu bar could not be interpreted
+		 */
 		public void updateMenuBar(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			update(env);
 		}
@@ -78,6 +102,7 @@ public class QuickMenuBar extends ExElement.Abstract {
 			syncChildren(getDefinition().getMenus(), theMenus, def -> def.interpret(this), QuickMenu.Interpreted::updateElement);
 		}
 
+		/** @return The menu bar */
 		public QuickMenuBar create() {
 			return new QuickMenuBar(getIdentity());
 		}
@@ -85,11 +110,13 @@ public class QuickMenuBar extends ExElement.Abstract {
 
 	private ObservableCollection<QuickMenu<?>> theMenus;
 
-	public QuickMenuBar(Object id) {
+	/** @param id The element ID for this menu bar */
+	protected QuickMenuBar(Object id) {
 		super(id);
 		theMenus = ObservableCollection.build(TypeTokens.get().keyFor(QuickMenu.class).<QuickMenu<?>> wildCard()).build();
 	}
 
+	/** @return The menus in this menu bar */
 	public ObservableCollection<QuickMenu<?>> getMenus() {
 		return theMenus.flow().unmodifiable(false).collect();
 	}

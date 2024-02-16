@@ -20,9 +20,16 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** Allows the user to choose a color. Exactly how this is done or what this widget looks like is somewhat implementation dependent */
 public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
+	/** The XML name of this element */
 	public static final String COLOR_CHOOSER = "color-chooser";
 
+	/**
+	 * {@link QuickColorChooser} definition
+	 *
+	 * @param <W> The sub-type of color chooser to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = COLOR_CHOOSER,
 		interpretation = Interpreted.class,
@@ -30,10 +37,15 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	public static class Def<W extends QuickColorChooser> extends QuickValueWidget.Def.Abstract<W> {
 		private CompiledExpression isWithAlpha;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether the user should be able to select the alpha (opacity) channel of the color with this widget */
 		@QonfigAttributeGetter("with-alpha")
 		public CompiledExpression isWithAlpha() {
 			return isWithAlpha;
@@ -52,10 +64,19 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 		}
 	}
 
+	/**
+	 * {@link QuickColorChooser} interpretation
+	 *
+	 * @param <W> The sub-type of color chooser to create
+	 */
 	public static class Interpreted<W extends QuickColorChooser> extends QuickValueWidget.Interpreted.Abstract<Color, W> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isWithAlpha;
 
-		public Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -64,6 +85,7 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 			return (Def<? super W>) super.getDefinition();
 		}
 
+		/** @return Whether the user should be able to select the alpha (opacity) channel of the color with this widget */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isWithAlpha() {
 			return isWithAlpha;
 		}
@@ -84,12 +106,14 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	private ModelValueInstantiator<SettableValue<Boolean>> isWithAlphaInstantiator;
 	private SettableValue<SettableValue<Boolean>> isWithAlpha;
 
-	public QuickColorChooser(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickColorChooser(Object id) {
 		super(id);
 		isWithAlpha = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 	}
 
+	/** @return Whether the user should be able to select the alpha (opacity) channel of the color with this widget */
 	public SettableValue<Boolean> isWithAlpha() {
 		return SettableValue.flatten(isWithAlpha);
 	}

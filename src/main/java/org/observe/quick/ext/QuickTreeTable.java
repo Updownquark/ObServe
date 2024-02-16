@@ -29,14 +29,25 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A tree that can display extra information for each node in columns, like a table
+ *
+ * @param <N> The type of the values of each node
+ */
 public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<BetterList<N>> {
+	/** The XML name of this element */
 	public static final String TREE_TABLE = "tree-table";
 
+	/** {@link QuickTreeTable} definition */
 	public static class Def extends QuickTree.Def<QuickTreeTable<?>> implements TabularWidget.Def<QuickTreeTable<?>> {
 		private final List<QuickTableColumn.TableColumnSet.Def<?>> theColumns;
 		private ModelComponentId theRowIndexVariable;
 		private ModelComponentId theColumnIndexVariable;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 			theColumns = new ArrayList<>();
@@ -73,11 +84,20 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 		}
 	}
 
+	/**
+	 * {@link QuickTreeTable} interpretation
+	 *
+	 * @param <N> The type of the values of each node
+	 */
 	public static class Interpreted<N> extends QuickTree.Interpreted<N, QuickTreeTable<N>>
 	implements TabularWidget.Interpreted<BetterList<N>, QuickTreeTable<N>> {
 		private ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> theColumns;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -125,7 +145,8 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	private SettableValue<SettableValue<Integer>> theRowIndex;
 	private SettableValue<SettableValue<Integer>> theColumnIndex;
 
-	public QuickTreeTable(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTreeTable(Object id) {
 		super(id);
 
 		theRowIndex = SettableValue

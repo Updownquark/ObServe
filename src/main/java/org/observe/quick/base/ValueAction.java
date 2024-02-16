@@ -29,35 +29,63 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An action that can be performed on a single value in a {@link MultiValueWidget} or upon multiple values at once
+ *
+ * @param <T> The type of the values in the widget
+ */
 public interface ValueAction<T> extends QuickStyledElement {
+	/** The XML name of the abstract value action element */
+	public static final String ABSTRACT_VALUE_ACTION = "abstract-value-action";
+
+	/**
+	 * {@link ValueAction} definition
+	 *
+	 * @param <A> The sub-type of action to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = "abstract-value-action",
+		qonfigType = ABSTRACT_VALUE_ACTION,
 		interpretation = Interpreted.class,
 		instance = ValueAction.class)
-	public interface Def<T, A extends ValueAction<T>> extends QuickStyledElement.Def<A> {
+	public interface Def<A extends ValueAction<?>> extends QuickStyledElement.Def<A> {
+		/** @return The name of the action--the text to represent the action to the user */
 		@QonfigAttributeGetter("name")
 		CompiledExpression getName();
 
+		/** @return Whether the action should be represented a button near the multi widget */
 		@QonfigAttributeGetter("as-button")
 		boolean isButton();
 
+		/** @return Whether the action should be represented as an item in a right-click popup menu on the widget */
 		@QonfigAttributeGetter("as-popup")
 		boolean isPopup();
 
+		/** @return Whether the action is currently enabled */
 		@QonfigAttributeGetter("enabled")
 		CompiledExpression isEnabled();
 
+		/** @return A tooltip describing the action */
 		@QonfigAttributeGetter("tooltip")
 		CompiledExpression getTooltip();
 
+		/** @return The action to perform */
 		@QonfigAttributeGetter
 		CompiledExpression getAction();
 
-		Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<? extends T> valueType);
+		/**
+		 * @param <T> The type of values in the widget
+		 * @param parent The parent of the interpreted action
+		 * @param valueType The type of values in the widget
+		 * @return The interpreted action
+		 */
+		<T> Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<T> valueType);
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickStyledElement.Def.Abstract<A> implements Def<T, A> {
-			public static final String ABTRACT_VALUE_ACTION = "abstract-value-action";
-
+		/**
+		 * Abstract {@link ValueAction} definition interpretation
+		 *
+		 * @param <A> The sub-type of action to create
+		 */
+		public abstract class Abstract<A extends ValueAction<?>> extends QuickStyledElement.Def.Abstract<A> implements Def<A> {
 			private CompiledExpression theName;
 			private boolean isButton;
 			private boolean isPopup;
@@ -65,6 +93,10 @@ public interface ValueAction<T> extends QuickStyledElement {
 			private CompiledExpression theTooltip;
 			private CompiledExpression theAction;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param type The Qonfig type of this element
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -117,24 +149,48 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * {@link ValueAction} interpretation
+	 *
+	 * @param <T> The type of values in the widget
+	 * @param <A> The sub-type of action to create
+	 */
 	public interface Interpreted<T, A extends ValueAction<T>> extends QuickStyledElement.Interpreted<A> {
 		@Override
-		Def<? super T, ? super A> getDefinition();
+		Def<? super A> getDefinition();
 
+		/** @return The type of values in the widget */
 		TypeToken<T> getValueType();
 
+		/** @return The name of the action--the text to represent the action to the user */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName();
 
+		/** @return Whether the action is currently enabled */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled();
 
+		/** @return A tooltip describing the action */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
 
+		/** @return The action to perform */
 		InterpretedValueSynth<ObservableAction, ObservableAction> getAction();
 
+		/**
+		 * Initializes or updates the action
+		 *
+		 * @param env The expresso environment to interpret expressions
+		 * @throws ExpressoInterpretationException If the action could not be interpreted
+		 */
 		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		ValueAction<T> create();
+		/** @return The value action instance */
+		A create();
 
+		/**
+		 * Abstract {@link ValueAction} interpretation implementation
+		 *
+		 * @param <T> The type of values in the widget
+		 * @param <A> The sub-type of action to create
+		 */
 		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickStyledElement.Interpreted.Abstract<A>
 		implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
@@ -143,14 +199,19 @@ public interface ValueAction<T> extends QuickStyledElement {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
-			protected Abstract(Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent of this element
+			 * @param valueType the type of values in the widget
+			 */
+			protected Abstract(Def<? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent);
 				theValueType = valueType;
 			}
 
 			@Override
-			public Def<? super T, ? super A> getDefinition() {
-				return (Def<? super T, ? super A>) super.getDefinition();
+			public Def<? super A> getDefinition() {
+				return (Def<? super A>) super.getDefinition();
 			}
 
 			@Override
@@ -194,21 +255,32 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/** @return The name of the action--the text to represent the action to the user */
 	SettableValue<String> getName();
 
+	/** @return Whether the action should be represented a button near the multi widget */
 	boolean isButton();
 
+	/** @return Whether the action should be represented as an item in a right-click popup menu on the widget */
 	boolean isPopup();
 
+	/** @return Whether the action is currently enabled */
 	SettableValue<String> isEnabled();
 
+	/** @return A tooltip describing the action */
 	SettableValue<String> getTooltip();
 
+	/** @return The action to perform */
 	ObservableAction getAction();
 
 	@Override
 	ValueAction<T> copy(ExElement parent);
 
+	/**
+	 * Abstract {@link ValueAction} implementation
+	 *
+	 * @param <T> The type of values in the widget
+	 */
 	public abstract class Abstract<T> extends QuickStyledElement.Abstract implements ValueAction<T> {
 		private TypeToken<T> theValueType;
 		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
@@ -223,6 +295,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		private SettableValue<SettableValue<String>> theTooltip;
 		private ObservableAction theAction;
 
+		/** @param id The element ID for the action */
 		protected Abstract(Object id) {
 			super(id);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
@@ -231,6 +304,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			theTooltip = SettableValue.build(theName.getType()).build();
 		}
 
+		/** @return The type of values in the widget */
 		public TypeToken<T> getValueType() {
 			return theValueType;
 		}
@@ -315,16 +389,29 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * Model context for a single-value action
+	 *
+	 * @param <T> The type of the value
+	 */
 	public interface SingleValueActionContext<T> {
+		/** @return The value that the action is being invoked or queried (e.g. its tooltip) upon */
 		SettableValue<T> getActionValue();
 
+		/**
+		 * Default {@link SingleValueActionContext} implementation
+		 *
+		 * @param <T> The type of the value
+		 */
 		public class Default<T> implements SingleValueActionContext<T> {
 			private final SettableValue<T> theActionValue;
 
+			/** @param actionValue The value that the action is being invoked or queried (e.g. its tooltip) upon */
 			public Default(SettableValue<T> actionValue) {
 				theActionValue = actionValue;
 			}
 
+			/** @param type The type of the value */
 			public Default(TypeToken<T> type) {
 				this(SettableValue.build(type).build());
 			}
@@ -336,16 +423,29 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * Model context for a multi-value action
+	 *
+	 * @param <T> The type of the values
+	 */
 	public interface MultiValueActionContext<T> {
+		/** @return The values that the action is being invoked or queried (e.g. its tooltip) upon */
 		ObservableCollection<T> getActionValues();
 
+		/**
+		 * Default {@link MultiValueActionContext} implementation
+		 *
+		 * @param <T> The type of the values
+		 */
 		public class Default<T> implements MultiValueActionContext<T> {
 			private final ObservableCollection<T> theActionValue;
 
-			public Default(ObservableCollection<T> actionValue) {
-				theActionValue = actionValue;
+			/** @param actionValues The values that the action is being invoked or queried (e.g. its tooltip) upon */
+			public Default(ObservableCollection<T> actionValues) {
+				theActionValue = actionValues;
 			}
 
+			/** @param type The type of the values */
 			public Default(TypeToken<T> type) {
 				this(ObservableCollection.build(type).build());
 			}
@@ -357,32 +457,47 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * Single value action
+	 *
+	 * @param <T> The type of the value
+	 */
 	public class Single<T> extends ValueAction.Abstract<T> {
+		/** The XML name of this element */
 		public static final String SINGLE_VALUE_ACTION = "value-action";
 
+		/**
+		 * {@link Single} {@link ValueAction} definition
+		 *
+		 * @param <A> The sub-type of action to create
+		 */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = SINGLE_VALUE_ACTION,
 			interpretation = Interpreted.class,
 			instance = Single.class)
-		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
+		public static class Def<A extends Single<?>> extends ValueAction.Def.Abstract<A> {
 			private String theValueName;
 			private boolean allowForMultiple;
 			private ModelComponentId theValueVariable;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param type The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
-			@QonfigAttributeGetter("value-name")
-			public String getValueName() {
-				return theValueName;
-			}
-
+			/** @return Whether this action may be selected for multiple values, to be executed against each in sequence */
 			@QonfigAttributeGetter("allow-for-multiple")
 			public boolean allowForMultiple() {
 				return allowForMultiple;
 			}
 
+			/**
+			 * @return The model ID of the model value in which the current value (the one being acted or queried upon) will be available to
+			 *         expressions
+			 */
 			@QonfigAttributeGetter("value-name")
 			public ModelComponentId getValueVariable() {
 				return theValueVariable;
@@ -400,24 +515,35 @@ public interface ValueAction<T> extends QuickStyledElement {
 			}
 
 			@Override
-			public Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<? extends T> valueType) {
-				return new Single.Interpreted<>(this, parent, (TypeToken<T>) valueType);
+			public <T> Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
+				return (Interpreted<? extends T, ? extends A>) new Single.Interpreted<>((Def<Single<T>>) this, parent, valueType);
 			}
 		}
 
+		/**
+		 * {@link Single} {@link ValueAction} definition
+		 *
+		 * @param <T> The type of the value
+		 * @param <A> The sub-type of action to create
+		 */
 		public static class Interpreted<T, A extends Single<T>> extends ValueAction.Interpreted.Abstract<T, A> {
-			public Interpreted(Single.Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element of this action
+			 * @param valueType The type of the value
+			 */
+			protected Interpreted(Single.Def<? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent, valueType);
 			}
 
 			@Override
-			public Def<? super T, ? super A> getDefinition() {
-				return (Def<? super T, ? super A>) super.getDefinition();
+			public Def<? super A> getDefinition() {
+				return (Def<? super A>) super.getDefinition();
 			}
 
 			@Override
-			public Single<T> create() {
-				return new Single<>(getIdentity());
+			public A create() {
+				return (A) new Single<>(getIdentity());
 			}
 		}
 
@@ -425,15 +551,18 @@ public interface ValueAction<T> extends QuickStyledElement {
 		private SettableValue<SettableValue<T>> theActionValue;
 		private boolean allowForMultiple;
 
-		public Single(Object id) {
+		/** @param id The element ID for this action */
+		protected Single(Object id) {
 			super(id);
 		}
 
+		/** @return Whether this action may be selected for multiple values, to be executed against each in sequence */
 		public boolean allowForMultiple() {
 			return allowForMultiple;
 		}
 
-		public void setActionContext(SingleValueActionContext<T> ctx) throws ModelInstantiationException {
+		/** @param ctx The model context for this action */
+		public void setActionContext(SingleValueActionContext<T> ctx) {
 			theActionValue.set(ctx.getActionValue(), null);
 		}
 
@@ -463,32 +592,47 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 	}
 
+	/**
+	 * Multi value action
+	 *
+	 * @param <T> The type of the values
+	 */
 	public class Multi<T> extends ValueAction.Abstract<T> {
+		/** The XML name of this element */
 		public static final String MULTI_VALUE_ACTION = "multi-value-action";
 
+		/**
+		 * {@link Multi} {@link ValueAction} definition
+		 *
+		 * @param <A> The sub-type of action to create
+		 */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = MULTI_VALUE_ACTION,
 			interpretation = Interpreted.class,
 			instance = Multi.class)
-		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
+		public static class Def<A extends Multi<?>> extends ValueAction.Def.Abstract<A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
 			private ModelComponentId theValuesVariable;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param type The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
-			@QonfigAttributeGetter("values-name")
-			public String getValuesName() {
-				return theValuesName;
-			}
-
+			/** @return Whether this action may be executed against an empty collection of values */
 			@QonfigAttributeGetter("allow-for-empty")
 			public boolean allowForEmpty() {
 				return allowForEmpty;
 			}
 
+			/**
+			 * @return The model ID of the model value in which the current values (the ones being acted or queried upon) will be available
+			 *         to expressions
+			 */
 			@QonfigAttributeGetter("values-name")
 			public ModelComponentId getValuesVariable() {
 				return theValuesVariable;
@@ -506,25 +650,36 @@ public interface ValueAction<T> extends QuickStyledElement {
 			}
 
 			@Override
-			public Multi.Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent,
-				TypeToken<? extends T> valueType) {
-				return new Multi.Interpreted<>(this, parent, (TypeToken<T>) valueType);
+			public <T> Multi.Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent,
+				TypeToken<T> valueType) {
+				return (Interpreted<? extends T, ? extends A>) new Multi.Interpreted<>((Def<Multi<T>>) this, parent, valueType);
 			}
 		}
 
+		/**
+		 * {@link Multi} {@link ValueAction} interpretation
+		 *
+		 * @param <T> The type of the values
+		 * @param <A> The sub-type of action to create
+		 */
 		public static class Interpreted<T, A extends Multi<T>> extends ValueAction.Interpreted.Abstract<T, A> {
-			public Interpreted(Multi.Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element of this action
+			 * @param valueType The type of the value
+			 */
+			public Interpreted(Multi.Def<? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent, valueType);
 			}
 
 			@Override
-			public Def<? super T, ? super A> getDefinition() {
-				return (Def<? super T, ? super A>) super.getDefinition();
+			public Def<? super A> getDefinition() {
+				return (Def<? super A>) super.getDefinition();
 			}
 
 			@Override
-			public Multi<T> create() {
-				return new Multi<>(getIdentity());
+			public A create() {
+				return (A) new Multi<>(getIdentity());
 			}
 		}
 
@@ -532,15 +687,18 @@ public interface ValueAction<T> extends QuickStyledElement {
 		private SettableValue<ObservableCollection<T>> theActionValues;
 		private boolean allowForEmpty;
 
+		/** @param id The element ID for this action */
 		public Multi(Object id) {
 			super(id);
 		}
 
+		/** @return Whether this action may be executed against an empty collection of values */
 		public boolean allowForEmpty() {
 			return allowForEmpty;
 		}
 
-		public void setActionContext(MultiValueActionContext<T> ctx) throws ModelInstantiationException {
+		/** @param ctx The model context for this action */
+		public void setActionContext(MultiValueActionContext<T> ctx) {
 			theActionValues.set(ctx.getActionValues(), null);
 		}
 

@@ -14,25 +14,47 @@ import org.observe.quick.style.FontStyleParser;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
+/**
+ * A character sequence, sections of which may be styled. This is an easy way of creating a styled document and may be used as the root of a
+ * &lt;dynamic-styled-document>. The quick-base.qss style sheet contains styles for nodes of this type (but it must be invoked explicitly by
+ * the &lt;text-style> in the document).
+ */
 public class SimpleStyledTextModel implements CharSequence, Appendable {
 	private static final int HAS_UNDERLINE_MASK = 1;
 	private static final int HAS_STRIKE_THROUGH_MASK = 4;
 	private static final int HAS_SUPER_SCRIPT_MASK = 16;
 	private static final int HAS_SUB_SCRIPT_MASK = 64;
 
+	/**
+	 * A style attribute for text in a {@link SimpleStyledTextModel}
+	 *
+	 * @param <T> The type of the style value
+	 */
 	public interface Attribute<T> extends Supplier<T> {
+		/**
+		 * @param value The value for the attribute
+		 * @return The text model
+		 */
 		SimpleStyledTextModel set(T value);
 
+		/** @return Whether the attribute is set for the text model */
 		default boolean hasAttribute() {
 			return get() != null;
 		}
 
+		/**
+		 * Clears the value of this attribute
+		 *
+		 * @return The text model
+		 */
 		default SimpleStyledTextModel clear() {
 			return set(null);
 		}
 	}
 
+	/** A double-type {@link SimpleStyledTextModel} text style attribute */
 	public interface DoubleAttribute extends DoubleSupplier {
+		/** @return The current value of the attribute */
 		double get();
 
 		@Override
@@ -40,20 +62,33 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 			return get();
 		}
 
+		/**
+		 * @param value The value for the attribute
+		 * @return The text model
+		 */
 		SimpleStyledTextModel set(double value);
 
+		/** @return Whether the attribute is set for the text model */
 		default boolean hasAttribute() {
 			return !Double.isNaN(get());
 		}
 
+		/**
+		 * Clears the value of this attribute
+		 *
+		 * @return The text model
+		 */
 		default SimpleStyledTextModel clear() {
 			return set(Double.NaN);
 		}
 	}
 
+	/** A boolean-type {@link SimpleStyledTextModel} text style attribute */
 	public interface BooleanAttribute extends BooleanSupplier {
+		/** @return Whether the attribute is set for the text model */
 		boolean hasAttribute();
 
+		/** @return The current value of the attribute */
 		boolean get();
 
 		@Override
@@ -61,11 +96,21 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 			return get();
 		}
 
+		/**
+		 * @param value The value for the attribute
+		 * @return The text model
+		 */
 		SimpleStyledTextModel set(boolean value);
 
+		/**
+		 * Clears the value of this attribute
+		 *
+		 * @return The text model
+		 */
 		SimpleStyledTextModel clear();
 	}
 
+	/** @return The root value for a dynamic styled document containing a {@link SimpleStyledTextModel} */
 	public static ObservableValue<SimpleStyledTextModel> createRoot() {
 		SettableValue<SimpleStyledTextModel> value = SettableValue.build(SimpleStyledTextModel.class).build();
 		value.set(new Root(value), null);
@@ -86,6 +131,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 	private double theFontSlant;
 	private int theBooleanAttrs;
 
+	/** @param parent The parent text model of this sub sequence */
 	protected SimpleStyledTextModel(SimpleStyledTextModel parent) {
 		theParent = parent;
 		if (this instanceof Root)
@@ -110,10 +156,12 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		reset();
 	}
 
+	/** @return The parent text model of this sub-sequence */
 	public SimpleStyledTextModel getParent() {
 		return theParent;
 	}
 
+	/** @return The children of this sequence */
 	public ObservableCollection<SimpleStyledTextModel> getChildren() {
 		return theChildren;
 	}
@@ -122,6 +170,11 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		theParentChild = child;
 	}
 
+	/**
+	 * Starts a batch transaction
+	 *
+	 * @return A Transaction to {@link Transaction#close() close} when modifications are finished
+	 */
 	public Transaction batch() {
 		if (isInBatch)
 			return Transaction.NONE;
@@ -133,6 +186,12 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		return theRoot.batch();
 	}
 
+	/**
+	 * Executes an action on this model in a {@link #batch()}
+	 *
+	 * @param action The action to execute
+	 * @return This model
+	 */
 	public SimpleStyledTextModel inBatch(Consumer<SimpleStyledTextModel> action) {
 		try (Transaction t = batch()) {
 			action.accept(this);
@@ -140,6 +199,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		return this;
 	}
 
+	/** Called when this model is changed */
 	protected void changed() {
 		if (isInBatch) {
 		} else if (theRoot.isInBatch()) {
@@ -149,6 +209,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 			theParentChild.accept(this);
 	}
 
+	/** Called from the {@link Transaction#close()} method of the transaction returned by {@link #batch()} */
 	protected void doChanged() {
 		if (theChildBatch != null) {
 			theChildBatch.close();
@@ -158,6 +219,11 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 			theParentChild.accept(this);
 	}
 
+	/**
+	 * Clears this model of both style and text
+	 *
+	 * @return This model
+	 */
 	public SimpleStyledTextModel clearAll() {
 		try (Transaction t = batch()) {
 			reset();
@@ -166,6 +232,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		return this;
 	}
 
+	/** Clears this mdoel of both style and text, but doesn't fire a change event */
 	protected void reset() {
 		theText.setLength(0);
 		theChildren.clear();
@@ -177,6 +244,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		theBooleanAttrs = 0;
 	}
 
+	/** Clears this models' text */
 	public void clearText() {
 		if (theText.length() == 0)
 			return;
@@ -184,6 +252,11 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		changed();
 	}
 
+	/**
+	 * Clears this model's style
+	 *
+	 * @param deep Whether to also clear the style of this model's children
+	 */
 	public void clearStyle(boolean deep) {
 		theBgColor = null;
 		theFgColor = null;
@@ -239,6 +312,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		return this;
 	}
 
+	/** @return The background of this model */
 	public Attribute<Color> bg() {
 		return new Attribute<Color>() {
 			@Override
@@ -257,6 +331,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		};
 	}
 
+	/** @return The foreground (text color) of this model */
 	public Attribute<Color> fg() {
 		return new Attribute<Color>() {
 			@Override
@@ -275,6 +350,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		};
 	}
 
+	/** @return The font weight of this model */
 	public DoubleAttribute fontWeight() {
 		return new DoubleAttribute() {
 			@Override
@@ -293,10 +369,16 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		};
 	}
 
+	/**
+	 * Sets this model's {@link #fontWeight()} to bold
+	 *
+	 * @return This model
+	 */
 	public SimpleStyledTextModel bold() {
 		return fontWeight().set(FontStyleParser.bold);
 	}
 
+	/** @return The font size of this model */
 	public DoubleAttribute fontSize() {
 		return new DoubleAttribute() {
 			@Override
@@ -313,6 +395,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		};
 	}
 
+	/** @return The font slant of this model */
 	public DoubleAttribute fontSlant() {
 		return new DoubleAttribute() {
 			@Override
@@ -329,22 +412,31 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		};
 	}
 
+	/**
+	 * Sets this model's {@link #fontSlant()} to italic
+	 *
+	 * @return This model
+	 */
 	public SimpleStyledTextModel italic() {
 		return fontSlant().set(FontStyleParser.italic);
 	}
 
+	/** @return Whether text in this model is underlined */
 	public BooleanAttribute underline() {
 		return new BooleanAttributeImpl(HAS_UNDERLINE_MASK);
 	}
 
+	/** @return Whether text in this model is struck through */
 	public BooleanAttribute strikeThrough() {
 		return new BooleanAttributeImpl(HAS_STRIKE_THROUGH_MASK);
 	}
 
+	/** @return Whether text in this model is super script */
 	public BooleanAttribute superScript() {
 		return new BooleanAttributeImpl(HAS_SUPER_SCRIPT_MASK);
 	}
 
+	/** @return Whether text in this model is sub script */
 	public BooleanAttribute subScript() {
 		return new BooleanAttributeImpl(HAS_SUB_SCRIPT_MASK);
 	}
@@ -397,12 +489,23 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		}
 	}
 
+	/**
+	 * Creates a child of this model
+	 *
+	 * @return The new child model
+	 */
 	public SimpleStyledTextModel branch() {
 		SimpleStyledTextModel child = new SimpleStyledTextModel(this);
 		theChildren.add(child);
 		return child;
 	}
 
+	/**
+	 * Creates a child of this model
+	 *
+	 * @param child The action to perform on the new child
+	 * @return This model
+	 */
 	public SimpleStyledTextModel branch(Consumer<SimpleStyledTextModel> child) {
 		SimpleStyledTextModel ch = new SimpleStyledTextModel(this);
 		child.accept(ch);
@@ -410,11 +513,11 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		return this;
 	}
 
-	public static class Root extends SimpleStyledTextModel {
+	static class Root extends SimpleStyledTextModel {
 		private int theBatchCount;
 		private final ListenerList<SimpleStyledTextModel> theBatch;
 
-		public Root(SettableValue<SimpleStyledTextModel> value) {
+		Root(SettableValue<SimpleStyledTextModel> value) {
 			super(null);
 			asChild(root -> value.set(root, null));
 			theBatch=ListenerList.build().build();

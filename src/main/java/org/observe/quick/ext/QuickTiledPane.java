@@ -31,9 +31,16 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget that renders each value of a collection as a separate content widget.
+ *
+ * @param <T> The type of the values in the collection
+ */
 public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValueRenderable<T> {
+	/** The XML name of this element */
 	public static final String TILED_PANE = "tiled-pane";
 
+	/** {@link QuickTiledPane} definition */
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = QuickXInterpretation.X,
 			qonfigType = TILED_PANE,
@@ -51,10 +58,15 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		private CompiledExpression theValues;
 		private QuickWidget.Def<?> theRenderer;
 
-		public Def(org.observe.expresso.qonfig.ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The values, each of which to represent as a separate content widget */
 		@QonfigAttributeGetter(asType = TILED_PANE, value = "values")
 		public CompiledExpression getValues() {
 			return theValues;
@@ -65,19 +77,23 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return theActiveValueVariable;
 		}
 
+		/** @return The model ID of the value containing whether the current value is selected */
 		public ModelComponentId getSelectedVariable() {
 			return theSelectedVariable;
 		}
 
+		/** @return The model ID of the value containing the index of the current value */
 		public ModelComponentId getValueIndexVariable() {
 			return theValueIndexVariable;
 		}
 
+		/** @return The layout for the content of this tiled pane */
 		@QonfigAttributeGetter(asType = TILED_PANE, value = "layout")
 		public QuickLayout.Def<?> getLayout() {
 			return getAddOn(QuickLayout.Def.class);
 		}
 
+		/** @return The renderer to render each value of this tiled pane */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
 		public QuickWidget.Def<?> getRenderer() {
 			return theRenderer;
@@ -107,12 +123,21 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 	}
 
+	/**
+	 * {@link QuickTiledPane} interpretation
+	 *
+	 * @param <T> The type of the values in the collection
+	 */
 	public static class Interpreted<T> extends QuickWidget.Interpreted.Abstract<QuickTiledPane<T>>
 	implements MultiValueRenderable.Interpreted<T, QuickTiledPane<T>> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 		private QuickWidget.Interpreted<?> theRenderer;
 
-		Interpreted(QuickTiledPane.Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(QuickTiledPane.Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -121,6 +146,10 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return (Def) super.getDefinition();
 		}
 
+		/**
+		 * @return The type of values in the collection
+		 * @throws ExpressoInterpretationException If the type of the values cannot be interpreted
+		 */
 		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			if (theValues == null) {
 				theValues = getDefinition().getValues().interpret(ModelTypes.Collection.anyAsV(), getExpressoEnv());
@@ -128,14 +157,17 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return (TypeToken<T>) theValues.getType().getType(0);
 		}
 
+		/** @return The values, each of which to represent as a separate content widget */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValues() {
 			return theValues;
 		}
 
+		/** @return The layout for the content of this tiled pane */
 		public QuickLayout.Interpreted<?> getLayout() {
 			return getAddOn(QuickLayout.Interpreted.class);
 		}
 
+		/** @return The renderer to render each value of this tiled pane */
 		public QuickWidget.Interpreted<?> getRenderer() {
 			return theRenderer;
 		}
@@ -166,7 +198,8 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	private SettableValue<SettableValue<Integer>> theValueIndex;
 	private QuickWidget theRenderer;
 
-	QuickTiledPane(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTiledPane(Object id) {
 		super(id);
 		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
@@ -184,6 +217,10 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		return theSelectedVariable;
 	}
 
+	/**
+	 * @param ctx The model context for this tiled pane
+	 * @throws ModelInstantiationException If the model context could not be installed
+	 */
 	public void setContext(TabularWidget.TabularContext<T> ctx) throws ModelInstantiationException {
 		setContext((MultiValueRenderContext<T>) ctx);
 		theValueIndex.set(ctx.getRowIndex(), null);
@@ -195,18 +232,22 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		isSelected.set(ctx.isSelected(), null);
 	}
 
+	/** @return The values, each of which to represent as a separate content widget */
 	public ObservableCollection<T> getValues() {
 		return ObservableCollection.flattenValue(theValues);
 	}
 
+	/** @return The active value (e.g. the one being rendered or interacted with) */
 	public SettableValue<T> getActiveValue() {
 		return SettableValue.flatten(theActiveValue);
 	}
 
+	/** @return The layout for the content of this tiled pane */
 	public QuickLayout getLayout() {
 		return getAddOn(QuickLayout.class);
 	}
 
+	/** @return The renderer to render each value of this tiled pane */
 	public QuickWidget getRenderer() {
 		return theRenderer;
 	}

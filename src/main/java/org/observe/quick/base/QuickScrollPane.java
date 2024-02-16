@@ -13,9 +13,15 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A container with a single content widget. The scroll pane can display scroll bars that allow a very large contained widget to be
+ * contained in a smaller container, with only a section of the content displayed at a time.
+ */
 public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
+	/** The XML name of this element */
 	public static final String SCROLL = "scroll";
 
+	/** {@link QuickScrollPane} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SCROLL,
 		interpretation = Interpreted.class,
@@ -24,15 +30,21 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		private QuickWidget.Def<?> theRowHeader;
 		private QuickWidget.Def<?> theColumnHeader;
 
-		public Def(ExElement.Def parent, QonfigElementOrAddOn type) {
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The row header for the scroll pane, displayed to the left of the content and scrolled vertically with it */
 		@QonfigChildGetter("row-header")
 		public QuickWidget.Def<?> getRowHeader() {
 			return theRowHeader;
 		}
 
+		/** @return The column header for the scroll pane, displayed above the content and scrolled horizontally with it */
 		@QonfigChildGetter("column-header")
 		public QuickWidget.Def<?> getColumnHeader() {
 			return theColumnHeader;
@@ -51,11 +63,16 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/** {@link QuickScrollPane} interpretation */
 	public static class Interpreted extends QuickContainer.Interpreted.Abstract<QuickScrollPane, QuickWidget> {
 		private QuickWidget.Interpreted<?> theRowHeader;
 		private QuickWidget.Interpreted<?> theColumnHeader;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -64,10 +81,12 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The row header for the scroll pane, displayed to the left of the content and scrolled vertically with it */
 		public QuickWidget.Interpreted<?> getRowHeader() {
 			return theRowHeader;
 		}
 
+		/** @return The column header for the scroll pane, displayed above the content and scrolled horizontally with it */
 		public QuickWidget.Interpreted<?> getColumnHeader() {
 			return theColumnHeader;
 		}
@@ -91,14 +110,17 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	private QuickWidget theRowHeader;
 	private QuickWidget theColumnHeader;
 
-	public QuickScrollPane(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickScrollPane(Object id) {
 		super(id);
 	}
 
+	/** @return The row header for the scroll pane, displayed to the left of the content and scrolled vertically with it */
 	public QuickWidget getRowHeader() {
 		return theRowHeader;
 	}
 
+	/** @return The column header for the scroll pane, displayed above the content and scrolled horizontally with it */
 	public QuickWidget getColumnHeader() {
 		return theColumnHeader;
 	}

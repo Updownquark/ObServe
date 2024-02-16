@@ -10,10 +10,35 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * <p>
+ * A layout that positions components along the edges of the container with an optional single component filling the rest of the space.
+ * </p>
+ * <p>
+ * This layout improves on basic border layouts in several ways:
+ * <ul>
+ * <li>This layout can accept any number of components along each edge. Edge components are arranged such that they appear closer to the
+ * opposite edge of the container than all previous components with the same edge. Edge components stretch out to the edges of the
+ * container, or to the edge of previous components along those edges.</li>
+ * <li>The amount of space that each component takes up can be specified by layout constraints, and can be specified relative to the edges
+ * or size of the container.</li>
+ * </ul>
+ * </p>
+ * <p>
+ * Only a single center component may be specified. If specified, the center component will occupy all the space not taken up by the edge
+ * components. Size constraints on the center component are not allowed.
+ * </p>
+ */
 public class QuickBorderLayout extends QuickLayout.Abstract {
+	/** The XML name of this add-on */
 	public static final String BORDER_LAYOUT = "border-layout";
 
+	/** {@link QuickBorderLayout} definition */
 	public static class Def extends QuickLayout.Def<QuickBorderLayout> {
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The container widget whose contents to manage
+		 */
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
 		}
@@ -29,7 +54,12 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 	}
 
+	/** {@link QuickBorderLayout} interpretation */
 	public static class Interpreted extends QuickLayout.Interpreted<QuickBorderLayout> {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The container widget whose contents to manage
+		 */
 		public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 			super(definition, element);
 		}
@@ -55,7 +85,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 	}
 
-	public QuickBorderLayout(QuickWidget element) {
+	/** @param element The container whose contents to manage */
+	protected QuickBorderLayout(QuickWidget element) {
 		super(element);
 	}
 
@@ -64,13 +95,29 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		return Interpreted.class;
 	}
 
+	/** A region for a child to occupy in a container managed by a {@link QuickBorderLayout} */
 	public enum Region {
-		Center, North, South, East, West
+		/**
+		 * The center, taking up all the space left over from the border contents. Only one component in the container may occupy this
+		 * region.
+		 */
+		Center,
+		/** The top edge of the container */
+		North,
+		/** The bottom edge of the container */
+		South,
+		/** The right edge of the container */
+		East,
+		/** The left edge of the container */
+		West
 	}
 
+	/** An add-on automatically inherited by children of a container managed by a {@link QuickBorderLayout} */
 	public static class Child extends ExAddOn.Abstract<QuickWidget> {
+		/** The XML name of this add-on */
 		public static final String BORDER_LAYOUT_CHILD = "border-layout-child";
 
+		/** {@link QuickBorderLayout} {@link Child} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = BORDER_LAYOUT_CHILD,
 			interpretation = Interpreted.class,
@@ -78,10 +125,15 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		public static class Def extends ExAddOn.Def.Abstract<QuickWidget, Child> {
 			private Region theRegion;
 
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The widget in the {@link QuickBorderLayout}-managed container
+			 */
 			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 				super(type, element);
 			}
 
+			/** @return The region for the content widget to occupy in the container */
 			@QonfigAttributeGetter("region")
 			public Region getRegion() {
 				return theRegion;
@@ -119,8 +171,13 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 		}
 
+		/** {@link QuickBorderLayout} {@link Child} interpretation */
 		public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, Child> {
-			public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param element The widget in the {@link QuickBorderLayout}-maaged container
+			 */
+			protected Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -142,7 +199,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 
 		private Region theRegion;
 
-		public Child(QuickWidget element) {
+		/** @param element The widget in the {@link QuickBorderLayout}-managed container */
+		protected Child(QuickWidget element) {
 			super(element);
 		}
 
@@ -151,6 +209,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			return Interpreted.class;
 		}
 
+		/** @return The region for the content widget to occupy in the container */
 		public Region getRegion() {
 			return theRegion;
 		}

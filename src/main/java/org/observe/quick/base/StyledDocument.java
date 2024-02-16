@@ -37,10 +37,22 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A text document, portions of which may be styled
+ *
+ * @param <T> The type of values in the document
+ */
 public abstract class StyledDocument<T> extends ExElement.Abstract {
+	/** The XML name of this element */
 	public static final String STYLED_DOCUMENT = "styled-document";
+	/** The XML name of the text-style element */
 	public static final String TEXT_STYLE = "text-style";
 
+	/**
+	 * {@link StyledDocument} definition
+	 *
+	 * @param <D> The sub-type of document to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = STYLED_DOCUMENT,
 		interpretation = Interpreted.class,
@@ -51,27 +63,42 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		private CompiledExpression theSelectionEndValue;
 		private CompiledExpression theSelectionEndOffset;
 
+		/**
+		 * @param parent The parent element of the document
+		 * @param type The Qonfig type of the document
+		 */
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether this document may support editing */
 		public abstract boolean isTypeEditable();
 
+		/** @return The document value at the start of the user's selection */
 		@QonfigAttributeGetter("selection-start-value")
 		public CompiledExpression getSelectionStartValue() {
 			return theSelectionStartValue;
 		}
 
+		/**
+		 * @return The offset from the start of the {@link #getSelectionStartValue()}'s representation in the document at the start of the
+		 *         user's selection
+		 */
 		@QonfigAttributeGetter("selection-start-offset")
 		public CompiledExpression getSelectionStartOffset() {
 			return theSelectionStartOffset;
 		}
 
+		/** @return The document value at the end of the user's selection */
 		@QonfigAttributeGetter("selection-end-value")
 		public CompiledExpression getSelectionEndValue() {
 			return theSelectionEndValue;
 		}
 
+		/**
+		 * @return The offset from the start of the {@link #getSelectionEndValue()}'s representation in the document at the end of the
+		 *         user's selection
+		 */
 		@QonfigAttributeGetter("selection-end-offset")
 		public CompiledExpression getSelectionEndOffset() {
 			return theSelectionEndOffset;
@@ -87,15 +114,29 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			theSelectionEndOffset = getAttributeExpression("selection-end-offset", session);
 		}
 
+		/**
+		 * @param parent The parent element for the interpreted document
+		 * @return The interpreted document
+		 */
 		public abstract Interpreted<?, ? extends D> interpret(ExElement.Interpreted<?> parent);
 	}
 
+	/**
+	 * {@link StyledDocument} interpretation
+	 *
+	 * @param <T> The type of values in the document
+	 * @param <D> The sub-type of document to create
+	 */
 	public static abstract class Interpreted<T, D extends StyledDocument<T>> extends ExElement.Interpreted.Abstract<D> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionStartValue;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionStartOffset;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionEndValue;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionEndOffset;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the document
+		 */
 		protected Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -105,24 +146,44 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			return (Def<? super D>) super.getDefinition();
 		}
 
+		/**
+		 * @return The type of values in the document
+		 * @throws ExpressoInterpretationException If the value type could not be interpreted
+		 */
 		public abstract TypeToken<T> getValueType() throws ExpressoInterpretationException;
 
+		/** @return The document value at the start of the user's selection */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectionStartValue() {
 			return theSelectionStartValue;
 		}
 
+		/**
+		 * @return The offset from the start of the {@link #getSelectionStartValue()}'s representation in the document at the start of the
+		 *         user's selection
+		 */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionStartOffset() {
 			return theSelectionStartOffset;
 		}
 
+		/** @return The document value at the end of the user's selection */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectionEndValue() {
 			return theSelectionEndValue;
 		}
 
+		/**
+		 * @return The offset from the start of the {@link #getSelectionEndValue()}'s representation in the document at the end of the
+		 *         user's selection
+		 */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionEndOffset() {
 			return theSelectionEndOffset;
 		}
 
+		/**
+		 * Initializes or updates this document
+		 *
+		 * @param env the expresso environment for interpreting expressions
+		 * @throws ExpressoInterpretationException If this document could not be interpreted
+		 */
 		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			update(env);
 		}
@@ -137,6 +198,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			theSelectionEndOffset = interpret(getDefinition().getSelectionEndOffset(), ModelTypes.Value.forType(int.class));
 		}
 
+		/** @return The instantiated document */
 		public abstract StyledDocument<T> create();
 	}
 
@@ -152,26 +214,38 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 
 	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
 
+	/** @param id The element ID for this document */
 	protected StyledDocument(Object id) {
 		super(id);
 	}
 
+	/** @return The model type of values in the document */
 	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
 		return theValueType;
 	}
 
+	/** @return The document value at the start of the user's selection */
 	public SettableValue<T> getSelectionStartValue() {
 		return SettableValue.flatten(theSelectionStartValue);
 	}
 
+	/**
+	 * @return The offset from the start of the {@link #getSelectionStartValue()}'s representation in the document at the start of the
+	 *         user's selection
+	 */
 	public SettableValue<Integer> getSelectionStartOffset() {
 		return SettableValue.flatten(theSelectionStartOffset, () -> 0);
 	}
 
+	/** @return The document value at the end of the user's selection */
 	public SettableValue<T> getSelectionEndValue() {
 		return SettableValue.flatten(theSelectionEndValue);
 	}
 
+	/**
+	 * @return The offset from the start of the {@link #getSelectionEndValue()}'s representation in the document at the end of the user's
+	 *         selection
+	 */
 	public SettableValue<Integer> getSelectionEndOffset() {
 		return SettableValue.flatten(theSelectionEndOffset, () -> 0);
 	}
@@ -244,13 +318,19 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		return copy;
 	}
 
+	/** Controls the style of text in a {@link StyledDocument} */
 	public static class TextStyleElement extends QuickWithBackground.Abstract implements QuickTextElement {
+		/** {@link TextStyleElement} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TEXT_STYLE,
 			interpretation = Interpreted.class,
 			instance = TextStyleElement.class)
 		public static class Def extends QuickWithBackground.Def.Abstract<TextStyleElement>
 		implements QuickTextElement.Def<TextStyleElement> {
+			/**
+			 * @param parent The parent element of the style element
+			 * @param type The Qonfig type of the style element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -270,14 +350,23 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				super.doUpdate(session.asElement("styled")); // No super element
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted style element
+			 * @return The interpreted style element
+			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
+		/** {@link TextStyleElement} interpretation */
 		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<TextStyleElement>
 		implements QuickTextElement.Interpreted<TextStyleElement> {
-			public Interpreted(TextStyleElement.Def definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for the style element
+			 */
+			protected Interpreted(TextStyleElement.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -291,12 +380,14 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				return (TextStyle.Interpreted) super.getStyle();
 			}
 
+			/** @return The instantiated style element */
 			public TextStyleElement create() {
 				return new TextStyleElement(getIdentity());
 			}
 		}
 
-		public TextStyleElement(Object id) {
+		/** @param id The element If for this style element */
+		protected TextStyleElement(Object id) {
 			super(id);
 		}
 
@@ -311,11 +402,18 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 	}
 
+	/** Quick style for a {@link StyledDocument} */
 	public static class TextStyle extends QuickTextElement.QuickTextStyle.Abstract implements QuickWithBackground.QuickBackgroundStyle {
+		/** {@link TextStyle} definition */
 		public static class Def extends QuickTextElement.QuickTextStyle.Def.Abstract implements QuickBackgroundStyle.Def {
 			private final QuickStyleAttributeDef theColor;
 			private final QuickStyleAttributeDef theMouseCursor;
 
+			/**
+			 * @param parent The Quick parent style to inherit from
+			 * @param styledElement The text style element in the document to style
+			 * @param wrapped The compiled style to wrap
+			 */
 			public Def(QuickInstanceStyle.Def parent, TextStyleElement.Def styledElement, QuickCompiledStyle wrapped) {
 				super(parent, styledElement, wrapped);
 				QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
@@ -342,11 +440,18 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 		}
 
+		/** {@link TextStyle} interpretation */
 		public static class Interpreted extends QuickTextElement.QuickTextStyle.Interpreted.Abstract
-			implements QuickBackgroundStyle.Interpreted {
+		implements QuickBackgroundStyle.Interpreted {
 			private QuickElementStyleAttribute<Color> theColor;
 			private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param styledElement The text style element in the document to style
+			 * @param parent The Quick parent style to inherit from
+			 * @param wrapped The interpreted style to wrap
+			 */
 			public Interpreted(Def definition, TextStyleElement.Interpreted styledElement, QuickInstanceStyle.Interpreted parent,
 				QuickInterpretedStyle wrapped) {
 				super(definition, styledElement, parent, wrapped);

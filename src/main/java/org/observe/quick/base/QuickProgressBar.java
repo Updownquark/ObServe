@@ -19,9 +19,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A horizontal bar that displays the progress of an operation */
 public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
+	/** The XML name of this element */
 	public static final String PROGRESS_BAR = "progress-bar";
 
+	/** {@link QuickProgressBar} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = PROGRESS_BAR,
 		interpretation = Interpreted.class,
@@ -30,15 +33,21 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		private CompiledExpression theMaximum;
 		private CompiledExpression theText;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The maximum value for the progress bar */
 		@QonfigAttributeGetter("max")
 		public CompiledExpression getMaximum() {
 			return theMaximum;
 		}
 
+		/** @return The text to display in the progress bar */
 		@QonfigAttributeGetter("text")
 		public CompiledExpression getText() {
 			return theText;
@@ -57,11 +66,16 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		}
 	}
 
+	/** {@link QuickProgressBar} interpretation */
 	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<Integer, QuickProgressBar> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaximum;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -70,10 +84,12 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The maximum value for the progress bar */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getMaximum() {
 			return theMaximum;
 		}
 
+		/** @return The text to display in the progress bar */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
 			return theText;
 		}
@@ -102,7 +118,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	private SettableValue<SettableValue<Integer>> theMaximum;
 	private SettableValue<SettableValue<String>> theText;
 
-	QuickProgressBar(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickProgressBar(Object id) {
 		super(id);
 		theMaximum = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
 			.build();
@@ -110,10 +127,12 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 			.build();
 	}
 
+	/** @return The maximum value for the progress bar */
 	public SettableValue<Integer> getMaximum() {
 		return SettableValue.flatten(theMaximum);
 	}
 
+	/** @return The text to display in the progress bar */
 	public SettableValue<String> getText() {
 		return SettableValue.flatten(theText);
 	}

@@ -17,9 +17,20 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A component that displays a single line of text to represent and allow modification of a value
+ *
+ * @param <T> The type of the value to represent
+ */
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
+	/** The XML name of this element */
 	public static final String TEXT_FIELD = "text-field";
 
+	/**
+	 * {@link QuickTextField} definition
+	 *
+	 * @param <F> The sub-type of text field to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = TEXT_FIELD,
 		interpretation = Interpreted.class,
@@ -29,6 +40,10 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		private CompiledExpression isPassword;
 		private CompiledExpression theEmptyText;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -38,16 +53,19 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return true;
 		}
 
+		/** @return The number of columns of text to display--the horizontal size of the text field */
 		@QonfigAttributeGetter("columns")
 		public Integer getColumns() {
 			return theColumns;
 		}
 
+		/** @return Determines whether the text field should display the text as-is or obfuscate it */
 		@QonfigAttributeGetter("password")
 		public CompiledExpression isPassword() {
 			return isPassword;
 		}
 
+		/** @return Text to display to the user when the formatted value is empty, e.g. as a user prompt */
 		@QonfigAttributeGetter("empty-text")
 		public CompiledExpression getEmptyText() {
 			return theEmptyText;
@@ -68,11 +86,21 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickTextField} interpretation
+	 *
+	 * @param <T> The type of the value to represent
+	 * @param <F> The sub-type of text field to create
+	 */
 	public static class Interpreted<T, F extends QuickTextField<T>> extends QuickEditableTextWidget.Interpreted.Abstract<T, F> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theEmptyText;
 
-		public Interpreted(Def<? super F> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super F> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -81,10 +109,12 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return (Def<? super F>) super.getDefinition();
 		}
 
+		/** @return Determines whether the text field should display the text as-is or obfuscate it */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword() {
 			return isPassword;
 		}
 
+		/** @return Text to display to the user when the formatted value is empty, e.g. as a user prompt */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getEmptyText() {
 			return theEmptyText;
 		}
@@ -108,7 +138,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	private SettableValue<SettableValue<Boolean>> isPassword;
 	private SettableValue<SettableValue<String>> theEmptyText;
 
-	public QuickTextField(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTextField(Object id) {
 		super(id);
 		isPassword = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
@@ -116,14 +147,17 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			.build();
 	}
 
+	/** @return The number of columns of text to display--the horizontal size of the text field */
 	public Integer getColumns() {
 		return theColumns;
 	}
 
+	/** @return Determines whether the text field should display the text as-is or obfuscate it */
 	public SettableValue<Boolean> isPassword() {
 		return SettableValue.flatten(isPassword);
 	}
 
+	/** @return Text to display to the user when the formatted value is empty, e.g. as a user prompt */
 	public SettableValue<String> getEmptyText() {
 		return SettableValue.flatten(theEmptyText);
 	}

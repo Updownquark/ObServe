@@ -16,9 +16,16 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A text field with little up and down buttons next to it for adjusting a quantitative value
+ *
+ * @param <T> The type of the value
+ */
 public class QuickSpinner<T> extends QuickTextField<T> {
+	/** The XML name of this element */
 	public static final String SPINNER = "spinner";
 
+	/** {@link QuickSpinner} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SPINNER,
 		interpretation = Interpreted.class,
@@ -27,15 +34,21 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 		private CompiledExpression thePrevious;
 		private CompiledExpression theNext;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return An expression that determines the previous value when the user presses down */
 		@QonfigAttributeGetter("previous")
 		public CompiledExpression getPrevious() {
 			return thePrevious;
 		}
 
+		/** @return An expression that determines the next value when the user presses up */
 		@QonfigAttributeGetter("next")
 		public CompiledExpression getNext() {
 			return theNext;
@@ -55,11 +68,20 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickSpinner} interpretation
+	 *
+	 * @param <T> The type of the value
+	 */
 	public static class Interpreted<T> extends QuickTextField.Interpreted<T, QuickSpinner<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> thePrevious;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theNext;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -68,10 +90,12 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return An expression that determines the previous value when the user presses down */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getPrevious() {
 			return thePrevious;
 		}
 
+		/** @return An expression that determines the next value when the user presses up */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getNext() {
 			return theNext;
 		}
@@ -96,14 +120,17 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 	private SettableValue<T> thePrevious;
 	private SettableValue<T> theNext;
 
-	public QuickSpinner(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickSpinner(Object id) {
 		super(id);
 	}
 
+	/** @return An expression that determines the previous value when the user presses down */
 	public SettableValue<T> getPrevious() {
 		return thePrevious;
 	}
 
+	/** @return An expression that determines the next value when the user presses up */
 	public SettableValue<T> getNext() {
 		return theNext;
 	}

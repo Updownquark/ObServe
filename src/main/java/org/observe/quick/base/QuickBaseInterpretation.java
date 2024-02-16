@@ -126,7 +126,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		// Containers
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));
 		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, ExElement.creator(QuickFieldPanel.Def::new));
-		interpreter.createWith("field", QuickField.Def.class,
+		interpreter.createWith(QuickField.FIELD, QuickField.Def.class,
 			ExAddOn.creator((Class<QuickWidget.Def<?>>) (Class<?>) QuickWidget.Def.class, QuickField.Def::new));
 		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, ExElement.creator(QuickSplit.Def::new));
 		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, ExElement.creator(QuickScrollPane.Def::new));
@@ -157,10 +157,12 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExElement.creator(ValueTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
 			ExElement.creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
-		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
+		interpreter.createWith(QuickTableColumn.ColumnEditType.RowModifyEditType.MODIFY,
+			QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
-		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
+		interpreter.createWith(QuickTableColumn.ColumnEditType.RowReplaceEditType.REPLACE,
+			QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class,

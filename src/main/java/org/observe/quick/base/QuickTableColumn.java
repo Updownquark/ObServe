@@ -31,16 +31,45 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Represents a column in a {@link TabularWidget}
+ *
+ * @param <R> The type of rows in the table
+ * @param <C> The type of this column's value
+ */
 public interface QuickTableColumn<R, C> {
+	/**
+	 * A set if table columns
+	 *
+	 * @param <R> The type of rows in the table
+	 */
 	public interface TableColumnSet<R> extends ValueTyped<R> {
+		/**
+		 * {@link TableColumnSet} definition
+		 *
+		 * @param <CC> The type of column set to create
+		 */
 		public interface Def<CC extends TableColumnSet<?>> extends ValueTyped.Def<CC> {
+			/** @return The renderer to represent the column value to the user when they are not interacting with it */
 			QuickWidget.Def<?> getRenderer();
 
+			/** @return The strategy for editing values in this column */
 			ColumnEditing.Def getEditing();
 
+			/**
+			 * @param <R> The type of rows in the table
+			 * @param parent The parent for the column set
+			 * @return The interpreted column set
+			 */
 			<R> Interpreted<R, ? extends CC> interpret(ExElement.Interpreted<?> parent);
 		}
 
+		/**
+		 * {@link TableColumnSet} interpretation
+		 *
+		 * @param <R> The type of rows in the table
+		 * @param <CC> The type of column set to create
+		 */
 		public interface Interpreted<R, CC extends TableColumnSet<R>> extends ValueTyped.Interpreted<R, CC> {
 			@Override
 			Def<? super CC> getDefinition();
@@ -48,44 +77,68 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			ValueTyped.Interpreted<R, ?> getParentElement();
 
+			/** @return The renderer to represent the column value to the user when they are not interacting with it */
 			QuickWidget.Interpreted<?> getRenderer();
 
+			/** @return The strategy for editing values in this column */
 			ColumnEditing.Interpreted<R, ?> getEditing();
 
+			/**
+			 * Initializes or updates this column set
+			 *
+			 * @param env The expresso environment to use to interpret expressions
+			 * @throws ExpressoInterpretationException If this column set could not be interpreted
+			 */
 			void updateColumns(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+			/** @return The column set */
 			CC create();
 		}
 
 		@Override
 		ValueTyped<R> getParentElement();
 
+		/** @return The type of rows in the table */
 		TypeToken<R> getRowType();
 
+		/** @return The columns for the table */
 		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
 
 		@Override
 		TableColumnSet<R> copy(ExElement parent);
 	}
 
+	/** @return The name of the column--the text for the column's header */
 	SettableValue<String> getName();
 
+	/** @return The column set that this column belongs to */
 	QuickTableColumn.TableColumnSet<R> getColumnSet();
 
+	/** @return The type of this column's value */
 	TypeToken<C> getType();
 
+	/** @return The current value of this column */
 	SettableValue<C> getValue();
 
+	/** @return The tooltip for this column's header */
 	SettableValue<String> getHeaderTooltip();
 
+	/** @return The minimum width of this column, in pixels */
 	Integer getMinWidth();
 
+	/** @return The preferred width of this column, in pixels */
 	Integer getPrefWidth();
 
+	/** @return The maximum width of this column, in pixels */
 	Integer getMaxWidth();
 
+	/**
+	 * @return The width of this column, in pixels. Overrides {@link #getMinWidth() min}, {@link #getPrefWidth() preferred}, and
+	 *         {@link #getMaxWidth() max} widths
+	 */
 	Integer getWidth();
 
+	/** @return The renderer to represent the column value to the user when they are not interacting with it */
 	QuickWidget getRenderer();
 
 	/**
@@ -98,22 +151,49 @@ public interface QuickTableColumn<R, C> {
 	 */
 	Observable<? extends Causable> getRenderStyleChanges();
 
+	/** @return The strategy for editing values in this column */
 	ColumnEditing<R, C> getEditing();
 
+	/** Updates or initializes this column */
 	void update();
 
+	/**
+	 * Model context for {@link ColumnEditing}
+	 *
+	 * @param <R> The type of rows in the table
+	 * @param <C> The value type of the column
+	 */
 	public interface ColumnEditContext<R, C> extends TabularWidget.TabularContext<R> {
+		/** @return The value in the column that is currently being edited */
 		SettableValue<C> getEditColumnValue();
 
+		/**
+		 * Default {@link ColumnEditContext} implementation
+		 *
+		 * @param <R> The type of rows in the table
+		 * @param <C> The value type of the column
+		 */
 		public class Default<R, C> extends TabularWidget.TabularContext.Default<R> implements ColumnEditContext<R, C> {
 			private final SettableValue<C> theEditColumnValue;
 
+			/**
+			 * @param renderValue The row value in the table that is currently being edited
+			 * @param selected Whether the row is selected in the table
+			 * @param rowIndex The index of the row of the editing element in the table
+			 * @param columnIndex The index of the column of the editing element in the table
+			 * @param editColumnValue The value in the column that is currently being edited
+			 */
 			public Default(SettableValue<R> renderValue, SettableValue<Boolean> selected, SettableValue<Integer> rowIndex,
 				SettableValue<Integer> columnIndex, SettableValue<C> editColumnValue) {
 				super(renderValue, selected, rowIndex, columnIndex);
 				theEditColumnValue = editColumnValue;
 			}
 
+			/**
+			 * @param rowType The type of rows in the table
+			 * @param columnType The value type of the column
+			 * @param descrip A description of the model context, for debugging
+			 */
 			public Default(TypeToken<R> rowType, TypeToken<C> columnType, String descrip) {
 				super(rowType, descrip);
 				theEditColumnValue = SettableValue.build(columnType).withValue(TypeTokens.get().getDefaultValue(columnType))
@@ -127,9 +207,17 @@ public interface QuickTableColumn<R, C> {
 		}
 	}
 
+	/**
+	 * A strategy for editing values in a {@link QuickTableColumn column} of a {@link TabularWidget}
+	 *
+	 * @param <R> The type of rows in the table
+	 * @param <C> The value type of the column
+	 */
 	public class ColumnEditing<R, C> extends ExElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
+		/** The XML name of this element */
 		public static final String COLUMN_EDITING = "column-edit";
 
+		/** {@link ColumnEditing} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = COLUMN_EDITING,
 			interpretation = Interpreted.class,
@@ -142,6 +230,10 @@ public interface QuickTableColumn<R, C> {
 			private CompiledExpression isAcceptable;
 			private Integer theClicks;
 
+			/**
+			 * @param parent The column set this editing is for
+			 * @param type The Qonfig type of this element
+			 */
 			public Def(TableColumnSet.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -151,31 +243,37 @@ public interface QuickTableColumn<R, C> {
 				return (TableColumnSet.Def<?>) super.getParentElement();
 			}
 
+			/** @return The sub-strategy to edit with */
 			@QonfigAttributeGetter("type")
 			public ColumnEditType.Def<?> getType() {
 				return getAddOn(ColumnEditType.Def.class);
 			}
 
+			/** @return The widget to modify the column value */
 			@QonfigChildGetter("editor")
 			public QuickWidget.Def<?> getEditor() {
 				return theEditor;
 			}
 
+			/** @return The model ID of the variable by which the editing column value will be available to expressions */
 			@QonfigAttributeGetter("column-edit-value-name")
 			public ModelComponentId getColumnEditValueVariable() {
 				return theColumnEditValueVariable;
 			}
 
+			/** @return Whether the column is editable for a cell */
 			@QonfigAttributeGetter("editable-if")
 			public CompiledExpression isEditable() {
 				return isEditable;
 			}
 
+			/** @return Whether the input value is acceptable for the current cell */
 			@QonfigAttributeGetter("accept")
 			public CompiledExpression isAcceptable() {
 				return isAcceptable;
 			}
 
+			/** @return How many clicks are required to activate editing on the column */
 			@QonfigAttributeGetter("clicks")
 			public Integer getClicks() {
 				return theClicks;
@@ -195,11 +293,21 @@ public interface QuickTableColumn<R, C> {
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getColumnType()));
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted editing
+			 * @return The interpreted editing
+			 */
 			public Interpreted<?, ?> interpret(TableColumnSet.Interpreted<?, ?> parent) {
 				return new Interpreted<>(this, parent);
 			}
 		}
 
+		/**
+		 * {@link ColumnEditing} interpretation
+		 *
+		 * @param <R> The type of rows in the table
+		 * @param <C> The value type of the column
+		 */
 		public static class Interpreted<R, C> extends ExElement.Interpreted.Abstract<ColumnEditing<R, C>>
 		implements QuickValueWidget.WidgetValueSupplier.Interpreted<C, ColumnEditing<R, C>> {
 			private TypeToken<C> theColumnType;
@@ -207,7 +315,11 @@ public interface QuickTableColumn<R, C> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isAcceptable;
 			private QuickWidget.Interpreted<?> theEditor;
 
-			public Interpreted(Def definition, TableColumnSet.Interpreted<R, ?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for the editing
+			 */
+			protected Interpreted(Def definition, TableColumnSet.Interpreted<R, ?> parent) {
 				super(definition, parent);
 			}
 
@@ -221,22 +333,27 @@ public interface QuickTableColumn<R, C> {
 				return (TableColumnSet.Interpreted<R, ?>) super.getParentElement();
 			}
 
+			/** @return The sub-strategy to edit with */
 			public ColumnEditType.Interpreted<R, C, ?> getType() {
 				return getAddOn(ColumnEditType.Interpreted.class);
 			}
 
+			/** @return Whether the column is editable for a cell */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEditable() {
 				return isEditable;
 			}
 
+			/** @return Whether the input value is acceptable for the current cell */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isAcceptable() {
 				return isAcceptable;
 			}
 
+			/** @return The widget to modify the column value */
 			public QuickWidget.Interpreted<?> getEditor() {
 				return theEditor;
 			}
 
+			/** @return the value type of the column */
 			public TypeToken<C> getColumnType() {
 				return theColumnType;
 			}
@@ -257,6 +374,14 @@ public interface QuickTableColumn<R, C> {
 				}
 			}
 
+			/**
+			 * Updates or initializes this editing strategy
+			 *
+			 * @param columnType The value type of the column
+			 * @param env The expresso environment to use to interpret expressions
+			 * @return This editing strategy
+			 * @throws ExpressoInterpretationException If the editing strategy could not be interpreted
+			 */
 			public Interpreted<R, C> update(TypeToken<C> columnType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theColumnType = columnType;
 
@@ -274,6 +399,7 @@ public interface QuickTableColumn<R, C> {
 					(e, eEnv) -> e.updateElement(eEnv));
 			}
 
+			/** @return The editing strategy */
 			public ColumnEditing<R, C> create() {
 				return new ColumnEditing<>(getIdentity());
 			}
@@ -296,7 +422,8 @@ public interface QuickTableColumn<R, C> {
 		private SettableValue<SettableValue<String>> isAcceptable;
 		private QuickWidget theEditor;
 
-		public ColumnEditing(Object id) {
+		/** @param id The element ID for the editing */
+		protected ColumnEditing(Object id) {
 			super(id);
 			isEditable = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
@@ -314,34 +441,42 @@ public interface QuickTableColumn<R, C> {
 			return (TableColumnSet<R>) super.getParentElement();
 		}
 
+		/** @return The sub-strategy to edit with */
 		public ColumnEditType<R, C> getType() {
 			return getAddOn(ColumnEditType.class);
 		}
 
+		/** @return The model ID of the variable by which the editing column value will be available to expressions */
 		public ModelComponentId getColumnEditValueName() {
 			return theColumnEditValueVariable;
 		}
 
+		/** @return The widget to modify the column value */
 		public QuickWidget getEditor() {
 			return theEditor;
 		}
 
+		/** @return Whether the column is editable for a cell */
 		public SettableValue<String> isEditable() {
 			return SettableValue.flatten(isEditable);
 		}
 
+		/** @return Whether the input value is acceptable for the current cell */
 		public SettableValue<String> isAcceptable() {
 			return SettableValue.flatten(isAcceptable);
 		}
 
+		/** @return The editing column value, disabled and filter-accepted as configured */
 		public SettableValue<C> getFilteredColumnEditValue() {
 			return theFilteredColumnEditValue;
 		}
 
+		/** @return How many clicks are required to activate editing on the column */
 		public Integer getClicks() {
 			return theClicks;
 		}
 
+		/** @param ctx The model context for this editing */
 		public void setEditorContext(ColumnEditContext<R, C> ctx) {
 			theEditRowValue.set(ctx.getActiveValue(), null);
 			theEditColumnValue.set(ctx.getEditColumnValue(), null);
@@ -460,6 +595,11 @@ public interface QuickTableColumn<R, C> {
 		}
 	}
 
+	/**
+	 * @param <R> The row type of the table
+	 * @param columns The column set to get the widget for
+	 * @return The widget that the column set is for
+	 */
 	static <R> MultiValueRenderable<R> getOwner(TableColumnSet<R> columns) {
 		ExElement parent = columns.getParentElement();
 		while (parent != null && !(parent instanceof MultiValueRenderable))
@@ -467,6 +607,13 @@ public interface QuickTableColumn<R, C> {
 		return (MultiValueRenderable<R>) parent;
 	}
 
+	/**
+	 * @param columnModels The models of the table column
+	 * @param owner The models of the table or widget that the columns are for
+	 * @return A model instance containing copies of the column and row values to be used independently of the model context of the widget
+	 *         and the column
+	 * @throws ModelInstantiationException If the models could not be copied
+	 */
 	static ModelSetInstanceBuilder copyTableModels(ModelSetInstanceBuilder columnModels, MultiValueRenderable<?> owner)
 		throws ModelInstantiationException {
 		if (owner == null)
@@ -492,6 +639,16 @@ public interface QuickTableColumn<R, C> {
 		return columnModelBuilder;
 	}
 
+	/**
+	 * @param <R> The row type of the tabular widget
+	 * @param columnModels The models of the table column
+	 * @param owner The widget that the column set is for
+	 * @param rowValue The value to replace for the row value in the model
+	 * @param selected The value to replace for the selected value in the model
+	 * @param rowIndex The value to replace for the row index in the model
+	 * @param columnIndex The value to replace for the column index in the model
+	 * @throws ModelInstantiationException If the model values could not be replaced
+	 */
 	static <R> void replaceTableValues(ModelSetInstance columnModels, MultiValueRenderable<R> owner, SettableValue<R> rowValue,
 		SettableValue<Boolean> selected, SettableValue<Integer> rowIndex, SettableValue<Integer> columnIndex)
 			throws ModelInstantiationException {
@@ -508,8 +665,24 @@ public interface QuickTableColumn<R, C> {
 		}
 	}
 
+	/**
+	 * A sub-strategy for editing column values. {@link ColumnEditing} contains all the information common to any column editing strategy,
+	 * but lacks the actual means to effect an edit.
+	 *
+	 * @param <R> The row type of the tabular widget
+	 * @param <C> The value type of the column
+	 */
 	public abstract class ColumnEditType<R, C> extends ExAddOn.Abstract<ColumnEditing<R, C>> {
+		/**
+		 * {@link ColumnEditType} definition
+		 *
+		 * @param <CET> The sub-type of editing to create
+		 */
 		public static abstract class Def<CET extends ColumnEditType<?, ?>> extends ExAddOn.Def.Abstract<ColumnEditing<?, ?>, CET> {
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The column editing to define
+			 */
 			protected Def(QonfigAddOn type, ColumnEditing.Def element) {
 				super(type, element);
 			}
@@ -523,9 +696,20 @@ public interface QuickTableColumn<R, C> {
 			public abstract Interpreted<?, ?, ? extends CET> interpret(ExElement.Interpreted<?> element);
 		}
 
+		/**
+		 * {@link ColumnEditType} interpretation
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <C> The value type of the column
+		 * @param <CET> The sub-type of editing to create
+		 */
 		public static abstract class Interpreted<R, C, CET extends ColumnEditType<R, C>>
 		extends ExAddOn.Interpreted.Abstract<ColumnEditing<R, C>, CET> {
-			protected Interpreted(Def<? super CET> definition, ExElement.Interpreted<?> element) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param element The column editing to define
+			 */
+			protected Interpreted(Def<? super CET> definition, ColumnEditing.Interpreted<R, C> element) {
 				super(definition, element);
 			}
 
@@ -540,15 +724,28 @@ public interface QuickTableColumn<R, C> {
 			// Do nothing. We need to use the editor models, which are passed intentionally from the editing via the method below
 		}
 
+		/**
+		 * @param editorModels The models for the editor
+		 * @throws ModelInstantiationException If the editor could not be instantiated
+		 */
 		public abstract void instantiateEditor(ModelSetInstance editorModels) throws ModelInstantiationException;
 
+		/** @param element The column editing to define */
 		protected ColumnEditType(ColumnEditing<R, C> element) {
 			super(element);
 		}
 
+		/**
+		 * A column editing strategy that modifies the editing row of the table with the edited column value
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <C> The value type of the column
+		 */
 		public static class RowModifyEditType<R, C> extends ColumnEditType<R, C> {
+			/** The XML name of this add-on */
 			public static final String MODIFY = "modify-row-value";
 
+			/** {@link RowModifyEditType} definition */
 			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 				qonfigType = MODIFY,
 				interpretation = Interpreted.class,
@@ -557,15 +754,21 @@ public interface QuickTableColumn<R, C> {
 				private CompiledExpression theCommit;
 				private boolean isRowUpdate;
 
+				/**
+				 * @param type The Qonfig type of this add-on
+				 * @param element The column editing to define
+				 */
 				public Def(QonfigAddOn type, QuickTableColumn.ColumnEditing.Def element) {
 					super(type, element);
 				}
 
+				/** @return The action that modifies the editing row with the edited column value */
 				@QonfigAttributeGetter("commit")
 				public CompiledExpression getCommit() {
 					return theCommit;
 				}
 
+				/** @return Whether to fire an update event on the edited row after an edit */
 				@QonfigAttributeGetter("row-update")
 				public boolean isRowUpdate() {
 					return isRowUpdate;
@@ -581,14 +784,24 @@ public interface QuickTableColumn<R, C> {
 
 				@Override
 				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
-					return new Interpreted<>(this, element);
+					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
 				}
 			}
 
+			/**
+			 * {@link RowModifyEditType} interpretation
+			 *
+			 * @param <R> The row type of the tabular widget
+			 * @param <C> The value type of the column
+			 */
 			public static class Interpreted<R, C> extends ColumnEditType.Interpreted<R, C, RowModifyEditType<R, C>> {
 				private InterpretedValueSynth<ObservableAction, ObservableAction> theCommit;
 
-				public Interpreted(Def definition, ExElement.Interpreted<?> element) {
+				/**
+				 * @param definition The definition to interpret
+				 * @param element The column editing to define
+				 */
+				protected Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
 					super(definition, element);
 				}
 
@@ -597,6 +810,7 @@ public interface QuickTableColumn<R, C> {
 					return (Def) super.getDefinition();
 				}
 
+				/** @return The action that modifies the editing row with the edited column value */
 				public InterpretedValueSynth<ObservableAction, ObservableAction> getCommit() {
 					return theCommit;
 				}
@@ -622,15 +836,18 @@ public interface QuickTableColumn<R, C> {
 			private SettableValue<ObservableAction> theCommit;
 			private boolean isRowUpdate;
 
-			public RowModifyEditType(ColumnEditing<R, C> element) {
+			/** @param element The column editing to define */
+			protected RowModifyEditType(ColumnEditing<R, C> element) {
 				super(element);
 				theCommit = SettableValue.build(TypeTokens.get().of(ObservableAction.class)).build();
 			}
 
+			/** @return Whether to fire an update event on the edited row after an edit */
 			public boolean isRowUpdate() {
 				return isRowUpdate;
 			}
 
+			/** @return The action that modifies the editing row with the edited column value */
 			public ObservableAction getCommit() {
 				return ObservableAction.flatten(theCommit);
 			}
@@ -665,9 +882,17 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		/**
+		 * A column editing strategy that replaces the editing row of the table using the edited column value
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <C> The value type of the column
+		 */
 		public static class RowReplaceEditType<R, C> extends ColumnEditType<R, C> {
+			/** The XML name of this add-on */
 			public static final String REPLACE = "replace-row-value";
 
+			/** {@link RowReplaceEditType} definition */
 			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 				qonfigType = REPLACE,
 				interpretation = Interpreted.class,
@@ -675,10 +900,15 @@ public interface QuickTableColumn<R, C> {
 			public static class Def extends ColumnEditType.Def<RowReplaceEditType<?, ?>> {
 				private CompiledExpression theReplacement;
 
+				/**
+				 * @param type The Qonfig type of this add-on
+				 * @param element The column editing to define
+				 */
 				public Def(QonfigAddOn type, ColumnEditing.Def element) {
 					super(type, element);
 				}
 
+				/** @return An expression that produces a new row value from the edited column value */
 				@QonfigAttributeGetter("replacement")
 				public CompiledExpression getReplacement() {
 					return theReplacement;
@@ -693,14 +923,24 @@ public interface QuickTableColumn<R, C> {
 
 				@Override
 				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
-					return new Interpreted<>(this, element);
+					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
 				}
 			}
 
+			/**
+			 * {@link RowReplaceEditType} interpretation
+			 *
+			 * @param <R> The row type of the tabular widget
+			 * @param <C> The value type of the column
+			 */
 			public static class Interpreted<R, C> extends ColumnEditType.Interpreted<R, C, RowReplaceEditType<R, C>> {
 				private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theReplacement;
 
-				public Interpreted(Def definition, ExElement.Interpreted<?> element) {
+				/**
+				 * @param definition The definition to interpret
+				 * @param element The column editing to define
+				 */
+				protected Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
 					super(definition, element);
 				}
 
@@ -709,6 +949,7 @@ public interface QuickTableColumn<R, C> {
 					return (Def) super.getDefinition();
 				}
 
+				/** @return An expression that produces a new row value from the edited column value */
 				public InterpretedValueSynth<SettableValue<?>, SettableValue<R>> getReplacement() {
 					return theReplacement;
 				}
@@ -734,7 +975,8 @@ public interface QuickTableColumn<R, C> {
 			private ModelValueInstantiator<SettableValue<R>> theReplacementInstantiator;
 			private SettableValue<SettableValue<R>> theReplacement;
 
-			public RowReplaceEditType(ColumnEditing<R, C> element) {
+			/** @param element The column editing to define */
+			protected RowReplaceEditType(ColumnEditing<R, C> element) {
 				super(element);
 				theReplacement = SettableValue.build(
 					TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(element.getParentElement().getRowType()))
@@ -746,6 +988,7 @@ public interface QuickTableColumn<R, C> {
 				return (Class<Interpreted<R, C>>) (Class<?>) Interpreted.class;
 			}
 
+			/** @return An expression that produces a new row value from the edited column value */
 			public SettableValue<R> getReplacement() {
 				return SettableValue.flatten(theReplacement);
 			}
@@ -775,9 +1018,17 @@ public interface QuickTableColumn<R, C> {
 		}
 	}
 
+	/**
+	 * The &lt;column> element, a single table column
+	 *
+	 * @param <R> The row type of the tabular widget
+	 * @param <C> The value type of the table
+	 */
 	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
+		/** The XML name of this element */
 		public static final String COLUMN = "column";
 
+		/** {@link SingleColumnSet} definition */
 		@ExMultiElementTraceable({
 			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 				qonfigType = COLUMN,
@@ -800,6 +1051,10 @@ public interface QuickTableColumn<R, C> {
 			private QuickWidget.Def<?> theRenderer;
 			private ColumnEditing.Def theEditing;
 
+			/**
+			 * @param parent The parent of the column
+			 * @param type The Qonfig type of the element
+			 */
 			public Def(ValueTyped.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -809,52 +1064,65 @@ public interface QuickTableColumn<R, C> {
 				return (ValueTyped.Def<?>) super.getParentElement();
 			}
 
+			/** @return The name of the column--the text for the column's header */
 			@QonfigAttributeGetter(asType = "column", value = "name")
 			public CompiledExpression getName() {
 				return theName;
 			}
 
+			/** @return The model ID of the variable by which the active column value will be available to expressions */
 			@QonfigAttributeGetter(asType = "column", value = "column-value-name")
 			public ModelComponentId getColumnValueVariable() {
 				return theColumnValueVariable;
 			}
 
+			/** @return The current value of this column */
 			@QonfigAttributeGetter(asType = "column", value = "value")
 			public CompiledExpression getValue() {
 				return theValue;
 			}
 
+			/** @return The tooltip for this column's header */
 			@QonfigAttributeGetter(asType = "column", value = "header-tooltip")
 			public CompiledExpression getHeaderTooltip() {
 				return theHeaderTooltip;
 			}
 
+			/** @return The minimum width of this column, in pixels */
 			@QonfigAttributeGetter(asType = "column", value = "min-width")
 			public Integer getMinWidth() {
 				return theMinWidth;
 			}
 
+			/** @return The preferred width of this column, in pixels */
 			@QonfigAttributeGetter(asType = "column", value = "pref-width")
 			public Integer getPrefWidth() {
 				return thePrefWidth;
 			}
 
+			/** @return The maximum width of this column, in pixels */
 			@QonfigAttributeGetter(asType = "column", value = "max-width")
 			public Integer getMaxWidth() {
 				return theMaxWidth;
 			}
 
+			/**
+			 * @return The width of this column, in pixels. Overrides {@link #getMinWidth() min}, {@link #getPrefWidth() preferred}, and
+			 *         {@link #getMaxWidth() max} widths
+			 */
 			@QonfigAttributeGetter(asType = "column", value = "width")
 			public Integer getWidth() {
 				return theWidth;
 			}
 
+			/** @return The renderer to represent the column value to the user when they are not interacting with it */
 			@QonfigChildGetter(asType = "rendering", value = "renderer")
 			@Override
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
 			}
 
+			/** @return The strategy for editing values in this column */
 			@QonfigChildGetter(asType = "column", value = "edit")
 			@Override
 			public ColumnEditing.Def getEditing() {
@@ -899,6 +1167,12 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		/**
+		 * {@link SingleColumnSet} interpretation
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <C> The value type of the table
+		 */
 		public static class Interpreted<R, C> extends QuickStyledElement.Interpreted.Abstract<SingleColumnSet<R, C>>
 		implements TableColumnSet.Interpreted<R, SingleColumnSet<R, C>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
@@ -907,7 +1181,11 @@ public interface QuickTableColumn<R, C> {
 			private QuickWidget.Interpreted<?> theRenderer;
 			private ColumnEditing.Interpreted<R, C> theEditing;
 
-			public Interpreted(SingleColumnSet.Def definition, ValueTyped.Interpreted<R, ?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element
+			 */
+			protected Interpreted(SingleColumnSet.Def definition, ValueTyped.Interpreted<R, ?> parent) {
 				super(definition, parent);
 				if (!(parent instanceof MultiValueWidget.Interpreted))
 					throw new IllegalStateException("The parent of a column must be a multi-value-widget");
@@ -923,23 +1201,28 @@ public interface QuickTableColumn<R, C> {
 				return (MultiValueWidget.Interpreted<R, ?>) super.getParentElement();
 			}
 
+			/** @return The name of the column--the text for the column's header */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName() {
 				return theName;
 			}
 
+			/** @return The current value of this column */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<C>> getValue() {
 				return theValue;
 			}
 
+			/** @return The tooltip for this column's header */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getHeaderTooltip() {
 				return theHeaderTooltip;
 			}
 
+			/** @return The renderer to represent the column value to the user when they are not interacting with it */
 			@Override
 			public QuickWidget.Interpreted<?> getRenderer() {
 				return theRenderer;
 			}
 
+			/** @return The strategy for editing values in this column */
 			@Override
 			public ColumnEditing.Interpreted<R, C> getEditing() {
 				return theEditing;
@@ -950,6 +1233,7 @@ public interface QuickTableColumn<R, C> {
 				return ((ValueTyped.Interpreted<R, ?>) getParentElement()).getValueType();
 			}
 
+			/** @return The value type of the column */
 			public TypeToken<C> getType() {
 				return (TypeToken<C>) theValue.getType().getType(0);
 			}
@@ -1013,7 +1297,8 @@ public interface QuickTableColumn<R, C> {
 
 		private Observable<? extends Causable> theRenderStyleChanges;
 
-		public SingleColumnSet(Object id) {
+		/** @param id The element ID for the column */
+		protected SingleColumnSet(Object id) {
 			super(id);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 				.build();
@@ -1025,10 +1310,12 @@ public interface QuickTableColumn<R, C> {
 			return (ValueTyped<R>) super.getParentElement();
 		}
 
+		/** @return The name of the column--the text for the column's header */
 		public SettableValue<String> getName() {
 			return SettableValue.flatten(theName);
 		}
 
+		/** @return The model ID of the variable by which the active column value will be available to expressions */
 		public ModelComponentId getColumnValueVariable() {
 			return theColumnValueVariable;
 		}
@@ -1043,18 +1330,22 @@ public interface QuickTableColumn<R, C> {
 			return theColumn;
 		}
 
+		/** @return The current value of this column */
 		public SettableValue<C> getValue() {
 			return SettableValue.flatten(theValue);
 		}
 
+		/** @return The tooltip for this column's header */
 		public SettableValue<String> getHeaderTooltip() {
 			return SettableValue.flatten(theHeaderTooltip);
 		}
 
+		/** @return The renderer to represent the column value to the user when they are not interacting with it */
 		public QuickWidget getRenderer() {
 			return theRenderer;
 		}
 
+		/** @return The strategy for editing values in this column */
 		public ColumnEditing<R, C> getEditing() {
 			return theEditing;
 		}
@@ -1133,7 +1424,8 @@ public interface QuickTableColumn<R, C> {
 			theHeaderTooltip.set(theHeaderTooltipInstantiator == null ? null : theHeaderTooltipInstantiator.get(myModels), null);
 
 			if (theRenderer != null) {
-				ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
+				// TODO
+				// ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
 				/* Create a copy of the renderer with table context values that don't change.
 				 * This will enable the table to be rendered when outside influences on the style change
 				 * without incurring the performance hit of all the style update eventing for every table cell rendered.
@@ -1180,6 +1472,7 @@ public interface QuickTableColumn<R, C> {
 			return copy;
 		}
 
+		/** The {@link QuickTableColumn column} of a {@link SingleColumnSet} */
 		public class SingleColumn implements QuickTableColumn<R, C> {
 			@Override
 			public TableColumnSet<R> getColumnSet() {
@@ -1242,7 +1535,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update() {}
+			public void update() {
+			}
 
 			@Override
 			public String toString() {
@@ -1250,8 +1544,15 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		/** Style for a {@link SingleColumnSet &lt;column>} */
 		public static class ColumnStyle extends QuickStyledElement.QuickInstanceStyle.Abstract {
+			/** {@link ColumnStyle} definition */
 			public static class Def extends QuickInstanceStyle.Def.Abstract {
+				/**
+				 * @param parent The parent Quick style to inherit from
+				 * @param styledElement The column element to style
+				 * @param wrapped The compiled style to wrap
+				 */
 				public Def(QuickInstanceStyle.Def parent, SingleColumnSet.Def styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
 				}
@@ -1264,7 +1565,14 @@ public interface QuickTableColumn<R, C> {
 				}
 			}
 
+			/** {@link ColumnStyle} interpretation */
 			public static class Interpreted extends QuickInstanceStyle.Interpreted.Abstract {
+				/**
+				 * @param compiled The definition to interpret
+				 * @param styledElement The column element to style
+				 * @param parent The parent style to inherit from
+				 * @param wrapped The interpreted style to wrap
+				 */
 				public Interpreted(Def compiled, SingleColumnSet.Interpreted<?, ?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(compiled, styledElement, parent, wrapped);

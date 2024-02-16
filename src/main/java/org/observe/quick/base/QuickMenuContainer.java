@@ -11,9 +11,12 @@ import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A container that may have a menu bar along the top */
 public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
+	/** The XML name of this add-on */
 	public static final String MENU_CONTAINER = "menu-container";
 
+	/** {@link QuickMenuContainer} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = MENU_CONTAINER,
 		interpretation = Interpreted.class,
@@ -21,10 +24,15 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, QuickMenuContainer> {
 		private QuickMenuBar.Def theMenuBar;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The container
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
+		/** @return The menu bar to display above the container */
 		@QonfigChildGetter("menu-bar")
 		public QuickMenuBar.Def getMenuBar() {
 			return theMenuBar;
@@ -50,10 +58,15 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
+	/** {@link QuickMenuContainer} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, QuickMenuContainer> {
 		private QuickMenuBar.Interpreted theMenuBar;
 
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The container
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
@@ -62,6 +75,7 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The menu bar to display above the container */
 		public QuickMenuBar.Interpreted getMenuBar() {
 			return theMenuBar;
 		}
@@ -87,10 +101,12 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 
 	private QuickMenuBar theMenuBar;
 
-	public QuickMenuContainer(ExElement element) {
+	/** @param element The container */
+	protected QuickMenuContainer(ExElement element) {
 		super(element);
 	}
 
+	/** @return The menu bar to display above the container */
 	public QuickMenuBar getMenuBar() {
 		return theMenuBar;
 	}

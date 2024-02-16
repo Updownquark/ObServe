@@ -28,9 +28,16 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A tree model for dynamic document structures--each node has a dynamic number of children
+ *
+ * @param <N> The type of nodes in the tree
+ */
 public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel<N> {
+	/** The XML name of this element */
 	public static final String DYNAMIC_TREE_MODEL = "dynamic-tree-model";
 
+	/** {@link DynamicTreeModel} definition */
 	@ExMultiElementTraceable({ //
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = DYNAMIC_TREE_MODEL,
@@ -45,20 +52,27 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		private CompiledExpression theChildren;
 		private CompiledExpression isLeaf;
 
+		/**
+		 * @param parent The parent for this element
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The root node of the tree model */
 		@QonfigAttributeGetter(asType = TreeModel.TREE_MODEL, value = "value")
 		public CompiledExpression getRoot() {
 			return theRoot;
 		}
 
+		/** @return An expression to generate children for a node */
 		@QonfigAttributeGetter(asType = DYNAMIC_TREE_MODEL, value = "children")
 		public CompiledExpression getChildren() {
 			return theChildren;
 		}
 
+		/** @return Whether a node is a leaf node */
 		@QonfigAttributeGetter(asType = DYNAMIC_TREE_MODEL, value = "leaf")
 		public CompiledExpression isLeaf() {
 			return isLeaf;
@@ -78,6 +92,11 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 	}
 
+	/**
+	 * {@link DynamicTreeModel} interpretation
+	 *
+	 * @param <N> The type of nodes in the tree
+	 */
 	public static class Interpreted<N> extends TreeModel.Interpreted.Abstract<N, DynamicTreeModel<N>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theRoot;
 		private InterpretedValueSynth<ObservableCollection<?>, ? extends ObservableCollection<? extends N>> theChildren;
@@ -93,14 +112,17 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The root node of the tree model */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<N>> getRoot() {
 			return theRoot;
 		}
 
+		/** @return An expression to generate children for a node */
 		public InterpretedValueSynth<ObservableCollection<?>, ? extends ObservableCollection<? extends N>> getChildren() {
 			return theChildren;
 		}
 
+		/** @return Whether a node is a leaf node */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isLeaf() {
 			return isLeaf;
 		}
@@ -117,6 +139,11 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 			return theNodeType;
 		}
 
+		/**
+		 * @param env The expresso environment to use to interpret expressions
+		 * @return The type of tree paths for the tree
+		 * @throws ExpressoInterpretationException If the path type could not be interpreted
+		 */
 		public TypeToken<BetterList<N>> getPathType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType(env));
 		}
@@ -156,7 +183,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	private SettableValue<N> theActiveNodeValue;
 	private SettableValue<BetterList<N>> theActivePathValue;
 
-	public DynamicTreeModel(Object id) {
+	DynamicTreeModel(Object id) {
 		super(id);
 	}
 

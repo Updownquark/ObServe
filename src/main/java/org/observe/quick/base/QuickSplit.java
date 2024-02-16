@@ -19,9 +19,19 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A container with exactly two content widgets, laying them out side-by-side or one above another, separated by a bar that the user may
+ * drag to change the amount of size allocated to each
+ */
 public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
+	/** The XML name of this element */
 	public static final String SPLIT = "split";
 
+	/**
+	 * {@link QuickSplit} definition
+	 *
+	 * @param <S> The sub-type of split pane to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SPLIT,
 		interpretation = Interpreted.class,
@@ -30,15 +40,21 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether the split pane arranges its content on top of each other or side-by-side */
 		@QonfigAttributeGetter("orientation")
 		public boolean isVertical() {
 			return isVertical;
 		}
 
+		/** @return The position of the split between the components, a {@link QuickSize} */
 		@QonfigAttributeGetter("split-position")
 		public CompiledExpression getSplitPosition() {
 			return theSplitPosition;
@@ -70,10 +86,19 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/**
+	 * {@link QuickSplit} interpretation
+	 *
+	 * @param <S> The sub-type of split pane to create
+	 */
 	public static class Interpreted<S extends QuickSplit> extends QuickContainer.Interpreted.Abstract<S, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theSplitPosition;
 
-		public Interpreted(Def<? super S> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super S> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -82,6 +107,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 			return (Def<? super S>) super.getDefinition();
 		}
 
+		/** @return The position of the split between the components */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> getSplitPosition() {
 			return theSplitPosition;
 		}
@@ -102,20 +128,24 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	private ModelValueInstantiator<SettableValue<QuickSize>> theSplitPositionInstantiator;
 	private SettableValue<SettableValue<QuickSize>> theSplitPosition;
 
-	public QuickSplit(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickSplit(Object id) {
 		super(id);
 		theSplitPosition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 	}
 
+	/** @return Whether the split pane arranges its content on top of each other or side-by-side */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return The position of the split between the components */
 	public SettableValue<QuickSize> getSplitPosition() {
 		return SettableValue.flatten(theSplitPosition);
 	}
 
+	/** @return Whether a {@link #getSplitPosition() split-position} is configured for this splitpane */
 	public boolean isSplitPositionSet() {
 		return theSplitPosition.get() != null;
 	}

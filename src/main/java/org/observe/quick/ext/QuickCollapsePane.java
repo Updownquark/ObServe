@@ -23,9 +23,15 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A container with a single content widget. A header is displayed above the content, and when the header is clicked, the content will be
+ * hidden or made visible.
+ */
 public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
+	/** The XML name of this element */
 	public static final String COLLAPSE_PANE = "collapse-pane";
 
+	/** {@link QuickCollapsePane} definition */
 	@ExElementTraceable(toolkit = QuickXInterpretation.X,
 		qonfigType = COLLAPSE_PANE,
 		interpretation = Interpreted.class,
@@ -36,25 +42,33 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 		private QuickWidget.Def<?> theHeader;
 		private ModelComponentId theCollapsedVariable;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether the content is currently hidden */
 		@QonfigAttributeGetter("collapsed")
 		public CompiledExpression isCollapsed() {
 			return isCollapsed;
 		}
 
+		/** @return Whether to animate the collapse/expand actions, or just make them happen instantaneously */
 		@QonfigAttributeGetter("animated")
 		public boolean isAnimated() {
 			return isAnimated;
 		}
 
+		/** @return The header to represent the content and allow the user to toggle its collapsed state */
 		@QonfigChildGetter("header")
 		public QuickWidget.Def<?> getHeader() {
 			return theHeader;
 		}
 
+		/** @return The model ID of the variable containing the collapsed state of the widget */
 		public ModelComponentId getCollapsedVariable() {
 			return theCollapsedVariable;
 		}
@@ -77,11 +91,16 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/** {@link QuickCollapsePane} interpretation */
 	public static class Interpreted extends QuickContainer.Interpreted.Abstract<QuickCollapsePane, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isCollapsed;
 		private QuickWidget.Interpreted<?> theHeader;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -90,10 +109,12 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return Whether the content is currently hidden */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isCollapsed() {
 			return isCollapsed;
 		}
 
+		/** @return The header to represent the content and allow the user to toggle its collapsed state */
 		public QuickWidget.Interpreted<?> getHeader() {
 			return theHeader;
 		}
@@ -118,20 +139,24 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	private boolean isAnimated;
 	private QuickWidget theHeader;
 
-	public QuickCollapsePane(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickCollapsePane(Object id) {
 		super(id);
 		isCollapsed = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 	}
 
+	/** @return Whether the content is currently hidden */
 	public SettableValue<Boolean> isCollapsed() {
 		return SettableValue.flatten(isCollapsed);
 	}
 
+	/** @return The header to represent the content and allow the user to toggle its collapsed state */
 	public QuickWidget getHeader() {
 		return theHeader;
 	}
 
+	/** @return Whether to animate the collapse/expand actions, or just make them happen instantaneously */
 	public boolean isAnimated() {
 		return isAnimated;
 	}

@@ -18,9 +18,16 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** Simple widget that performs an action when clicked */
 public class QuickButton extends QuickWidget.Abstract {
+	/** The XML name of this element */
 	public static final String BUTTON = "button";
 
+	/**
+	 * {@link QuickButton} definition
+	 *
+	 * @param <B> The sub-type of button to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = BUTTON,
 		interpretation = Interpreted.class,
@@ -29,15 +36,21 @@ public class QuickButton extends QuickWidget.Abstract {
 		private CompiledExpression theText;
 		private CompiledExpression theAction;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The text to display for the button */
 		@QonfigAttributeGetter
 		public CompiledExpression getText() {
 			return theText;
 		}
 
+		/** @return The action to perform when clicked */
 		@QonfigAttributeGetter("action")
 		public CompiledExpression getAction() {
 			return theAction;
@@ -56,11 +69,20 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 	}
 
+	/**
+	 * {@link QuickButton} interpretation
+	 *
+	 * @param <B> The sub-type of button to create
+	 */
 	public static class Interpreted<B extends QuickButton> extends QuickWidget.Interpreted.Abstract<B> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
-		public Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -69,10 +91,12 @@ public class QuickButton extends QuickWidget.Abstract {
 			return (Def<? super B>) super.getDefinition();
 		}
 
+		/** @return The text to display for the button */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
 			return theText;
 		}
 
+		/** @return The action to perform when clicked */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 			return theAction;
 		}
@@ -96,14 +120,17 @@ public class QuickButton extends QuickWidget.Abstract {
 	private SettableValue<String> theText;
 	private ObservableAction theAction;
 
-	public QuickButton(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickButton(Object id) {
 		super(id);
 	}
 
+	/** @return The text to display for the button */
 	public SettableValue<String> getText() {
 		return theText;
 	}
 
+	/** @return The action to perform when clicked */
 	public ObservableAction getAction() {
 		return theAction;
 	}

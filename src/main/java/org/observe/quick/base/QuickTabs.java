@@ -44,12 +44,22 @@ import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A container that displays a row of tabs at the top, each tab representing one of its content widgets. The widget represented by the
+ * selected tab is displayed, all others are hidden.
+ *
+ * @param <T> The type of the ID values of the tabs
+ */
 public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
+	/** The XML name of this element */
 	public static final String TABS = "tabs";
 
+	/** An add-on inherited by tabs in a {@link QuickTabs} pane */
 	public static class AbstractTab extends ExAddOn.Abstract<ExElement> {
+		/** The XML name of this add-on */
 		public static final String ABSTRACT_TAB = "abstract-tab";
 
+		/** {@link AbstractTab} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = "abstract-tab",
 			interpretation = Interpreted.class,
@@ -60,25 +70,33 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			private CompiledExpression theOnSelect;
 			private ModelComponentId isTabSelectedVariable;
 
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The tab element
+			 */
 			public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 				super(type, element);
 			}
 
+			/** @return The name of the tab to display */
 			@QonfigAttributeGetter("tab-name")
 			public CompiledExpression getTabName() {
 				return theTabName;
 			}
 
+			/** @return The icon to display in the tab */
 			@QonfigAttributeGetter("tab-icon")
 			public CompiledExpression getTabIcon() {
 				return theTabIcon;
 			}
 
+			/** @return An action to execute when the tab becomes the active tab */
 			@QonfigAttributeGetter("on-select")
 			public CompiledExpression getOnSelect() {
 				return theOnSelect;
 			}
 
+			/** @return The model ID of the variable by which the selected status of the current tab will be available to expressions */
 			public ModelComponentId getTabSelectedVariable() {
 				return isTabSelectedVariable;
 			}
@@ -103,13 +121,18 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 		}
 
+		/** {@link AbstractTab} interpretation */
 		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, AbstractTab> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTabName;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theTabIcon;
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theSelectOn;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 
-			public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param element The tab element
+			 */
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 				super(definition, element);
 			}
 
@@ -118,18 +141,22 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return The name of the tab to display */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTabName() {
 				return theTabName;
 			}
 
+			/** @return The icon to display in the tab */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getTabIcon() {
 				return theTabIcon;
 			}
 
+			/** @return An event that will cause this tab to be become the active tab */
 			public InterpretedValueSynth<Observable<?>, Observable<?>> getSelectOn() {
 				return theSelectOn;
 			}
 
+			/** @return An action to execute when the tab becomes the active tab */
 			public InterpretedValueSynth<ObservableAction, ObservableAction> getOnSelect() {
 				return theOnSelect;
 			}
@@ -165,7 +192,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		private ObservableAction theOnSelect;
 		private SettableValue<Boolean> isTabSelected;
 
-		public AbstractTab(ExElement element) {
+		/** @param element The tab element */
+		protected AbstractTab(ExElement element) {
 			super(element);
 
 			theTabName = SettableValue
@@ -180,23 +208,32 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return Interpreted.class;
 		}
 
+		/** @return The name of the tab to display */
 		public SettableValue<String> getTabName() {
 			return SettableValue.flatten(theTabName);
 		}
 
+		/** @return The icon to display in the tab */
 		public SettableValue<Image> getTabIcon() {
 			return SettableValue.flatten(theTabIcon);
 		}
 
+		/**
+		 * Called when the tab becomes the active tab
+		 *
+		 * @param cause The cause of the selection
+		 */
 		public void onSelect(Object cause) {
 			if (theOnSelect != null)
 				theOnSelect.act(cause);
 		}
 
+		/** @return Whether this tab is currently selected */
 		public SettableValue<Boolean> isTabSelected() {
 			return isTabSelected;
 		}
 
+		/** @return The model ID of the variable by which the selected status of the current tab will be available to expressions */
 		public ModelComponentId getTabSelectedVariable() {
 			return isTabSelectedVariable;
 		}
@@ -244,9 +281,16 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/**
+	 * An add-on automatically inherited by content components in a {@link QuickTabs} pane
+	 *
+	 * @param <T> The type of the ID value of the tab
+	 */
 	public static class Tab<T> extends ExAddOn.Abstract<QuickWidget> {
+		/** The XML name of this add-on */
 		public static final String TAB = "tab";
 
+		/** {@link Tab} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = "tab",
 			interpretation = Interpreted.class,
@@ -254,10 +298,15 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		public static class Def extends ExAddOn.Def.Abstract<QuickWidget, Tab<?>> {
 			private CompiledExpression theTabId;
 
+			/**
+			 * @param type The Qonfig type of this add-on
+			 * @param element The tab widget
+			 */
 			public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 				super(type, element);
 			}
 
+			/** @return The ID for the tab */
 			@QonfigAttributeGetter("tab-id")
 			public CompiledExpression getTabId() {
 				return theTabId;
@@ -276,10 +325,19 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 		}
 
+		/**
+		 * {@link Tab} interpretation
+		 *
+		 * @param <T> The type of the ID value of the tab
+		 */
 		public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<QuickWidget, Tab<T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theTabId;
 
-			public Interpreted(Def definition, ExElement.Interpreted<?> element) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param element The tab widget
+			 */
+			protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -288,6 +346,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return The ID for the tab */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getTabId() {
 				return theTabId;
 			}
@@ -312,7 +371,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		private ModelValueInstantiator<SettableValue<T>> theTabIdInstantiator;
 		private SettableValue<T> theTabId;
 
-		public Tab(QuickWidget element) {
+		/** @param element The tab widget */
+		protected Tab(QuickWidget element) {
 			super(element);
 		}
 
@@ -321,6 +381,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return (Class<Interpreted<T>>) (Class<?>) Interpreted.class;
 		}
 
+		/** @return The ID for the tab */
 		public SettableValue<T> getTabId() {
 			return theTabId;
 		}
@@ -352,9 +413,16 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/**
+	 * Represents a set of tabs for each value in a collection
+	 *
+	 * @param <T> The type of values in the collection
+	 */
 	public static class TabSet<T> extends ExElement.Abstract implements TabSource<T> {
+		/** The XML name of this element */
 		public static final String TAB_SET = "tab-set";
 
+		/** {@link TabSet} definition */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = "tab-set",
 			interpretation = Interpreted.class,
@@ -364,19 +432,26 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			private ModelComponentId theTabIdVariable;
 			private QuickWidget.Def<?> theRenderer;
 
+			/**
+			 * @param parent The parent element of the tab set
+			 * @param qonfigType The Qonfig type of the tab set
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 			}
 
+			/** @return The collection whose values to represent with tabs in a {@link QuickTabs} pane */
 			@QonfigAttributeGetter("values")
 			public CompiledExpression getValues() {
 				return theValues;
 			}
 
+			/** @return The model ID of the variable by which the value to render will be available in expressions */
 			public ModelComponentId getTabIdVariable() {
 				return theTabIdVariable;
 			}
 
+			/** @return The widget to show as the content for each value in the collection */
 			@QonfigChildGetter("renderer")
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
@@ -395,16 +470,29 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				theRenderer = syncChild(QuickWidget.Def.class, theRenderer, session, "renderer");
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted tab set
+			 * @return The interpreted tab set
+			 */
 			public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
 		}
 
+		/**
+		 * {@link TabSet} interpretation
+		 *
+		 * @param <T> The type of values in the collection
+		 */
 		public static class Interpreted<T> extends ExElement.Interpreted.Abstract<TabSet<T>> {
 			private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 			private QuickWidget.Interpreted<?> theRenderer;
 
-			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for the tab set
+			 */
+			protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -413,14 +501,22 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return The collection whose values to represent with tabs in a {@link QuickTabs} pane */
 			public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValues() {
 				return theValues;
 			}
 
+			/** @return The widget to show as the content for each value in the collection */
 			public QuickWidget.Interpreted<?> getRenderer() {
 				return theRenderer;
 			}
 
+			/**
+			 * Initializes or updates this tab set
+			 *
+			 * @param env The expresso environment to use to interpret expressions
+			 * @throws ExpressoInterpretationException If this tab set could not be interpreted
+			 */
 			public void updateTabSet(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
 			}
@@ -433,10 +529,12 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 					(r, rEnv) -> r.updateElement(rEnv));
 			}
 
+			/** @return The type of values in the collection */
 			public TypeToken<T> getTabIdType() {
 				return (TypeToken<T>) theValues.getType().getType(0);
 			}
 
+			/** @return The tab set */
 			public TabSet<T> create() {
 				return new TabSet<>(getIdentity());
 			}
@@ -450,7 +548,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		private QuickWidget theRenderer;
 		private int theInstantiatedModel;
 
-		public TabSet(Object id) {
+		/** @param id The element ID for this tab set */
+		protected TabSet(Object id) {
 			super(id);
 			theValues = SettableValue.build((Class<ObservableCollection<T>>) (Class<?>) ObservableCollection.class).build();
 			theTabInstances = getValues().flow()//
@@ -477,6 +576,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return reporting().getPosition();
 		}
 
+		/** @return The collection whose values to represent with tabs in a {@link QuickTabs} pane */
 		public ObservableCollection<T> getValues() {
 			return ObservableCollection.flattenValue(theValues);
 		}
@@ -486,6 +586,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return theTabInstances;
 		}
 
+		/** @return The widget to show as the content for each value in the collection */
 		@QonfigChildGetter("renderer")
 		public QuickWidget getRenderer() {
 			return theRenderer;
@@ -645,6 +746,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/** {@link QuickTabs} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = "tabs",
 		interpretation = Interpreted.class,
@@ -654,21 +756,28 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		private final List<TabSet.Def> theTabSets;
 		private ModelComponentId theSelectedTabVariable;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 			theTabSets = new ArrayList<>();
 		}
 
+		/** @return The identity of the selected tab */
 		@QonfigAttributeGetter("selected")
 		public CompiledExpression getSelectedTab() {
 			return theSelectedTab;
 		}
 
+		/** @return All the &lt;tab-set>s in the tab pane */
 		@QonfigChildGetter("tab-set")
 		public List<TabSet.Def> getTabSets() {
 			return Collections.unmodifiableList(theTabSets);
 		}
 
+		/** @return The model ID of the variable by which the ID of the current tab will be available in expressions */
 		public ModelComponentId getSelectedTabVariable() {
 			return theSelectedTabVariable;
 		}
@@ -691,12 +800,21 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/**
+	 * {@link QuickTabs} interpretation
+	 *
+	 * @param <T> The type of the ID values of the tabs
+	 */
 	public static class Interpreted<T> extends QuickContainer.Interpreted.Abstract<QuickTabs<T>, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectedTab;
 		private final List<TabSet.Interpreted<? extends T>> theTabSets;
 		private TypeToken<T> theTabIdType;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theTabSets = new ArrayList<>();
 		}
@@ -706,14 +824,17 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The type of the ID values of the tabs */
 		public TypeToken<T> getTabIdType() {
 			return theTabIdType;
 		}
 
+		/** @return The identity of the selected tab */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectedTab() {
 			return theSelectedTab;
 		}
 
+		/** @return All the &lt;tab-set>s in the tab pane */
 		public List<TabSet.Interpreted<? extends T>> getTabSets() {
 			return Collections.unmodifiableList(theTabSets);
 		}
@@ -749,7 +870,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	private ObservableCollection<TabInstance<? extends T>> theTabs;
 	private ModelComponentId theSelectedTabVariable;
 
-	public QuickTabs(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTabs(Object id) {
 		super(id);
 		createTabData();
 	}
@@ -781,14 +903,17 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/** @return All the &lt;tab-set>s in the tab pane */
 	public ObservableCollection<TabSet<? extends T>> getTabSets() {
 		return theTabSets;
 	}
 
+	/** @return The tabs in this tab pane */
 	public ObservableCollection<TabInstance<? extends T>> getTabs() {
 		return theTabs;
 	}
 
+	/** @return The identity of the selected tab */
 	public SettableValue<T> getSelectedTab() {
 		return SettableValue.flatten(theSelectedTab);
 	}
@@ -936,23 +1061,42 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	/**
+	 * Represents a tab in a {@link QuickTabs} pane from any source, either specified as an inline child widget, or represented by a value
+	 * in a {@link TabSet}
+	 *
+	 * @param <T> The type of the ID value of the tab
+	 */
 	public static interface TabInstance<T> {
+		/** @return The ID value of the tab */
 		T getTabValue();
 
+		/** @return The widget to render the tab's content */
 		QuickWidget getRenderer();
 
+		/** @return The name of the tab to represent in the tab */
 		ObservableValue<String> getTabName();
 
+		/** @return The icon to show in the tab */
 		ObservableValue<Image> getTabIcon();
 
+		/** @return Whether the tab can be removed by clicking an X in the tab */
 		ObservableValue<Boolean> isRemovable();
 
+		/**
+		 * Called when the tab is removed
+		 *
+		 * @see #isRemovable()
+		 */
 		void onRemove();
 
+		/** Called when the tab becomes the active tab */
 		void onSelect();
 
+		/** Called when the tab was the active tab but is no longer */
 		void deSelect();
 
+		/** @param listener A listener to be {@link Runnable#run() run} when the tab is selected */
 		void setSelectListener(Runnable listener);
 	}
 }

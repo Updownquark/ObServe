@@ -32,20 +32,31 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget displaying a hierarchical set of values
+ *
+ * @param <N> The type of each node in the tree
+ */
 public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidget<BetterList<N>> {
+	/** The XML name of this element */
 	public static final String TREE = "tree";
 
+	/**
+	 * {@link QuickTree} definition
+	 *
+	 * @param <T> The sub-type of tree to create
+	 */
 	@ExMultiElementTraceable({ //
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TREE,
 			interpretation = Interpreted.class,
 			instance = QuickTree.class),
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = "multi-value-widget",
+		qonfigType = MULTI_VALUE_WIDGET,
 		interpretation = Interpreted.class,
 		instance = QuickTree.class),
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = "multi-value-renderable",
+		qonfigType = MULTI_VALUE_RENDERABLE,
 		interpretation = Interpreted.class,
 		instance = QuickTree.class) })
 	public static class Def<T extends QuickTree<?>> extends QuickWidget.Def.Abstract<T> implements MultiValueWidget.Def<T> {
@@ -58,66 +69,78 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private CompiledExpression thePathMultiSelection;
 		private CompiledExpression theNodeSelection;
 		private CompiledExpression theNodeMultiSelection;
-		private final List<ValueAction.Def<?, ?>> theActions;
+		private final List<ValueAction.Def<?>> theActions;
 		private boolean isRootVisible;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 			theActions = new ArrayList<>();
 		}
 
-		@QonfigChildGetter(asType = "tree", value = "tree-model")
+		/** @return The data model for the tree */
+		@QonfigChildGetter(asType = TREE, value = "tree-model")
 		public TreeModel.Def<?> getModel() {
 			return theModel;
 		}
 
-		@QonfigChildGetter(asType = "tree", value = "tree-column")
+		/** @return The tree column to render and handle interactions with values in the tree */
+		@QonfigChildGetter(asType = TREE, value = "tree-column")
 		public QuickTableColumn.SingleColumnSet.Def getTreeColumn() {
 			return theTreeColumn;
 		}
 
-		@QonfigAttributeGetter(asType = "multi-value-renderable", value = "active-value-name")
+		@QonfigAttributeGetter(asType = MULTI_VALUE_RENDERABLE, value = "active-value-name")
 		@Override
 		public ModelComponentId getActiveValueVariable() {
 			return theActiveValueVariable;
 		}
 
-		@QonfigAttributeGetter(asType = "tree", value = "active-node-name")
+		/** @return The model ID of the variable containing the value of the active tree node (e.g. the one being rendered) */
+		@QonfigAttributeGetter(asType = TREE, value = "active-node-name")
 		public ModelComponentId getNodeVariable() {
 			return theNodeVariable;
 		}
 
+		/** @return The model ID of the variable containing the selected state of the active tree node */
 		public ModelComponentId getSelectedVariable() {
 			return theSelectedVariable;
 		}
 
-		@QonfigAttributeGetter(asType = "multi-value-widget", value = "selection")
+		@QonfigAttributeGetter(asType = MULTI_VALUE_WIDGET, value = "selection")
 		@Override
 		public CompiledExpression getSelection() {
 			return thePathSelection;
 		}
 
-		@QonfigAttributeGetter(asType = "multi-value-widget", value = "multi-selection")
+		@QonfigAttributeGetter(asType = MULTI_VALUE_WIDGET, value = "multi-selection")
 		@Override
 		public CompiledExpression getMultiSelection() {
 			return thePathMultiSelection;
 		}
 
-		@QonfigAttributeGetter(asType = "tree", value = "node-selection")
+		/** @return The value of the selected node */
+		@QonfigAttributeGetter(asType = TREE, value = "node-selection")
 		public CompiledExpression getNodeSelection() {
 			return theNodeSelection;
 		}
 
-		@QonfigAttributeGetter(asType = "tree", value = "node-multi-selection")
+		/** @return The values of the selected nodes */
+		@QonfigAttributeGetter(asType = TREE, value = "node-multi-selection")
 		public CompiledExpression getNodeMultiSelection() {
 			return theNodeMultiSelection;
 		}
 
+		/** @return The set of actions that may be executed against the values of nodes in the tree */
 		@QonfigChildGetter(asType = TREE, value = "action")
-		public List<ValueAction.Def<?, ?>> getActions() {
+		public List<ValueAction.Def<?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
 
+		/** @return Whether the root node should be visible to the user */
 		@QonfigAttributeGetter(asType = TREE, value = "root-visible")
 		public boolean isRootVisible() {
 			return isRootVisible;
@@ -131,7 +154,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theActiveValueVariable = elModels.getElementValueModelId(valueName);
 			String nodeName = session.getAttributeText("active-node-name");
 			theNodeVariable = elModels.getElementValueModelId(nodeName);
-			theModel = syncChild(TreeModel.Def.class, theModel, session, "tree-model", (m, mEnv) -> m.update(mEnv, valueName, nodeName));
+			theModel = syncChild(TreeModel.Def.class, theModel, session, TreeModel.TREE_MODEL,
+				(m, mEnv) -> m.update(mEnv, valueName, nodeName));
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theTreeColumn = syncChild(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
 			thePathSelection = getAttributeExpression("selection", session);
@@ -151,6 +175,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 	}
 
+	/**
+	 * {@link QuickTree} interpretation
+	 *
+	 * @param <N> The type of each node in the tree
+	 * @param <T> The sub-type of tree to create
+	 */
 	public static class Interpreted<N, T extends QuickTree<N>> extends QuickWidget.Interpreted.Abstract<T>
 	implements MultiValueWidget.Interpreted<BetterList<N>, T> {
 		private TreeModel.Interpreted<N, ?> theModel;
@@ -162,6 +192,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> theNodeMultiSelection;
 		private final List<ValueAction.Interpreted<BetterList<N>, ?>> theActions;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
 		protected Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			persistModelInstances(true);
@@ -173,6 +207,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return (Def<? super T>) super.getDefinition();
 		}
 
+		/** @return The data model for the tree */
 		public TreeModel.Interpreted<N, ?> getModel() {
 			return theModel;
 		}
@@ -187,10 +222,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return thePathMultiSelection;
 		}
 
+		/** @return The value of the selected node */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<N>> getNodeSelection() {
 			return theNodeSelection;
 		}
 
+		/** @return The values of the selected nodes */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> getNodeMultiSelection() {
 			return theNodeMultiSelection;
 		}
@@ -200,20 +237,30 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
 		}
 
+		/**
+		 * @return The type of each node in the tree
+		 * @throws ExpressoInterpretationException If the node type could not be interpreted
+		 */
 		public TypeToken<N> getNodeType() throws ExpressoInterpretationException {
 			if (theNodeType == null)
 				theNodeType = (TypeToken<N>) theModel.getNodeType(getExpressoEnv());
 			return theNodeType;
 		}
 
+		/**
+		 * @return The type of node paths in the tree
+		 * @throws ExpressoInterpretationException If the node type could not be interpreted
+		 */
 		public TypeToken<BetterList<N>> getPathType() throws ExpressoInterpretationException {
 			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
 		}
 
+		/** @return The tree column to render and handle interactions with values in the tree */
 		public QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> getTreeColumn() {
 			return theTreeColumn;
 		}
 
+		/** @return The set of actions that may be executed against the values of nodes in the tree */
 		public List<ValueAction.Interpreted<BetterList<N>, ?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
@@ -243,8 +290,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeMultiSelection = interpret(getDefinition().getNodeMultiSelection(), ModelTypes.Collection.forType(nodeType));
 
 			syncChildren(getDefinition().getActions(), theActions,
-				def -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<BetterList<N>, ?>) def).interpret(this,
-					getValueType()),
+				def -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType()),
 				ValueAction.Interpreted::updateAction);
 		}
 
@@ -275,16 +321,19 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
 
+	/** @param id The element ID for this widget */
 	protected QuickTree(Object id) {
 		super(id);
 		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
 	}
 
+	/** @return The data model for the tree */
 	public TreeModel<N> getModel() {
 		return theModel;
 	}
 
+	/** @return The type of each node in the tree */
 	public TypeToken<N> getNodeType() {
 		return theNodeType;
 	}
@@ -315,22 +364,27 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return ObservableCollection.flattenValue(thePathMultiSelection);
 	}
 
+	/** @return The value of the selected node */
 	public SettableValue<N> getNodeSelection() {
 		return SettableValue.flatten(theNodeSelection);
 	}
 
+	/** @return The values of the selected nodes */
 	public ObservableCollection<N> getNodeMultiSelection() {
 		return ObservableCollection.flattenValue(theNodeMultiSelection);
 	}
 
+	/** @return The tree column to render and handle interactions with values in the tree */
 	public QuickTableColumn.SingleColumnSet<BetterList<N>, N> getTreeColumn() {
 		return theTreeColumn;
 	}
 
+	/** @return Whether the root node should be visible to the user */
 	public boolean isRootVisible() {
 		return isRootVisible;
 	}
 
+	/** @return The set of actions that may be executed against the values of nodes in the tree */
 	public ObservableCollection<ValueAction<BetterList<N>>> getActions() {
 		return theActions.flow().unmodifiable(false).collect();
 	}

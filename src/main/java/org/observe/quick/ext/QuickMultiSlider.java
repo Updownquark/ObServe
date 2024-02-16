@@ -41,12 +41,18 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A slide with multiple thumbs and a great deal of control over rendering */
 public class QuickMultiSlider extends QuickWidget.Abstract {
+	/** The XML name of this element */
 	public static final String MULTI_SLIDER = "multi-slider";
+	/** The XML name of the &lt;slider-handle-renderer> element */
 	public static final String SLIDER_HANDLE_RENDERER = "slider-handle-renderer";
+	/** The XML name of the &lt;slider-bg-renderer> element */
 	public static final String SLIDER_BG_RENDERER = "slider-bg-renderer";
 
+	/** Renders a handle for a {@link QuickMultiSlider} */
 	public static class SliderHandleRenderer extends QuickWithBackground.Abstract {
+		/** {@link SliderHandleRenderer} definition */
 		@ExElementTraceable(toolkit = QuickXInterpretation.X,
 			qonfigType = SLIDER_HANDLE_RENDERER,
 			interpretation = Interpreted.class,
@@ -56,18 +62,25 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			private ModelComponentId theHandleIndexVariable;
 			private CompiledExpression theTooltip;
 
+			/**
+			 * @param parent The parent element of the renderer
+			 * @param type The Qonfig type of the renderer
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/** @return The model ID of the variable containing the value of the handle being rendered */
 			public ModelComponentId getHandleValueVariable() {
 				return theHandleValueVariable;
 			}
 
+			/** @return The model ID of the variable containing the index of the handle being rendered */
 			public ModelComponentId getHandleIndexVariable() {
 				return theHandleIndexVariable;
 			}
 
+			/** @return The tooltip to display for the handle */
 			@QonfigAttributeGetter("tooltip")
 			public CompiledExpression getTooltip() {
 				return theTooltip;
@@ -93,15 +106,24 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				theTooltip = getAttributeExpression("tooltip", session);
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted renderer
+			 * @return The interpretedrenderer
+			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
+		/** {@link SliderHandleRenderer} interpretation */
 		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<SliderHandleRenderer> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 
-			Interpreted(SliderHandleRenderer.Def definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for the renderer
+			 */
+			protected Interpreted(SliderHandleRenderer.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -115,10 +137,17 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				return (SliderHandleStyle.Interpreted) super.getStyle();
 			}
 
+			/** @return The tooltip to display for the handle */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip() {
 				return theTooltip;
 			}
 
+			/**
+			 * Initializes or updates this renderer
+			 *
+			 * @param env The expresso environment for interpreting expressions
+			 * @throws ExpressoInterpretationException If the renderer could not be interpreted
+			 */
 			public void updateRenderer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
 			}
@@ -129,25 +158,35 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 			}
 
+			/** @return The handle renderer */
 			public SliderHandleRenderer create() {
 				return new SliderHandleRenderer(getIdentity());
 			}
 		}
 
+		/** Model context for a {@link SliderHandleRenderer} */
 		public interface HandleRenderContext {
+			/** @return The value of the handle being rendered */
 			SettableValue<Double> getHandleValue();
 
+			/** @return The index of the handle being rendered */
 			SettableValue<Integer> getHandleIndex();
 
+			/** Default {@link HandleRenderContext} implementation */
 			public class Default implements HandleRenderContext {
 				private final SettableValue<Double> theHandleValue;
 				private final SettableValue<Integer> theHandleIndex;
 
+				/**
+				 * @param handleValue The value of the handle being rendered
+				 * @param handleIndex The indexof the handle being rendered
+				 */
 				public Default(SettableValue<Double> handleValue, SettableValue<Integer> handleIndex) {
 					theHandleValue = handleValue;
 					theHandleIndex = handleIndex;
 				}
 
+				/** Creates default context */
 				public Default() {
 					this(SettableValue.build(double.class).withValue(0.0).build(), //
 						SettableValue.build(int.class).withValue(0).build());
@@ -173,7 +212,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		private SettableValue<SettableValue<Integer>> theHandleIndex;
 		private SettableValue<String> theTooltip;
 
-		public SliderHandleRenderer(Object id) {
+		/** @param id The element ID for this renderer */
+		protected SliderHandleRenderer(Object id) {
 			super(id);
 			theHandleValue = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class)).build();
@@ -181,10 +221,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
 		}
 
+		/** @return The model ID of the variable containing the value of the handle being rendered */
 		public ModelComponentId getHandleValueVariable() {
 			return theHandleValueVariable;
 		}
 
+		/** @return The model ID of the variable containing the index of the handle being rendered */
 		public ModelComponentId getHandleIndexVariable() {
 			return theHandleIndexVariable;
 		}
@@ -194,11 +236,13 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return (SliderHandleStyle) super.getStyle();
 		}
 
+		/** @return The tooltip to display for the handle */
 		public SettableValue<String> getTooltip() {
 			return theTooltip;
 		}
 
-		public void setHandleContext(HandleRenderContext context) throws ModelInstantiationException {
+		/** @param context Model context for this renderer */
+		public void setHandleContext(HandleRenderContext context) {
 			theHandleValue.set(context.getHandleValue(), null);
 			theHandleIndex.set(context.getHandleIndex(), null);
 		}
@@ -240,7 +284,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return copy;
 		}
 
+		/** Style for a {@link SliderHandleRenderer} */
 		public static class SliderHandleStyle extends QuickBackgroundStyle.Default {
+			/** {@link SliderHandleRenderer} style definition */
 			public static class Def extends QuickBackgroundStyle.Def.Default {
 				private QuickStyleAttributeDef theLineColor;
 				private QuickStyleAttributeDef theLineThickness;
@@ -253,10 +299,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 					theLineThickness = addApplicableAttribute(typeStyle.getAttribute("line-thickness"));
 				}
 
+				/** @return The attribute representing the color of the slider's line */
 				public QuickStyleAttributeDef getLineColor() {
 					return theLineColor;
 				}
 
+				/** @return The attribute representing the thickness of the slider's line */
 				public QuickStyleAttributeDef getLineThickness() {
 					return theLineThickness;
 				}
@@ -269,11 +317,18 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				}
 			}
 
+			/** {@link SliderHandleRenderer} style interpretation */
 			public static class Interpreted extends QuickBackgroundStyle.Interpreted.Default {
 				private QuickElementStyleAttribute<Color> theLineColor;
 				private QuickElementStyleAttribute<Integer> theLineThickness;
 
-				public Interpreted(SliderHandleStyle.Def definition, SliderHandleRenderer.Interpreted styledElement,
+				/**
+				 * @param definition The definition to interpret
+				 * @param styledElement The handle renderer to style
+				 * @param parent The Quick style to inherit from
+				 * @param wrapped The interpreted style to wrap
+				 */
+				protected Interpreted(SliderHandleStyle.Def definition, SliderHandleRenderer.Interpreted styledElement,
 					QuickInstanceStyle.Interpreted parent, QuickInterpretedStyle wrapped) {
 					super(definition, styledElement, parent, wrapped);
 				}
@@ -283,10 +338,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 					return (SliderHandleStyle.Def) super.getDefinition();
 				}
 
+				/** @return The attribute representing the color of the slider's line */
 				public QuickElementStyleAttribute<Color> getLineColor() {
 					return theLineColor;
 				}
 
+				/** @return The attribute representing the thickness of the slider's line */
 				public QuickElementStyleAttribute<Integer> getLineThickness() {
 					return theLineThickness;
 				}
@@ -311,13 +368,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			private ObservableValue<Color> theLineColor;
 			private ObservableValue<Integer> theLineThickness;
 
-			public SliderHandleStyle() {
-			}
-
+			/** @return The color for the slider's line */
 			public ObservableValue<Color> getLineColor() {
 				return theLineColor;
 			}
 
+			/** @return The thickness for the slider's line */
 			public ObservableValue<Integer> getLineThickness() {
 				return theLineThickness;
 			}
@@ -348,7 +404,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 	}
 
+	/** Renders a portion of the line for a {@link QuickMultiSlider} */
 	public static class SliderBgRenderer extends QuickWithBackground.Abstract {
+		/** {@link SliderBgRenderer} definition */
 		@ExElementTraceable(toolkit = QuickXInterpretation.X,
 			qonfigType = SLIDER_BG_RENDERER,
 			interpretation = Interpreted.class,
@@ -356,10 +414,18 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		public static class Def extends QuickWithBackground.Def.Abstract<SliderBgRenderer> {
 			private CompiledExpression theMaxValue;
 
+			/**
+			 * @param parent The parent element of the renderer
+			 * @param type The Qonfig type of the renderer
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
+			/**
+			 * @return The maximum value of this renderer's domain. This renderer will be used to render the portion of the slider below
+			 *         this value and above those of any other renderers on the slider
+			 */
 			@QonfigAttributeGetter("max-value")
 			public CompiledExpression getMaxValue() {
 				return theMaxValue;
@@ -371,15 +437,24 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				theMaxValue = getAttributeExpression("max-value", session);
 			}
 
+			/**
+			 * @param parent The parent element for the interpreted renderer
+			 * @return The interpreted renderer
+			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
+		/** {@link SliderBgRenderer} interpretation */
 		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<SliderBgRenderer> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMaxValue;
 
-			Interpreted(SliderBgRenderer.Def definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition to renderer
+			 * @param parent The parent element for the renderer
+			 */
+			protected Interpreted(SliderBgRenderer.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -388,10 +463,20 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				return (SliderBgRenderer.Def) super.getDefinition();
 			}
 
+			/**
+			 * @return The maximum value of this renderer's domain. This renderer will be used to render the portion of the slider below
+			 *         this value and above those of any other renderers on the slider
+			 */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMaxValue() {
 				return theMaxValue;
 			}
 
+			/**
+			 * Initializes or updates this renderer
+			 *
+			 * @param env The expresso environment for interpreting expressions
+			 * @throws ExpressoInterpretationException If the renderer could not be interpreted
+			 */
 			public void updateRenderer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
 			}
@@ -403,6 +488,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				theMaxValue = interpret(getDefinition().getMaxValue(), ModelTypes.Value.DOUBLE);
 			}
 
+			/** @return The background renderer */
 			public SliderBgRenderer create() {
 				return new SliderBgRenderer(getIdentity());
 			}
@@ -412,10 +498,15 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 		private SettableValue<Double> theMaxValue;
 
-		public SliderBgRenderer(Object id) {
+		/** @param id The element ID for this renderer */
+		protected SliderBgRenderer(Object id) {
 			super(id);
 		}
 
+		/**
+		 * @return The maximum value of this renderer's domain. This renderer will be used to render the portion of the slider below this
+		 *         value and above those of any other renderers on the slider
+		 */
 		public SettableValue<Double> getMaxValue() {
 			return theMaxValue;
 		}
@@ -449,6 +540,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 	}
 
+	/** {@link QuickMultiSlider} definition */
 	@ExElementTraceable(toolkit = QuickXInterpretation.X,
 		qonfigType = MULTI_SLIDER,
 		interpretation = Interpreted.class,
@@ -462,41 +554,52 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		private SliderHandleRenderer.Def theHandleRenderer;
 		private final List<SliderBgRenderer.Def> theBgRenderers;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 			theBgRenderers = new ArrayList<>();
 		}
 
+		/** @return The values for the slider's handles */
 		@QonfigAttributeGetter("values")
 		public CompiledExpression getValues() {
 			return theValues;
 		}
 
+		/** @return Whether the slider should be vertical or horizontal */
 		@QonfigAttributeGetter("orientation")
 		public boolean isVertical() {
 			return isVertical;
 		}
 
+		/** @return Whether to prevent the user from re-ordering values by dragging handles */
 		@QonfigAttributeGetter("enforce-order")
 		public boolean isOrderEnforced() {
 			return isOrderEnforced;
 		}
 
+		/** @return The value for the leading edge of the slider */
 		@QonfigAttributeGetter("min")
 		public CompiledExpression getMin() {
 			return theMin;
 		}
 
+		/** @return The value for the trailing edge of the slider */
 		@QonfigAttributeGetter("max")
 		public CompiledExpression getMax() {
 			return theMax;
 		}
 
+		/** @return The renderer to control the appearance of the slider's handles */
 		@QonfigChildGetter("handle-renderer")
 		public SliderHandleRenderer.Def getHandleRenderer() {
 			return theHandleRenderer;
 		}
 
+		/** @return Renderers to control the appearance of the slider's line */
 		@QonfigChildGetter("bg-renderer")
 		public List<SliderBgRenderer.Def> getBgRenderers() {
 			return Collections.unmodifiableList(theBgRenderers);
@@ -521,6 +624,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 	}
 
+	/** {@link QuickMultiSlider} interpretation */
 	public static class Interpreted extends QuickWidget.Interpreted.Abstract<QuickMultiSlider> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Double>> theValues;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMin;
@@ -528,7 +632,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		private SliderHandleRenderer.Interpreted theHandleRenderer;
 		private final List<SliderBgRenderer.Interpreted> theBgRenderers;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theBgRenderers = new ArrayList<>();
 		}
@@ -538,22 +646,27 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The values for the slider's handles */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Double>> getValues() {
 			return theValues;
 		}
 
+		/** @return The value for the leading edge of the slider */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMin() {
 			return theMin;
 		}
 
+		/** @return The value for the trailing edge of the slider */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMax() {
 			return theMax;
 		}
 
+		/** @return The renderer to control the appearance of the slider's handles */
 		public SliderHandleRenderer.Interpreted getHandleRenderer() {
 			return theHandleRenderer;
 		}
 
+		/** @return Renderers to control the appearance of the slider's line */
 		public List<SliderBgRenderer.Interpreted> getBgRenderers() {
 			return Collections.unmodifiableList(theBgRenderers);
 		}
@@ -636,7 +749,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	private SliderHandleRenderer theHandleRenderer;
 	private List<SliderBgRenderer> theBgRenderers;
 
-	QuickMultiSlider(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickMultiSlider(Object id) {
 		super(id);
 		theValues = SettableValue
 			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<Double>> parameterized(double.class)).build();
@@ -647,30 +761,37 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		theBgRenderers = new ArrayList<>();
 	}
 
+	/** @return The values for the slider's handles */
 	public ObservableCollection<Double> getValues() {
 		return ObservableCollection.flattenValue(theValues);
 	}
 
+	/** @return Whether the slider should be vertical or horizontal */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return Whether to prevent the user from re-ordering values by dragging handles */
 	public boolean isOrderEnforced() {
 		return isOrderEnforced;
 	}
 
+	/** @return The value for the leading edge of the slider */
 	public SettableValue<Double> getMin() {
 		return SettableValue.flatten(theMin, () -> 0.0);
 	}
 
+	/** @return The value for the trailing edge of the slider */
 	public SettableValue<Double> getMax() {
 		return SettableValue.flatten(theMax, () -> 0.0);
 	}
 
+	/** @return The renderer to control the appearance of the slider's handles */
 	public SliderHandleRenderer getHandleRenderer() {
 		return theHandleRenderer;
 	}
 
+	/** @return Renderers to control the appearance of the slider's line */
 	public List<SliderBgRenderer> getBgRenderers() {
 		return Collections.unmodifiableList(theBgRenderers);
 	}

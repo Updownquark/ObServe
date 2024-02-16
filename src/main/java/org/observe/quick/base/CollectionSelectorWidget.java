@@ -25,9 +25,20 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget that allows the user to select a value from a collection (e.g. a combo box)
+ *
+ * @param <T> The type of values represented by the widget
+ */
 public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstract<T> implements MultiValueRenderable<T> {
+	/** The XML name of this element */
 	public static final String COLLECTION_SELECTOR = "collection-selector-widget";
 
+	/**
+	 * {@link CollectionSelectorWidget} definition
+	 *
+	 * @param <W> The sub-type of widget to create
+	 */
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = MultiValueRenderable.MULTI_VALUE_RENDERABLE,
@@ -44,10 +55,15 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 		private ModelComponentId theActiveValueVariable;
 		private ModelComponentId theSelectedVariable;
 
+		/**
+		 * @param parent The parent element for this widget
+		 * @param type The Qonfig type of this element
+		 */
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The elements the user may select from */
 		@QonfigAttributeGetter(asType = COLLECTION_SELECTOR, value = "values")
 		public CompiledExpression getValues() {
 			return theValues;
@@ -59,6 +75,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 			return theActiveValueVariable;
 		}
 
+		/** @return The ID of the model value in which the selected value for the widget will be available to expressions */
 		public ModelComponentId getSelectedVariable() {
 			return theSelectedVariable;
 		}
@@ -79,9 +96,19 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 		public abstract Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 	}
 
+	/**
+	 * {@link CollectionSelectorWidget} interpretation
+	 *
+	 * @param <T> The type of values represented by the widget
+	 * @param <W> The sub-type of widget to create
+	 */
 	public static abstract class Interpreted<T, W extends CollectionSelectorWidget<T>> extends QuickValueWidget.Interpreted.Abstract<T, W> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent for this element
+		 */
 		protected Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -91,6 +118,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 			return (Def<? super W>) super.getDefinition();
 		}
 
+		/** @return The elements the user may select from */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValues() {
 			return theValues;
 		}
@@ -109,12 +137,14 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	private SettableValue<SettableValue<T>> theActiveValue;
 	private SettableValue<SettableValue<Boolean>> theSelectedValue;
 
+	/** @param id The element identity of the widget */
 	protected CollectionSelectorWidget(Object id) {
 		super(id);
 		theSelectedValue = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 	}
 
+	/** @return The elements the user may select from */
 	public ObservableCollection<T> getValues() {
 		return ObservableCollection.flattenValue(theValues);
 	}

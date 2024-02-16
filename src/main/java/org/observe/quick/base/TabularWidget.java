@@ -28,21 +28,43 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget that displays rows of values, and containing columns to represent attributes of each row
+ *
+ * @param <R> The row type of the tabular widget
+ */
 public interface TabularWidget<R> extends MultiValueWidget<R> {
+	/** The XML name of this element */
+	public static final String TABULAR_WIDGET = "tabular-widget";
+
+	/**
+	 * {@link TabularWidget} definition
+	 *
+	 * @param <W> The sub-type of tabular widget to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = "tabular-widget",
+		qonfigType = TABULAR_WIDGET,
 		interpretation = Interpreted.class,
 		instance = TabularWidget.class)
 	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W> {
+		/** @return The columns to represent attributes of each row */
 		@QonfigChildGetter("columns")
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
 
+		/** @return The model ID of the variable containing the selected status of the current row */
 		ModelComponentId getSelectedVariable();
 
+		/** @return The model ID of the variable containing the row index of the current row */
 		ModelComponentId getRowIndexVariable();
 
+		/** @return The model ID of the variable containing the column index of the current cell */
 		ModelComponentId getColumnIndexVariable();
 
+		/**
+		 * Abstract {@link TabularWidget} definition implementation
+		 *
+		 * @param <W> The sub-type of tabular widget to create
+		 */
 		public abstract class Abstract<W extends TabularWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private final List<QuickTableColumn.TableColumnSet.Def<?>> theColumns;
 			private ModelComponentId theActiveValueVariable;
@@ -50,6 +72,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			private ModelComponentId theRowIndexVariable;
 			private ModelComponentId theColumnIndexVariable;
 
+			/**
+			 * @param parent The parent element of the widget
+			 * @param type The Qonfig type of the widget
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 				theColumns = new ArrayList<>();
@@ -80,6 +106,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				return theColumnIndexVariable;
 			}
 
+			/**
+			 * @param session The session to inspect
+			 * @return The name of the model variable in which the value of the active row will be available to expressions
+			 */
 			protected abstract String getActiveValueVariableName(ExpressoQIS session);
 
 			@Override
@@ -97,6 +127,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				syncChildren(QuickTableColumn.TableColumnSet.Def.class, theColumns, session.forChildren("columns"));
 			}
 
+			/**
+			 * @param interpreted The interpreted widget
+			 * @param env The expresso environment for interpreting expressions
+			 * @return The row type of the tabular widget
+			 * @throws ExpressoInterpretationException If the row type could not be interpreted
+			 */
 			protected abstract TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException;
 
@@ -105,17 +141,34 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 	}
 
+	/**
+	 * {@link TabularWidget} interpretation
+	 *
+	 * @param <R> The row type of the tabular widget
+	 * @param <W> The sub-type of tabular widget to create
+	 */
 	public interface Interpreted<R, W extends TabularWidget<R>> extends MultiValueWidget.Interpreted<R, W> {
 		@Override
 		Def<? super W> getDefinition();
 
+		/** @return The columns to represent attributes of each row */
 		List<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> getColumns();
 
+		/**
+		 * Abstract {@link TabularWidget} interpretation implementation
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <W> The sub-type of tabular widget to create
+		 */
 		public abstract class Abstract<R, W extends TabularWidget<R>> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<R, W> {
 			private ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> theColumns;
 			private TypeToken<R> theRowType;
 
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element for the widget
+			 */
 			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -162,23 +215,45 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 	}
 
+	/**
+	 * Model context for a {@link TabularWidget}
+	 *
+	 * @param <R> The row type of the tabular widget
+	 */
 	public interface TabularContext<R> extends MultiValueRenderContext<R> {
+		/** @return The row index of the current row */
 		SettableValue<Integer> getRowIndex();
 
+		/** @return The column index of the current cell */
 		SettableValue<Integer> getColumnIndex();
 
-		public class Default<T> extends MultiValueRenderContext.Default<T> implements TabularContext<T> {
+		/**
+		 * Default {@link TabularContext} implementation
+		 *
+		 * @param <R> The row type of the tabular widget
+		 */
+		public class Default<R> extends MultiValueRenderContext.Default<R> implements TabularContext<R> {
 			private final SettableValue<Integer> theRowIndex;
 			private final SettableValue<Integer> theColumnIndex;
 
-			public Default(SettableValue<T> renderValue, SettableValue<Boolean> selected, SettableValue<Integer> rowIndex,
+			/**
+			 * @param renderValue The value of the current row
+			 * @param selected Whether the current row is selected
+			 * @param rowIndex The row index of the current row
+			 * @param columnIndex The column index of the current cell
+			 */
+			public Default(SettableValue<R> renderValue, SettableValue<Boolean> selected, SettableValue<Integer> rowIndex,
 				SettableValue<Integer> columnIndex) {
 				super(renderValue, selected);
 				theRowIndex = rowIndex;
 				theColumnIndex = columnIndex;
 			}
 
-			public Default(TypeToken<T> rowType, String descrip) {
+			/**
+			 * @param rowType The row type of the tabular widget
+			 * @param descrip A description of this context for debugging
+			 */
+			public Default(TypeToken<R> rowType, String descrip) {
 				this(
 					SettableValue.build(rowType).withDescription(descrip + ".rowValue").withValue(TypeTokens.get().getDefaultValue(rowType))
 					.build(), //
@@ -199,21 +274,35 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 	}
 
+	/** @return The row type of the widget */
 	TypeToken<R> getRowType();
 
 	@Override
 	ModelComponentId getActiveValueVariable();
 
+	/** @return The model ID of the variable containing the row index of the current row */
 	ModelComponentId getRowIndexVariable();
 
+	/** @return The model ID of the variable containing the column index of the current cell */
 	ModelComponentId getColumnIndexVariable();
 
+	/**
+	 * @param ctx The model context for this tabular widget
+	 * @throws ModelInstantiationException If the model context could not be installed
+	 */
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 
+	/** @return The columns to represent attributes of each row */
 	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumns();
 
+	/** @return All columns from all sources in this table */
 	ObservableCollection<QuickTableColumn<R, ?>> getAllColumns();
 
+	/**
+	 * Abstract {@link TabularWidget} implementation
+	 *
+	 * @param <R> The row type of the tabular widget
+	 */
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
 		private TypeToken<R> theRowType;
 		private ObservableCollection<QuickTableColumn.TableColumnSet<R>> theColumnSets;
@@ -229,6 +318,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		private SettableValue<SettableValue<Integer>> theRowIndex;
 		private SettableValue<SettableValue<Integer>> theColumnIndex;
 
+		/** @param id The element ID for this widget */
 		protected Abstract(Object id) {
 			super(id);
 			isSelected = SettableValue

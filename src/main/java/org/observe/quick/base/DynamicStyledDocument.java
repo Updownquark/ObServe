@@ -28,9 +28,20 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A styled document with a dynamic structure--each node having a dynamic collection of children
+ *
+ * @param <T> the value of each node in the document
+ */
 public class DynamicStyledDocument<T> extends StyledDocument<T> {
+	/** The XML name of this element */
 	public static final String DYNAMIC_STYLED_DOCUMENT = "dynamic-styled-document";
 
+	/**
+	 * {@link DynamicStyledDocument} definition
+	 *
+	 * @param <D> The sub-type of document to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = DYNAMIC_STYLED_DOCUMENT,
 		interpretation = Interpreted.class,
@@ -43,6 +54,10 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		private TextStyleElement.Def theTextStyle;
 		private ModelComponentId theNodeValue;
 
+		/**
+		 * @param parent The parent for this element
+		 * @param type The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -52,31 +67,37 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			return false; // Editing not implemented
 		}
 
+		/** @return The root of the document */
 		@QonfigAttributeGetter("root")
 		public CompiledExpression getRoot() {
 			return theRoot;
 		}
 
+		/** @return The expression to generate children for the document */
 		@QonfigAttributeGetter("children")
 		public CompiledExpression getChildren() {
 			return theChildren;
 		}
 
+		/** @return The format to represent values as text */
 		@QonfigAttributeGetter("format")
 		public CompiledExpression getFormat() {
 			return theFormat;
 		}
 
+		/** @return The post-text for each node in the document--the text to appear after the node's children */
 		@QonfigAttributeGetter("post-text")
 		public CompiledExpression getPostText() {
 			return thePostText;
 		}
 
+		/** @return The text style for the document */
 		@QonfigChildGetter("text-style")
 		public TextStyleElement.Def getTextStyle() {
 			return theTextStyle;
 		}
 
+		/** @return The model ID for the variable where the current node will be available to expressions */
 		public ModelComponentId getNodeValue() {
 			return theNodeValue;
 		}
@@ -103,6 +124,12 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 	}
 
+	/**
+	 * {@link DynamicStyledDocument} interpretation
+	 *
+	 * @param <T> The type of each node in the document
+	 * @param <D> The sub-type of document to create
+	 */
 	public static class Interpreted<T, D extends DynamicStyledDocument<T>> extends StyledDocument.Interpreted<T, D> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theRoot;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theChildren;
@@ -110,7 +137,11 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> thePostText;
 		private TextStyleElement.Interpreted theTextStyle;
 
-		public Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent for this element
+		 */
+		protected Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			persistModelInstances(true);
 		}
@@ -125,6 +156,12 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			return (TypeToken<T>) getOrInitRoot().getType().getType(0);
 		}
 
+		/**
+		 * Gets or initializes the root of the document
+		 *
+		 * @return The root of the document
+		 * @throws ExpressoInterpretationException If the root could not be interpreted
+		 */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitRoot() throws ExpressoInterpretationException {
 			if (theRoot == null) {
 				if (getDefinition().getRoot() != null)
@@ -135,22 +172,27 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			return theRoot;
 		}
 
+		/** @return The root of the document */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getRoot() {
 			return theRoot;
 		}
 
+		/** @return The expression to generate children for the document */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getChildren() {
 			return theChildren;
 		}
 
+		/** @return The format to represent values as text */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getFormat() {
 			return theFormat;
 		}
 
+		/** @return The post-text for each node in the document--the text to appear after the node's children */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getPostText() {
 			return thePostText;
 		}
 
+		/** @return The text style for the document */
 		public TextStyleElement.Interpreted getTextStyle() {
 			return theTextStyle;
 		}
@@ -178,18 +220,37 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 	}
 
+	/**
+	 * Context for a {@link DynamicStyledDocument}, defining a node value
+	 *
+	 * @param <T> The type of the document value
+	 */
 	public interface StyledTextAreaContext<T> extends QuickWithBackground.BackgroundContext {
+		/** @return The node value of the context */
 		SettableValue<T> getNodeValue();
 
+		/**
+		 * Default {@link StyledTextAreaContext} implementation
+		 *
+		 * @param <T> The type of the document value
+		 */
 		public class Default<T> extends QuickWithBackground.BackgroundContext.Default implements StyledTextAreaContext<T> {
 			private final SettableValue<T> theNodeValue;
 
+			/**
+			 * @param hovered The container for the hovered state of the node
+			 * @param focused The container for the focused state of the node
+			 * @param pressed The container for the pressed state of the node
+			 * @param rightPressed The container for the right-pressed state of the node
+			 * @param nodeValue The node value of the context
+			 */
 			public Default(SettableValue<Boolean> hovered, SettableValue<Boolean> focused, SettableValue<Boolean> pressed,
 				SettableValue<Boolean> rightPressed, SettableValue<T> nodeValue) {
 				super(hovered, focused, pressed, rightPressed);
 				theNodeValue = nodeValue;
 			}
 
+			/** @param type The type of the document value */
 			public Default(TypeToken<T> type) {
 				theNodeValue = SettableValue.build(type).build();
 			}
@@ -213,26 +274,36 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	private ModelValueInstantiator<SettableValue<String>> thePostTextSynth;
 	private ModelComponentId theNodeValueId;
 
-	public DynamicStyledDocument(Object id) {
+	/** @param id The element identity of the widget */
+	protected DynamicStyledDocument(Object id) {
 		super(id);
 	}
 
+	/** @return The root of the document */
 	public SettableValue<T> getRoot() {
 		return SettableValue.flatten(theRoot);
 	}
 
+	/** @return Whether this document may append text to nodes after the node's children */
 	public boolean hasPostText() {
 		return thePostTextSynth != null;
 	}
 
+	/** @return The text style for the document */
 	public TextStyleElement getTextStyle() {
 		return theTextStyle;
 	}
 
+	/** @return The value of the current node (e.g. the one hovered) */
 	public SettableValue<T> getNodeValue() {
 		return theNodeValue;
 	}
 
+	/**
+	 * @param ctx The context to generate the children for
+	 * @return The child values for the node in the given context
+	 * @throws ModelInstantiationException If the children could not be instantiated
+	 */
 	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
 			.build();
@@ -241,10 +312,16 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		return theChildrenSynth.get(modelCopy);
 	}
 
+	/** @return The format to represent values as text */
 	public Format<T> getFormat() {
 		return theFormat;
 	}
 
+	/**
+	 * @param ctx The context to generate the style for
+	 * @return The text style for the node in the given context
+	 * @throws ModelInstantiationException If the text style could not be instantiated
+	 */
 	public TextStyle getStyle(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		if (theTextStyle == null)
 			return null;
@@ -260,6 +337,11 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		return styleCopy;
 	}
 
+	/**
+	 * @param ctx The context to generate the post-text for
+	 * @return The post-text for the node in the given context
+	 * @throws ModelInstantiationException If the post-text could not be instantiated
+	 */
 	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
 			.build();

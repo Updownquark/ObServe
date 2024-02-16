@@ -11,9 +11,20 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedPositionedContent;
 
+/**
+ * A simple text label, icon, or both
+ *
+ * @param <T> The type of value to represent
+ */
 public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
+	/** The XML name of this element */
 	public static final String LABEL = "label";
 
+	/**
+	 * {@link QuickLabel} definition
+	 *
+	 * @param <W> The sub-type of label to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = LABEL,
 		interpretation = Interpreted.class,
@@ -22,6 +33,10 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -38,6 +53,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			return theTextExpression;
 		}
 
+		/** @return The value text to use in place of a dynamic value attribute */
 		@QonfigAttributeGetter
 		public String getValueText() {
 			return theStaticText;
@@ -73,8 +89,18 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickLabel} interpretation
+	 *
+	 * @param <T> The type of value to represent
+	 * @param <W> The sub-type of label to create
+	 */
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		public Interpreted(QuickLabel.Def<? super W> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(QuickLabel.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -89,7 +115,8 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 	}
 
-	public QuickLabel(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickLabel(Object id) {
 		super(id);
 	}
 

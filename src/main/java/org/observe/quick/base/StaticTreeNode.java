@@ -31,9 +31,21 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A static tree node in a {@link QuickTree}. This class is a {@link TreeModel}. Its contents are other {@link TreeModel}s, and its content
+ * list itself is static, but the tree models that are its contents may be dynamic.
+ *
+ * @param <N> The type of value in this tree node
+ */
 public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N> {
+	/** The XML name of this element */
 	public static final String TREE_NODE = "tree-node";
 
+	/**
+	 * {@link StaticTreeNode} definition
+	 *
+	 * @param <TN> The sub-type of tree node to create
+	 */
 	@ExMultiElementTraceable({ //
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TREE_NODE,
@@ -47,16 +59,22 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		private CompiledExpression theValue;
 		private final List<TreeModel.Def<?>> theChildren;
 
+		/**
+		 * @param parent The parent element of the node
+		 * @param qonfigType The Qonfig type of the node
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theChildren = new ArrayList<>();
 		}
 
+		/** @return The value of the node */
 		@QonfigAttributeGetter(asType = TreeModel.TREE_MODEL, value = "value")
 		public CompiledExpression getValue() {
 			return theValue;
 		}
 
+		/** @return The children of the node */
 		@QonfigChildGetter(asType = TREE_NODE, value = "child")
 		public List<TreeModel.Def<?>> getChildren() {
 			return Collections.unmodifiableList(theChildren);
@@ -76,12 +94,22 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 	}
 
+	/**
+	 * {@link StaticTreeNode} interpretation
+	 *
+	 * @param <N> The type of value in the tree node
+	 * @param <TN> The sub-type of tree node to create
+	 */
 	public static class Interpreted<N, TN extends StaticTreeNode<N>> extends TreeModel.Interpreted.Abstract<N, TN> {
 		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends N>> theValue;
 		private List<TreeModel.Interpreted<? extends N, ?>> theChildren;
 		private TypeToken<N> theNodeType;
 
-		Interpreted(Def<? super TN> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the node
+		 */
+		protected Interpreted(Def<? super TN> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theChildren = new ArrayList<>();
 		}
@@ -91,10 +119,12 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 			return (Def<? super TN>) super.getDefinition();
 		}
 
+		/** @return The value of the node */
 		public InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends N>> getValue() {
 			return theValue;
 		}
 
+		/** @return The children of the node */
 		public List<TreeModel.Interpreted<? extends N, ?>> getChildren() {
 			return Collections.unmodifiableList(theChildren);
 		}
@@ -142,7 +172,8 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	private ObservableCollection<N> theChildValues;
 	private ObservableMap<N, TreeModel<? extends N>> theChildrenByValue;
 
-	StaticTreeNode(Object id) {
+	/** @param id The element ID for this node */
+	protected StaticTreeNode(Object id) {
 		super(id);
 		theChildren = new ArrayList<>();
 	}

@@ -19,13 +19,29 @@ import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * Arranges components next to each other up to a maximum number of components before wrapping to a new row, similarly to a
+ * {@link QuickInlineLayout} for a container containing a series of containers with {@link QuickInlineLayout}s of opposite
+ * {@link QuickInlineLayout#isVertical() orientation}.
+ */
 public class QuickGridFlowLayout extends QuickLayout.Abstract {
+	/** The XML name of this add-on */
 	public static final String GRID_FLOW_LAYOUT = "grid-flow-layout";
 
+	/** An edge of a container */
 	public enum Edge {
-		Left(false, false), Right(false, true), Top(true, false), Bottom(true, true);
+		/** The left edge of the container */
+		Left(false, false),
+		/** The right edge of the container */
+		Right(false, true),
+		/** The top edge of the container */
+		Top(true, false),
+		/** The bottom edge of the container */
+		Bottom(true, true);
 
+		/** Whether this edge is a vertical edge (top or bottom) */
 		public final boolean vertical;
+		/** Whether this edge is a trailing edge (bottom or right) */
 		public final boolean reversed;
 
 		private Edge(boolean vertical, boolean reversed) {
@@ -34,6 +50,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		}
 	}
 
+	/** {@link QuickGridFlowLayout} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = GRID_FLOW_LAYOUT,
 		interpretation = Interpreted.class,
@@ -47,40 +64,51 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		private JustifiedBoxLayout.Alignment theRowAlign;
 		private int thePadding;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The container widget whose contents to manage
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
+		/** @return The starting edge for widget in a row of the layout */
 		@QonfigAttributeGetter("primary-start")
 		public Edge getPrimaryStart() {
 			return thePrimaryStart;
 		}
 
+		/** @return The starting edge for rows in the container */
 		@QonfigAttributeGetter("secondary-start")
 		public Edge getSecondaryStart() {
 			return theSecondaryStart;
 		}
 
+		/** @return The maximum number of widgets in a row of the layout */
 		@QonfigAttributeGetter("max-row-count")
 		public CompiledExpression getMaxRowCount() {
 			return theMaxRowCount;
 		}
 
+		/** @return The alignment of widgets along each row */
 		@QonfigAttributeGetter("main-align")
 		public JustifiedBoxLayout.Alignment getMainAlign() {
 			return theMainAlign;
 		}
 
+		/** @return How widget are aligned in the cross dimension of each row */
 		@QonfigAttributeGetter("cross-align")
 		public JustifiedBoxLayout.Alignment getCrossAlign() {
 			return theCrossAlign;
 		}
 
+		/** @return The alignment of rows in the container */
 		@QonfigAttributeGetter("row-align")
 		public JustifiedBoxLayout.Alignment getRowAlign() {
 			return theRowAlign;
 		}
 
+		/** @return The spacing to leave between widgets */
 		@QonfigAttributeGetter("padding")
 		public int getPadding() {
 			return thePadding;
@@ -117,10 +145,15 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		}
 	}
 
+	/** {@link QuickGridFlowLayout} interpretation */
 	public static class Interpreted extends QuickLayout.Interpreted<QuickGridFlowLayout> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaxRowCount;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The container widget whose contents to manage
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -129,6 +162,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The maximum number of widgets in a row of the layout */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getMaxRowCount() {
 			return theMaxRowCount;
 		}
@@ -160,36 +194,44 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theRowAlign;
 	private int thePadding;
 
-	public QuickGridFlowLayout(QuickWidget element) {
+	/** @param element The container whose contents to manage */
+	protected QuickGridFlowLayout(QuickWidget element) {
 		super(element);
 		theMaxRowCount = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
 			.build();
 	}
 
+	/** @return The starting edge for widget in a row of the layout */
 	public Edge getPrimaryStart() {
 		return thePrimaryStart;
 	}
 
+	/** @return The starting edge for rows in the container */
 	public Edge getSecondaryStart() {
 		return theSecondaryStart;
 	}
 
+	/** @return The maximum number of widgets in a row of the layout */
 	public SettableValue<Integer> getMaxRowCount() {
 		return SettableValue.flatten(theMaxRowCount, () -> 1);
 	}
 
+	/** @return The alignment of widgets along each row */
 	public JustifiedBoxLayout.Alignment getMainAlign() {
 		return theMainAlign;
 	}
 
+	/** @return How widget are aligned in the cross dimension of each row */
 	public JustifiedBoxLayout.Alignment getCrossAlign() {
 		return theCrossAlign;
 	}
 
+	/** @return The alignment of rows in the container */
 	public JustifiedBoxLayout.Alignment getRowAlign() {
 		return theRowAlign;
 	}
 
+	/** @return The spacing to leave between widgets */
 	public int getPadding() {
 		return thePadding;
 	}

@@ -20,9 +20,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A slider, allowing the user to drag a handle controlling the value of a number */
 public class QuickSlider extends QuickValueWidget.Abstract<Double> {
+	/** The XML name of this element */
 	public static final String SLIDER = "slider";
 
+	/** {@link QuickSlider} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SLIDER,
 		interpretation = Interpreted.class,
@@ -31,15 +34,21 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 		private CompiledExpression theMin;
 		private CompiledExpression theMax;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The value represented by the leading edge of the slider */
 		@QonfigAttributeGetter("min")
 		public CompiledExpression getMin() {
 			return theMin;
 		}
 
+		/** @return The value represented by the trailing edge of the slider */
 		@QonfigAttributeGetter("max")
 		public CompiledExpression getMax() {
 			return theMax;
@@ -59,11 +68,16 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 		}
 	}
 
+	/** {@link QuickSlider} interpretation */
 	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<Double, QuickSlider> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMin;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMax;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -72,10 +86,12 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The value represented by the leading edge of the slider */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMin() {
 			return theMin;
 		}
 
+		/** @return The value represented by the trailing edge of the slider */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMax() {
 			return theMax;
 		}
@@ -147,7 +163,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	private SettableValue<SettableValue<Double>> theMin;
 	private SettableValue<SettableValue<Double>> theMax;
 
-	public QuickSlider(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickSlider(Object id) {
 		super(id);
 		theMin = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
 			.build();
@@ -155,10 +172,12 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			.build();
 	}
 
+	/** @return The value represented by the leading edge of the slider */
 	public SettableValue<Double> getMin() {
 		return SettableValue.flatten(theMin, () -> 0.0);
 	}
 
+	/** @return The value represented by the trailing edge of the slider */
 	public SettableValue<Double> getMax() {
 		return SettableValue.flatten(theMax, () -> 0.0);
 	}

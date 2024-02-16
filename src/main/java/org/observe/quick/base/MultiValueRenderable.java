@@ -11,18 +11,39 @@ import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A widget that represents multiple values to the user
+ *
+ * @param <T> The type of the values
+ */
 public interface MultiValueRenderable<T> extends QuickWidget {
+	/** The XML name of this element */
 	public static final String MULTI_VALUE_RENDERABLE = "multi-value-renderable";
 
+	/**
+	 * {@link MultiValueRenderable} definition
+	 *
+	 * @param <W> The sub-type of widget to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = "multi-value-renderable",
 		interpretation = Interpreted.class,
 		instance = QuickMouseButtonListener.class)
 	public interface Def<W extends MultiValueRenderable<?>> extends QuickWidget.Def<W> {
+		/**
+		 * @return The model ID of the variable by which the active value (the one being rendered or acted upon) will be available to
+		 *         expressions
+		 */
 		@QonfigAttributeGetter("active-value-name")
 		ModelComponentId getActiveValueVariable();
 	}
 
+	/**
+	 * {@link MultiValueRenderable} interpretation
+	 *
+	 * @param <T> The type of the values
+	 * @param <W> The sub-type of widget to create
+	 */
 	public interface Interpreted<T, W extends MultiValueRenderable<T>> extends QuickWidget.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
@@ -31,20 +52,37 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		W create();
 	}
 
+	/**
+	 * Model context for a {@link MultiValueRenderable}
+	 *
+	 * @param <T> The type of values in the widget
+	 */
 	public interface MultiValueRenderContext<T> {
+		/** @return The active value for the widget */
 		SettableValue<T> getActiveValue();
 
+		/** @return Whether the active value is selected */
 		SettableValue<Boolean> isSelected();
 
+		/**
+		 * Default {@link MultiValueRenderContext} implementation
+		 *
+		 * @param <T> The type of values in the widget
+		 */
 		public class Default<T> implements MultiValueRenderContext<T> {
 			private final SettableValue<T> theActiveValue;
 			private final SettableValue<Boolean> isSelected;
 
+			/**
+			 * @param activeValue The active value for the widget
+			 * @param selected Whether the active value is selected
+			 */
 			public Default(SettableValue<T> activeValue, SettableValue<Boolean> selected) {
 				theActiveValue = activeValue;
 				isSelected = selected;
 			}
 
+			/** @param valueType The type of values in the widget */
 			public Default(TypeToken<T> valueType) {
 				this(SettableValue.build(valueType).withDescription("activeValue").withValue(TypeTokens.get().getDefaultValue(valueType))
 					.build(), SettableValue.build(boolean.class).withDescription("selected").withValue(false).build());
@@ -62,9 +100,18 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		}
 	}
 
+	/**
+	 * @return The model ID of the variable by which the active value (the one being rendered or acted upon) will be available to
+	 *         expressions
+	 */
 	ModelComponentId getActiveValueVariable();
 
+	/** @return The model ID of the variable by which the selected status of the active value will be available to expressions */
 	ModelComponentId getSelectedVariable();
 
+	/**
+	 * @param ctx The model context for this widget
+	 * @throws ModelInstantiationException If the model context could not be installed
+	 */
 	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException;
 }

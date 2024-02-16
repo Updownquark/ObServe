@@ -26,9 +26,16 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A table that displays a row for each value in a collection
+ *
+ * @param <R> The row type of the table
+ */
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
+	/** The XML name of this element */
 	public static final String TABLE = "table";
 
+	/** {@link QuickTable} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = TABLE,
 		interpretation = Interpreted.class,
@@ -37,8 +44,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private CompiledExpression theRows;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
-		private final List<ValueAction.Def<?, ?>> theActions;
+		private final List<ValueAction.Def<?>> theActions;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 			theActions = new ArrayList<>();
@@ -59,19 +70,21 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theMultiSelection;
 		}
 
+		/** @return The row values for the table */
 		@QonfigAttributeGetter("rows")
 		public CompiledExpression getRows() {
 			return theRows;
 		}
 
+		/** @return Actions that can be executed against rows in the table */
 		@QonfigChildGetter("action")
-		public List<ValueAction.Def<?, ?>> getActions() {
+		public List<ValueAction.Def<?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			super.doUpdate(session.asElement("tabular-widget"));
+			super.doUpdate(session.asElement(TABULAR_WIDGET));
 			theRows = getAttributeExpression("rows", session);
 			theSelection = getAttributeExpression("selection", session);
 			theMultiSelection = getAttributeExpression("multi-selection", session);
@@ -90,13 +103,22 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 	}
 
+	/**
+	 * {@link QuickTable} interpretation
+	 *
+	 * @param <R> The row type of the table
+	 */
 	public static class Interpreted<R> extends TabularWidget.Interpreted.Abstract<R, QuickTable<R>> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theRows;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theMultiSelection;
 		private final List<ValueAction.Interpreted<R, ?>> theActions;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theActions = new ArrayList<>();
 		}
@@ -113,6 +135,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return (TypeToken<R>) theRows.getType().getType(0);
 		}
 
+		/** @return The row values for the table */
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> getRows() {
 			return theRows;
 		}
@@ -127,6 +150,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theMultiSelection;
 		}
 
+		/** @return Actions that can be executed against rows in the table */
 		public List<ValueAction.Interpreted<R, ?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
@@ -137,7 +161,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			theSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(getValueType()));
 			theMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(getValueType()));
 			syncChildren(getDefinition().getActions(), theActions,
-				def -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) def).interpret(this, getValueType()),
+				def -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType()),
 				ValueAction.Interpreted::updateAction);
 		}
 
@@ -156,10 +180,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	private SettableValue<ObservableCollection<R>> theMultiSelection;
 	private ObservableCollection<ValueAction<R>> theActions;
 
-	public QuickTable(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickTable(Object id) {
 		super(id);
 	}
 
+	/** @return The row values for the table */
 	public ObservableCollection<R> getRows() {
 		return ObservableCollection.flattenValue(theRows);
 	}
@@ -174,6 +200,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		return ObservableCollection.flattenValue(theMultiSelection);
 	}
 
+	/** @return Actions that can be executed against rows in the table */
 	public ObservableCollection<ValueAction<R>> getActions() {
 		return theActions.flow().unmodifiable(false).collect();
 	}

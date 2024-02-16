@@ -14,9 +14,16 @@ import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A dropdown box that allows the user to select one of a collection of values
+ *
+ * @param <T> The type of the value to select
+ */
 public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
+	/** The XML name of this element */
 	public static final String COMBO_BOX = "combo";
 
+	/** {@link QuickCheckBox} definition */
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = COMBO_BOX,
@@ -30,10 +37,15 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	public static class Def extends CollectionSelectorWidget.Def<QuickComboBox<?>> {
 		private QuickWidget.Def<?> theRenderer;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The renderer to determine how values in the combo box appear */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
 		public QuickWidget.Def<?> getRenderer() {
 			return theRenderer;
@@ -55,10 +67,19 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickCheckBox} interpretation
+	 *
+	 * @param <T> The type of the value to select
+	 */
 	public static class Interpreted<T> extends CollectionSelectorWidget.Interpreted<T, QuickComboBox<T>> {
 		private QuickWidget.Interpreted<?> theRenderer;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -67,6 +88,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The renderer to determine how values in the combo box appear */
 		public QuickWidget.Interpreted<?> getRenderer() {
 			return theRenderer;
 		}
@@ -86,10 +108,12 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 
 	private QuickWidget theRenderer;
 
-	public QuickComboBox(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickComboBox(Object id) {
 		super(id);
 	}
 
+	/** @return The renderer to determine how values in the combo box appear */
 	public QuickWidget getRenderer() {
 		return theRenderer;
 	}

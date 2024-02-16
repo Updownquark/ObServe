@@ -22,9 +22,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A simple dialog that displays a message with a severity */
 public class QuickInfoDialog extends QuickContentDialog.Abstract {
+	/** The XML name of this element */
 	public static final String INFO_DIALOG = "info-dialog";
 
+	/** {@link QuickInfoDialog} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = INFO_DIALOG,
 		interpretation = Interpreted.class,
@@ -34,20 +37,27 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		private CompiledExpression theOnClose;
 		private CompiledExpression theIcon;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param qonfigType The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The type of the dialog--a String that determines the severity of the message */
 		@QonfigAttributeGetter("type")
 		public CompiledExpression getType() {
 			return theType;
 		}
 
+		/** @return An action to perform when the user closes the dialog */
 		@QonfigAttributeGetter("on-close")
 		public CompiledExpression getOnClose() {
 			return theOnClose;
 		}
 
+		/** @return The icon for the dialog */
 		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
@@ -68,12 +78,17 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		}
 	}
 
+	/** {@link QuickInfoDialog} interpretation */
 	public static class Interpreted extends QuickContentDialog.Interpreted.Abstract<QuickInfoDialog> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theType;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnClose;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theIcon;
 
-		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -82,14 +97,17 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The type of the dialog--a String that determines the severity of the message */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getType() {
 			return theType;
 		}
 
+		/** @return An action to perform when the user closes the dialog */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnClose() {
 			return theOnClose;
 		}
 
+		/** @return The icon for the dialog */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
 			return theIcon;
 		}
@@ -118,7 +136,8 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 	private SettableValue<ObservableAction> theOnClose;
 	private SettableValue<SettableValue<Image>> theIcon;
 
-	QuickInfoDialog(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickInfoDialog(Object id) {
 		super(id);
 		theType = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
@@ -127,14 +146,17 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 			.build();
 	}
 
+	/** @return The type of the dialog--a String that determines the severity of the message */
 	public SettableValue<String> getType() {
 		return SettableValue.flatten(theType);
 	}
 
+	/** @return An action to perform when the user closes the dialog */
 	public ObservableAction getOnClose() {
 		return ObservableAction.flatten(theOnClose);
 	}
 
+	/** @return The icon for the dialog */
 	public SettableValue<Image> getIcon() {
 		return SettableValue.flatten(theIcon);
 	}

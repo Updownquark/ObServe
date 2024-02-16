@@ -11,9 +11,20 @@ import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A simple layout arranging contents in a line either from the top of the widget down, or from the left side of the widget across */
 public class QuickInlineLayout extends QuickLayout.Abstract {
+	/** The XML name of this add-on */
 	public static final String INLINE_LAYOUT = "inline-layout";
 
+	/**
+	 * Parses a {@link JustifiedBoxLayout} {@link org.observe.util.swing.JustifiedBoxLayout.Alignment Alignment} from an attribute
+	 *
+	 * @param attributeName The name of the attribute
+	 * @param attributeText The value of the attribute
+	 * @param session The session the attribute came from
+	 * @return The parsed alignment
+	 * @throws QonfigInterpretationException If the alignment couldn't be parsed
+	 */
 	public static JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		switch (attributeText) {
@@ -31,6 +42,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 	}
 
+	/** {@link QuickInlineLayout} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = INLINE_LAYOUT,
 		interpretation = Interpreted.class,
@@ -41,25 +53,33 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		private JustifiedBoxLayout.Alignment theCrossAlign;
 		private int thePadding;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The container widget whose contents to manage
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
+		/** @return Whether the layout will stack components top-to-bottom, or left-to-right */
 		@QonfigAttributeGetter("orientation")
 		public boolean isVertical() {
 			return isVertical;
 		}
 
+		/** @return The alignment for components along the main axis of the layout */
 		@QonfigAttributeGetter("main-align")
 		public JustifiedBoxLayout.Alignment getMainAlign() {
 			return theMainAlign;
 		}
 
+		/** @return The alignment for components along the cross axis of the layout */
 		@QonfigAttributeGetter("cross-align")
 		public JustifiedBoxLayout.Alignment getCrossAlign() {
 			return theCrossAlign;
 		}
 
+		/** @return The space to leave between components */
 		@QonfigAttributeGetter("padding")
 		public int getPadding() {
 			return thePadding;
@@ -80,8 +100,13 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 	}
 
+	/** {@link QuickInlineLayout} interpretation */
 	public static class Interpreted extends QuickLayout.Interpreted<QuickInlineLayout> {
-		public Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The container widget whose contents to manage
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -106,22 +131,27 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theCrossAlign;
 	private int thePadding;
 
-	public QuickInlineLayout(QuickWidget element) {
+	/** @param element The container whose contents to manage */
+	protected QuickInlineLayout(QuickWidget element) {
 		super(element);
 	}
 
+	/** @return Whether the layout will stack components top-to-bottom, or left-to-right */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return The alignment for components along the main axis of the layout */
 	public JustifiedBoxLayout.Alignment getMainAlign() {
 		return theMainAlign;
 	}
 
+	/** @return The alignment for components along the cross axis of the layout */
 	public JustifiedBoxLayout.Alignment getCrossAlign() {
 		return theCrossAlign;
 	}
 
+	/** @return The space to leave between components */
 	public int getPadding() {
 		return thePadding;
 	}

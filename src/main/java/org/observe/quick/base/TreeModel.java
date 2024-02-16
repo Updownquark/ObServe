@@ -31,23 +31,58 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A model for a tree widget
+ *
+ * @param <N> The type of the nodes in the tree
+ */
 public interface TreeModel<N> extends ExElement {
+	/** The XML name of this element */
 	public static final String TREE_MODEL = "tree-model";
 
+	/**
+	 * {@link TreeModel} definition
+	 *
+	 * @param <M> The sub-type of model to create
+	 */
 	public interface Def<M extends TreeModel<?>> extends ExElement.Def<M> {
+		/**
+		 * Updates or initializes the tree model
+		 *
+		 * @param session The session containing the environment to interpret the tree in
+		 * @param activePath The name of the variable where the active node path will be available to expressions
+		 * @param activeNode The name of the variable where the active node value will be available to expressions
+		 * @throws QonfigInterpretationException
+		 */
 		void update(ExpressoQIS session, String activePath, String activeNode) throws QonfigInterpretationException;
 
+		/** @return The ID of the variable where the active node path will be available to expressions */
 		ModelComponentId getActivePathVariable();
 
+		/** @return The ID of the variable where the active node value will be available to expressions */
 		ModelComponentId getActiveNodeVariable();
 
+		/**
+		 * @param <N> The type of node in the tree
+		 * @param parent The parent element for the interpreted model
+		 * @return The interpreted model
+		 */
 		<N> Interpreted<N, ? extends M> interpret(ExElement.Interpreted<?> parent);
 
+		/**
+		 * Abstract {@link TreeModel} definition implementation
+		 *
+		 * @param <M> The sub-type of model to create
+		 */
 		public static abstract class Abstract<M extends TreeModel<?>> extends ExElement.Def.Abstract<M> implements Def<M> {
 			private ModelComponentId theActivePathVariable;
 			private ModelComponentId theActiveNodeVariable;
 			private Interpreted<?, ?> theCurrentInterpreting;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 			}
@@ -150,18 +185,46 @@ public interface TreeModel<N> extends ExElement {
 		}
 	}
 
+	/**
+	 * {@link TreeModel} definition
+	 *
+	 * @param <N> The type of the nodes in the tree
+	 * @param <M> The sub-type of model to create
+	 */
 	public interface Interpreted<N, M extends TreeModel<N>> extends ExElement.Interpreted<M> {
 		@Override
 		Def<? super M> getDefinition();
 
+		/**
+		 * @param env The expresso environment to use to interpret expressions
+		 * @return The type of nodes in the tree
+		 * @throws ExpressoInterpretationException If the node type could not be interpreted
+		 */
 		TypeToken<? extends N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/**
+		 * Initializes or updates this model
+		 *
+		 * @param env The expresso environment to use to interpret expressions
+		 * @throws ExpressoInterpretationException If this model could not be interpreted
+		 */
 		void updateModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/** @return The tree model instance */
 		M create();
 
+		/**
+		 * Abstract {@link TreeModel} interpretation implementation
+		 *
+		 * @param <N> The type of nodes in the tree
+		 * @param <M> The sub-type of model to create
+		 */
 		public static abstract class Abstract<N, M extends TreeModel<N>> extends ExElement.Interpreted.Abstract<M>
 		implements Interpreted<N, M> {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent of this element
+			 */
 			protected Abstract(Def.Abstract<? super M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -178,6 +241,11 @@ public interface TreeModel<N> extends ExElement {
 				}
 			}
 
+			/**
+			 * @param env The expresso environment to use to interpret expressions
+			 * @return The type of nodes in the tree
+			 * @throws ExpressoInterpretationException If the node type could not be interpreted
+			 */
 			protected abstract TypeToken<? extends N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
 			@Override
@@ -189,11 +257,23 @@ public interface TreeModel<N> extends ExElement {
 		}
 	}
 
+	/** @return The current node value (e.g. the one hovered one) */
 	SettableValue<N> getValue();
 
+	/**
+	 * @param path The node path to get the children for
+	 * @param until The observable that will fire when the caller no longer cares about the result (e.g. when the user collapses the parent
+	 *        node)
+	 * @return The children of the given node
+	 * @throws ModelInstantiationException If the children could not be instantiated
+	 */
 	ObservableCollection<? extends N> getChildren(ObservableValue<BetterList<N>> path, Observable<?> until)
 		throws ModelInstantiationException;
 
+	/**
+	 * @param path The node path to determine if it is a leaf
+	 * @return Whether the given node is a leaf node
+	 */
 	boolean isLeaf(BetterList<N> path);
 
 	@Override

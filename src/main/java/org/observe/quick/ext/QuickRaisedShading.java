@@ -16,9 +16,13 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.base.QuickSize;
 import org.observe.util.swing.Shading;
 
+/** A simple shader that makes a component look raised out of the screen above the level of the rest of the UI. E.g. like a button. */
 public class QuickRaisedShading implements QuickShading {
+	/** The default light source direction, in degrees East of North */
 	public static final float DEFAULT_LIGHT_SOURCE = 45;
+	/** The default corner radius */
 	public static final QuickSize DEFAULT_CORNER_RADIUS = QuickSize.ofPixels(4);
+	/** The default maximum shading amount */
 	public static final float DEFAULT_MAX_SHADING = 0.5f;
 
 	private final boolean isRound;
@@ -33,18 +37,22 @@ public class QuickRaisedShading implements QuickShading {
 		theOpacity = opacity;
 	}
 
+	/** @return Whether to draw corners rounded or square (sharp) */
 	public boolean isRound() {
 		return isRound;
 	}
 
+	/** @return Whether this shading applies to the horizontal edges (left and right) */
 	public boolean isHorizontal() {
 		return isHorizontal;
 	}
 
+	/** @return Whether this shading applies to the vertical edges (top and bottom) */
 	public boolean isVertical() {
 		return isVertical;
 	}
 
+	/** @return The opacity for the shading */
 	public ObservableValue<Double> getOpacity() {
 		return theOpacity;
 	}
@@ -58,6 +66,7 @@ public class QuickRaisedShading implements QuickShading {
 			return new SquareShading(this, widget.getAddOn(QuickShaded.class), repaint);
 	}
 
+	/** Abstract shading implementation for raised shading */
 	protected static abstract class AbstractShading implements Shading {
 		private final boolean isHorizontal;
 		private final boolean isVertical;
@@ -86,10 +95,12 @@ public class QuickRaisedShading implements QuickShading {
 			.act(__ -> repaint.run());
 		}
 
+		/** @return Whether this shading applies to the horizontal edges (left and right) */
 		public boolean isHorizontal() {
 			return isHorizontal;
 		}
 
+		/** @return Whether this shading applies to the vertical edges (top and bottom) */
 		public boolean isVertical() {
 			return isVertical;
 		}
@@ -118,6 +129,16 @@ public class QuickRaisedShading implements QuickShading {
 			shade(graphics, size, light, shadow, source, maxShading, wRad, hRad);
 		}
 
+		/**
+		 * @param graphics The graphics to draw on
+		 * @param size The size of the widget to shade
+		 * @param light The color of the light
+		 * @param shadow The color of the shadow
+		 * @param source The direction that the light is coming from, in degrees East of North
+		 * @param maxShading The max shading amount
+		 * @param wRad The corner radius in the horizontal dimension
+		 * @param hRad The corner radius in the vertical dimension
+		 */
 		protected abstract void shade(Graphics2D graphics, Dimension size, Color light, Color shadow, float source, float maxShading,
 			int wRad, int hRad);
 
@@ -127,6 +148,7 @@ public class QuickRaisedShading implements QuickShading {
 		}
 	}
 
+	/** Rounded raised shader */
 	public static class RoundShading extends AbstractShading {
 		private static final Map<CornerRenderKey, SoftReference<CornerRender>> CORNER_RENDER_CACHE = new LinkedHashMap<>();
 
@@ -371,6 +393,7 @@ public class QuickRaisedShading implements QuickShading {
 		}
 	}
 
+	/** Square raised shader */
 	public static class SquareShading extends AbstractShading {
 		SquareShading(QuickRaisedShading type, QuickShaded shaded, Runnable repaint) {
 			super(type, shaded, repaint);

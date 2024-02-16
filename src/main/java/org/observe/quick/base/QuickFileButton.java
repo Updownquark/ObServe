@@ -14,9 +14,12 @@ import org.observe.quick.QuickValueWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A button that represents the state of a file-type value and pops up a file chooser to select a new file when clicked */
 public class QuickFileButton extends QuickValueWidget.Abstract<File> {
+	/** The XML name of this element */
 	public static final String FILE_BUTTON = "file-button";
 
+	/** {@link QuickFileButton} definition */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = FILE_BUTTON,
 		interpretation = Interpreted.class,
@@ -24,10 +27,15 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 	public static class Def extends QuickValueWidget.Def.Abstract<QuickFileButton> {
 		private boolean isOpen;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether the file is to be read (and so must exist) or saved to (and so might not yet exist) */
 		@QonfigAttributeGetter("open")
 		public boolean isOpen() {
 			return isOpen;
@@ -45,8 +53,13 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		}
 	}
 
+	/** {@link QuickFileButton} interpretation */
 	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<File, QuickFileButton> {
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -68,10 +81,12 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 
 	private boolean isOpen;
 
-	public QuickFileButton(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickFileButton(Object id) {
 		super(id);
 	}
 
+	/** @return Whether the file is to be read (and so must exist) or saved to (and so might not yet exist) */
 	public boolean isOpen() {
 		return isOpen;
 	}

@@ -17,9 +17,20 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A menu item that can be selected or deselected like a check box
+ *
+ * @param <T> The type of value to represent
+ */
 public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
+	/** The XML name of this element */
 	public static final String CHECK_BOX_MENU_ITEM = "check-box-menu-item";
 
+	/**
+	 * {@link QuickCheckBoxMenuItem} definition
+	 *
+	 * @param <M> The sub-type of menu item to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = CHECK_BOX_MENU_ITEM,
 		interpretation = Interpreted.class,
@@ -27,10 +38,15 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	public static class Def<M extends QuickCheckBoxMenuItem<?>> extends QuickAbstractMenuItem.Def<M> {
 		private CompiledExpression isSelected;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return Whether the menu check box is selected */
 		@QonfigAttributeGetter("selected")
 		public CompiledExpression isSelected() {
 			return isSelected;
@@ -49,13 +65,24 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickCheckBoxMenuItem} interpretation
+	 *
+	 * @param <T> The type of value to represent
+	 * @param <M> The sub-type of menu item to create
+	 */
 	public static class Interpreted<T, M extends QuickCheckBoxMenuItem<T>> extends QuickAbstractMenuItem.Interpreted<T, M> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isSelected;
 
-		public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
+		/** @return Whether the menu check box is selected */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isSelected() {
 			return isSelected;
 		}
@@ -81,12 +108,14 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	private ModelValueInstantiator<SettableValue<Boolean>> theSelectedInstantiator;
 	private SettableValue<SettableValue<Boolean>> isSelected;
 
-	public QuickCheckBoxMenuItem(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickCheckBoxMenuItem(Object id) {
 		super(id);
 		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
 	}
 
+	/** @return Whether the menu check box is selected */
 	public SettableValue<Boolean> isSelected() {
 		return SettableValue.flatten(isSelected);
 	}

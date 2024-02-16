@@ -18,9 +18,16 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A simple check box to display and edit a boolean value */
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
+	/** The XML name of this element */
 	public static final String CHECK_BOX = "check-box";
 
+	/**
+	 * {@link QuickCheckBox} definition
+	 *
+	 * @param <W> The sub-type of check box to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = CHECK_BOX,
 		interpretation = Interpreted.class,
@@ -28,10 +35,15 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static class Def<W extends QuickCheckBox> extends QuickValueWidget.Def.Abstract<W> {
 		private CompiledExpression theText;
 
+		/**
+		 * @param parent The parent element of the widget
+		 * @param type The Qonfig type of the widget
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The text to display for the check box */
 		@QonfigAttributeGetter
 		public CompiledExpression getText() {
 			return theText;
@@ -49,10 +61,19 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 	}
 
+	/**
+	 * {@link QuickCheckBox} interpretation
+	 *
+	 * @param <W> The sub-type of check box to create
+	 */
 	public static class Interpreted<W extends QuickCheckBox> extends QuickValueWidget.Interpreted.Abstract<Boolean, W> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 
-		public Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the widget
+		 */
+		protected Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -61,6 +82,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 			return (Def<? super W>) super.getDefinition();
 		}
 
+		/** @return The text to display for the check box */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
 			return theText;
 		}
@@ -80,12 +102,14 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	private ModelValueInstantiator<SettableValue<String>> theTextInstantiator;
 	private SettableValue<SettableValue<String>> theText;
 
-	public QuickCheckBox(Object id) {
+	/** @param id The element ID for this widget */
+	protected QuickCheckBox(Object id) {
 		super(id);
 		theText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
 	}
 
+	/** @return The text to display for the check box */
 	public SettableValue<String> getText() {
 		return SettableValue.flatten(theText);
 	}

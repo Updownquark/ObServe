@@ -14,15 +14,17 @@ import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledAddOn;
-import org.observe.quick.style.QuickStyledAddOn.StyleDefBuilder;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigAddOn;
 
+/** Add-on allowing specification of styled shading on boxes */
 public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
+	/** The XML name of this add-on */
 	public static final String SHADED = "shaded";
 
+	/** {@link QuickShaded} definition */
 	@ExElementTraceable(toolkit = QuickXInterpretation.X,
 		qonfigType = SHADED,
 		interpretation = Interpreted.class,
@@ -36,6 +38,10 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		private QuickStyleAttributeDef theMaxShadeAmount;
 		private QuickStyleAttributeDef theShading;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The widget to shade
+		 */
 		public Def(QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 		}
@@ -50,26 +56,32 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 			theShading = builder.addApplicableAttribute(type.getAttribute("shading"));
 		}
 
+		/** @return The style attribute for the direction the light is coming from, in degrees East of North */
 		public QuickStyleAttributeDef getLightSource() {
 			return theLightSource;
 		}
 
+		/** @return The style attribute for the color of the light to use in shading */
 		public QuickStyleAttributeDef getLightColor() {
 			return theLightColor;
 		}
 
+		/** @return The style attribute for the color of the shadow to use in shading */
 		public QuickStyleAttributeDef getShadowColor() {
 			return theShadowColor;
 		}
 
+		/** @return The style attribute for the radius of corners */
 		public QuickStyleAttributeDef getCornerRadius() {
 			return theCornerRadius;
 		}
 
+		/** @return The style attribute for the maximum shading amount */
 		public QuickStyleAttributeDef getMaxShadeAmount() {
 			return theMaxShadeAmount;
 		}
 
+		/** @return The style attribute for the shading implementation to use */
 		public QuickStyleAttributeDef getShading() {
 			return theShading;
 		}
@@ -80,6 +92,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 	}
 
+	/** {@link QuickShaded} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickStyledElement, QuickShaded> {
 		private QuickElementStyleAttribute<Float> theLightSource;
 		private QuickElementStyleAttribute<Color> theLightColor;
@@ -88,7 +101,11 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		private QuickElementStyleAttribute<Float> theMaxShadeAmount;
 		private QuickElementStyleAttribute<QuickShading> theShading;
 
-		public Interpreted(Def def, ExElement.Interpreted<?> element) {
+		/**
+		 * @param def The definition to interpret
+		 * @param element The widget to shade
+		 */
+		protected Interpreted(Def def, ExElement.Interpreted<?> element) {
 			super(def, element);
 		}
 
@@ -102,26 +119,32 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 			return QuickShaded.class;
 		}
 
+		/** @return The style attribute for the direction the light is coming from, in degrees East of North */
 		public QuickElementStyleAttribute<Float> getLightSource() {
 			return theLightSource;
 		}
 
+		/** @return The style attribute for the color of the light to use in shading */
 		public QuickElementStyleAttribute<Color> getLightColor() {
 			return theLightColor;
 		}
 
+		/** @return The style attribute for the color of the shadow to use in shading */
 		public QuickElementStyleAttribute<Color> getShadowColor() {
 			return theShadowColor;
 		}
 
+		/** @return The style attribute for the radius of corners */
 		public QuickElementStyleAttribute<QuickSize> getCornerRadius() {
 			return theCornerRadius;
 		}
 
+		/** @return The style attribute for the maximum shading amount */
 		public QuickElementStyleAttribute<Float> getMaxShadeAmount() {
 			return theMaxShadeAmount;
 		}
 
+		/** @return The style attribute for the shading implementation to use */
 		public QuickElementStyleAttribute<QuickShading> getShading() {
 			return theShading;
 		}
@@ -161,7 +184,8 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 	private ObservableValue<Float> theMaxShadeAmount;
 	private ObservableValue<QuickShading> theShading;
 
-	QuickShaded(QuickStyledElement element) {
+	/** @param element The widget to shade */
+	protected QuickShaded(QuickStyledElement element) {
 		super(element);
 	}
 
@@ -170,26 +194,32 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		return Interpreted.class;
 	}
 
+	/** @return The direction the light is coming from, in degrees East of North */
 	public ObservableValue<Float> getLightSource() {
 		return theLightSource;
 	}
 
+	/** @return The color of the light to use in shading */
 	public ObservableValue<Color> getLightColor() {
 		return theLightColor;
 	}
 
+	/** @return The color of the shadow to use in shading */
 	public ObservableValue<Color> getShadowColor() {
 		return theShadowColor;
 	}
 
+	/** @return The radius of corners */
 	public ObservableValue<QuickSize> getCornerRadius() {
 		return theCornerRadius;
 	}
 
+	/** @return The maximum shading amount */
 	public ObservableValue<Float> getMaxShadeAmount() {
 		return theMaxShadeAmount;
 	}
 
+	/** @return The shading implementation to use */
 	public ObservableValue<QuickShading> getShading() {
 		return theShading;
 	}

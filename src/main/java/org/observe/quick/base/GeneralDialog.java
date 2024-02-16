@@ -9,9 +9,16 @@ import org.observe.quick.QuickContentDialog;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A general dialog that may contain a widget with any content */
 public class GeneralDialog extends QuickContentDialog.Abstract {
+	/** The XML name of this element */
 	public static final String GENERAL_DIALOG = "general-dialog";
 
+	/**
+	 * {@link GeneralDialog} definition
+	 *
+	 * @param <D> The sub-type of dialog to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = GENERAL_DIALOG,
 		interpretation = Interpreted.class,
@@ -20,15 +27,21 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 		private boolean isModal;
 		private boolean isAlwaysOnTop;
 
+		/**
+		 * @param parent The parent element of the dialog
+		 * @param qonfigType The Qonfig type of the dialog
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return Whether the dialog is modal (preventing interaction with the rest of the document as long as it is open) */
 		@QonfigAttributeGetter("modal")
 		public boolean isModal() {
 			return isModal;
 		}
 
+		/** @return Whether the dialog should always show on top of other windows */
 		@QonfigAttributeGetter("always-on-top")
 		public boolean isAlwaysOnTop() {
 			return isAlwaysOnTop;
@@ -47,8 +60,17 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 		}
 	}
 
+	/**
+	 * {@link GeneralDialog} interpretation
+	 *
+	 * @param <D> The sub-type of dialog to create
+	 */
 	public static class Interpreted<D extends GeneralDialog> extends QuickContentDialog.Interpreted.Abstract<D> {
-		public Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the dialog
+		 */
+		protected Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -66,14 +88,17 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 	private boolean isModal;
 	private boolean isAlwaysOnTop;
 
-	public GeneralDialog(Object id) {
+	/** @param id The element ID for this dialog */
+	protected GeneralDialog(Object id) {
 		super(id);
 	}
 
+	/** @return Whether the dialog is modal (preventing interaction with the rest of the document as long as it is open) */
 	public boolean isModal() {
 		return isModal;
 	}
 
+	/** @return Whether the dialog should always show on top of other windows */
 	public boolean isAlwaysOnTop() {
 		return isAlwaysOnTop;
 	}

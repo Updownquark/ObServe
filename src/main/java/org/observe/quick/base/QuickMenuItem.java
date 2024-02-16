@@ -17,9 +17,20 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * A simple menu item in a menu that performs an action
+ *
+ * @param <T> The type of alue to represent
+ */
 public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
+	/** The XML name of this element */
 	public static final String MENU_ITEM = "menu-item";
 
+	/**
+	 * {@link QuickMenuItem} definition
+	 *
+	 * @param <M> The sub-type of menu item to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = MENU_ITEM,
 		interpretation = Interpreted.class,
@@ -27,10 +38,15 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	public static class Def<M extends QuickMenuItem<?>> extends QuickAbstractMenuItem.Def<M> {
 		private CompiledExpression theAction;
 
+		/**
+		 * @param parent The parent element of the menu item
+		 * @param type The Qonfig type of the menu item
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
+		/** @return The action to perform when the menu item is selected */
 		@QonfigAttributeGetter("action")
 		public CompiledExpression getAction() {
 			return theAction;
@@ -49,13 +65,24 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 		}
 	}
 
+	/**
+	 * {@link QuickMenuItem} interpretation
+	 *
+	 * @param <T> The type of value to represent
+	 * @param <M> The sub-type of menu item to create
+	 */
 	public static class Interpreted<T, M extends QuickMenuItem<T>> extends QuickAbstractMenuItem.Interpreted<T, M> {
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
-		public Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element for the menu item
+		 */
+		protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
+		/** @return The action to perform when the menu item is selected */
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 			return theAction;
 		}
@@ -81,11 +108,13 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	private ModelValueInstantiator<ObservableAction> theActionInstantiator;
 	private SettableValue<ObservableAction> theAction;
 
-	public QuickMenuItem(Object id) {
+	/** @param id The element ID for this menu item */
+	protected QuickMenuItem(Object id) {
 		super(id);
 		theAction = SettableValue.build(ObservableAction.class).build();
 	}
 
+	/** @return The action to perform when the menu item is selected */
 	public ObservableAction getAction() {
 		return ObservableAction.flatten(theAction);
 	}
