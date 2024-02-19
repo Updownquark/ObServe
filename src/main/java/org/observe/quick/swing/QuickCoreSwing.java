@@ -645,16 +645,16 @@ public class QuickCoreSwing implements QuickInterpretation {
 	}
 
 	public static void applyIcon(WindowBuilder<?, ?> window, QuickWindow quckWindow) {
-		if (quckWindow.getWindowIcon() != null)
+		if (quckWindow.getWindowIcon().get() != null)
 			applyIcon(window, quckWindow.getWindowIcon());
 		else {
 			ExElement parent = quckWindow.getElement().getParentElement();
 			QuickWindow parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
-			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon() == null)) {
+			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon().get() == null)) {
 				parent = parent.getParentElement();
 				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
 			}
-			if (parentWindow != null && parentWindow.getWindowIcon() != null)
+			if (parentWindow != null && parentWindow.getWindowIcon().get() != null)
 				applyIcon(window, parentWindow.getWindowIcon());
 		}
 	}
@@ -664,16 +664,16 @@ public class QuickCoreSwing implements QuickInterpretation {
 	}
 
 	public static void applyIcon(Window window, QuickWindow quckWindow, Observable<?> until) {
-		if (quckWindow.getWindowIcon() != null)
+		if (quckWindow.getWindowIcon().get() != null)
 			applyIcon(window, quckWindow.getWindowIcon(), until);
 		else {
 			ExElement parent = quckWindow.getElement().getParentElement();
 			QuickWindow parentWindow = parent.getAddOn(QuickWindow.class);
-			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon() == null)) {
+			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon().get() == null)) {
 				parent = parent.getParentElement();
 				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
 			}
-			if (parentWindow != null && parentWindow.getWindowIcon() != null)
+			if (parentWindow != null && parentWindow.getWindowIcon().get() != null)
 				applyIcon(window, parentWindow.getWindowIcon(), until);
 		}
 	}

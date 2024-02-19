@@ -27,10 +27,16 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	 * @param <B> The type of the document's body
 	 * @param <BD> The definition of the document's body type
 	 */
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = EXPRESSO_DOCUMENT,
+	@ExMultiElementTraceable({ //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = EXPRESSO_DOCUMENT,
+			interpretation = Interpreted.class,
+			instance = ExpressoDocument.class), //
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "expresso-document",
 		interpretation = Interpreted.class,
-		instance = ExpressoDocument.class)
+		instance = ExpressoDocument.class)//
+	})
 	public static class Def<B extends ExElement, BD extends ExElement.Def<B>>
 	extends ExModelAugmentation.Def<ExElement, ExpressoDocument<? extends B>> {
 		private ExpressoHeadSection.Def theHead;
@@ -46,7 +52,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		}
 
 		/** @return The head section definition of the document */
-		@QonfigChildGetter("head")
+		@QonfigChildGetter(asType = "expresso-document", value = "head")
 		public ExpressoHeadSection.Def getHead() {
 			return theHead;
 		}

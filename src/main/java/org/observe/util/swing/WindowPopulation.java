@@ -255,7 +255,7 @@ public class WindowPopulation {
 								EventQueue.invokeLater(() -> {
 									theWindow.setSize(//
 										theWidth == null ? theWindow.getWidth() : theWidth.get(), //
-										theHeight == null ? theWindow.getHeight() : theHeight.get());
+											theHeight == null ? theWindow.getHeight() : theHeight.get());
 								});
 							}
 						} finally {

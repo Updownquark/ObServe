@@ -345,10 +345,14 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 		super.instantiate(models);
 
-		theX.set(theXInstantiator == null ? null : theXInstantiator.get(models), null);
-		theY.set(theYInstantiator == null ? null : theYInstantiator.get(models), null);
-		theWidth.set(theWidthInstantiator == null ? null : theWidthInstantiator.get(models), null);
-		theHeight.set(theHeightInstantiator == null ? null : theHeightInstantiator.get(models), null);
+		theX.set(theXInstantiator == null ? defaultIntV() : theXInstantiator.get(models), null);
+		theY.set(theYInstantiator == null ? defaultIntV() : theYInstantiator.get(models), null);
+		theWidth.set(theWidthInstantiator == null ? defaultIntV() : theWidthInstantiator.get(models), null);
+		theHeight.set(theHeightInstantiator == null ? defaultIntV() : theHeightInstantiator.get(models), null);
 		theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models), null);
+	}
+
+	private static SettableValue<Integer> defaultIntV() {
+		return SettableValue.build(TypeTokens.get().INT).build();
 	}
 }

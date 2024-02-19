@@ -1425,7 +1425,8 @@ public interface QuickTableColumn<R, C> {
 
 			if (theRenderer != null) {
 				// TODO
-				// ModelSetInstance rendererModels = theRenderer.instantiate(myModels);
+				// ModelSetInstance rendererModels = //
+				theRenderer.instantiate(myModels);
 				/* Create a copy of the renderer with table context values that don't change.
 				 * This will enable the table to be rendered when outside influences on the style change
 				 * without incurring the performance hit of all the style update eventing for every table cell rendered.
