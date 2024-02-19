@@ -42,7 +42,15 @@ import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 
+/** Utility class for building windows */
 public class WindowPopulation {
+	/**
+	 * @param frame The frame to build (or null to build a new {@link JFrame})
+	 * @param until The observable to stop all listening
+	 * @param disposeOnClose Whether to dispose of the window when the user closes it
+	 * @param exitOnClose Whether to exit the application when the user closes the window
+	 * @return The builder to configure and show the window
+	 */
 	public static WindowBuilder<JFrame, ?> populateWindow(JFrame frame, Observable<?> until, boolean disposeOnClose, boolean exitOnClose) {
 		if (frame == null)
 			frame = new JFrame();
@@ -51,6 +59,12 @@ public class WindowPopulation {
 		return new DefaultWindowBuilder<>(frame, until == null ? Observable.empty() : until, disposeOnClose || exitOnClose);
 	}
 
+	/**
+	 * @param dialog The dialog to build (or null to build a new {@link JDialog})
+	 * @param until The observable to stop all listening
+	 * @param disposeOnClose Whether to dispose of the dialog when the user closes it
+	 * @return The builder to configure and show the dialog
+	 */
 	public static DialogBuilder<JDialog, ?> populateDialog(JDialog dialog, Observable<?> until, boolean disposeOnClose) {
 		return new DefaultDialogBuilder<>(dialog == null ? new JDialog() : dialog, until == null ? Observable.empty() : until,
 			disposeOnClose);
@@ -489,7 +503,14 @@ public class WindowPopulation {
 		}
 	}
 
+	/**
+	 * Abstract {@link MenuBuilder} implementation
+	 *
+	 * @param <M> The type of menu component
+	 * @param <B> The sub-type of this builder
+	 */
 	public static interface AbstractMenuBuilder<M extends JComponent, B extends AbstractMenuBuilder<M, B>> extends MenuBuilder<M, B> {
+		/** @param item The menu item to add to the menu */
 		void addMenuItem(JMenuItem item);
 
 		@Override
@@ -538,10 +559,15 @@ public class WindowPopulation {
 		}
 	}
 
+	/** @param <M> The type of menu */
 	public static class JMenuBuilder<M extends JMenu> extends SimpleButtonEditor<M, JMenuBuilder<M>>
 	implements AbstractMenuBuilder<M, JMenuBuilder<M>> {
-		public JMenuBuilder(M button, Observable<?> until) {
-			super((String) null, button, button.getText(), ObservableAction.nullAction(), false, until);
+		/**
+		 * @param menu The menu to build
+		 * @param until The observable to stop all listening
+		 */
+		public JMenuBuilder(M menu, Observable<?> until) {
+			super((String) null, menu, menu.getText(), ObservableAction.nullAction(), false, until);
 		}
 
 		@Override

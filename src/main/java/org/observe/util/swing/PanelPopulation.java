@@ -356,8 +356,6 @@ public class PanelPopulation {
 
 		P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress);
 
-		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
-
 		default P spacer(int size) {
 			return spacer(size, null);
 		}
@@ -785,14 +783,6 @@ public class PanelPopulation {
 			SimpleScrollEditor<?> scrollPane = new SimpleScrollEditor<>(fieldName, getUntil());
 			scroll.accept(scrollPane);
 			doAdd(scrollPane);
-			return (P) this;
-		}
-
-		@Override
-		default <R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
-			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(rows.safe(ThreadConstraint.EDT, getUntil()), getUntil());
-			list.accept(tb);
-			doAdd(tb);
 			return (P) this;
 		}
 
@@ -1762,11 +1752,6 @@ public class PanelPopulation {
 		ObservableCollection<? extends R> getRows();
 
 		String getItemName();
-	}
-
-	public interface ListBuilder<R, P extends ListBuilder<R, P>>
-	extends CollectionWidgetBuilder<R, LittleList<R>, P>, ListWidgetBuilder<R, LittleList<R>, P>, FieldEditor<LittleList<R>, P> {
-		P render(Consumer<CategoryRenderStrategy<R, R>> render);
 	}
 
 	public interface AbstractTableBuilder<R, C extends Component, P extends AbstractTableBuilder<R, C, P>> {

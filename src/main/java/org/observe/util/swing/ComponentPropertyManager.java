@@ -23,6 +23,8 @@ import javax.swing.JComponent;
  * <li>It handles changes to properties by outside code (e.g. the UI) and re-sets the property using the updated value as the source for the
  * adjustment.</li>
  * </ul>
+ *
+ * @param <C> The type of component to manage
  */
 public class ComponentPropertyManager<C extends Component> {
 	private class ComponentProperty<T> implements PropertyChangeListener {
@@ -91,20 +93,35 @@ public class ComponentPropertyManager<C extends Component> {
 	private boolean isImmediate;
 	private final Map<String, ComponentProperty<?>> theProperties;
 
+	/** @param component The component whose properties to manage */
 	public ComponentPropertyManager(C component) {
 		theComponent = component;
 		theProperties = new LinkedHashMap<>();
 	}
 
+	/** @return The component being managed */
 	public C getComponent() {
 		return theComponent;
 	}
 
+	/**
+	 * @param immediate Whether, when a managed property is changed outside of this manager's control, to re-set the property to the managed
+	 *        value immediately or in an {@link EventQueue#invokeLater(Runnable) invokeLater}.
+	 * @return This manager
+	 */
 	public ComponentPropertyManager<C> setImmediate(boolean immediate) {
 		isImmediate = immediate;
 		return this;
 	}
 
+	/**
+	 * @param <T> The type of the property
+	 * @param propertyName The beans name of the property
+	 * @param getter The getter for the property
+	 * @param setter The setter for the property
+	 * @param adjuster The adjuster to modify the externally-set value of the property
+	 * @return This manager
+	 */
 	public <T> ComponentPropertyManager<C> setProperty(String propertyName, Function<? super C, T> getter, BiConsumer<? super C, T> setter,
 		UnaryOperator<T> adjuster) {
 		if (!EventQueue.isDispatchThread()) {
@@ -128,18 +145,34 @@ public class ComponentPropertyManager<C extends Component> {
 		return this;
 	}
 
+	/**
+	 * @param adjuster The adjuster to modify the externally-set font
+	 * @return This manager
+	 */
 	public ComponentPropertyManager<C> setFont(UnaryOperator<Font> adjuster) {
 		return setProperty("font", Component::getFont, Component::setFont, adjuster);
 	}
 
+	/**
+	 * @param fg The foreground for the component, or null to stop managing foreground
+	 * @return This manager
+	 */
 	public ComponentPropertyManager<C> setForeground(Color fg) {
 		return setProperty("foreground", Component::getForeground, Component::setForeground, fg == null ? null : __ -> fg);
 	}
 
+	/**
+	 * @param bg The background for the component, or null to stop managing background
+	 * @return This manager
+	 */
 	public ComponentPropertyManager<C> setBackground(Color bg) {
 		return setProperty("background", Component::getBackground, Component::setBackground, bg == null ? null : __ -> bg);
 	}
 
+	/**
+	 * @param opaque The opacity for the component, or null to stop managing opacity
+	 * @return This manager
+	 */
 	public ComponentPropertyManager<C> setOpaque(Boolean opaque) {
 		if (theComponent instanceof JComponent)
 			((ComponentPropertyManager<JComponent>) this).setProperty("opaque", JComponent::isOpaque, JComponent::setOpaque,

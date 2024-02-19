@@ -24,6 +24,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -32,6 +33,10 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 
@@ -97,6 +102,11 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		return null;
 	}
 
+	/**
+	 * @param value The value to get the path for
+	 * @param searchDeeply Whether to search for values in this tree that may be in collapsed parents
+	 * @return The path to the given node, or null if the node could not be found
+	 */
 	public BetterList<T> getBetterPath(T value, boolean searchDeeply) {
 		TreeNode node = getNode(value, searchDeeply);
 		return node == null ? null : node.getBetterPath();
@@ -161,6 +171,10 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		return node == null ? -1 : node.indexOfChild(child);
 	}
 
+	/**
+	 * @param child The child to get the mutable element for
+	 * @return The mutable collection element of the given child in its parent's children collection
+	 */
 	public MutableCollectionElement<T> getElementOfChild(T child) {
 		TreeNode childNode = getNode(child, false);
 		if (childNode == null)
@@ -696,8 +710,145 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		});
 	}
 
+	/**
+	 * Synchronizes selection between nodes in a tree and an observable collection of tree paths
+	 *
+	 * @param <T> The type of nodes in the tree
+	 * @param tree The tree to synchronize selection for
+	 * @param multiSelection The tree paths to synchronize the tree selection with
+	 * @param until The observable to stop all listening
+	 */
 	public static <T> void syncSelection(JTree tree, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
-		// TODO Auto-generated method stub
-		System.err.println("Tree multi-selection is not implemented yet");
+		// This method assumes multiSelection is already safe for the EDT
+
+		// Tree selection->collection
+		boolean[] callbackLock = new boolean[1];
+		TreeSelectionModel selectionModel = tree.getSelectionModel();
+		TreeSelectionListener selListener = e -> {
+			if (callbackLock[0])
+				return;
+			ObservableSwingUtils.flushEQCache();
+			callbackLock[0] = true;
+			try (Transaction t = multiSelection.lock(true, e)) {
+				CollectionUtils
+				.synchronize(multiSelection, Arrays.asList(selectionModel.getSelectionPaths()),
+					(better, treePath) -> isSamePath(better, treePath))//
+				.adjust(new CollectionUtils.CollectionSynchronizer<BetterList<T>, TreePath>() {
+					@Override
+					public boolean getOrder(ElementSyncInput<BetterList<T>, TreePath> element) {
+						return true;
+					}
+
+					@Override
+					public ElementSyncAction leftOnly(ElementSyncInput<BetterList<T>, TreePath> element) {
+						return element.remove();
+					}
+
+					@Override
+					public ElementSyncAction rightOnly(ElementSyncInput<BetterList<T>, TreePath> element) {
+						return element.useValue(ObservableTreeModel.betterPath(element.getRightValue()));
+					}
+
+					@Override
+					public ElementSyncAction common(ElementSyncInput<BetterList<T>, TreePath> element) {
+						return element.preserve();
+					}
+
+				}, CollectionUtils.AdjustmentOrder.RightOrder);
+			} finally {
+				callbackLock[0] = false;
+			}
+		};
+		selectionModel.addTreeSelectionListener(selListener);
+		// Tree model->update collection
+		TreeModelListener modelListener = new TreeModelListener() {
+			@Override
+			public void treeNodesInserted(TreeModelEvent e) {
+			}
+
+			@Override
+			public void treeNodesRemoved(TreeModelEvent e) {
+			}
+
+			@Override
+			public void treeNodesChanged(TreeModelEvent e) {
+				if (callbackLock[0])
+					return;
+				int parentRow = tree.getRowForPath(e.getTreePath());
+				if (parentRow < 0 || !tree.isExpanded(parentRow))
+					return;
+
+				Transaction t = multiSelection.tryLock(true, e);
+				if (t == null)
+					return;
+				callbackLock[0] = true;
+				try {
+					for (CollectionElement<BetterList<T>> selected : multiSelection.elements()) {
+						if (eventApplies(e, selected.get()))
+							multiSelection.mutableElement(selected.getElementId()).set(selected.get());
+					}
+				} finally {
+					t.close();
+					callbackLock[0] = false;
+				}
+			}
+
+			@Override
+			public void treeStructureChanged(TreeModelEvent e) {
+				if (callbackLock[0])
+					return;
+				// Update the entire selection
+				Transaction t = multiSelection.tryLock(true, e);
+				if (t == null)
+					return;
+				try {
+					for (CollectionElement<BetterList<T>> selected : multiSelection.elements())
+						multiSelection.mutableElement(selected.getElementId()).set(selected.get());
+				} finally {
+					t.close();
+				}
+			}
+		};
+		tree.getModel().addTreeModelListener(modelListener);
+		// collection->tree selection
+		Subscription msSub = multiSelection.simpleChanges().act(evt -> {
+			if (callbackLock[0])
+				return;
+			callbackLock[0] = true;
+			try (Transaction t = multiSelection.lock(false, modelListener)) {
+				TreePath[] selection = new TreePath[multiSelection.size()];
+				int i = 0;
+				for (BetterList<T> path : multiSelection)
+					selection[i++] = new TreePath(path.toArray());
+				selectionModel.setSelectionPaths(selection);
+			} finally {
+				callbackLock[0] = false;
+			}
+		});
+
+		until.take(1).act(__ -> {
+			selectionModel.removeTreeSelectionListener(selListener);
+			tree.getModel().removeTreeModelListener(modelListener);
+			msSub.unsubscribe();
+		});
+	}
+
+	private static boolean isSamePath(BetterList<?> better, TreePath treePath) {
+		if (better.size() != treePath.getPathCount())
+			return false;
+		for (Object betterV : better.reverse()) {
+			if (!Objects.equals(betterV, treePath.getLastPathComponent()))
+				return false;
+			treePath = treePath.getParentPath();
+		}
+		return true;
+	}
+
+	private static boolean eventApplies(TreeModelEvent e, BetterList<?> path) {
+		if (path.size() <= e.getTreePath().getPathCount())
+			return false;
+		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath()))
+			return false;
+		return ArrayUtils.contains(e.getChildren(), path.get(e.getTreePath().getPathCount()));
 	}
 }

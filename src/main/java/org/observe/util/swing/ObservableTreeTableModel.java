@@ -378,25 +378,14 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 		});
 	}
 
-	private static boolean isSamePath(BetterList<?> better, TreePath treePath) {
-		if (better.size() != treePath.getPathCount())
-			return false;
-		for (Object betterV : better.reverse()) {
-			if (!Objects.equals(betterV, treePath.getLastPathComponent()))
-				return false;
-			treePath = treePath.getParentPath();
-		}
-		return true;
-	}
-
-	private static boolean eventApplies(TreeModelEvent e, BetterList<?> path) {
-		if (path.size() <= e.getTreePath().getPathCount())
-			return false;
-		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath()))
-			return false;
-		return ArrayUtils.contains(e.getChildren(), path.get(e.getTreePath().getPathCount()));
-	}
-
+	/**
+	 * Synchronizes selection between nodes in a tree table and an observable collection of tree paths
+	 *
+	 * @param <T> The type of nodes in the tree
+	 * @param treeTable The tree table to synchronize selection for
+	 * @param multiSelection The tree paths to synchronize the tree selection with
+	 * @param until The observable to stop all listening
+	 */
 	public static <T> void syncSelection(JXTreeTable treeTable, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
 		// This method assumes multiSelection is already safe for the EDT
 
@@ -508,5 +497,24 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			treeTable.getTreeTableModel().removeTreeModelListener(modelListener);
 			msSub.unsubscribe();
 		});
+	}
+
+	private static boolean isSamePath(BetterList<?> better, TreePath treePath) {
+		if (better.size() != treePath.getPathCount())
+			return false;
+		for (Object betterV : better.reverse()) {
+			if (!Objects.equals(betterV, treePath.getLastPathComponent()))
+				return false;
+			treePath = treePath.getParentPath();
+		}
+		return true;
+	}
+
+	private static boolean eventApplies(TreeModelEvent e, BetterList<?> path) {
+		if (path.size() <= e.getTreePath().getPathCount())
+			return false;
+		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath()))
+			return false;
+		return ArrayUtils.contains(e.getChildren(), path.get(e.getTreePath().getPathCount()));
 	}
 }

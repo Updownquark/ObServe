@@ -56,10 +56,15 @@ public class ConformingPanel extends JPanel {
 		return this;
 	}
 
+	/** @return This panel's shading */
 	public Shading getShading() {
 		return theShading;
 	}
 
+	/**
+	 * @param shading The shading for this panel
+	 * @return This panel
+	 */
 	public ConformingPanel setShading(Shading shading) {
 		theShading = shading;
 		repaint();

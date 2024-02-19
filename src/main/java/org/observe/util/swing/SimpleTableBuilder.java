@@ -398,9 +398,8 @@ implements TableBuilder<R, T, P> {
 	@Override
 	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> createColumnSet() {
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
-		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns2;
 		if (theDynamicColumns.isEmpty()) {
-			columns2 = getColumns();
+			columns = getColumns();
 		} else {
 			List<ObservableCollection<? extends CategoryRenderStrategy<R, ?>>> columnSets = new ArrayList<>();
 			columnSets.add(getColumns());
@@ -418,10 +417,10 @@ implements TableBuilder<R, T, P> {
 					.collectActive(getUntil());
 				columnSets.add(dcc);
 			}
-			columns2 = ObservableCollection.flattenCollections((TypeToken<CategoryRenderStrategy<R, ?>>) getColumns().getType(),
+			columns = ObservableCollection.flattenCollections((TypeToken<CategoryRenderStrategy<R, ?>>) getColumns().getType(),
 				columnSets.toArray(new ObservableCollection[columnSets.size()])).collectActive(getUntil());
 		}
-		return columns2;
+		return columns;
 	}
 
 	@Override

@@ -29,10 +29,22 @@ import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
 import org.qommons.ThreadConstraint;
 import org.qommons.io.Format;
 
+/**
+ * A {@link JSpinner} backed by a {@link SettableValue} and functions to produce previous and next values from the current value
+ *
+ * @param <T> The type of the spinner's value
+ */
 public class ObservableSpinner<T> extends JSpinner implements ObservableTextEditorWidget<T, ObservableSpinner<T>> {
 	private final ObservableTextEditor<T> theEditor;
 	private final JFormattedTextField theTextField;
 
+	/**
+	 * @param value The value for the model
+	 * @param format The format for representing the value as text
+	 * @param previousMaker Function to produce a previous value from the current value
+	 * @param nextMaker Function to produce a next value from the current value
+	 * @param until Observable to stop all listening
+	 */
 	public ObservableSpinner(SettableValue<T> value, Format<T> format, Function<? super T, ? extends T> previousMaker,
 		Function<? super T, ? extends T> nextMaker, Observable<?> until) {
 		super(new ObservableSpinnerModel<>(value, previousMaker, nextMaker, until));
@@ -262,6 +274,11 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			theEditor.redisplayWarningTooltip();
 	}
 
+	/**
+	 * Simple spinner model backed by a {@link SettableValue} and functions to produce next and previous values based on the current value
+	 *
+	 * @param <T> The type of the value
+	 */
 	public static class ObservableSpinnerModel<T> implements SpinnerModel {
 		private final SettableValue<T> theValue;
 		private final Function<? super T, ? extends T> thePreviousMaker;
@@ -276,6 +293,12 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		private T theCachedNext;
 		private boolean isNextValid;
 
+		/**
+		 * @param value The value for the model
+		 * @param previousMaker Function to produce a previous value from the current value
+		 * @param nextMaker Function to produce a next value from the current value
+		 * @param until Observable to stop all listening
+		 */
 		public ObservableSpinnerModel(SettableValue<T> value, Function<? super T, ? extends T> previousMaker,
 			Function<? super T, ? extends T> nextMaker, Observable<?> until) {
 			theValue = value;
@@ -290,6 +313,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			});
 		}
 
+		/** @return The value backing this model */
 		public SettableValue<T> getObservableValue() {
 			return theValue;
 		}
@@ -314,6 +338,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			return isPreviousValid ? theCachedPrevious : null;
 		}
 
+		/** @return The previous value for the spinner, regardless of whether it is acceptable */
 		public T getWouldBePrevious() {
 			updateCache();
 			return theCachedPrevious;
@@ -325,6 +350,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			return isNextValid ? theCachedNext : null;
 		}
 
+		/** @return The next value for the spinner, regardless of whether it is acceptable */
 		public T getWouldBeNext() {
 			updateCache();
 			return theCachedNext;

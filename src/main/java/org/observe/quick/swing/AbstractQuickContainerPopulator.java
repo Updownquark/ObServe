@@ -261,11 +261,6 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public <R> AbstractQuickContainerPopulator addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addList(rows, list));
-	}
-
-	@Override
 	public AbstractQuickContainerPopulator addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addSettingsMenu(menu));
 	}

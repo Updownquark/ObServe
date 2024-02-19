@@ -8,7 +8,15 @@ import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A swing layout that:
+ * <ol>
+ * <li>Does not require or recognize any constraints on layout children</li>
+ * <li>Does not require the actual children, but may be called with {@link AbstractLayout.LayoutChild} instances instead.
+ * </ol>
+ */
 public interface AbstractLayout extends ScrollableSwingLayout {
+	/** A substitute for a component in a layout container */
 	interface LayoutChild {
 		/**
 		 * @param type The type of the size to get:
@@ -78,6 +86,13 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 			components.get(c).setBounds(componentBounds[c]);
 	}
 
+	/**
+	 * @param type &lt;0 for minimum, 0 for preferred, >0 for maximum size
+	 * @param containerSize The container's size
+	 * @param parentInsets The insets to leave around the container's border
+	 * @param components The components to lay out
+	 * @return The size of the given type for the container
+	 */
 	default Dimension layoutSize(int type, Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
 		if (type < 0)
 			return minimumLayoutSize(containerSize, parentInsets, components);
@@ -87,14 +102,43 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 			return maximumLayoutSize(containerSize, parentInsets, components);
 	}
 
+	/**
+	 * @param containerSize The container's size
+	 * @param parentInsets The insets to leave around the container's border
+	 * @param components The components to lay out
+	 * @return The minimum size for the container
+	 */
 	Dimension minimumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
+	/**
+	 * @param containerSize The container's size
+	 * @param parentInsets The insets to leave around the container's border
+	 * @param components The components to lay out
+	 * @return The preferred size for the container
+	 */
 	Dimension preferredLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
+	/**
+	 * @param containerSize The container's size
+	 * @param parentInsets The insets to leave around the container's border
+	 * @param components The components to lay out
+	 * @return The maximum size for the container
+	 */
 	Dimension maximumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
+	/**
+	 * @param containerSize The container's size
+	 * @param parentInsets The insets to leave around the container's border
+	 * @param components The components to lay out
+	 * @return The bounds for each of the given components
+	 */
 	Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<AbstractLayout.LayoutChild> components);
 
+	/**
+	 * @param container The container whose children to lay out
+	 * @param showInvisible Whether to allocate size to invisible children
+	 * @return A {@link LayoutChild} for each child to be laid out in the container
+	 */
 	static List<LayoutChild> layoutChildren(Container container, boolean showInvisible) {
 		List<LayoutChild> children = new ArrayList<>(container.getComponentCount());
 		for (int c = 0; c < container.getComponentCount(); c++) {

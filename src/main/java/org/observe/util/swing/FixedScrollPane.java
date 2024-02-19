@@ -43,10 +43,12 @@ import javax.swing.plaf.LayerUI;
 public class FixedScrollPane {
 	private final JLayer<JScrollPane> theLayer;
 
+	/** @param content The component to scroll */
 	public FixedScrollPane(Component content) {
 		this(new JScrollPane(content));
 	}
 
+	/** @param scroll The scroll pane to fix */
 	public FixedScrollPane(JScrollPane scroll) {
 		scroll.getVerticalScrollBar().setUnitIncrement(15);
 		scroll.getHorizontalScrollBar().setUnitIncrement(15);
@@ -86,6 +88,13 @@ public class FixedScrollPane {
 		});
 	}
 
+	/**
+	 * @param vertical Whether the scroll pane should show a vertical scroll bar (as needed) or just always display all of its vertical
+	 *        content
+	 * @param horizontal Whether the scroll pane should show a vertical scroll bar (as needed) or just always display all of its horizontal
+	 *        content
+	 * @return This fixer
+	 */
 	public FixedScrollPane scrollable(boolean vertical, boolean horizontal) {
 		theLayer.getView()
 		.setVerticalScrollBarPolicy(vertical ? JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED : JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -97,10 +106,12 @@ public class FixedScrollPane {
 		return this;
 	}
 
+	/** @return The layer to add to a container instead of the actual scroll pane */
 	public JLayer<JScrollPane> getLayer() {
 		return theLayer;
 	}
 
+	/** @return The scroll pane that this fixer fixes. Do NOT add this to a container. */
 	public JScrollPane getScrollPane() {
 		return theLayer.getView();
 	}

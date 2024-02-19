@@ -124,6 +124,10 @@ public class MultiRangeSlider extends ConformingPanel {
 			return theValue + theExtent / 2;
 		}
 
+		/**
+		 * @param value The value to test
+		 * @return Whether this range includes the given value
+		 */
 		public boolean includes(double value) {
 			double diff = value - theValue;
 			return Math.abs(diff) <= theExtent;
@@ -491,20 +495,36 @@ public class MultiRangeSlider extends ConformingPanel {
 				return this;
 			}
 
+			/** @return The thickness for the slider's line */
 			public float getLineThickness() {
 				return theLineThickness;
 			}
 
+			/**
+			 * @param lineThickness The thickness for the slider's line
+			 * @return This renderer
+			 */
 			public Default setLineThickness(float lineThickness) {
 				theLineThickness = lineThickness;
 				return this;
 			}
 
+			/**
+			 * Clears all value color ranges in this renderer
+			 *
+			 * @return This renderer
+			 */
 			public Default clearColorRanges() {
 				theColorRanges.clear();
 				return this;
 			}
 
+			/**
+			 * @param upperBound The upper bound for the color range
+			 * @param color The color for the slider's line for values <code>&lt;upperBound</code> and >= than the upper bounds of other
+			 *        color ranges in the renderer
+			 * @return This renderer
+			 */
 			public Default withColorRange(Double upperBound, Color color) {
 				theColorRanges.put(upperBound, color);
 				return this;
@@ -595,6 +615,10 @@ public class MultiRangeSlider extends ConformingPanel {
 				}
 			}
 
+			/**
+			 * @param value The value to get the color for
+			 * @return The slider's line color at the given value
+			 */
 			protected Color getColor(double value) {
 				if (theColorRanges.isEmpty())
 					return getForeground();

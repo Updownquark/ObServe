@@ -264,6 +264,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return ComboHookup.of(Subscription.forAll(subs), () -> hoveredItem[0]);
 	}
 
+	/**
+	 * @param comboBox The combo box to get the popup for
+	 * @return The popup for the combo
+	 */
 	public static ComboPopup getComboPopup(JComboBox<?> comboBox) {
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
 		AccessibleContext accessible = comboBox.getAccessibleContext();
@@ -275,6 +279,12 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return null;
 	}
 
+	/**
+	 * @param <T> The type of values in the combo box
+	 * @param comboBox The combo box to get the list for
+	 * @param popup The popup for the combo
+	 * @return The list for the combo
+	 */
 	public static <T> JList<T> getPopupList(JComboBox<T> comboBox, ComboPopup popup){
 		if(popup==null)
 			popup=getComboPopup(comboBox);

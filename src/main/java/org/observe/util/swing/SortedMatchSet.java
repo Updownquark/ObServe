@@ -1,32 +1,54 @@
 package org.observe.util.swing;
 
+import java.util.Arrays;
+
 import org.qommons.ArrayUtils;
 
 /**
- * A simple sorted set of 2-length int array matches. This highly-specialized and highly-optimized class makes combining matches fast
- * and easy. It assumes single-threaded usage, as it should only be ever used on the Java AWT Event Queue thread. For performance
- * reasons however, this is never checked.
+ * A simple sorted set of {@link TextMatch}es. This highly-specialized and highly-optimized class makes combining matches fast and easy. It
+ * assumes single-threaded usage, as it should only be ever used on the Java AWT Event Queue thread. For performance reasons however, this
+ * is never checked.
  */
 public class SortedMatchSet {
+	/** Immutable empty match set */
 	public static final SortedMatchSet EMPTY = new SortedMatchSet(0);
 
 	private int[] theMatches;
 	private int theSize; // This is double the number of matches in the set, as each match takes two spots
 
+	/** Creates a mutable empty match set */
 	public SortedMatchSet() {
 		this(10);
 	}
 
+	/**
+	 * Creates a mutable empty match set
+	 *
+	 * @param capacity The initial capacity for the match set
+	 */
 	public SortedMatchSet(int capacity) {
 		theMatches = new int[capacity << 1];
 	}
 
+	/**
+	 * Adds a text match to this match set
+	 *
+	 * @param match The match to add
+	 * @return This match set
+	 */
 	public SortedMatchSet add(TextMatch match) {
 		if (theMatches.length == 0)
 			throw new UnsupportedOperationException("Can't add to EMPTY");
 		return add(match.start, match.end);
 	}
 
+	/**
+	 * Adds a text match to this match set
+	 *
+	 * @param start The offset index of the start of the text match
+	 * @param end The offset index of the end of the text match
+	 * @return This match set
+	 */
 	public SortedMatchSet add(int start, int end) {
 		if (theMatches.length == 0)
 			throw new UnsupportedOperationException("Can't add to EMPTY");
@@ -69,6 +91,12 @@ public class SortedMatchSet {
 		return this;
 	}
 
+	/**
+	 * Adds all matches from another match set into this one
+	 *
+	 * @param matches The matches to add
+	 * @return This match set
+	 */
 	public SortedMatchSet addAll(SortedMatchSet matches) {
 		if (matches == null)
 			return this;
@@ -88,6 +116,7 @@ public class SortedMatchSet {
 		return this;
 	}
 
+	/** @return All text matches in this match set */
 	public TextMatch[] getMatches() {
 		int matchCount = theSize >> 1;
 		TextMatch[] copy = new TextMatch[matchCount];
@@ -96,10 +125,15 @@ public class SortedMatchSet {
 		return copy;
 	}
 
+	/** @return The number of matches in this match set */
 	public int size() {
 		return theSize >>> 1;
 	}
 
+	/**
+	 * @param i The index of the match in this match set
+	 * @return The offset index of the start of the text match at the given index
+	 */
 	public int getStart(int i) {
 		int idx = i << 1;
 		if (idx >= theSize)
@@ -107,6 +141,10 @@ public class SortedMatchSet {
 		return theMatches[idx];
 	}
 
+	/**
+	 * @param i The index of the match in this match set
+	 * @return The offset index of the end of the text match at the given index
+	 */
 	public int getEnd(int i) {
 		int idx = i << 1;
 		if (idx >= theSize)
@@ -114,6 +152,7 @@ public class SortedMatchSet {
 		return theMatches[idx + 1];
 	}
 
+	/** @return All the text matches in this match set, with any intersecting or abutting matches combined into one */
 	public TextMatch[] getDisjointMatches() {
 		TextMatch[] matches=new TextMatch[theSize];
 		if (theSize == 0)
@@ -129,12 +168,8 @@ public class SortedMatchSet {
 			end=theMatches[i+1];
 		}
 		matches[m++] = new TextMatch(start, end);
-		if(m<matches.length) {
-			TextMatch [] littleM=new TextMatch[m];
-			for(int i=0;i<m;i++)
-				littleM[i]=matches[i];
-			matches=littleM;
-		}
+		if (m < matches.length)
+			matches = Arrays.copyOf(matches, m);
 		return matches;
 	}
 

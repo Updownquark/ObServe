@@ -33,6 +33,11 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
+/**
+ * Observable structure for a styled text document
+ *
+ * @param <T> The type of nodes in the structure
+ */
 public abstract class ObservableStyledDocument<T> implements Highlighter {
 	private final ObservableValue<? extends T> theRoot;
 	private final Format<T> theFormat;
@@ -46,8 +51,13 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 	private final ListenerList<Consumer<? super ChangeEvent<T>>> theListeners;
 
 	private Function<? super T, String> thePostNodeText;
-	private boolean isHighlighterInstalled;
 
+	/**
+	 * @param root The root node of the structure
+	 * @param format The format to convert nodes to text
+	 * @param threading The threading constraint for thread-safety in the structure
+	 * @param until The observable to stop all listening
+	 */
 	protected ObservableStyledDocument(ObservableValue<? extends T> root, Format<T> format, ThreadConstraint threading,
 		Observable<?> until) {
 		theFormat = format;
@@ -76,6 +86,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 		return this;
 	}
 
+	/** @return The root node of the document */
 	public DocumentNode getRoot() {
 		return theRootNode;
 	}
@@ -84,6 +95,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 		return theRootStyle;
 	}
 
+	/** @return The root value of the document */
 	public ObservableValue<? extends T> getRootValue() {
 		return theRoot;
 	}
