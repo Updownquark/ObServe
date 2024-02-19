@@ -82,18 +82,18 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		</add-on>
 
 		<!-- To support external content -->
-		<?DOC The &lt;head> section of &lt;expresso-external-content> specified in a separate file?>
+		<?DOC The &lt;head> section of an &lt;expresso-external-document> specified in a separate file?>
 		<add-on name="external-head-section" requires="head">
-			<child-mod child="head.models" inherits="external-content-model" />
+			<child-mod child="head.models" inherits="external-document-model" />
 		</add-on>
-		<?DOC Tagging add-on for the &lt;models> element in a &lt;head> section for &lt;expresso-external-content> specified in a separate file?>
-		<add-on name="external-content-model" requires="models" />
-		<?DOC Tags &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file ?>
+		<?DOC Tagging add-on for the &lt;models> element in a &lt;head> section for &lt;expresso-external-document> specified in a separate file?>
+		<add-on name="external-document-model" requires="models" />
+		<?DOC Tags &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-document> specified in a separate file ?>
 		<add-on name="attr-backed-ext-model" requires="ext-model">
 			<child-mod child="ext-model.value" inherits="attr-backed-model-value" />
 			<child-mod child="ext-model.sub-model" inherits="attr-backed-ext-model" />
 		</add-on>
-		<?DOC &lt;model-value>s specified in &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file?>
+		<?DOC &lt;model-value>s specified in &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-document> specified in a separate file?>
 		<add-on name="attr-backed-model-value" requires="model-value">
 			<attribute name="source-attr" type="qonfig-member" />
 		</add-on>
@@ -157,17 +157,17 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="models" type="models" />
 		</element-def>
 
-		<?DOC Expresso content specified in a separate file from the main application?>
-		<element-def name="expresso-external-content" extends="external-content" inherits="expresso-document">
+		<?DOC Root element of expresso content specified in a separate file from the main application?>
+		<element-def name="expresso-external-document" extends="external-document" inherits="expresso-document">
 			<child-mod child="expresso-document.head" type="head" inherits="external-head-section" />
 		</element-def>
 	</elements>
 
 	<auto-inheritance>
-		<?DOC Marks &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-content> specified in a separate file to require
+		<?DOC Marks &lt;ext-model>s in the &lt;head> section of &lt;expresso-external-document> specified in a separate file to require
 			specification of the attribute on the promise that will populate the model value?>
 		<auto-inherit inherits="attr-backed-ext-model">
-			<target element="ext-model" role="external-content-model.model" />
+			<target element="ext-model" role="external-document-model.model" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

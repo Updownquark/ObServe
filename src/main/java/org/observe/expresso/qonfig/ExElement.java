@@ -687,8 +687,8 @@ public interface ExElement extends Identifiable {
 				theReporting = session.reporting();
 				boolean firstTime = theTraceability == null;
 				if (firstTime) {
-					theTraceability = new LinkedHashMap<>(ElementTypeTraceability.SingleTypeTraceability.traceabilityFor(getClass(),
-						theElement.getDocument().getDocToolkit(), theReporting));
+					theTraceability = new LinkedHashMap<>(
+						ElementTypeTraceability.traceabilityFor(getClass(), theElement.getDocument().getDocToolkit(), theReporting));
 				}
 				session.setElementRepresentation(this);
 				if (theParent != null) { // Check that the parent configured is actually the parent element
@@ -728,7 +728,7 @@ public interface ExElement extends Identifiable {
 						addAddOns(session, theElement.getType(), addOnsTested, theAddOns);
 					else {
 						for (ExAddOn.Def<?, ?> addOn : thePromise.getAddOns()) {
-							SingleTypeTraceability.join(theTraceability, SingleTypeTraceability.traceabilityFor(addOn.getClass(),
+							ElementTypeTraceability.join(theTraceability, SingleTypeTraceability.traceabilityFor(addOn.getClass(),
 								theElement.getDocument().getDocToolkit(), theReporting));
 						}
 					}
@@ -821,7 +821,7 @@ public interface ExElement extends Identifiable {
 				Class<?> addOnType = session.getInterpretationSupport(ExAddOn.Def.class);
 				if (addOnType != null && addOns.get(addOnType, ClassMap.TypeMatch.SUB_TYPE) == null) {
 					ExAddOn.Def<? super E, ?> exAddOn = session.interpret(addOn, ExAddOn.Def.class);
-					SingleTypeTraceability.join(theTraceability,
+					ElementTypeTraceability.join(theTraceability,
 						SingleTypeTraceability.traceabilityFor(exAddOn.getClass(), theElement.getDocument().getDocToolkit(), theReporting));
 					addOns.put(exAddOn.getClass(), exAddOn);
 				}

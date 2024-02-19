@@ -317,7 +317,7 @@ public class ObservableValueTransformations {
 				return new FilterEnabledValue<>(source.filterAccept(LambdaUtils.printableFn(v -> {
 					sourceV.set(v, null);
 					return test.get();
-				}, test::toString, null)), sourceV, test);
+				}, test::toString, null)), test);
 			}
 
 			@Override
@@ -341,18 +341,19 @@ public class ObservableValueTransformations {
 				else {
 					SettableValue<T> newSourceV = SettableValue.build(theSourceType).build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
-					return new FilterEnabledValue<>(newSource, newSourceV, newTest);
+					return new FilterEnabledValue<>(newSource.filterAccept(LambdaUtils.printableFn(v -> {
+						newSourceV.set(v, null);
+						return newTest.get();
+					}, newTest::toString, null)), newTest);
 				}
 			}
 		}
 
 		static class FilterEnabledValue<T> extends SettableValue.WrappingSettableValue<T> {
-			private final SettableValue<T> theSourceValue;
 			private final SettableValue<String> theTest;
 
-			FilterEnabledValue(SettableValue<T> wrapped, SettableValue<T> sourceValue, SettableValue<String> test) {
+			FilterEnabledValue(SettableValue<T> wrapped, SettableValue<String> test) {
 				super(wrapped);
-				theSourceValue = sourceValue;
 				theTest = test;
 			}
 
@@ -1197,7 +1198,7 @@ public class ObservableValueTransformations {
 				}
 			}
 
-			static class AsSettableValue<T> extends SettableValue.AlwaysDisabledValue<T> implements SettableValue<T> {
+			static class AsSettableValue<T> extends SettableValue.AlwaysDisabledValue<T> {
 				private final SettableValue<? extends ObservableValue<? extends T>> theSourceValue;
 
 				AsSettableValue(SettableValue<? extends ObservableValue<? extends T>> sourceValue, ObservableValue<T> value) {

@@ -15,23 +15,52 @@ import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.SessionValues;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An element defining a model value that must be specified from outside the scope of its document
+ *
+ * @param <MV> The type of the model value
+ */
 public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
+	/** The XML name of this element */
 	public static final String EXT_MODEL_VALUE = "ext-model-value";
+	/**
+	 * The session key in the {@link ExpressoQIS} to {@link SessionValues#put(String, Object) put} a {@link ExtModelValueHandler handler} to
+	 * handle external model values
+	 */
 	public static final String EXT_MODEL_VALUE_HANDLER = "Ext.Model.Value.Handler";
 
+	/** A handler for external model values */
 	public interface ExtModelValueHandler {
+		/**
+		 * @param <M> The model type of the value
+		 * @param value The definition of the value
+		 * @param builder The model builder to populate with the external value
+		 * @param valueSession The expresso session for the model value
+		 * @throws QonfigInterpretationException If the external value could not be interpreted
+		 */
 		<M> void handleExtValue(Def<M> value, ObservableModelSet.Builder builder, ExpressoQIS valueSession)
 			throws QonfigInterpretationException;
 	}
 
+	/**
+	 * External model value element definition
+	 *
+	 * @param <M> The model type of the value
+	 */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = EXT_MODEL_VALUE, interpretation = Interpreted.class)
 	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<?>> implements ExtValueRef<M> {
 		private CompiledExpression theDefault;
 
+		/**
+		 * @param parent The parent element defining this external model value
+		 * @param qonfigType The Qonfig type of this element
+		 * @param modelType The model type of the value
+		 */
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
 			super(parent, qonfigType, modelType);
 		}
@@ -58,6 +87,7 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 				builder.withExternal(name, this, reporting().getFileLocation().getPosition(0));
 		}
 
+		/** @return The expression defining the value to use for the value if it is not supplied externally */
 		@QonfigAttributeGetter("default")
 		public CompiledExpression getDefault() {
 			return theDefault;
@@ -109,12 +139,19 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 			return getElement().getPositionInFile();
 		}
 
+		/**
+		 * A {@link Def definition} for an {@link ExtModelValueElement} that has no type parameters
+		 *
+		 * @param <M> The model type of the value
+		 */
 		public static class UnTyped<M> extends Def<M> {
-			private final String theTypeName;
-
-			public UnTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.UnTyped<M> modelType, String typeName) {
+			/**
+			 * @param parent The parent element defining this external model value
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of the value
+			 */
+			public UnTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.UnTyped<M> modelType) {
 				super(parent, qonfigType, modelType);
-				theTypeName = typeName;
 			}
 
 			@Override
@@ -128,9 +165,20 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 			}
 		}
 
+		/**
+		 * A {@link Def definition} for an {@link ExtModelValueElement} that has one type parameter
+		 *
+		 * @param <M> The model type of the value
+		 */
 		public static class Single<M> extends Def<M> {
 			private final String theTypeName;
 
+			/**
+			 * @param parent The parent element defining this external model value
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of the value
+			 * @param typeName The name of the model value's type
+			 */
 			public Single(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<M> modelType, String typeName) {
 				super(parent, qonfigType, modelType);
 				theTypeName = typeName;
@@ -141,6 +189,7 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 				return (ModelType.SingleTyped<M>) super.getModelType();
 			}
 
+			/** @return The declared type of the model value */
 			public VariableType getValueType() {
 				return getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
 			}
@@ -163,9 +212,20 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 			}
 		}
 
+		/**
+		 * A {@link Def definition} for an {@link ExtModelValueElement} that has two type parameters
+		 *
+		 * @param <M> The model type of the value
+		 */
 		public static class Double<M> extends Def<M> {
 			private final String theTypeName;
 
+			/**
+			 * @param parent The parent element defining this external model value
+			 * @param qonfigType The Qonfig type of this element
+			 * @param modelType The model type of the value
+			 * @param typeName The name of the model value's type
+			 */
 			public Double(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType, String typeName) {
 				super(parent, qonfigType, modelType);
 				theTypeName = typeName;
@@ -176,10 +236,12 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 				return (ModelType.DoubleTyped<M>) super.getModelType();
 			}
 
+			/** @return The declared key type of the model value */
 			public VariableType getKeyType() {
 				return getAddOnValue(ExMapModelValue.Def.class, ExMapModelValue.Def::getKeyType);
 			}
 
+			/** @return The declared value type of the model value */
 			public VariableType getValueType() {
 				return getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
 			}
@@ -211,11 +273,21 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 		}
 	}
 
+	/**
+	 * External model value element interpretation
+	 *
+	 * @param <M> The model type of the external value
+	 * @param <MV> The instance type of the external value
+	 */
 	public static abstract class Interpreted<M, MV extends M>
 	extends ModelValueElement.Interpreted.Abstract<M, MV, ExtModelValueElement<MV>> {
 		private InterpretedValueSynth<M, MV> theDefault;
 
-		protected Interpreted(Def<M> definition, ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+		/**
+		 * @param definition The definition to interpret
+		 * @param parent The parent element defining this external value
+		 */
+		protected Interpreted(Def<M> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -224,6 +296,7 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 			return (Def<M>) super.getDefinition();
 		}
 
+		/** @return The expression defining the value to use for the value if it is not supplied externally */
 		public InterpretedValueSynth<M, MV> getDefault() {
 			return theDefault;
 		}

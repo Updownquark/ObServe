@@ -13,14 +13,20 @@ import org.observe.quick.QuickDocument;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/** The &lt;quick-swing> add-on, allowing the user to select the Swing look and feel for the UI */
 @ExElementTraceable(toolkit = QuickSwingInterpretation.SWING, qonfigType = "quick-swing", interpretation = QuickSwing.Interpreted.class)
 public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void<QuickDocument>> {
 	private String theLookAndFeel;
 
+	/**
+	 * @param type The Qonfig type of this add-on
+	 * @param element The Quick document
+	 */
 	public QuickSwing(QonfigAddOn type, ExElement.Def<? extends QuickDocument> element) {
 		super(type, element);
 	}
 
+	/** @return The name of the look and feel */
 	@QonfigAttributeGetter("look-and-feel")
 	public String getLookAndFeel() {
 		return theLookAndFeel;
@@ -38,8 +44,13 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		return new Interpreted(this, element);
 	}
 
+	/** {@link QuickSwing} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickDocument, ExAddOn.Void<QuickDocument>> {
-		public Interpreted(QuickSwing definition, ExElement.Interpreted<?> element) {
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The interpreted Quick document
+		 */
+		protected Interpreted(QuickSwing definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 

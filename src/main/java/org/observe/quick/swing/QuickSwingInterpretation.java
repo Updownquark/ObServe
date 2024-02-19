@@ -13,6 +13,7 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for Quick-Swing toolkit */
 public class QuickSwingInterpretation implements QonfigInterpretation {
 	/** The name of the toolkit */
 	public static final String NAME = "Quick-Swing";

@@ -87,11 +87,31 @@ import com.google.common.reflect.TypeToken;
 
 /** Quick interpretation of the base toolkit for Swing */
 public class QuickBaseSwing implements QuickInterpretation {
+	/**
+	 * Support for menu bars in Quick swing
+	 *
+	 * @param <E> The type of element this menu bar support is for
+	 */
 	public interface QuickSwingMenuBarPopulator<E extends ExElement> {
+		/**
+		 * @param menuBar The menu bar builder to populate
+		 * @param quick The quick element to use to populate the menu bar
+		 * @throws ModelInstantiationException If an error occurs populating the menu bar
+		 */
 		void populateMenuBar(PanelPopulation.MenuBarBuilder<?> menuBar, E quick) throws ModelInstantiationException;
 	}
 
+	/**
+	 * Support for menus in Quick swing
+	 *
+	 * @param <E> The type of element this menu support is for
+	 */
 	public interface QuickSwingMenuPopulator<E extends ExElement> {
+		/**
+		 * @param menu The menu builder to populate
+		 * @param quick The quick element to use to populate the menu
+		 * @throws ModelInstantiationException If an error occurs populating the menu
+		 */
 		void populateMenu(PanelPopulation.MenuBuilder<?, ?> menu, E quick) throws ModelInstantiationException;
 	}
 
@@ -165,6 +185,16 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickCheckBoxMenuItem.Interpreted.class, QuickSwingMenuPopulator.class, (quick, tx2) -> new SwingCheckBoxMenuItem<>());
 	}
 
+	/**
+	 * Utility method for populating a {@link org.qommons.Transformer.Builder} for a Quick widget populator for a generic widget type
+	 *
+	 * @param <W> The wildcard Quick widget element type
+	 * @param <GW> The parameterized Quick widget element type
+	 * @param <I> The wildcard Quick widget interpreted type
+	 * @param <GI> The parameterized Quick widget interpreted type
+	 * @param ctor The constructor for the widget populator
+	 * @return The population creator for the transformer
+	 */
 	public static <W extends QuickWidget, GW extends W, I extends QuickWidget.Interpreted<W>, GI extends QuickWidget.Interpreted<GW>> //
 	ExBiFunction<I, Transformer<ExpressoInterpretationException>, QuickSwingPopulator<W>, ExpressoInterpretationException> widget(
 		Supplier<QuickSwingPopulator<GW>> ctor) {

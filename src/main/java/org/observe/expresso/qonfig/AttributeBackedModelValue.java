@@ -39,13 +39,13 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 			super.update(session, element);
 
 			ExElement.Def<?> parent = element.getParentElement();
-			while (parent != null && !(parent instanceof QonfigExternalContent.Def))
+			while (parent != null && !(parent instanceof QonfigExternalDocument.Def))
 				parent = parent.getParentElement();
 			if (parent == null) {
 				element.reporting().warn(ATTR_BACKED_MODEL_VALUE + " applied to non-external element");
 				return;
 			}
-			QonfigElementDef fulfills = ((QonfigExternalContent.Def<?>) parent).getFulfills();
+			QonfigElementDef fulfills = ((QonfigExternalDocument.Def<?>) parent).getFulfills();
 			PatternMatch sourceAttr = session.getAttribute("source-attr", PatternMatch.class);
 			String elementName = sourceAttr.getGroup("name");
 			if (elementName != null) {

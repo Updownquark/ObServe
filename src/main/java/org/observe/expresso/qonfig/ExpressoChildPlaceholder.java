@@ -12,10 +12,25 @@ import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+/**
+ * <p>
+ * A promise inside an externally-loaded expresso document that is fulfilled by content specified on the {@link ExpressoExternalReference}
+ * that loaded the external content.
+ * </p>
+ * <p>
+ * This is the mechanism by which content may specified in the root document to be injected into the middle of externally-loaded content.
+ * </p>
+ */
 public class ExpressoChildPlaceholder extends ExElement.Abstract implements QonfigPromise {
+	/** The XML name of this element */
 	public static final String CHILD_PLACEHOLDER = "child-placeholder";
 
-	@ExElementTraceable(toolkit = ExpressoExternalReference.QONFIG_REFERENCE_TK,
+	/**
+	 * {@link ExpressoChildPlaceholder} definition
+	 *
+	 * @param <P> The sub-type of element to create
+	 */
+	@ExElementTraceable(toolkit = QonfigExternalDocument.QONFIG_REFERENCE_TK,
 		qonfigType = CHILD_PLACEHOLDER,
 		interpretation = Interpreted.class,
 		instance = ExpressoChildPlaceholder.class)
@@ -26,23 +41,31 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		private String theRefRoleName;
 		private QonfigChildDef theRefRole;
 
+		/**
+		 * @param parent The parent element containing this promise
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		/** @return The element in the document that loaded the external content */
 		public ExElement.Def<?> getDocumentParent() {
 			return theDocumentParent;
 		}
 
+		/** @return The name of the role in the {@link #getDocumentParent() document parent} that this promise will be fulfilled with */
 		public String getRefRoleName() {
 			return theRefRoleName;
 		}
 
+		/** @return The role in the {@link #getDocumentParent() document parent} that this promise will be fulfilled with */
 		@QonfigAttributeGetter("ref-role")
 		public QonfigChildDef getRefRole() {
 			return theRefRole;
 		}
 
+		/** @param refRole The role in the {@link #getDocumentParent() document parent} that this promise will be fulfilled with */
 		public void setRefRole(QonfigChildDef refRole) {
 			theRefRole = refRole;
 		}
@@ -89,6 +112,11 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		}
 	}
 
+	/**
+	 * {@link ExpressoChildPlaceholder} interpretation
+	 *
+	 * @param <P> The sub-type of element to create
+	 */
 	public static class Interpreted<P extends ExpressoChildPlaceholder> extends ExElement.Interpreted.Abstract<P>
 	implements QonfigPromise.Interpreted<P> {
 		private ExElement.Interpreted<?> theFulfilledContent;

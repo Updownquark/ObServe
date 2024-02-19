@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<expresso-external-content xmlns:tests="Quick-Swing-Tests v0.1" xmlns:base="Quick-Base v0.1" fulfills="entity-table">
+<expresso-external-document xmlns:tests="Quick-Swing-Tests v0.1" xmlns:base="Quick-Base v0.1" fulfills="entity-table">
 	<head role="head">
 		<imports>
 			<import>org.observe.quick.swing.SwingTestEntity</import>
@@ -25,4 +25,4 @@
 			</column-edit>
 		</column>
 	</table>
-</expresso-external-content>
+</expresso-external-document>

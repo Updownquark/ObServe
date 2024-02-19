@@ -11,7 +11,7 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ElementTypeTraceability.QonfigElementKey;
-import org.observe.expresso.qonfig.ExpressoExternalContent.AttributeValueSatisfier;
+import org.observe.expresso.qonfig.ExpressoExternalDocument.AttributeValueSatisfier;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterList;
@@ -27,25 +27,36 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigElementView;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A reference to an external expresso document that will be loaded and injected into the source document as content */
 public class ExpressoExternalReference extends ExElement.Abstract implements QonfigPromise {
-	public static final String QONFIG_REFERENCE_TK = "Qonfig-Reference v0.1";
+	/** The XML name of this element */
 	public static final String EXT_REFERENCE = "external-reference";
 
-	@ExElementTraceable(toolkit = QONFIG_REFERENCE_TK,
+	/**
+	 * {@link ExpressoExternalReference} definition
+	 *
+	 * @param <P> The type of element to create
+	 */
+	@ExElementTraceable(toolkit = QonfigExternalDocument.QONFIG_REFERENCE_TK,
 		qonfigType = EXT_REFERENCE,
 		interpretation = Interpreted.class,
 		instance = ExpressoExternalReference.class)
 	public static class Def<P extends ExpressoExternalReference> extends ExElement.Def.Abstract<P> implements QonfigPromise.Def<P> {
 		private ExElement.Def<?> theFulfilledContent;
-		private ExpressoExternalContent.Def<?> theExternalContent;
+		private ExpressoExternalDocument.Def<?> theExternalContent;
 		private final BetterMultiMap<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> theChildren;
 		private CompiledExpressoEnv theExtExpressoEnv;
 
+		/**
+		 * @param parent The parent element in the source document
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theChildren = BetterHashMultiMap.<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> build().buildMultiMap();
 		}
 
+		/** @return The loaded external document whose content to inject into the source document */
 		@QonfigAttributeGetter("ref")
 		public QonfigDocument getReference() {
 			return theExternalContent == null ? null : theExternalContent.getElement().getDocument();
@@ -56,10 +67,15 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			return theFulfilledContent;
 		}
 
-		public ExpressoExternalContent.Def<?> getExternalContent() {
+		/** @return The content to inject into the source document */
+		public ExpressoExternalDocument.Def<?> getExternalContent() {
 			return theExternalContent;
 		}
 
+		/**
+		 * @return The child placeholders in the {@link #getExternalContent() external content} to be satisfied with children specified on
+		 *         this element
+		 */
 		public BetterMultiMap<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> getChildren() {
 			return BetterCollections.unmodifiableMultiMap(theChildren);
 		}
@@ -77,11 +93,11 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			QonfigElement.Builder extContentBuilder = QonfigElement.buildRoot(false, session.reporting(), extContentDoc,
 				(QonfigElementDef) extContentDoc.getPartialRoot().getType(), extContentDoc.getPartialRoot().getDescription());
 			buildExtContent(extContentBuilder, extContentDoc.getPartialRoot(),
-				session.getType(ExpressoSessionImplV0_1.CORE, ExpressoExternalContent.EXPRESSO_EXTERNAL_CONTENT).getChild("fulfillment"));
+				session.getType(ExpressoSessionImplV0_1.CORE, ExpressoExternalDocument.EXPRESSO_EXTERNAL_DOCUMENT).getChild("fulfillment"));
 			QonfigElement extContentRoot = extContentBuilder.buildFull();
 			ExpressoQIS extContentSession = session.interpretRoot(extContentRoot).setExpressoEnv(CompiledExpressoEnv.STANDARD_JAVA);
 			if (theExternalContent == null || !ExElement.typesEqual(theExternalContent.getElement(), extContentDoc.getPartialRoot()))
-				theExternalContent = extContentSession.interpret(ExpressoExternalContent.Def.class);
+				theExternalContent = extContentSession.interpret(ExpressoExternalDocument.Def.class);
 			theExternalContent.update(extContentSession, theFulfilledContent);
 			theExtExpressoEnv = theExternalContent.getExpressoEnv();
 
@@ -124,7 +140,7 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 					builders.put(key, builder);
 				}
 				builder.withAttribute(attr.getKey().getName(), __ -> attr.getValue().getValue(),
-					interp -> ((ExpressoExternalContent.Interpreted<?>) interp).getExternalAttribute(attr.getKey()));
+					interp -> ((ExpressoExternalDocument.Interpreted<?>) interp).getExternalAttribute(attr.getKey()));
 			}
 			for (QonfigChildDef.Declared childDef : theChildren.keySet()) {
 				QonfigElementKey key = new QonfigElementKey(childDef.getOwner());
@@ -138,9 +154,9 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 				}
 				builder.withChild(childDef.getName(), __ -> (BetterList<ExpressoChildPlaceholder.Def<?>>) theChildren.get(childDef),
 					interp -> {
-						return ((ExpressoExternalContent.Interpreted<?>) interp).getChildren(childDef);
+						return ((ExpressoExternalDocument.Interpreted<?>) interp).getChildren(childDef);
 					}, inst -> {
-						return ((ExpressoExternalContent) inst).getChildren(childDef);
+						return ((ExpressoExternalDocument) inst).getChildren(childDef);
 					});
 			}
 			for (Map.Entry<QonfigElementKey, ElementTypeTraceability.SingleTypeTraceabilityBuilder<?, ?, ?>> builder : builders.entrySet())
@@ -177,10 +193,15 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 	}
 
+	/**
+	 * {@link ExpressoExternalReference} interpretation
+	 *
+	 * @param <P> The type of element to create
+	 */
 	public static class Interpreted<P extends ExpressoExternalReference> extends ExElement.Interpreted.Abstract<P>
 	implements QonfigPromise.Interpreted<P> {
 		private ExElement.Interpreted<?> theFulfilledContent;
-		private ExpressoExternalContent.Interpreted<?> theExternalContent;
+		private ExpressoExternalDocument.Interpreted<?> theExternalContent;
 		private InterpretedExpressoEnv theExtExpressoEnv;
 
 		Interpreted(Def<? super P> definition, ExElement.Interpreted<?> parent) {
@@ -197,7 +218,8 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			return theFulfilledContent;
 		}
 
-		public ExpressoExternalContent.Interpreted<?> getExternalContent() {
+		/** @return The interpreted content to inject into the source document */
+		public ExpressoExternalDocument.Interpreted<?> getExternalContent() {
 			return theExternalContent;
 		}
 
@@ -234,7 +256,7 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 
 	private ModelInstantiator theExtModels;
 	private ExElement theFulfilledContent;
-	private ExpressoExternalContent theExternalContent;
+	private ExpressoExternalDocument theExternalContent;
 
 	ExpressoExternalReference(Object id, ExElement fulfilledContent) {
 		super(id);

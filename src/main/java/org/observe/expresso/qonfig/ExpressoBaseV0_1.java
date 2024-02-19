@@ -68,15 +68,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith(ExpressoDocument.EXPRESSO_DOCUMENT, ExpressoDocument.Def.class, ExAddOn.creator(ExpressoDocument.Def::new));
 
 		// To support external content
-		interpreter.createWith(ExpressoExternalContent.EXPRESSO_EXTERNAL_CONTENT, ExpressoExternalContent.Def.class,
-			ExElement.creator(ExpressoExternalContent.Def::new));
+		interpreter.createWith(ExpressoExternalDocument.EXPRESSO_EXTERNAL_DOCUMENT, ExpressoExternalDocument.Def.class,
+			ExElement.creator(ExpressoExternalDocument.Def::new));
 		interpreter.createWith(AttributeBackedModelValue.ATTR_BACKED_MODEL_VALUE, AttributeBackedModelValue.Def.class,
 			ExAddOn.creator(ExtModelValueElement.Def.class, AttributeBackedModelValue.Def::new));
 		interpreter.createWith(ExpressoChildPlaceholder.CHILD_PLACEHOLDER, ExpressoChildPlaceholder.Def.class,
 			ExElement.creator(ExpressoChildPlaceholder.Def::new));
 		// We have to explicitly support any external reference types
 		QonfigElementDef extReference = interpreter.getToolkit()
-			.getElement(ExpressoExternalReference.QONFIG_REFERENCE_TK + ":" + ExpressoExternalReference.EXT_REFERENCE);
+			.getElement(QonfigExternalDocument.QONFIG_REFERENCE_TK + ":" + ExpressoExternalReference.EXT_REFERENCE);
 
 		Set<QonfigToolkit> supported = new HashSet<>();
 		for (QonfigToolkit toolkit : interpreter.getKnownToolkits())
@@ -150,8 +150,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		})//
 		.createWith("action", ExtModelValueElement.Def.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ExtModelValueElement.Def.UnTyped<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action,
-				"action");
+			return new ExtModelValueElement.Def.UnTyped<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action);
 		})//
 		.createWith("value", ExtModelValueElement.Def.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);

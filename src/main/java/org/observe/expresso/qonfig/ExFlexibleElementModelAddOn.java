@@ -31,12 +31,35 @@ import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * This abstract add-on implementation provides utility for injecting new model data into the model view of the tagged element.
+ *
+ * @param <E> The type of element this add-on applies to
+ */
 public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends ExModelAugmentation<E> {
+	/**
+	 * Satisfies a dynamic model value in a model instance
+	 *
+	 * @param elementValueId The model ID of the dynamic model value to satisfy
+	 * @param models The model instance to satisfy the value in
+	 * @param value The value to satisfy the model value with
+	 * @throws ModelInstantiationException If no such element was injected from this add-on, or the injected value was not dynamically-typed
+	 */
 	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value)
 		throws ModelInstantiationException {
 		satisfyElementValue(elementValueId, models, value, ActionIfSatisfied.Replace);
 	}
 
+	/**
+	 * Satisfies a dynamic model value in a model instance
+	 *
+	 * @param elementValueId The model ID of the dynamic model value to satisfy
+	 * @param models The model instance to satisfy the value in
+	 * @param value The value to satisfy the model value with
+	 * @param ifPreSatisfied The action to take if the value is already satisfied in the model
+	 * @throws ModelInstantiationException If no such element was injected from this add-on, the value is not dynamic, or the value is
+	 *         already satisfied and <code>ifPreSatisfied=={@link ActionIfSatisfied#Error Error}</code>
+	 */
 	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value,
 		ActionIfSatisfied ifPreSatisfied) throws ModelInstantiationException {
 		Object modelValue = models.get(elementValueId);
@@ -56,6 +79,12 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		hollow.satisfy(value);
 	}
 
+	/**
+	 * @param elementValueId The model ID of the dynamic model value
+	 * @param models The model instance to check the value in
+	 * @return Whether the given dynamic value has been satisfied
+	 * @throws ModelInstantiationException If no such element was injected from this add-on, or the injected value was not dynamically-typed
+	 */
 	public static boolean isElementValueSatisfied(ModelComponentId elementValueId, ModelSetInstance models)
 		throws ModelInstantiationException {
 		Object modelValue = models.get(elementValueId);
@@ -65,11 +94,21 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		return hollow.isSatisfied();
 	}
 
+	/**
+	 * {@link ExFlexibleElementModelAddOn} definition
+	 *
+	 * @param <E> The type of element this add-on applies to
+	 * @param <AO> The type of add-on to create
+	 */
 	public static abstract class Def<E extends ExElement, AO extends ExFlexibleElementModelAddOn<? super E>>
 	extends ExModelAugmentation.Def<E, AO> {
 		private Map<String, CompiledModelValue<?>> theElementValues;
 		private volatile ExElement.Interpreted<? extends E> theCurrentInterpreting;
 
+		/**
+		 * @param type The Qonfig type of this add-on
+		 * @param element The element whose model view to enhance
+		 */
 		protected Def(QonfigAddOn type, ExElement.Def<? extends E> element) {
 			super(type, element);
 			theElementValues = Collections.emptyMap();
@@ -82,10 +121,22 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			super.update(session, element);
 		}
 
+		/** @return Additional model values injected by this add on, by name */
 		public Map<String, ? extends CompiledModelValue<?>> getElementValues() {
 			return Collections.unmodifiableMap(theElementValues);
 		}
 
+		/**
+		 * Injects a model value into the tagged element's model view
+		 *
+		 * @param <M> The model type of the value to inject
+		 * @param name The name of the variable by which the injected model value will be available in expressions on the target element
+		 * @param value The model value to inject
+		 * @param builder The model builder in which to inject the value
+		 * @param position The file position where the value was defined, for tracing
+		 * @return The model node of the injected value
+		 * @throws QonfigInterpretationException If the model value could not be injected
+		 */
 		protected <M> ModelComponentNode<M> addElementValue(String name, CompiledModelValue<M> value, ObservableModelSet.Builder builder,
 			LocatedFilePosition position) throws QonfigInterpretationException {
 			try {
@@ -105,6 +156,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return component;
 		}
 
+		/**
+		 * @param elementValueName The name by which the model value should be available to expressions
+		 * @return The
+		 *         {@link #addElementValue(String, CompiledModelValue, org.observe.expresso.ObservableModelSet.Builder, LocatedFilePosition)
+		 *         injected} model value
+		 * @throws QonfigInterpretationException If no such model value is available from this add-on
+		 */
 		protected CompiledModelValue<?> getElementValue(String elementValueName) throws QonfigInterpretationException {
 			CompiledModelValue<?> value = theElementValues.get(elementValueName);
 			if (value == null)
@@ -113,6 +171,20 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return value;
 		}
 
+		/**
+		 * Satisfies the type of an injected model value. The model value passed to
+		 * {@link #addElementValue(String, CompiledModelValue, org.observe.expresso.ObservableModelSet.Builder, LocatedFilePosition)
+		 * addElementValue()} may not have the information it needs to ascertain its type. This method provides implementations a means for
+		 * determining type with the interpreted element available.
+		 *
+		 * @param <I> The type of the interpreted element
+		 * @param <M> The model type of the model value
+		 * @param elementValueId The model ID of the model value to satisfy the type of
+		 * @param modelType The model type of the model value
+		 * @param type A function to evaluate the type for the model value given the interpreted element and its expresso environment
+		 * @throws QonfigInterpretationException If no such element was injected from this add-on, or the injected value was not
+		 *         dynamically-typed
+		 */
 		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
 			ModelType<M> modelType,
 			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
@@ -133,6 +205,19 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				(ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
 		}
 
+		/**
+		 * Satisfies the type of an injected model value. The model value passed to
+		 * {@link #addElementValue(String, CompiledModelValue, org.observe.expresso.ObservableModelSet.Builder, LocatedFilePosition)
+		 * addElementValue()} may not have the information it needs to ascertain its type. This method provides implementations a means for
+		 * satisfying the type after the value is declared.
+		 *
+		 * @param <I> The type of the interpreted element
+		 * @param <M> The model type of the model value
+		 * @param elementValueId The model ID of the model value to satisfy the type of
+		 * @param type The type for the model value
+		 * @throws QonfigInterpretationException If no such element was injected from this add-on, or the injected value was not
+		 *         dynamically-typed
+		 */
 		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
 			ModelInstanceType<M, ?> type) throws QonfigInterpretationException {
 			satisfyElementValueType(elementValueId, type.getModelType(), (interp, env) -> type);
@@ -150,10 +235,20 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 	}
 
+	/**
+	 * {@link ExFlexibleElementModelAddOn} interpretation
+	 *
+	 * @param <E> The type of element this add-on applies to
+	 * @param <AO> The type of add-on to create
+	 */
 	public static abstract class Interpreted<E extends ExElement, AO extends ExFlexibleElementModelAddOn<? super E>>
 	extends ExAddOn.Interpreted.Abstract<E, AO> {
 		private final Map<String, InterpretedModelComponentNode<?, ?>> theElementValues;
 
+		/**
+		 * @param definition The definition to interpret
+		 * @param element The element whose model view to enhance
+		 */
 		protected Interpreted(Def<E, ? super AO> definition, ExElement.Interpreted<? extends E> element) {
 			super(definition, element);
 			if (definition.getElementValues().isEmpty())
@@ -167,6 +262,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return (Def<E, ? super AO>) super.getDefinition();
 		}
 
+		/** @return Additional model values injected by this add on, by name */
 		public Map<String, InterpretedModelComponentNode<?, ?>> getElementValues() {
 			return Collections.unmodifiableMap(theElementValues);
 		}
@@ -188,6 +284,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			getDefinition().setCurrentInterpreting(null);
 		}
 
+		/**
+		 * @param elementValueName The name by which the model value should be available to expressions
+		 * @return The
+		 *         {@link Def#addElementValue(String, CompiledModelValue, org.observe.expresso.ObservableModelSet.Builder, LocatedFilePosition)
+		 *         injected} model value
+		 * @throws ExpressoInterpretationException If no such model value is available from this add-on
+		 */
 		protected InterpretedModelComponentNode<?, ?> getElementValue(String elementValueName) throws ExpressoInterpretationException {
 			InterpretedModelComponentNode<?, ?> value = theElementValues.get(elementValueName);
 			if (value == null) {
@@ -203,6 +306,15 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return value;
 		}
 
+		/**
+		 * Satisfies the value of an injected model value
+		 *
+		 * @param <M> The model type of the value to satisfy
+		 * @param <MV> The instance type of the value to satisfy
+		 * @param elementValueName The name of the model value to satisfy the type of
+		 * @param satisfier The implementation of the model value
+		 * @throws ExpressoInterpretationException If no such model value is available from this add-on, or the value is not dynamic
+		 */
 		protected <M, MV extends M> void satisfyElementValue(String elementValueName, InterpretedValueSynth<M, MV> satisfier)
 			throws ExpressoInterpretationException {
 			InterpretedModelComponentNode<?, ?> value = getElementValue(elementValueName);
@@ -212,11 +324,29 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			((PlaceholderModelValue.Interpreted<M, MV>) value.getValue()).satisfy(satisfier);
 		}
 
+		/**
+		 * Satisfies the value of an injected model value in an instance of the models
+		 *
+		 * @param elementValueName The name of the model value to satisfy the type of
+		 * @param models The model instance to satisfy the model value in
+		 * @param value The value for the model
+		 * @throws ModelInstantiationException If no such model value is available from this add on, or the value is not dynamic
+		 */
 		protected void satisfyElementValue(String elementValueName, ModelSetInstance models, Object value)
 			throws ModelInstantiationException {
-			satisfyElementValue(elementValueName, models, value, ActionIfSatisfied.Error);
+			satisfyElementValue(elementValueName, models, value, ActionIfSatisfied.Replace);
 		}
 
+		/**
+		 * Satisfies the value of an injected model value in an instance of the models
+		 *
+		 * @param elementValueName The name of the model value to satisfy the type of
+		 * @param models The model instance to satisfy the model value in
+		 * @param value The value for the model
+		 * @param ifPreSatisfied The action to take if the value is already satisfied in the model
+		 * @throws ModelInstantiationException If no such model value is available from this add on, the value is not dynamic, or the value
+		 *         is already satisfied and <code>ifPreSatisfied=={@link ActionIfSatisfied#Error Error}</code>
+		 */
 		protected void satisfyElementValue(String elementValueName, ModelSetInstance models, Object value, ActionIfSatisfied ifPreSatisfied)
 			throws ModelInstantiationException {
 			InterpretedModelComponentNode<?, ?> elementValue = theElementValues.get(elementValueName);
@@ -246,23 +376,38 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 	}
 
+	/** An action to take when attempting to satisfy a dynamic model value, but it is already satisfied */
 	public enum ActionIfSatisfied {
-		Error, Ignore, Replace
+		/** Throw an exception */
+		Error,
+		/** Leave the pre-satisfied value and return */
+		Ignore,
+		/** Replace the satisfied value with the new one */
+		Replace
 	}
 
+	/** @param element The element whose model view to enhance */
 	protected ExFlexibleElementModelAddOn(E element) {
 		super(element);
 	}
 
+	/**
+	 * A {@link CompiledModelValue} implementation for dynamic model values--ones that are just placeholders whose implementations must be
+	 * supplied by element or add-on implementations.
+	 *
+	 * @param <M> The model type of the value
+	 */
 	protected static abstract class PlaceholderModelValue<M> implements CompiledModelValue<M> {
 		private final String theName;
 		private Supplier<ExElement.Interpreted<?>> theInterpreting;
 		private ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> theType;
 
+		/** @param name The name by which this value will be available to expressions */
 		protected PlaceholderModelValue(String name) {
 			theName = name;
 		}
 
+		/** @return The model type of this value */
 		public abstract ModelType<M> getModelType();
 
 		@Override
@@ -276,6 +421,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			theType = type;
 		}
 
+		/**
+		 * @param <MV> The instance type of the value
+		 * @param env The expresso environment for interpreting expressions
+		 * @param defaultType The type to use for this model value if its type has not been satisfied
+		 * @return The interpreted model value
+		 * @throws ExpressoInterpretationException If the value could not be interpreted, or if it requires a type that was not satisfied
+		 */
 		protected <MV extends M> InterpretedValueSynth<M, MV> create(InterpretedExpressoEnv env, ModelInstanceType<M, MV> defaultType)
 			throws ExpressoInterpretationException {
 			ModelInstanceType<M, MV> type;
@@ -302,6 +454,12 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return interpret(type);
 		}
 
+		/**
+		 * @param <MV> The instance type of the value
+		 * @param type The actual instance type for the value
+		 * @return The interpreted model value
+		 * @throws ExpressoInterpretationException If the model value could not be interpreted
+		 */
 		protected <MV extends M> Interpreted<M, MV> interpret(ModelInstanceType<M, MV> type) throws ExpressoInterpretationException {
 			return new Interpreted<>(theName, type);
 		}
@@ -311,11 +469,22 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return theName;
 		}
 
+		/**
+		 * An {@link InterpretedValueSynth} implementation for dynamic model values--ones that are just placeholders whose implementations
+		 * must be supplied by element or add-on implementations.
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The instance type of the value
+		 */
 		protected static class Interpreted<M, MV extends M> implements InterpretedValueSynth<M, MV> {
 			private final String theName;
 			private final ModelInstanceType<M, MV> theType;
 			private InterpretedValueSynth<M, MV> theSatisfier;
 
+			/**
+			 * @param name The name by which this value will be available to expressions
+			 * @param type The instance type of this value
+			 */
 			protected Interpreted(String name, ModelInstanceType<M, MV> type) {
 				theName = name;
 				theType = type;
@@ -371,10 +540,20 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			}
 		}
 
+		/**
+		 * A model instantiator for dynamic model values that must be satisfied by element or add-on instance implementations
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The instance type of the value
+		 */
 		protected static class HollowValueInstantiator<M, MV extends M> implements ModelValueInstantiator<MV> {
 			private final String theName;
 			private final ModelInstanceType<M, MV> theType;
 
+			/**
+			 * @param name The name by which this value will be available to expressions
+			 * @param type The instance type of this value
+			 */
 			protected HollowValueInstantiator(String name, ModelInstanceType<M, MV> type) {
 				theName = name;
 				theType = type;

@@ -50,11 +50,22 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 */
 	void populate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
+	/**
+	 * Adds a modifier to this populator to be called when the component is added
+	 *
+	 * @param modify The modifier
+	 */
 	void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify);
 
+	/**
+	 * Abstract {@link QuickSwingPopulator} implementation
+	 *
+	 * @param <W> The type of the Quick widget
+	 */
 	public abstract class Abstract<W extends QuickWidget> implements QuickSwingPopulator<W> {
 		private final List<ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException>> theModifiers;
 
+		/** Creates the populator */
 		protected Abstract() {
 			theModifiers = new LinkedList<>();
 		}
@@ -171,62 +182,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		void addAction(PanelPopulation.CollectionWidgetBuilder<R, ?, ?> table, A action) throws ModelInstantiationException;
 	}
 
-	// /**
-	// * Utility for interpretation of swing widgets
-	// *
-	// * @param <W> The type of the Quick widget to interpret
-	// * @param <I> The type of the interpreted quick widget
-	// *
-	// * @param transformer The transformer builder to populate
-	// * @param interpretedType The type of the interpreted quick widget
-	// * @param interpreter Produces a {@link QuickSwingPopulator} for interpreted widgets of the given type
-	// */
-	// public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> void interpretWidget(//
-	// Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
-	// ExBiFunction<? super I, Transformer<ExpressoInterpretationException>, ? extends QuickSwingPopulator<? extends W>,
-	// ExpressoInterpretationException> interpreter) {
-	// transformer.with(interpretedType, QuickSwingPopulator.class, interpreter);
-	// }
-	//
-	// public static <W extends QuickWidget, I extends QuickWidget.Interpreted<W>> QuickSwingPopulator<W> createWidget(
-	// ExBiFunction<PanelPopulator<?, ?>, W, ComponentEditor<?, ?>, ModelInstantiationException> populator) {
-	// return new Abstract<W>() {
-	// @Override
-	// protected ComponentEditor<?, ?> doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
-	// return populator.apply(panel, quick);
-	// }
-	// };
-	// }
-	//
-	// /**
-	// * Utility for interpretation of swing widgets
-	// *
-	// * @param <W> The type of the Quick widget to interpret
-	// * @param <I> The type of the interpreted quick widget
-	// *
-	// * @param transformer The transformer builder to populate
-	// * @param interpretedType The type of the interpreted quick widget
-	// * @param interpreter Produces a {@link QuickSwingPopulator} for interpreted widgets of the given type
-	// */
-	// public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> void interpretContainer(//
-	// Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
-	// ExBiFunction<? super I, Transformer<ExpressoInterpretationException>, ? extends QuickSwingContainerPopulator<? extends W>,
-	// ExpressoInterpretationException> interpreter) {
-	// transformer.with(interpretedType, QuickSwingContainerPopulator.class, interpreter);
-	// }
-	//
-	// public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> QuickSwingContainerPopulator<W>
-	// createContainer(
-	// ExBiFunction<ContainerPopulator<?, ?>, W, ComponentEditor<?, ?>, ModelInstantiationException> populator) {
-	// return new QuickSwingContainerPopulator.Abstract<W>() {
-	// @Override
-	// protected ComponentEditor<?, ?> doPopulateContainer(ContainerPopulator<?, ?> panel, W quick)
-	// throws ModelInstantiationException {
-	// return populator.apply(panel, quick);
-	// }
-	// };
-	// }
-
 	/**
 	 * Utility for modification of swing widgets by Quick abstract widgets
 	 *
@@ -258,7 +213,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 * @param <AOI> The type of the interpreted quick widget
 	 *
 	 * @param transformer The transformer builder to populate
-	 * @param widgetType The type of the interpreted quick widget
+	 * @param interpretedType The interpreted type of the quick widget
+	 * @param widgetType The instance type of the quick widget
 	 * @param modifier Modifies a {@link QuickSwingPopulator} for interpreted widgets of the given type
 	 */
 	public static <W extends QuickWidget, AO extends ExAddOn<? super W>, AOI extends ExAddOn.Interpreted<? super W, ? extends AO>> void modifyForAddOn(//

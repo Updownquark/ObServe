@@ -779,7 +779,6 @@ public class ObservableCollectionTransformations {
 
 	static class DistinctCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableSet<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
-		private ModelType<C1> theSourceType;
 		private ModelType<C2> theTargetType;
 		private boolean isUseFirst;
 		private boolean isPreservingSourceOrder;
@@ -809,12 +808,15 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C1> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
-			theSourceType = sourceModelType;
 			isUseFirst = session.getAttribute("use-first", boolean.class);
 			isPreservingSourceOrder = session.getAttribute("preserve-source-order", boolean.class);
 			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
 			if (isPreservingSourceOrder && theSort != null)
 				reporting().warn("'preserve-source-order' is not used when sorting is specified");
+			if (theSort != null || sourceModelType == ModelTypes.SortedCollection || sourceModelType == ModelTypes.SortedSet)
+				theTargetType = (ModelType<C2>) ModelTypes.SortedSet;
+			else
+				theTargetType = (ModelType<C2>) ModelTypes.Set;
 		}
 
 		@Override
@@ -929,8 +931,17 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	/**
+	 * Collection implementation for the &lt;sort> transform operation
+	 *
+	 * @param <C1> The model type of the source collection type
+	 */
 	public static class SortedCollectionTransform<C1 extends ObservableCollection<?>> extends ExSort.ExRootSort
 	implements CollectionTransform<C1, ObservableSortedCollection<?>, ExElement> {
+		/**
+		 * @param parent The parent element of this transform operation
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public SortedCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}

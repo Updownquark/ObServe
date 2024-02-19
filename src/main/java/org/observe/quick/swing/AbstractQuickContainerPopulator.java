@@ -33,6 +33,7 @@ import org.observe.util.swing.PanelPopulation.*;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
 
+/** Abstract {@link org.observe.util.swing.PanelPopulation.PanelPopulator} implementation for Quick */
 public abstract class AbstractQuickContainerPopulator
 implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulator> {
 	@Override

@@ -45,20 +45,44 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class ExpressoExternalContent extends QonfigExternalContent {
-	public static final String EXPRESSO_EXTERNAL_CONTENT = "expresso-external-content";
+/**
+ * An external expresso document loaded by an {@link ExpressoExternalReference} to be injected into a source expresso document
+ */
+public class ExpressoExternalDocument extends QonfigExternalDocument {
+	/** The XML name of this element */
+	public static final String EXPRESSO_EXTERNAL_DOCUMENT = "expresso-external-document";
 	private static final String CONTENT_ENV_PROPERTY = "Expresso$Content";
 
+	/** A satisfier for an externally-specified model value in external content */
 	public interface AttributeValueSatisfier {
+		/** @return The value of the attribute, for traceability */
 		Object getValue();
 
+		/**
+		 * @param <M> The model type of the model value
+		 * @param extValue The external model value definition
+		 * @param env The expresso environment for interpreting model types of expressions
+		 * @return The compiled model value to satisfy the external model value
+		 * @throws QonfigInterpretationException If the external model value could not be satisfied
+		 */
 		<M> CompiledModelValue<M> satisfy(ExtModelValueElement.Def<M> extValue, CompiledExpressoEnv env)
 			throws QonfigInterpretationException;
 
+		/**
+		 * An {@link AttributeValueSatisfier} satisfied by a literal value
+		 *
+		 * @param <T> The type of the value
+		 */
 		public static class Literal<T> implements AttributeValueSatisfier {
 			private final String theValueType;
 			private final CompiledModelValue<SettableValue<?>> theModelValue;
 
+			/**
+			 * @param valueType The name of the type of the value (for error messaging)
+			 * @param type The type of the value
+			 * @param value The value
+			 * @param text The text representing the value (for error messaging and debugging)
+			 */
 			public Literal(String valueType, TypeToken<T> type, T value, String text) {
 				theValueType = valueType;
 				theModelValue = CompiledModelValue.literal(type, value, text);
@@ -85,33 +109,49 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 		}
 	}
 
+	/**
+	 * {@link ExpressoExternalDocument} definition
+	 *
+	 * @param <C> The sub-type of element to create
+	 */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
-		qonfigType = EXPRESSO_EXTERNAL_CONTENT,
+		qonfigType = EXPRESSO_EXTERNAL_DOCUMENT,
 		interpretation = Interpreted.class,
-		instance = ExpressoExternalContent.class)
-	public static class Def<C extends ExpressoExternalContent> extends QonfigExternalContent.Def<C> {
+		instance = ExpressoExternalDocument.class)
+	public static class Def<C extends ExpressoExternalDocument> extends QonfigExternalDocument.Def<C> {
 		private ObservableModelSet.Built theContentModelModel;
 		private ModelComponentId theContentModelVariable;
 
 		private final Map<QonfigAttributeDef.Declared, AttributeValueSatisfier> theAttributeValues;
 
+		/**
+		 * @param parent The parent element in the external document
+		 * @param qonfigType The Qonfig type of this element
+		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theAttributeValues = new LinkedHashMap<>();
 		}
 
+		/** @return The head section in the external content */
 		public ExpressoHeadSection.Def getHead() {
 			return getAddOn(ExpressoDocument.Def.class).getHead();
 		}
 
+		/** @return The expresso model for the external content */
 		public ObservableModelSet.Built getContentModelModel() {
 			return theContentModelModel;
 		}
 
+		/**
+		 * @return The model ID of the variable in which the {@link #getContentModelModel() external content's model} will be stored. This
+		 *         is to facilitate evaluation of expressions in external content
+		 */
 		public ModelComponentId getContentModelVariable() {
 			return theContentModelVariable;
 		}
 
+		/** @return Satisfiers for attribute values declared as externally-satisfied values by this external content */
 		public Map<QonfigAttributeDef.Declared, AttributeValueSatisfier> getAttributeValues() {
 			return Collections.unmodifiableMap(theAttributeValues);
 		}
@@ -196,6 +236,13 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			super.doUpdate(session);
 		}
 
+		/**
+		 * @param <M> The model type of the value
+		 * @param extValue The external value declaration
+		 * @param builder The model builder to populate
+		 * @param valueSession The Expresso interpretation session to use for traceability
+		 * @throws QonfigInterpretationException If the external value could not be interpreted
+		 */
 		protected <M> void populateExtModelValue(ExtModelValueElement.Def<M> extValue, ObservableModelSet.Builder builder,
 			ExpressoQIS valueSession) throws QonfigInterpretationException {
 			QonfigAttributeDef attr = extValue.getAddOn(AttributeBackedModelValue.Def.class).getSourceAttribute();
@@ -211,6 +258,14 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 				builder.withMaker(name, satisfier.satisfy(extValue, getExpressoEnv()), source);
 		}
 
+		/**
+		 * @param attr The definition of the attribute to interpret
+		 * @param element The promise element that loaded the external content
+		 * @param value The value of the attribute from the loading document
+		 * @param session The expresso interpretation session to use for parsing expressions
+		 * @return A satisfier to satisfy an externally-specified model value using the value of the attribute
+		 * @throws QonfigInterpretationException If the attribute could not be handled
+		 */
 		protected AttributeValueSatisfier populateAttributeValue(QonfigAttributeDef attr, QonfigElement element, QonfigValue value,
 			ExpressoQIS session) throws QonfigInterpretationException {
 			if (attr.getType() instanceof QonfigValueType.Custom) {
@@ -268,7 +323,12 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 		}
 	}
 
-	public static class Interpreted<C extends ExpressoExternalContent> extends QonfigExternalContent.Interpreted<C> {
+	/**
+	 * {@link ExpressoExternalDocument} interpretation
+	 *
+	 * @param <C> The sub-type of element to create
+	 */
+	public static class Interpreted<C extends ExpressoExternalDocument> extends QonfigExternalDocument.Interpreted<C> {
 		private InterpretedModelSet theContentModelModel;
 
 		Interpreted(Def<? super C> definition, ExElement.Interpreted<?> parent) {
@@ -280,17 +340,26 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return (Def<? super C>) super.getDefinition();
 		}
 
+		/** @return The expresso model for the external content */
 		public InterpretedModelSet getContentModelModel() {
 			return theContentModelModel;
 		}
 
+		/**
+		 * @param attribute The attribute to get the value for
+		 * @return The interpreted value for the given attribute
+		 */
 		public Object getExternalAttribute(QonfigAttributeDef.Declared attribute) {
-			// TODO
+			// TODO This is only to support traceability, specifically to support hover and other features in QWYSIWYG.
 			return null;
 		}
 
+		/**
+		 * @param child The child to get the value for
+		 * @return The interpreted value for the given child
+		 */
 		public List<ExpressoChildPlaceholder.Interpreted<?>> getChildren(QonfigChildDef.Declared child) {
-			// TODO
+			// TODO This is only to support traceability, specifically to support hover and other features in QWYSIWYG.
 			return Collections.emptyList();
 		}
 
@@ -303,8 +372,12 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			super.doUpdate(env);
 		}
 
-		public ExpressoExternalContent create(ExElement content) {
-			return new ExpressoExternalContent(getIdentity(), content);
+		/**
+		 * @param content The external content
+		 * @return The external content instantiation
+		 */
+		public ExpressoExternalDocument create(ExElement content) {
+			return new ExpressoExternalDocument(getIdentity(), content);
 		}
 	}
 
@@ -312,18 +385,22 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	private ModelComponentId theContentModelVariable;
 	private ModelInstantiator theContentModels;
 
-	ExpressoExternalContent(Object id, ExElement content) {
+	ExpressoExternalDocument(Object id, ExElement content) {
 		super(id);
 	}
 
+	/**
+	 * @param child The child to get the value for
+	 * @return The instantiated value for the given child
+	 */
 	public List<ExpressoChildPlaceholder> getChildren(QonfigChildDef.Declared child) {
-		// TODO
+		// TODO This is only to support traceability, specifically to support hover and other features in QWYSIWYG.
 		return Collections.emptyList();
 	}
 
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
-		ExpressoExternalContent.Interpreted<?> myInterpreted = (ExpressoExternalContent.Interpreted<?>) interpreted;
+		ExpressoExternalDocument.Interpreted<?> myInterpreted = (ExpressoExternalDocument.Interpreted<?>) interpreted;
 		theContentModelModel = myInterpreted.getContentModelModel().instantiate();
 		theContentModelVariable = myInterpreted.getDefinition().getContentModelVariable();
 		theContentModels = myInterpreted.getExpressoEnv().getModels().instantiate();
@@ -349,8 +426,8 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 	}
 
 	@Override
-	public ExpressoExternalContent copy(ExElement content) {
-		return (ExpressoExternalContent) super.copy(null);
+	public ExpressoExternalDocument copy(ExElement content) {
+		return (ExpressoExternalDocument) super.copy(null);
 	}
 
 	static class PlaceholderExtValue<M> implements CompiledModelValue<M> {
@@ -380,7 +457,7 @@ public class ExpressoExternalContent extends QonfigExternalContent {
 			return of(attrValueSynth, contentModel);
 		}
 
-		private <M, MV extends M> InterpretedValueSynth<M, MV> of(InterpretedValueSynth<M, MV> attrValueSynth,
+		private <MV extends M> InterpretedValueSynth<M, MV> of(InterpretedValueSynth<M, MV> attrValueSynth,
 			InterpretedValueSynth<?, ContentModelHolder> contentModel) {
 			return InterpretedValueSynth.of(attrValueSynth.getType(),
 				() -> instantiate(attrValueSynth.instantiate(), contentModel.instantiate()), attrValueSynth, contentModel);
