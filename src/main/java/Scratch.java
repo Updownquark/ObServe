@@ -8,8 +8,24 @@ import java.time.Duration;
 
 import org.qommons.threading.QommonsTimer;
 
+/**
+ * <p>
+ * This file was never supposed to be committed, but it turns out it's easy to miss in big commits.
+ * </p>
+ *
+ * <p>
+ * This is a simple main class that I created to do tiny little one-off tests that are not worth saving. The content of this file at any
+ * point in history is irrelevant, but I'm keeping it in here just for utility.
+ * </p>
+ */
 public class Scratch {
-	public static void main(String... args) throws IOException, InterruptedException {
+	/**
+	 * Main method. What it does at any point in time, who knows.
+	 *
+	 * @param args Command-line arguments, typically ignored
+	 * @throws Throwable Hey, could happen
+	 */
+	public static void main(String... args) throws Throwable {
 		File file = File.createTempFile("scratch", ".txt");
 		QommonsTimer.getCommonInstance().execute(() -> {
 			System.out.print("Reading...");
