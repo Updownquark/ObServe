@@ -207,16 +207,14 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			List<ModelValueInstantiator<SettableValue<T>>> values = new ArrayList<>(theValues.size());
 			for (EvaluatedExpression<SettableValue<?>, SettableValue<T>> value : theValues)
 				values.add(value.instantiate());
-			return new Instantiator<>((TypeToken<T>) theType.getType(0), values);
+			return new Instantiator<>(values);
 		}
 	}
 
 	static class Instantiator<T> implements ModelValueInstantiator<ObservableCollection<T>> {
-		private final TypeToken<T> theType;
 		private final List<ModelValueInstantiator<SettableValue<T>>> theValues;
 
-		Instantiator(TypeToken<T> type, List<ModelValueInstantiator<SettableValue<T>>> values) {
-			theType = type;
+		Instantiator(List<ModelValueInstantiator<SettableValue<T>>> values) {
 			theValues = values;
 		}
 
@@ -231,7 +229,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			SettableValue<T>[] values = new SettableValue[theValues.size()];
 			for (int i = 0; i < values.length; i++)
 				values[i] = theValues.get(i).get(models);
-			return new Instance<>(theType, BetterList.of(values));
+			return new Instance<>(BetterList.of(values));
 		}
 
 		@Override
@@ -250,7 +248,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 					values[i] = copy;
 			}
 			if (values != null)
-				return new Instance<>(theType, BetterList.of(values));
+				return new Instance<>(BetterList.of(values));
 			return value;
 		}
 	}
@@ -329,11 +327,9 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		private final Object theId;
-		private final TypeToken<T> theType;
 		private final BetterList<SettableValue<T>> theValues;
 
-		Instance(TypeToken<T> type, BetterList<SettableValue<T>> values) {
-			theType = type;
+		Instance(BetterList<SettableValue<T>> values) {
 			theId = Identifiable.baseId("ArrayInitializer", this);
 			theValues = values;
 		}
@@ -503,11 +499,6 @@ public class ArrayInitializerExpression implements ObservableExpression {
 					return ThreadConstraint.ANY;
 			}
 			return constraint == null ? ThreadConstraint.NONE : constraint;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theType;
 		}
 
 		@Override

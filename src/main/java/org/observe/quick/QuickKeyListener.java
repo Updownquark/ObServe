@@ -10,7 +10,6 @@ import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -57,7 +56,7 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			/** Creates a context with default value containers */
 			public Default() {
-				theTypedChar = SettableValue.build(char.class).withValue((char) 0).build();
+				theTypedChar = SettableValue.<Character> build().withValue((char) 0).build();
 			}
 
 			@Override
@@ -90,7 +89,7 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			/** Creates a context with default value containers */
 			public Default() {
-				theKeyCode = SettableValue.build(KeyCode.class).build();
+				theKeyCode = SettableValue.<KeyCode> build().build();
 			}
 
 			@Override
@@ -192,8 +191,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		/** @param id The element ID for this listener */
 		public QuickKeyTypedListener(Object id) {
 			super(id);
-			theTypedChar = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Character>> parameterized(Character.class)).build();
+			theTypedChar = SettableValue.<SettableValue<Character>> build().build();
 		}
 
 		/**
@@ -228,7 +226,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		protected QuickKeyTypedListener clone() {
 			QuickKeyTypedListener copy = (QuickKeyTypedListener) super.clone();
 
-			copy.theTypedChar = SettableValue.build(theTypedChar.getType()).build();
+			copy.theTypedChar = SettableValue.<SettableValue<Character>> build().build();
 
 			return copy;
 		}
@@ -342,8 +340,7 @@ public interface QuickKeyListener extends QuickEventListener {
 
 		QuickKeyCodeListener(Object id) {
 			super(id);
-			theEventKeyCode = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<KeyCode>> parameterized(KeyCode.class)).build();
+			theEventKeyCode = SettableValue.<SettableValue<KeyCode>> build().build();
 		}
 
 		/** @param ctx The listener context from the Quick implementation */
@@ -382,7 +379,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		public QuickKeyCodeListener copy(ExElement parent) {
 			QuickKeyCodeListener copy = (QuickKeyCodeListener) super.copy(parent);
 
-			copy.theEventKeyCode = SettableValue.build(theEventKeyCode.getType()).build();
+			copy.theEventKeyCode = SettableValue.<SettableValue<KeyCode>> build().build();
 
 			return copy;
 		}

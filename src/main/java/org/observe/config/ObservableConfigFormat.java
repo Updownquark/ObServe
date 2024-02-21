@@ -901,7 +901,6 @@ public interface ObservableConfigFormat<E> {
 		if (!TypeTokens.getRawType(collectionType).isAssignableFrom(ObservableCollection.class))
 			throw new IllegalArgumentException("This class can only produce instances of " + ObservableCollection.class.getName()
 				+ ", which is not compatible with type " + collectionType);
-		TypeToken<E> elementType = (TypeToken<E>) collectionType.resolveType(Collection.class.getTypeParameters()[0]);
 		return new ObservableConfigFormat<C>() {
 			@Override
 			public boolean format(ObservableConfigParseSession session, C value, C previousValue, ConfigGetter config,
@@ -924,7 +923,7 @@ public interface ObservableConfigFormat<E> {
 			public C parse(ObservableConfigParseContext<C> ctx) throws ParseException {
 				if (ctx.getPreviousValue() == null) {
 					return (C) new ObservableConfigTransform.ObservableConfigValues<>(ctx.getLock(), ctx.getSession(), ctx.getConfig(),
-						trivial -> ctx.getConfig(true, trivial), elementType, elementFormat, childName, ctx.getUntil(), false,
+						trivial -> ctx.getConfig(true, trivial), elementFormat, childName, ctx.getUntil(), false,
 						ctx.findReferences());
 				} else {
 					((ObservableConfigTransform.ObservableConfigValues<E>) ctx.getPreviousValue()).onChange(ctx.getChange());
@@ -2593,8 +2592,8 @@ public interface ObservableConfigFormat<E> {
 				// This is a bit complicated, but we'll see if we can assign an ID for the new value
 				// that is unique in its owning collection
 				TypeToken<?> parentTypeToken = null;
-				if (parentValues instanceof ObservableCollection)
-					parentTypeToken = ((ObservableCollection<?>) parentValues).getType();
+				if (parentValues instanceof ObservableValueSet)
+					parentTypeToken = ((ObservableValueSet<?>) parentValues).getType().getType();
 				EntityConfiguredValueType<? super E2> parentType = entityType;
 				if (parentTypeToken == null) {
 					while (parentType.getSupers().size() == 1)

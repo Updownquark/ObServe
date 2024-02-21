@@ -24,7 +24,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoConfigV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -242,12 +241,11 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	/** @param element The element that this add-on is added onto */
 	public QuickWindow(ExElement element) {
 		super(element);
-		theX = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
-		theY = SettableValue.build(theX.getType()).build();
-		theWidth = SettableValue.build(theX.getType()).build();
-		theHeight = SettableValue.build(theX.getType()).build();
-		theWindowIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
-			.build();
+		theX = SettableValue.<SettableValue<Integer>> build().build();
+		theY = SettableValue.<SettableValue<Integer>> build().build();
+		theWidth = SettableValue.<SettableValue<Integer>> build().build();
+		theHeight = SettableValue.<SettableValue<Integer>> build().build();
+		theWindowIcon = SettableValue.<SettableValue<Image>> build().build();
 		theConfigVariables = new ArrayList<>();
 	}
 
@@ -353,6 +351,6 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	}
 
 	private static SettableValue<Integer> defaultIntV() {
-		return SettableValue.build(TypeTokens.get().INT).build();
+		return SettableValue.<Integer> build().withValue(-1).build();
 	}
 }

@@ -111,7 +111,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	/** @param id The element ID for this menu item */
 	protected QuickMenuItem(Object id) {
 		super(id);
-		theAction = SettableValue.build(ObservableAction.class).build();
+		theAction = SettableValue.<ObservableAction> build().build();
 	}
 
 	/** @return The action to perform when the menu item is selected */
@@ -145,7 +145,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	public QuickMenuItem<T> copy(ExElement parent) {
 		QuickMenuItem<T> copy = (QuickMenuItem<T>) super.copy(parent);
 
-		copy.theAction = SettableValue.build(ObservableAction.class).build();
+		copy.theAction = SettableValue.<ObservableAction> build().build();
 
 		return copy;
 	}

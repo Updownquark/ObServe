@@ -4,7 +4,6 @@ import java.util.Comparator;
 import java.util.function.BiFunction;
 
 import org.observe.Equivalence;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -16,8 +15,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ValueStoredCollection;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableSortedSet} implementation based on a backing {@link BetterSortedSet}
  *
@@ -25,27 +22,24 @@ import com.google.common.reflect.TypeToken;
  */
 public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E> implements ObservableSortedSet<E> {
 	/**
-	 * @param type The type of elements in the set
 	 * @param sorting The sorting for the set
 	 * @return A builder to build a new sorted set
 	 */
-	public static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> sorting) {
-		return new ObservableCollectionBuilder.DistinctSortedBuilderImpl<>(type, "observable-sorted-set", sorting);
+	public static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(Comparator<? super E> sorting) {
+		return new ObservableCollectionBuilder.DistinctSortedBuilderImpl<>("observable-sorted-set", sorting);
 	}
 
 	/**
-	 * @param type The type for the sorted set
 	 * @param sortedSet The backing sorted set to hold this observable set's values
 	 */
-	public DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet) {
-		this(type, sortedSet, null, null);
+	public DefaultObservableSortedSet(BetterSortedSet<E> sortedSet) {
+		this(sortedSet, null, null);
 	}
 
-	DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet,
+	DefaultObservableSortedSet(BetterSortedSet<E> sortedSet,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-		super(type, sortedSet, elementSource, sourceElements,
-			Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), sortedSet.comparator(), false));
+		super(sortedSet, elementSource, sourceElements, Equivalence.DEFAULT.sorted(sortedSet.comparator(), false));
 	}
 
 	@Override

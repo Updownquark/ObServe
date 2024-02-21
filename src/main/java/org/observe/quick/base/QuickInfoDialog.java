@@ -18,7 +18,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContentDialog;
 import org.observe.quick.QuickCoreInterpretation;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -139,11 +138,9 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 	/** @param id The element ID for this widget */
 	protected QuickInfoDialog(Object id) {
 		super(id);
-		theType = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-			.build();
-		theOnClose = SettableValue.build(ObservableAction.class).build();
-		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
-			.build();
+		theType = SettableValue.<SettableValue<String>> build().build();
+		theOnClose = SettableValue.<ObservableAction> build().build();
+		theIcon = SettableValue.<SettableValue<Image>> build().build();
 	}
 
 	/** @return The type of the dialog--a String that determines the severity of the message */
@@ -194,9 +191,9 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 	public QuickInfoDialog copy(ExElement parent) {
 		QuickInfoDialog copy = (QuickInfoDialog) super.copy(parent);
 
-		copy.theType = SettableValue.build(theType.getType()).build();
-		copy.theOnClose = SettableValue.build(ObservableAction.class).build();
-		copy.theIcon = SettableValue.build(theIcon.getType()).build();
+		copy.theType = SettableValue.<SettableValue<String>> build().build();
+		copy.theOnClose = SettableValue.<ObservableAction> build().build();
+		copy.theIcon = SettableValue.<SettableValue<Image>> build().build();
 
 		return copy;
 	}

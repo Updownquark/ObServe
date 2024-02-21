@@ -42,7 +42,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			Comparator<T> compare = compare(sourceLink.getType(), helper);
-			SettableValue<SortedLinkHelper<T>> sort = SettableValue.build((Class<SortedLinkHelper<T>>) (Class<?>) SortedLinkHelper.class)//
+			SettableValue<SortedLinkHelper<T>> sort = SettableValue.<SortedLinkHelper<T>> build()
 				.withValue(new SortedLinkHelper<>(compare, true)).build();
 			Comparator<T> wrappedCompare = LambdaUtils.printableComparator((v1, v2) -> sort.get().getCompare().compare(v1, v2),
 				() -> sort.get().getCompare().toString() + "*", null);

@@ -39,7 +39,6 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.QommonsUtils;
@@ -1120,7 +1119,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							config.setName(theConfigName);
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
 						}
-						return SettableValue.of(ObservableConfig.class, config, "Not Settable");
+						return SettableValue.of(config, "Not Settable");
 					}
 
 					@Override
@@ -1180,15 +1179,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
-				Runnable onNoBackup, AppEnvironment appEnv,
-				boolean[] closingWithoutSave, ModelSetInstance msi, ErrorReporting reporting) throws ModelInstantiationException {
+				Runnable onNoBackup, AppEnvironment appEnv, boolean[] closingWithoutSave, ModelSetInstance msi, ErrorReporting reporting)
+					throws ModelInstantiationException {
 				BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 				if (backupTimes == null || backupTimes.isEmpty()) {
 					if (onNoBackup != null)
 						onNoBackup.run();
 					return;
 				}
-				SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
+				SettableValue<Instant> selectedBackup = SettableValue.<Instant> build().build();
 				Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", opts -> opts
 					.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 				boolean[] backedUp = new boolean[1];
@@ -1224,7 +1223,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
 								.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
 							content.addLabel(null, "Please choose a backup to restore", null)//
-							.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
+							.addTable(ObservableCollection.of(backupTimes.reverse()), table -> {
 								table.fill()
 								.withColumn("Date", Instant.class, t -> t,
 									col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//

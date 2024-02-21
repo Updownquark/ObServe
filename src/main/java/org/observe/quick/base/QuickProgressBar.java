@@ -15,7 +15,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -121,10 +120,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	/** @param id The element ID for this widget */
 	protected QuickProgressBar(Object id) {
 		super(id);
-		theMaximum = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
-			.build();
-		theText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-			.build();
+		theMaximum = SettableValue.<SettableValue<Integer>> build().build();
+		theText = SettableValue.<SettableValue<String>> build().build();
 	}
 
 	/** @return The maximum value for the progress bar */
@@ -167,8 +164,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	public QuickProgressBar copy(ExElement parent) {
 		QuickProgressBar copy = (QuickProgressBar) super.copy(parent);
 
-		copy.theMaximum = SettableValue.build(theMaximum.getType()).build();
-		copy.theText = SettableValue.build(theText.getType()).build();
+		copy.theMaximum = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theText = SettableValue.<SettableValue<String>> build().build();
 
 		return copy;
 	}

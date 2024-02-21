@@ -28,7 +28,6 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.OperationResult;
 import org.observe.config.ValueOperationException;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation;
 import org.qommons.BiTuple;
@@ -51,12 +50,9 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 	public DefaultInteractiveTestingPanel(InteractiveTestingService service) {
 		theService = service;
 
-		theSelectedItem = SettableValue
-			.build(
-				TypeTokens.get().keyFor(BetterList.class).<BetterList<InteractiveTestOrSuite>> parameterized(InteractiveTestOrSuite.class))
-			.build();
-		theCurrentState = SettableValue.build(TestingState.class).build();
-		theUserWait = SettableValue.build(String.class).build();
+		theSelectedItem = SettableValue.<BetterList<InteractiveTestOrSuite>> build().build();
+		theCurrentState = SettableValue.<TestingState> build().build();
+		theUserWait = SettableValue.<String> build().build();
 
 		initComponents();
 	}
@@ -73,14 +69,14 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 		ObservableValue<InteractiveTest> currentTest = theCurrentState.map(state -> state == null ? null : state.getCurrentTest());
 		PanelPopulation.populateVPanel(this, null)//
 		.addSplit(true, mainSplit -> mainSplit.fill().fillV()
-			.firstV(top -> top.addTree(ObservableValue.of(InteractiveTestOrSuite.class, theService), tos -> {
+			.firstV(top -> top.<InteractiveTestOrSuite> addTree(ObservableValue.of(theService), tos -> {
 				if (tos instanceof InteractiveTestSuite)
 					return ((InteractiveTestSuite) tos).getContent();
 				else
-					return ObservableCollection.of(InteractiveTestOrSuite.class);
+						return ObservableCollection.of();
 			}, tree -> {
 				tree.fill().fillV().withItemName("Test").withLeafTest(tos -> tos instanceof InteractiveTest)
-						.withRender(render -> render.formatText(tos -> tos.getName()));
+				.withRender(render -> render.formatText(tos -> tos.getName()));
 				tree.withSelection(theSelectedItem, false);
 			})).lastV(bottom -> bottom//
 				.addLabel("Current Test:", currentTest.map(test -> test == null ? "" : test.getName()), Format.TEXT,
@@ -141,11 +137,11 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 						else
 							execute(theSelectedItem.get());
 					}, btn -> {
-						ObservableValue<BiTuple<InteractiveTestOrSuite, TestingState>> selectedAndCurrent = theSelectedItem.transform(
-							(Class<BiTuple<InteractiveTestOrSuite, TestingState>>) (Class<?>) BiTuple.class,
-							tx -> tx.combineWith(theService.getCurrentTest()).combine((test, current) -> {
-								return new BiTuple<>(test == null ? null : test.peekLast(), current);
-							}));
+						ObservableValue<BiTuple<InteractiveTestOrSuite, TestingState>> selectedAndCurrent = theSelectedItem
+							.<BiTuple<InteractiveTestOrSuite, TestingState>> transform(
+								tx -> tx.combineWith(theService.getCurrentTest()).combine((test, current) -> {
+									return new BiTuple<>(test == null ? null : test.peekLast(), current);
+								}));
 						btn.withText(selectedAndCurrent.map(sac -> {
 							if (sac.getValue2() != null)
 								return "Stop Test";
@@ -225,11 +221,11 @@ public class DefaultInteractiveTestingPanel extends JPanel {
 
 		SwingUI() {
 			isClosing = new AtomicInteger();
-			theMessage = SettableValue.build(String.class).withValue("").build();
-			theYesLabel = SettableValue.build(String.class).withValue("Yes").build();
-			theNoLabel = SettableValue.build(String.class).withValue("No").build();
-			theYesVisible = SettableValue.build(boolean.class).withValue(false).build();
-			theNoVisible = SettableValue.build(boolean.class).withValue(false).build();
+			theMessage = SettableValue.<String> build().withValue("").build();
+			theYesLabel = SettableValue.<String> build().withValue("Yes").build();
+			theNoLabel = SettableValue.<String> build().withValue("No").build();
+			theYesVisible = SettableValue.<Boolean> build().withValue(false).build();
+			theNoVisible = SettableValue.<Boolean> build().withValue(false).build();
 
 			theDefaultDialog = createDialog(SwingUtilities.getWindowAncestor(DefaultInteractiveTestingPanel.this));
 		}

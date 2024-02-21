@@ -15,7 +15,6 @@ import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -26,8 +25,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * An {@link ObservableSet} that also implements {@link NavigableMap}
@@ -127,25 +124,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	/**
 	 * Creates a builder to build an unconstrained {@link ObservableSortedMap}
 	 *
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
 	 * @param sorting The sorting for the map's keys
 	 * @return The builder to build the map
 	 */
-	static <K, V> Builder<K, V, ?> build(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting) {
-		return new Builder<>(keyType, valueType, sorting, "ObservableMap");
-	}
-
-	/**
-	 * Creates a builder to build an unconstrained {@link ObservableSortedMap}
-	 *
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
-	 * @param sorting The sorting for the map's keys
-	 * @return The builder to build the map
-	 */
-	static <K, V> Builder<K, V, ?> build(Class<K> keyType, Class<V> valueType, Comparator<? super K> sorting) {
-		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType), sorting);
+	static <K, V> Builder<K, V, ?> build(Comparator<? super K> sorting) {
+		return new Builder<>(sorting, "ObservableMap");
 	}
 
 	/**
@@ -157,9 +140,9 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 */
 	class Builder<K, V, B extends Builder<K, V, ? extends B>> extends ObservableMap.Builder<K, V, B>
 	implements ObservableCollectionBuilder.SortedBuilder<K, B> {
-		Builder(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting, String initDescrip) {
-			super(keyType, valueType, initDescrip);
-			super.withEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), sorting, true));
+		Builder(Comparator<? super K> sorting, String initDescrip) {
+			super(initDescrip);
+			super.withEquivalence(Equivalence.DEFAULT.sorted(sorting, true));
 		}
 
 		@Override
@@ -198,13 +181,12 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public ObservableSortedMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			ObservableCollectionBuilder<Entry<K, V>, ?> builder = ObservableCollection
-				.build(ObservableMap.buildEntryType(getType(), getValueType()))//
+			ObservableCollectionBuilder<Entry<K, V>, ?> builder = ObservableCollection.<Entry<K, V>> build()//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription());
 			builder.withElementsBySource(getElementsBySource()).withSourceElements(getSourceElements());
 			builder.withCollectionLocking(getLocker());
-			return new DefaultObservableSortedMap<>(getType(), getValueType(), compare, //
+			return new DefaultObservableSortedMap<>(compare, //
 				builder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()))//
 				.build());
 		}
@@ -221,8 +203,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		public ObservableSortedEntrySet(ObservableSortedMap<K, V> map) {
 			super(map);
-			Class<Map.Entry<K, V>> type = (Class<Map.Entry<K, V>>) (Class<?>) Map.Entry.class;
-			theEquivalence = ((Equivalence.SortedEquivalence<K>) getMap().keySet().equivalence()).map(type, __ -> true,
+			theEquivalence = ((Equivalence.SortedEquivalence<K>) getMap().keySet().equivalence()).map(__ -> true,
 				k -> new SimpleMapEntry<>(k, null), Map.Entry::getKey);
 		}
 
@@ -290,21 +271,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public boolean isLockSupported() {
 			return theWrapped.isLockSupported();
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theWrapped.getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theWrapped.getValueType();
-		}
-
-		@Override
-		public TypeToken<Map.Entry<K, V>> getEntryType() {
-			return theWrapped.getEntryType();
 		}
 
 		@Override
@@ -446,21 +412,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public TypeToken<K> getKeyType() {
-			return getSource().getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return getSource().getValueType();
-		}
-
-		@Override
-		public TypeToken<Map.Entry<K, V>> getEntryType() {
-			return getSource().getEntryType();
-		}
-
-		@Override
 		public Equivalence<? super V> equivalence() {
 			return getSource().equivalence();
 		}
@@ -473,8 +424,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getSource().onChange(evt -> {
-				if (!keySet().belongs(evt.getKey()))
-					return;
 				int index = keySet().getElementsBefore(evt.getElementId());
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldKey(),
 					evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
@@ -492,9 +441,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param <V> The value type of the map
 	 */
 	class DefaultObservableSortedMap<K, V> extends DefaultObservableMap<K, V> implements ObservableSortedMap<K, V> {
-		public DefaultObservableSortedMap(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting,
-			ObservableSortedCollection<java.util.Map.Entry<K, V>> entries) {
-			super(keyType, valueType, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(keyType), sorting, true), entries);
+		public DefaultObservableSortedMap(Comparator<? super K> sorting, ObservableSortedCollection<java.util.Map.Entry<K, V>> entries) {
+			super(Equivalence.DEFAULT.sorted(sorting, true), entries);
 		}
 
 		@Override

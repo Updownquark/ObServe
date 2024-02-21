@@ -23,7 +23,6 @@ import org.observe.ds.Dependency;
 import org.observe.ds.DependencyService;
 import org.observe.ds.DependencyServiceStage;
 import org.observe.ds.Service;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -54,15 +53,13 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 	/** @param lock The lock to facilitate thread safety */
 	public DefaultDependencyService(Transactable lock) {
-		theComponents = ObservableCollection.build((Class<DefaultComponent<C>>) (Class<?>) DefaultComponent.class)
-			.withLocking(new RRWLockingStrategy(lock)).build();
-		theServices = ObservableSet.build(TypeTokens.get().keyFor(Service.class).<Service<?>> wildCard())
-			.withLocking(new RRWLockingStrategy(lock)).build();
+		theComponents = ObservableCollection.<DefaultComponent<C>> build().withLocking(new RRWLockingStrategy(lock)).build();
+		theServices = ObservableSet.<Service<?>> build().withLocking(new RRWLockingStrategy(lock)).build();
 
 		theServiceProviders = new LinkedHashMap<>();
 		theDependents = new LinkedHashMap<>();
 		theScheduledTasks = ListenerList.build().build();
-		theStage = SettableValue.build(DependencyServiceStage.class).withLocking(new RRWLockingStrategy(lock))
+		theStage = SettableValue.<DependencyServiceStage> build().withLocking(new RRWLockingStrategy(lock))
 			.withValue(DependencyServiceStage.Uninitialized).build();
 	}
 
@@ -78,8 +75,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 	@Override
 	public ObservableCollection<? extends DSComponent<C>> getComponents() {
-		return theComponents.flow()
-			.transform((Class<DSComponent<C>>) (Class<?>) DSComponent.class, tx -> tx.cache(false).map(c -> c.getComponent())).unmodifiable(false)
+		return theComponents.flow().<DSComponent<C>> transform(tx -> tx.cache(false).map(c -> c.getComponent())).unmodifiable(false)
 			.collect();
 	}
 

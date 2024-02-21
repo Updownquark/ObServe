@@ -101,7 +101,7 @@ implements TreeTableEditor<F, P> {
 		theChildren2 = children2;
 		theChildren3 = children3;
 		isRootVisible = true;
-		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
+		theTreeColumn = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) TypeTokens.get().OBJECT,
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 	}
 
@@ -208,23 +208,12 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	protected TypeToken<BetterList<F>> getRowType() {
-		return TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(theRoot.getType());
-	}
-
-	@Override
 	protected ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> createColumnSet() {
-		TypeToken<CategoryRenderStrategy<BetterList<F>, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
-			.parameterized(//
-				TypeTokens.get().keyFor(BetterList.class).parameterized(theRoot.getType()), //
-				TypeTokens.get().WILDCARD);
 		if (theTreeColumn == null)
-			theTreeColumn = new CategoryRenderStrategy<>("Tree", theRoot.getType(), f -> f.getLast());
+			theTreeColumn = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) TypeTokens.get().OBJECT, f -> f.getLast());
 		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns = getColumns();
 		columns = columns.safe(ThreadConstraint.EDT, getUntil());
-		columns = ObservableCollection.flattenCollections(columnType, //
-			ObservableCollection.of(columnType, theTreeColumn), //
-			columns).collect();
+		columns = ObservableCollection.flattenCollections(ObservableCollection.of(theTreeColumn), columns).collect();
 		return columns;
 	}
 
@@ -245,8 +234,7 @@ implements TreeTableEditor<F, P> {
 		ObservableTreeTableModel.syncSelection(table, selection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null) {
 			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
-			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
-				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
+			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.<BetterList<F>> transformReversible(//
 				tx -> tx.map(v -> treeModel.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
 				Equivalence.DEFAULT, getUntil());
 		}
@@ -262,9 +250,8 @@ implements TreeTableEditor<F, P> {
 			// Subscription sub = ObservableUtils.link(selection, theValueMultiSelection, //
 			// path -> path == null ? null : path.getLast(), //
 			// value -> treeModel.getBetterPath(value, true), false, false);
-			TypeToken<F> type = (TypeToken<F>) getRowType().resolveType(BetterList.class.getTypeParameters()[0]);
 			ObservableCollection<F> modelValueSel = selection.flow()//
-				.transform(type, tx -> tx//
+				.<F> transform(tx -> tx//
 					.cache(false).reEvalOnUpdate(false).fireIfUnchanged(true)//
 					.map(path -> path == null ? null : path.getLast())//
 					.replaceSource(value -> treeModel.getBetterPath(value, true), null))//

@@ -13,7 +13,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -113,7 +112,7 @@ public class QuickMenuBar extends ExElement.Abstract {
 	/** @param id The element ID for this menu bar */
 	protected QuickMenuBar(Object id) {
 		super(id);
-		theMenus = ObservableCollection.build(TypeTokens.get().keyFor(QuickMenu.class).<QuickMenu<?>> wildCard()).build();
+		theMenus = ObservableCollection.<QuickMenu<?>> build().build();
 	}
 
 	/** @return The menus in this menu bar */
@@ -155,7 +154,7 @@ public class QuickMenuBar extends ExElement.Abstract {
 	public QuickMenuBar copy(ExElement parent) {
 		QuickMenuBar copy = (QuickMenuBar) super.copy(parent);
 
-		copy.theMenus = ObservableCollection.build(theMenus.getType()).build();
+		copy.theMenus = ObservableCollection.<QuickMenu<?>> build().build();
 		for (QuickMenu<?> menuItem : theMenus)
 			copy.theMenus.add(menuItem.copy(copy));
 

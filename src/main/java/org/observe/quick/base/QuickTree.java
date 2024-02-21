@@ -302,7 +302,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 	private ModelComponentId theActiveValueVariable;
 	private ModelComponentId theSelectedVariable;
-	private TypeToken<N> theNodeType;
 	private TreeModel<N> theModel;
 	private ModelValueInstantiator<SettableValue<BetterList<N>>> thePathSelectionInstantiator;
 	private ModelValueInstantiator<ObservableCollection<BetterList<N>>> thePathMultiSelectionInstantiator;
@@ -324,18 +323,18 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	/** @param id The element ID for this widget */
 	protected QuickTree(Object id) {
 		super(id);
-		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
-			.build();
+		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		thePathSelection = SettableValue.<SettableValue<BetterList<N>>> build().build();
+		thePathMultiSelection = SettableValue.<ObservableCollection<BetterList<N>>> build().build();
+		theNodeSelection = SettableValue.<SettableValue<N>> build().build();
+		theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
+		theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
+		theActions = ObservableCollection.<ValueAction<BetterList<N>>> build().build();
 	}
 
 	/** @return The data model for the tree */
 	public TreeModel<N> getModel() {
 		return theModel;
-	}
-
-	/** @return The type of each node in the tree */
-	public TypeToken<N> getNodeType() {
-		return theNodeType;
 	}
 
 	@Override
@@ -410,29 +409,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		theNodeMultiSelectionInstantiator = myInterpreted.getNodeMultiSelection() == null ? null
 			: myInterpreted.getNodeMultiSelection().instantiate();
 
-		TypeToken<N> nodeType;
-		try {
-			nodeType = myInterpreted.getNodeType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not evaluated?", e);
-		}
-		if (theNodeType == null || !theNodeType.equals(nodeType)) {
-			theNodeType = nodeType;
-			TypeToken<BetterList<N>> pathType = TypeTokens.get().keyFor(BetterList.class).parameterized(theNodeType);
-			thePathSelection = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<BetterList<N>>> parameterized(pathType)).build();
-			thePathMultiSelection = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<BetterList<N>>> parameterized(pathType))
-				.build();
-			theNodeSelection = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType))
-				.build();
-			theNodeMultiSelection = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<N>> parameterized(nodeType)).build();
-			theActivePath = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<BetterList<N>>> parameterized(pathType)).build();
-			theActions = ObservableCollection
-				.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<BetterList<N>>> parameterized(pathType)).build();
-		}
 		isRootVisible = myInterpreted.getDefinition().isRootVisible();
 
 		if (theTreeColumn != null && theTreeColumn
@@ -497,20 +473,20 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		QuickTree<N> copy = (QuickTree<N>) super.copy(parent);
 		copy.theModel = theModel.copy(copy);
 		if (thePathSelection != null)
-			copy.thePathSelection = SettableValue.build(thePathSelection.getType()).build();
+			copy.thePathSelection = SettableValue.<SettableValue<BetterList<N>>> build().build();
 		if (thePathMultiSelection != null)
-			copy.thePathMultiSelection = SettableValue.build(thePathMultiSelection.getType()).build();
+			copy.thePathMultiSelection = SettableValue.<ObservableCollection<BetterList<N>>> build().build();
 		if (theNodeSelection != null)
-			copy.theNodeSelection = SettableValue.build(theNodeSelection.getType()).build();
+			copy.theNodeSelection = SettableValue.<SettableValue<N>> build().build();
 		if (theNodeMultiSelection != null)
-			copy.theNodeMultiSelection = SettableValue.build(theNodeMultiSelection.getType()).build();
+			copy.theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
 
 		if (theTreeColumn != null)
 			copy.theTreeColumn = theTreeColumn.copy(copy);
 
-		copy.theActivePath = SettableValue.build(theActivePath.getType()).build();
-		copy.isSelected = SettableValue.build(isSelected.getType()).build();
-		copy.theActions = ObservableCollection.build(theActions.getType()).build();
+		copy.theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
+		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theActions = ObservableCollection.<ValueAction<BetterList<N>>> build().build();
 
 		for (ValueAction<BetterList<N>> action : theActions)
 			copy.theActions.add(action.copy(copy));

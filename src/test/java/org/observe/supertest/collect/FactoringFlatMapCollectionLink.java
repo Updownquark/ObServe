@@ -13,7 +13,6 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.Primes;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -41,13 +40,9 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 			Function<Integer, CollectionDataFlow<Integer, Integer, Integer>> factorize = LambdaUtils.printableFn(//
 				i -> getPrimeFactors(i).flow(), "factorize", null);
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> oneStepFlow = sourceCL.getCollection().flow()
-				.flatMap(TypeTokens.get().INT, factorize);
-			// Eclipse is being stupid about whether this cast is needed or not. It definitely should not be necessary
-			// and eclipse flags it with a warning, but if I remove it, there's an error.
-			// But the error doesn't actually seem to be a compile error, because the class will still run.
-			@SuppressWarnings("cast")
-			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = (CollectionDataFlow<?, ?, Integer>) sourceCL
-			.getDef().multiStepFlow.flatMap(TypeTokens.get().INT, factorize);
+				.flatMap(factorize);
+			ObservableCollection.CollectionDataFlow<?, ?, Integer> multiStepFlow = sourceCL
+			.getDef().multiStepFlow.flatMap(factorize);
 			ObservableCollectionTestDef<Integer> def = new ObservableCollectionTestDef<>(TestValueType.INT, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
 			return (ObservableCollectionLink<T, X>) new FactoringFlatMapCollectionLink(path, sourceCL, def, helper);
@@ -152,7 +147,7 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 
 	private static ObservableCollection<Integer> _factor(int value) {
 		if (value == 1 || value == 0 || value == -1)
-			return ObservableCollection.of(TypeTokens.get().INT, value);
+			return ObservableCollection.of(value);
 
 		List<Integer> factors = new ArrayList<>(5);
 		if (value < 0) {
@@ -169,7 +164,7 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 		// Possible to get a value not completely factorizable by the primes in my list
 		if (value > 1)
 			factors.add(value);
-		return ObservableCollection.of(TypeTokens.get().INT, factors);
+		return ObservableCollection.of(factors);
 	}
 
 	private static final Map<Integer, ObservableCollection<Integer>> CACHED_FACTORIZATION = new ConcurrentHashMap<>();

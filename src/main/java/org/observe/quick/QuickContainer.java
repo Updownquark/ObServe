@@ -149,7 +149,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
-			theContents = ObservableCollection.build((Class<C>) QuickWidget.class).build();
+			theContents = ObservableCollection.<C> build().build();
 		}
 
 		@Override
@@ -164,16 +164,16 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-				.<ModelInstantiationException> simpleX(child -> (C) child.create())//
+			.<ModelInstantiationException> simpleX(child -> (C) child.create())//
 			.rightOrder()//
-				.onRightX(element -> {
+			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
-				.onCommonX(element -> {
+			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
@@ -202,7 +202,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		public QuickContainer.Abstract<C> copy(ExElement parent) {
 			QuickContainer.Abstract<C> copy = (QuickContainer.Abstract<C>) super.copy(parent);
 
-			copy.theContents = ObservableCollection.build((Class<C>) QuickWidget.class).build();
+			copy.theContents = ObservableCollection.<C> build().build();
 			for (C content : theContents)
 				copy.theContents.add((C) content.copy(copy));
 

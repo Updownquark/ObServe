@@ -14,7 +14,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -105,8 +104,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	/** @param id The element ID for this widget */
 	protected QuickCheckBox(Object id) {
 		super(id);
-		theText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-			.build();
+		theText = SettableValue.<SettableValue<String>> build().build();
 	}
 
 	/** @return The text to display for the check box */
@@ -138,7 +136,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public QuickCheckBox copy(ExElement parent) {
 		QuickCheckBox copy = (QuickCheckBox) super.copy(parent);
 
-		copy.theText = SettableValue.build(theText.getType()).build();
+		copy.theText = SettableValue.<SettableValue<String>> build().build();
 
 		return copy;
 	}

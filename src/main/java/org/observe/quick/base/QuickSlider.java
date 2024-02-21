@@ -138,7 +138,7 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 					throw new ExpressoInterpretationException("Cannot create a multi-slider for number type " + numberType.getName(),
 						getDefinition().getElement().getPositionInFile(), 0);
 			}
-			return numberValue.mapValue(ModelTypes.Value.DOUBLE, numberColl -> numberColl.transformReversible(double.class, tx -> tx//
+			return numberValue.mapValue(ModelTypes.Value.DOUBLE, numberColl -> numberColl.transformReversible(tx -> tx//
 				.cache(false)//
 				.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact))));
 		}
@@ -166,10 +166,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	/** @param id The element ID for this widget */
 	protected QuickSlider(Object id) {
 		super(id);
-		theMin = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
-			.build();
-		theMax = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
-			.build();
+		theMin = SettableValue.<SettableValue<Double>> build().build();
+		theMax = SettableValue.<SettableValue<Double>> build().build();
 	}
 
 	/** @return The value represented by the leading edge of the slider */
@@ -219,8 +217,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	public QuickSlider copy(ExElement parent) {
 		QuickSlider copy = (QuickSlider) super.copy(parent);
 
-		copy.theMin = SettableValue.build(theMin.getType()).build();
-		copy.theMax = SettableValue.build(theMax.getType()).build();
+		copy.theMin = SettableValue.<SettableValue<Double>> build().build();
+		copy.theMax = SettableValue.<SettableValue<Double>> build().build();
 
 		return copy;
 	}

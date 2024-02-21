@@ -18,8 +18,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableSet} whose size is always 1 and whose only element is backed by a {@link SettableValue}
  *
@@ -99,11 +97,6 @@ public class SingletonObservableSet<T> implements ObservableSet<T> {
 	@Override
 	public long getStamp() {
 		return theValue.getStamp();
-	}
-
-	@Override
-	public TypeToken<T> getType() {
-		return theValue.getType();
 	}
 
 	@Override

@@ -499,8 +499,10 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 		@Override
 		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			ExElement.Interpreted<?> parent = INTERPRETING_PARENTS.getParent(getParentElement());
-			if (parent == null)
+			if (parent == null) {
+				INTERPRETING_PARENTS.getParent(getParentElement()); // Debugging
 				throw new ExpressoInterpretationException("Correct model not installed in environment", reporting().getFileLocation());
+			}
 			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
 			interpreted.updateValue(env);
 			return interpreted;

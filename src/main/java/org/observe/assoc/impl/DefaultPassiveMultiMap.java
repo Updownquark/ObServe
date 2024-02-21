@@ -20,7 +20,6 @@ import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.ObservableCollectionWrapper;
-import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
@@ -79,7 +78,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		else
 			theKeySet = new ObservableSetImpl.PassiveDerivedSet<>(theSourceMap.keySet(), theKeyManager);
 		// Using a sorted set here in case the value flow function is expecting sorting and/or distinctness
-		theValueManager = valueFlow.apply(ObservableSortedSet.of(theSourceMap.getValueType(), (v1, v2) -> 0).flow()).managePassive();
+		theValueManager = valueFlow.apply(ObservableSortedSet.<V0> of((v1, v2) -> 0).flow()).managePassive();
 	}
 
 	/** @return The source map this map is derived from */
@@ -218,8 +217,6 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 	@Override
 	public ObservableCollection<V> get(K key) {
-		if (!theKeySet.belongs(key))
-			return theValueFlow.apply(theSourceMap.get((K0) NULL_KEY).flow()).collectPassive();
 		FilterMapResult<K, K0> reversedKey = theKeyManager.reverse(key, false, true);
 		if (!reversedKey.isAccepted())
 			return theValueFlow.apply(theSourceMap.get((K0) NULL_KEY).flow()).collectPassive();
@@ -310,14 +307,6 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		@Override
 		public boolean isEmpty() {
 			return theSourceValues.isEmpty();
-		}
-
-		@Override
-		public boolean belongs(Object o) {
-			if (!(TypeTokens.get().isInstance(theValueManager.getTargetType(), o)))
-				return false;
-			FilterMapResult<V, V0> reversedValue = theValueManager.reverse((V) o, false, true);
-			return reversedValue.isAccepted();
 		}
 
 		@Override
@@ -506,7 +495,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			if (theSourceEntry != null)
 				init(theValueFlow.apply(theSourceEntry.flow()).collectPassive());
 			else
-				init(ObservableCollection.of(getValueType()));
+				init(ObservableCollection.of());
 		}
 
 		@Override

@@ -24,7 +24,6 @@ import org.observe.quick.style.QuickStyledAddOn;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -132,8 +131,7 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 
 	Iconized(QuickStyledElement element) {
 		super(element);
-		theIconValue = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Image>> parameterized(Image.class)).build();
+		theIconValue = SettableValue.<ObservableValue<Image>> build().build();
 	}
 
 	@Override
@@ -186,7 +184,7 @@ public class Iconized extends ExAddOn.Abstract<QuickStyledElement> {
 		QuickInstanceStyle style = element.getStyle();
 
 		copy.theIconStyle = style.getApplicableAttribute(theIconAttr);
-		copy.theIconValue = SettableValue.build(theIconValue.getType()).build();
+		copy.theIconValue = SettableValue.<ObservableValue<Image>> build().build();
 
 		return copy;
 	}

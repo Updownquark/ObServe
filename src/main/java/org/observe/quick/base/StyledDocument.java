@@ -7,7 +7,6 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -31,7 +30,6 @@ import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -212,16 +210,14 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	private SettableValue<SettableValue<T>> theSelectionEndValue;
 	private SettableValue<SettableValue<Integer>> theSelectionEndOffset;
 
-	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
-
 	/** @param id The element ID for this document */
 	protected StyledDocument(Object id) {
 		super(id);
-	}
 
-	/** @return The model type of values in the document */
-	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
-		return theValueType;
+		theSelectionStartValue = SettableValue.<SettableValue<T>> build().build();
+		theSelectionStartOffset = SettableValue.<SettableValue<Integer>> build().build();
+		theSelectionEndValue = SettableValue.<SettableValue<T>> build().build();
+		theSelectionEndOffset = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	/** @return The document value at the start of the user's selection */
@@ -255,22 +251,6 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 
-		TypeToken<T> valueType;
-		try {
-			valueType = myInterpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not interpreted?", e);
-		}
-		if (theSelectionStartValue == null || !theValueType.getType(0).equals(valueType)) {
-			theValueType = ModelTypes.Value.forType(valueType);
-			TypeToken<SettableValue<T>> containerType = TypeTokens.get().keyFor(SettableValue.class)
-				.<SettableValue<T>> parameterized(valueType);
-			theSelectionStartValue = SettableValue.build(containerType).build();
-			theSelectionStartOffset = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
-			theSelectionEndValue = SettableValue.build(containerType).build();
-			theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
-		}
 		theSelectionStartValueInstantiator = myInterpreted.getSelectionStartValue() == null ? null
 			: myInterpreted.getSelectionStartValue().instantiate();
 		theSelectionStartOffsetInstantiator = myInterpreted.getSelectionStartOffset() == null ? null
@@ -310,10 +290,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	public StyledDocument<T> copy(ExElement parent) {
 		StyledDocument<T> copy = (StyledDocument<T>) super.copy(parent);
 
-		copy.theSelectionStartValue = SettableValue.build(theSelectionStartValue.getType()).build();
-		copy.theSelectionStartOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
-		copy.theSelectionEndValue = SettableValue.build(theSelectionStartValue.getType()).build();
-		copy.theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
+		copy.theSelectionStartValue = SettableValue.<SettableValue<T>> build().build();
+		copy.theSelectionStartOffset = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theSelectionEndValue = SettableValue.<SettableValue<T>> build().build();
+		copy.theSelectionEndOffset = SettableValue.<SettableValue<Integer>> build().build();
 
 		return copy;
 	}

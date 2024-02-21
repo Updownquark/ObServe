@@ -16,7 +16,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -109,8 +108,7 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	/** @param id The element ID for this widget */
 	protected QuickColorChooser(Object id) {
 		super(id);
-		isWithAlpha = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+		isWithAlpha = SettableValue.<SettableValue<Boolean>> build().build();
 	}
 
 	/** @return Whether the user should be able to select the alpha (opacity) channel of the color with this widget */
@@ -143,7 +141,7 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	public QuickColorChooser copy(ExElement parent) {
 		QuickColorChooser copy = (QuickColorChooser) super.copy(parent);
 
-		copy.isWithAlpha = SettableValue.build(isWithAlpha.getType()).build();
+		copy.isWithAlpha = SettableValue.<SettableValue<Boolean>> build().build();
 
 		return copy;
 	}

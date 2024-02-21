@@ -25,7 +25,6 @@ import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickBaseInterpretation;
 import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickComboBox;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -189,6 +188,9 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	/** @param id The element ID for this widget */
 	protected QuickComboButton(Object id) {
 		super(id);
+
+		theValues = SettableValue.<ObservableCollection<T>> build().build();
+		theActiveValue = SettableValue.<SettableValue<T>> build().build();
 	}
 
 	/** @return The values representing actions to present to the user */
@@ -221,13 +223,6 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 
-		TypeToken<T> valueType = (TypeToken<T>) myInterpreted.getValues().getType().getType(0);
-		if (theValues == null || !getValues().getType().equals(valueType)) {
-			theValues = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(valueType)).build();
-			theActiveValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType))
-				.build();
-		}
 		theValuesInstantiator = myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate();
 		theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
 
@@ -265,8 +260,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	protected QuickComboButton<T> clone() {
 		QuickComboButton<T> copy = (QuickComboButton<T>) super.clone();
 
-		copy.theValues = SettableValue.build(theValues.getType()).build();
-		copy.theActiveValue = SettableValue.build(theActiveValue.getType()).build();
+		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
+		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
 
 		if (theRenderer != null)
 			copy.theRenderer = theRenderer.copy(copy);

@@ -53,8 +53,6 @@ import org.qommons.io.Format;
 import org.qommons.io.Qonsole;
 import org.qommons.threading.QommonsTimer;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * <p>
  * A widget containing 2 tables side-by-side, separated by a panel containing 4 buttons.
@@ -194,9 +192,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		super(null); // No layout
 		theSourceRows = sourceRows;
 		theMap = map;
-		theSelectableValues = ObservableSortedSet.create(new TypeToken<SelectableValue<T, X>>() {
-		}, SelectableValue::compareTo);
-		theFilterText = SettableValue.build(TableContentControl.class).build().withValue(TableContentControl.DEFAULT, null);
+		theSelectableValues = ObservableSortedSet.create(SelectableValue::compareTo);
+		theFilterText = SettableValue.<TableContentControl> build().build().withValue(TableContentControl.DEFAULT, null);
 		theIncludedValues = theSelectableValues.flow().filter(sv -> sv.isIncluded() ? null : "Not Included").unmodifiable()
 			.collectActive(until);
 		theItemName = itemName == null ? "item" : itemName;
@@ -315,7 +312,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true).setShowingInvisible(true), until)//
 			.withName("OVS Dest")//
 			// Invisible placeholder here to make the available and included tables the same height
-			.addTextField(null, SettableValue.build(TableContentControl.class).build(),
+			.addTextField(null, SettableValue.<TableContentControl> build().build(),
 				filterFormat == null ? TableContentControl.FORMAT : filterFormat,
 					f -> TableContentControl.configureSearchField(f.fill(), commitOnType).visibleWhen(ObservableValue.of(false)))//
 			.addTable(theIncludedValues, destTbl -> {
@@ -871,14 +868,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 * @param args Command-line arguments, ignored
 	 */
 	public static void main(String... args) {
-		ObservableCollection<Map<String, String>> rows = ObservableCollection
-			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).onEdt().build();
-		TypeToken<SelectableValue<Map<String, String>, Map<String, String>>> selValueType = TypeTokens.get().keyFor(SelectableValue.class)//
-			.parameterized(rows.getType(), rows.getType());
+		ObservableCollection<Map<String, String>> rows = ObservableCollection.<Map<String, String>> build().onEdt().build();
 		ObservableCollection<CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>> columns = ObservableCollection
-			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
-				.<CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>> parameterized(selValueType,
-					TypeTokens.get().STRING))
+			.<CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>> build()
 			.onEdt().build();
 		EventQueue.invokeLater(() -> {
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("A",
@@ -988,7 +980,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			ObservableSwingUtils.systemLandF();
 			ObservableValueSelector<Map<String, String>, Map<String, String>> ovs = ObservableValueSelector
 				.<Map<String, String>, Map<String, String>> build(rows, srcTable -> srcTable.withColumns(columns),
-					destTable -> destTable.withColumns(ObservableCollection.of(columns.getType(),
+					destTable -> destTable.withColumns(ObservableCollection.of(
 						new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("Value",
 							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300))),
 					v -> v)

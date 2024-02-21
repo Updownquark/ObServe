@@ -149,7 +149,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 
 			@Override
 			public ModelValueInstantiator<SettableValue<T>> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(targetType, arrayValue.instantiate(), arrayReporting, indexValue.instantiate(), indexReporting);
+				return new Instantiator<>(arrayValue.instantiate(), arrayReporting, indexValue.instantiate(), indexReporting);
 			}
 
 			@Override
@@ -180,15 +180,13 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
-		private final TypeToken<T> theTargetType;
 		private final ModelValueInstantiator<SettableValue<T[]>> theArray;
 		private final ErrorReporting theArrayReporting;
 		private final ModelValueInstantiator<SettableValue<Integer>> theIndex;
 		private final ErrorReporting theIndexReporting;
 
-		public Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T[]>> array, ErrorReporting arrayReporting,
+		public Instantiator(ModelValueInstantiator<SettableValue<T[]>> array, ErrorReporting arrayReporting,
 			ModelValueInstantiator<SettableValue<Integer>> index, ErrorReporting indexReporting) {
-			theTargetType = targetType;
 			theArray = array;
 			theArrayReporting = arrayReporting;
 			theIndex = index;
@@ -209,7 +207,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 		}
 
 		private SettableValue<T> createArrayValue(SettableValue<T[]> arrayV, SettableValue<Integer> indexV) {
-			return arrayV.transformReversible(theTargetType, tx -> tx.combineWith(indexV)//
+			return arrayV.transformReversible(tx -> tx.combineWith(indexV)//
 				.combine((a, idx) -> {
 					if (a == null) {
 						theArrayReporting.error("Array " + theArray + " is null");

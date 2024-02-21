@@ -10,8 +10,6 @@ import org.qommons.Transactable;
 import org.qommons.collect.CollectionElement;
 import org.qommons.testing.TestHelper;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * Simple base collection link
  *
@@ -31,7 +29,7 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			TestValueType type = targetType != null ? targetType : nextType(helper);
-			ObservableCollection<X> base = ObservableCollection.build((TypeToken<X>) type.getType()).build();
+			ObservableCollection<X> base = ObservableCollection.<X> build().build();
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);
 			return (ObservableCollectionLink<T, X>) new BaseCollectionLink<>(path, def, helper);
 		}

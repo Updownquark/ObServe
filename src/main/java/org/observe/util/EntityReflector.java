@@ -882,11 +882,6 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public TypeToken<F> getType() {
-			return theField.getType();
-		}
-
-		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(theEntity, theField.getName());
 		}
@@ -969,12 +964,10 @@ public class EntityReflector<E> {
 	 */
 	public static class DefaultedField<E, F> implements ObservableField<E, F> {
 		private final E theEntity;
-		private final TypeToken<F> theType;
 		private final Method theMethod;
 
-		DefaultedField(E entity, TypeToken<F> type, Method method) {
+		DefaultedField(E entity, Method method) {
 			theEntity = entity;
-			theType = type;
 			theMethod = method;
 		}
 
@@ -1035,11 +1028,6 @@ public class EntityReflector<E> {
 		@Override
 		public Observable<ObservableValueEvent<F>> noInitChanges() {
 			return Observable.empty();
-		}
-
-		@Override
-		public TypeToken<F> getType() {
-			return theType;
 		}
 
 		@Override
@@ -2529,7 +2517,7 @@ public class EntityReflector<E> {
 						// Getters have no parameters, so this is sufficient to match the signatures
 						if (getter.getMethod().getName().equals(first.getName())) {
 							// The super's getter is overridden by a default method, so it's not a field in this entity.
-							return new DefaultedField<>(entity, (TypeToken<F>) TypeTokens.get().of(first.getGenericReturnType()), first);
+							return new DefaultedField<>(entity, first);
 						}
 					}
 				}

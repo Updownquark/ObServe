@@ -192,7 +192,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				models = theLocalModel.wrap(models);
 				StatefulTestStructure structure = new StatefulTestStructure(theDerivedState.get(models));
 				ExFlexibleElementModelAddOn.satisfyElementValue(theInternalStateVariable, models, structure.getInternalState());
-				return SettableValue.of(StatefulTestStructure.class, structure, "Not Settable");
+				return SettableValue.<StatefulTestStructure> of(structure, "Not Settable");
 			}
 
 			@Override
@@ -355,7 +355,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				models = theLocalModel.wrap(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
-				return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
+				return SettableValue.<DynamicTypeStatefulTestStructure> of(structure, "Not Settable");
 			}
 
 			@Override
@@ -508,7 +508,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				models = theLocalModel.wrap(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
-				return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
+				return SettableValue.<DynamicTypeStatefulTestStructure> of(structure, "Not Settable");
 			}
 
 			@Override

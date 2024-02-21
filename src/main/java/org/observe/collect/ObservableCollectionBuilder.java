@@ -12,7 +12,6 @@ import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
@@ -29,8 +28,6 @@ import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.RedBlackNodeList;
 import org.qommons.tree.SortedTreeList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Builds modifiable instances of {@link ObservableCollection}
@@ -284,20 +281,15 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 */
 	public static class CollectionBuilderImpl<E, B extends CollectionBuilderImpl<E, ? extends B>> extends CollectionBuilder.Default<B>
 	implements ObservableCollectionBuilder<E, B> {
-		private final TypeToken<E> theType;
 		private BetterList<E> theBacking;
 		private Comparator<? super E> theSorting;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 		private Equivalence<? super E> theEquivalence;
 
-		/**
-		 * @param type The type of elements in the collection
-		 * @param initDescrip The initial (default) description for the collection
-		 */
-		public CollectionBuilderImpl(TypeToken<E> type, String initDescrip) {
+		/** @param initDescrip The initial (default) description for the collection */
+		public CollectionBuilderImpl(String initDescrip) {
 			super(initDescrip);
-			theType = type;
 		}
 
 		/**
@@ -306,7 +298,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 * @param toCopy The builder to copy
 		 */
 		protected CollectionBuilderImpl(CollectionBuilderImpl<E, ?> toCopy) {
-			this(toCopy.theType, toCopy.getDescription());
+			this(toCopy.getDescription());
 			theBacking = toCopy.theBacking;
 			withCollectionLocking(toCopy.getLocker());
 			theSorting = toCopy.theSorting;
@@ -361,11 +353,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return new DistinctSortedBuilderImpl<>(this, sorting);
 		}
 
-		/** @return The type for the collection */
-		protected TypeToken<E> getType() {
-			return theType;
-		}
-
 		/** @return The pre-set backing for the collection */
 		protected BetterList<E> getBacking() {
 			BetterList<E> backing = theBacking;
@@ -401,7 +388,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 					: BetterTreeList.build();
 				backing = builder.withDescription(getDescription()).withCollectionLocking(getLocker()).build();
 			}
-			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
+			return new DefaultObservableCollection<>(backing, theElementSource, theSourceElements, theEquivalence);
 		}
 
 		@Override
@@ -532,17 +519,16 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		 */
 		public SortedBuilderImpl(CollectionBuilderImpl<E, ?> toCopy, Comparator<? super E> sorting) {
 			super(toCopy);
-			super.withEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), sorting, true));
+			super.withEquivalence(Equivalence.DEFAULT.sorted(sorting, true));
 		}
 
 		/**
-		 * @param type The type for the collection
 		 * @param initDescrip The initial (default) description for the collection
 		 * @param sorting The sorting for the collection
 		 */
-		public SortedBuilderImpl(TypeToken<E> type, String initDescrip, Comparator<? super E> sorting) {
-			super(type, initDescrip);
-			super.withEquivalence(Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), sorting, true));
+		public SortedBuilderImpl(String initDescrip, Comparator<? super E> sorting) {
+			super(initDescrip);
+			super.withEquivalence(Equivalence.DEFAULT.sorted(sorting, true));
 		}
 
 		@Override
@@ -581,8 +567,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementsBySource(),
-				getSourceElements());
+			return new DefaultObservableSortedCollection<>((BetterSortedList<E>) backing, getElementsBySource(), getSourceElements());
 		}
 
 		@Override
@@ -635,9 +620,9 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			super(toCopy);
 		}
 
-		/** @see ObservableCollectionBuilder.CollectionBuilderImpl#CollectionBuilderImpl(TypeToken, String) */
-		public DistinctBuilderImpl(TypeToken<E> type, String initDescrip) {
-			super(type, initDescrip);
+		/** @see ObservableCollectionBuilder.CollectionBuilderImpl#CollectionBuilderImpl(String) */
+		public DistinctBuilderImpl(String initDescrip) {
+			super(initDescrip);
 		}
 
 		@Override
@@ -694,9 +679,9 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			super(toCopy, sorting);
 		}
 
-		/** @see ObservableCollectionBuilder.SortedBuilderImpl#SortedBuilderImpl(TypeToken, String, Comparator) */
-		public DistinctSortedBuilderImpl(TypeToken<E> type, String initDescrip, Comparator<? super E> sorting) {
-			super(type, initDescrip, sorting);
+		/** @see ObservableCollectionBuilder.SortedBuilderImpl#SortedBuilderImpl(String, Comparator) */
+		public DistinctSortedBuilderImpl(String initDescrip, Comparator<? super E> sorting) {
+			super(initDescrip, sorting);
 		}
 
 		@Override
@@ -724,7 +709,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements());
+			return new DefaultObservableSortedSet<>((BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements());
 		}
 
 		@Override

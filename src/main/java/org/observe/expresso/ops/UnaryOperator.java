@@ -162,8 +162,7 @@ public class UnaryOperator implements ObservableExpression {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new ExpressoInterpretationException("Unary operator " + theOperator + " can only be evaluated as an action",
 					env.reporting().getPosition(), getExpressionLength());
-			return (MV) evaluateAction(op, (UnaryOp<S, S>) operator, expressionOffset, valueReporting, operatorReporting,
-				exHandler);
+			return (MV) evaluateAction(op, (UnaryOp<S, S>) operator, expressionOffset, valueReporting, operatorReporting, exHandler);
 		} else {
 			if (!operator.isActionOnly() && type.getModelType() != ModelTypes.Value)
 				throw new ExpressoInterpretationException("Unary operator " + theOperator + " can only be evaluated as a value",
@@ -202,9 +201,9 @@ public class UnaryOperator implements ObservableExpression {
 			}
 			type = cast.getConvertedType();
 		}
-		TypeToken<T> fType = type;
-		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Value.forType(type),
-			opV -> new ValueInstantiator<>(fType, op.instantiate(), operator, cast, operatorReporting)), operator, op);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			op.map(ModelTypes.Value.forType(type), opV -> new ValueInstantiator<>(op.instantiate(), operator, cast, operatorReporting)),
+			operator, op);
 	}
 
 	@Override
@@ -294,15 +293,13 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	static class ValueInstantiator<S, T> implements ModelValueInstantiator<SettableValue<T>> {
-		private final TypeToken<T> theResultType;
 		private final ModelValueInstantiator<SettableValue<S>> theSource;
 		private final UnaryOp<S, T> theOperator;
 		private final TypeTokens.TypeConverter<T, T, T, T> theCast;
 		private final ErrorReporting theOperatorReporting;
 
-		ValueInstantiator(TypeToken<T> resultType, ModelValueInstantiator<SettableValue<S>> source, UnaryOp<S, T> operator,
-			TypeConverter<T, T, T, T> cast, ErrorReporting operatorReporting) {
-			theResultType = resultType;
+		ValueInstantiator(ModelValueInstantiator<SettableValue<S>> source, UnaryOp<S, T> operator, TypeConverter<T, T, T, T> cast,
+			ErrorReporting operatorReporting) {
 			theSource = source;
 			theOperator = operator;
 			theCast = cast;
@@ -321,7 +318,7 @@ public class UnaryOperator implements ObservableExpression {
 		}
 
 		private SettableValue<T> transform(SettableValue<S> sourceV) {
-			return sourceV.transformReversible(theResultType, tx -> tx//
+			return sourceV.transformReversible(tx -> tx//
 				.map(LambdaUtils.printableFn(v -> {
 					try {
 						T result = theOperator.apply(v);

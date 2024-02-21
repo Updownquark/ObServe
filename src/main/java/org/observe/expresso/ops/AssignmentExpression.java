@@ -136,6 +136,7 @@ public class AssignmentExpression implements ObservableExpression {
 			} else if (value == null)
 				return null;
 		}
+		boolean listAction = List.class.isAssignableFrom(TypeTokens.getRawType(target.getType().getType(0)));
 		ErrorReporting reporting = env.reporting();
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			new InterpretedValueSynth<ObservableAction, ObservableAction>() {
@@ -156,7 +157,7 @@ public class AssignmentExpression implements ObservableExpression {
 
 			@Override
 			public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(target.instantiate(), value.instantiate(), reporting);
+					return new Instantiator<>(target.instantiate(), value.instantiate(), reporting, listAction);
 			}
 
 			@Override
@@ -186,12 +187,14 @@ public class AssignmentExpression implements ObservableExpression {
 		private final ModelValueInstantiator<SettableValue<S>> theTarget;
 		private final ModelValueInstantiator<SettableValue<T>> theSource;
 		private final ErrorReporting theReporting;
+		private final boolean isList;
 
 		Instantiator(ModelValueInstantiator<SettableValue<S>> target, ModelValueInstantiator<SettableValue<T>> source,
-			ErrorReporting reporting) {
+			ErrorReporting reporting, boolean list) {
 			theTarget = target;
 			theSource = source;
 			theReporting = reporting;
+			isList = list;
 		}
 
 		@Override
@@ -204,7 +207,7 @@ public class AssignmentExpression implements ObservableExpression {
 		public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<S> ctxValue = theTarget.get(models);
 			SettableValue<T> valueValue = theSource.get(models);
-			if (List.class.isAssignableFrom(TypeTokens.getRawType(ctxValue.getType())))
+			if (isList)
 				return new ListAssignmentAction<>((SettableValue<List<Object>>) ctxValue, (SettableValue<List<Object>>) valueValue,
 					theReporting);
 			else
@@ -303,7 +306,7 @@ public class AssignmentExpression implements ObservableExpression {
 		public ObservableValue<String> isEnabled() {
 			ObservableValue<String> simpleAssignmentEnabled = theTarget.refresh(theTarget.noInitChanges())
 				.map(v -> theTarget.isAcceptable(v));
-			ObservableValue<String> listAssignmentEnabled = ObservableValue.of(TypeTokens.get().STRING, () -> {
+			ObservableValue<String> listAssignmentEnabled = ObservableValue.of(() -> {
 				C target = theTarget.get();
 				if (!(target instanceof BetterList))
 					return null; // No way to tell, hope for the best

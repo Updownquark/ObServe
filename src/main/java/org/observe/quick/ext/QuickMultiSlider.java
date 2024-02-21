@@ -188,8 +188,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 				/** Creates default context */
 				public Default() {
-					this(SettableValue.build(double.class).withValue(0.0).build(), //
-						SettableValue.build(int.class).withValue(0).build());
+					this(SettableValue.<Double> build().withValue(0.0).build(), //
+						SettableValue.<Integer> build().withValue(0).build());
 				}
 
 				@Override
@@ -215,10 +215,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		/** @param id The element ID for this renderer */
 		protected SliderHandleRenderer(Object id) {
 			super(id);
-			theHandleValue = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class)).build();
-			theHandleIndex = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+			theHandleValue = SettableValue.<SettableValue<Double>> build().build();
+			theHandleIndex = SettableValue.<SettableValue<Integer>> build().build();
 		}
 
 		/** @return The model ID of the variable containing the value of the handle being rendered */
@@ -278,8 +276,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		public SliderHandleRenderer copy(ExElement parent) {
 			SliderHandleRenderer copy = (SliderHandleRenderer) super.copy(parent);
 
-			copy.theHandleValue = SettableValue.build(theHandleValue.getType()).build();
-			copy.theHandleIndex = SettableValue.build(theHandleIndex.getType()).build();
+			copy.theHandleValue = SettableValue.<SettableValue<Double>> build().build();
+			copy.theHandleIndex = SettableValue.<SettableValue<Integer>> build().build();
 
 			return copy;
 		}
@@ -716,7 +714,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 						getDefinition().getElement().getPositionInFile(), 0);
 			}
 			theValues = numberValues.mapValue(ModelTypes.Collection.forType(double.class),
-				numberColl -> numberColl.flow().transform(double.class, tx -> tx//
+				numberColl -> numberColl.flow().<Double> transform(tx -> tx//
 					.cache(false)//
 					.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact)))//
 				.collectPassive());
@@ -752,12 +750,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	/** @param id The element ID for this widget */
 	protected QuickMultiSlider(Object id) {
 		super(id);
-		theValues = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<Double>> parameterized(double.class)).build();
-		theMin = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
-			.build();
-		theMax = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
-			.build();
+		theValues = SettableValue.<ObservableCollection<Double>> build().build();
+		theMin = SettableValue.<SettableValue<Double>> build().build();
+		theMax = SettableValue.<SettableValue<Double>> build().build();
 		theBgRenderers = new ArrayList<>();
 	}
 
@@ -865,9 +860,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	public QuickMultiSlider copy(ExElement parent) {
 		QuickMultiSlider copy = (QuickMultiSlider) super.copy(parent);
 
-		copy.theValues = SettableValue.build(theValues.getType()).build();
-		copy.theMin = SettableValue.build(theMin.getType()).build();
-		copy.theMax = SettableValue.build(theMax.getType()).build();
+		copy.theValues = SettableValue.<ObservableCollection<Double>> build().build();
+		copy.theMin = SettableValue.<SettableValue<Double>> build().build();
+		copy.theMax = SettableValue.<SettableValue<Double>> build().build();
 		if (theHandleRenderer != null)
 			copy.theHandleRenderer = theHandleRenderer.copy(copy);
 		copy.theBgRenderers = new ArrayList<>();

@@ -13,7 +13,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -111,8 +110,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	/** @param id The element ID for this widget */
 	protected QuickCheckBoxMenuItem(Object id) {
 		super(id);
-		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
-			.build();
+		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
 	}
 
 	/** @return Whether the menu check box is selected */
@@ -146,7 +144,7 @@ public class QuickCheckBoxMenuItem<T> extends QuickAbstractMenuItem<T> {
 	public QuickCheckBoxMenuItem<T> copy(ExElement parent) {
 		QuickCheckBoxMenuItem<T> copy = (QuickCheckBoxMenuItem<T>) super.copy(parent);
 
-		copy.isSelected = SettableValue.build(isSelected.getType()).build();
+		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
 
 		return copy;
 	}

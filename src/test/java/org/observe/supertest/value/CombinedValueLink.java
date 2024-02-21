@@ -24,8 +24,6 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * Tests {@link ObservableValue#combine(java.util.function.BiFunction, ObservableValue)} and
  * {@link ObservableValue#combine(TriFunction, ObservableValue, ObservableValue)}
@@ -61,7 +59,7 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 			int valueCount = helper.getInt(1, 2); // Value combination only supports 1 or 2 combined values
 			List<SettableValue<V>> values = new ArrayList<>(valueCount);
 			for (int i = 0; i < valueCount; i++)
-				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).build());
+				values.add(SettableValue.<V> build().build());
 			Function<TestHelper, V> valueSupplier = (Function<TestHelper, V>) ObservableChainTester.SUPPLIERS.get(transform.getValueType());
 			for (int i = 0; i < valueCount; i++)
 				values.get(i).set(valueSupplier.apply(helper), null);
@@ -129,7 +127,6 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 	protected ObservableValue<T> createValue(TestHelper helper) {
 		ObservableValue<S> sourceValue = getSourceLink().getValue();
 		ObservableValue<T> combinedValue;
-		TypeToken<T> type = (TypeToken<T>) getType().getType();
 		Consumer<XformOptions> options = opts -> {
 			opts.cache(theOptions.isCached()).reEvalOnUpdate(theOptions.isReEvalOnUpdate()).fireIfUnchanged(theOptions.isFireIfUnchanged())//
 			.manyToOne(theOperation.isManyToOne()).oneToMany(theOperation.isOneToMany());
@@ -137,11 +134,11 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 		switch (theValues.size()) {
 		case 1:
 			if (isReversible && sourceValue instanceof SettableValue)
-				combinedValue = ((SettableValue<S>) sourceValue).combine(type, //
+				combinedValue = ((SettableValue<S>) sourceValue).combine( //
 					(s, v) -> s == null ? null : theOperation.map(s, v), theValues.get(0), theOperation::reverse,
 						options);
 			else
-				combinedValue = sourceValue.combine(type, (s, v) -> s == null ? null : theOperation.map(s, v), theValues.get(0), options);
+				combinedValue = sourceValue.combine((s, v) -> s == null ? null : theOperation.map(s, v), theValues.get(0), options);
 			break;
 		case 2:
 			TriFunction<S, V, V, T> map = (s, v1, v2) -> {
@@ -151,12 +148,12 @@ public class CombinedValueLink<S, V, T> extends ObservableValueLink<S, T> implem
 				return theOperation.map(s, combinedV);
 			};
 			if (isReversible && sourceValue instanceof SettableValue)
-				combinedValue = ((SettableValue<S>) sourceValue).combine(type, map, theValues.get(0), theValues.get(1), (c, v1, v2) -> {
+				combinedValue = ((SettableValue<S>) sourceValue).combine(map, theValues.get(0), theValues.get(1), (c, v1, v2) -> {
 					V combinedV = theValueCombination.apply(Arrays.asList(v1, v2));
 					return theOperation.reverse(c, combinedV);
 				}, options);
 			else
-				combinedValue = sourceValue.combine(type, map, theValues.get(0), theValues.get(1), options);
+				combinedValue = sourceValue.combine(map, theValues.get(0), theValues.get(1), options);
 			break;
 		default:
 			throw new IllegalStateException();

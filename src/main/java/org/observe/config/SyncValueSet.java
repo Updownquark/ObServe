@@ -6,7 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * An {@link ObservableValueSet} without asynchronous creation capabilities
- * 
+ *
  * @param <E> The type of values in the set
  */
 public interface SyncValueSet<E> extends ObservableValueSet<E> {
@@ -29,7 +29,7 @@ public interface SyncValueSet<E> extends ObservableValueSet<E> {
 
 	/**
 	 * Implements {@link SyncValueSet#empty(TypeToken)}
-	 * 
+	 *
 	 * @param <E> The type of the set
 	 */
 	class EmptySyncValueSet<E> implements SyncValueSet<E> {
@@ -38,7 +38,7 @@ public interface SyncValueSet<E> extends ObservableValueSet<E> {
 
 		public EmptySyncValueSet(TypeToken<E> type) {
 			theType = ConfiguredValueType.empty(type);
-			theValues = ObservableCollection.of(type);
+			theValues = ObservableCollection.of();
 		}
 
 		@Override

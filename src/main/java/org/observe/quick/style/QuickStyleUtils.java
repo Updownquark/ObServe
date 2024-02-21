@@ -105,9 +105,11 @@ public class QuickStyleUtils {
 					if (loc == null)
 						return null;
 					IconKey key = new IconKey(loc);
-					Image img = (Image) fCache.getCacheItem(key);
-					if (img != null)
-						return img;
+					Object found = fCache.getCacheItem(key);
+					if (found instanceof Image)
+						return (Image) found;
+					else if (found != null)
+						return null; // Error. Don't report again, just return null
 					String relLoc;
 					try {
 						relLoc = QommonsConfig.resolve(loc, QuickStyleUtils.class, sourceDocument);
@@ -117,15 +119,17 @@ public class QuickStyleUtils {
 						e.printStackTrace();
 						return null;
 					}
+					Image img = null;
 					Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
 					if (icon == null)
 						icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
 					if (icon == null)
 						reporting.at(expression.getFilePosition()).error("Icon file not found: '" + loc);
 					else if (icon instanceof ImageIcon) {
-						if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED)
+						if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED) {
+							fCache.setCacheItem(key, "Image load error");
 							reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
-						else
+						} else
 							img = ((ImageIcon) icon).getImage();
 					} else {
 						BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);

@@ -36,8 +36,6 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
-import org.observe.dbug.DbugAnchor;
-import org.observe.dbug.DbugAnchor.InstantiationTransaction;
 import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
@@ -57,7 +55,6 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public abstract class AbstractSimpleTableBuilder<R, T extends JTable, P extends AbstractSimpleTableBuilder<R, T, P>>
@@ -82,8 +79,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		}
 	}
 
-	@SuppressWarnings("rawtypes")
-	private final DbugAnchor<AbstractTableBuilder> theAnchor;
 	private String theItemName;
 	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
 	private SettableValue<R> theSelectionValue;
@@ -106,16 +101,11 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	protected AbstractSimpleTableBuilder(ObservableCollection<R> rows, T table, Observable<?> until) {
 		super(null, table, until);
-		theAnchor = AbstractTableBuilder.DBUG.instance(this, a -> a//
-			.setField("type", rows.getType(), null)//
-			);
 		theActions = new LinkedList<>();
 		theActionsOnTop = true;
 		withColumnHeader = true;
 		isScrollable = true;
 	}
-
-	protected abstract TypeToken<R> getRowType();
 
 	@Override
 	public String getItemName() {
@@ -152,9 +142,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	@Override
 	public P withColumn(CategoryRenderStrategy<R, ?> column) {
 		if (theColumns == null)
-			theColumns = ObservableCollection.create(new TypeToken<CategoryRenderStrategy<R, ?>>() {
-			}.where(new TypeParameter<R>() {
-			}, TypeTokens.get().wrap(getRowType())));
+			theColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> create();
 		((ObservableCollection<CategoryRenderStrategy<R, ?>>) theColumns).add(column);
 		return (P) this;
 	}
@@ -178,7 +166,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		if (theDisablement == null)
 			theDisablement = disabled;
 		else
-			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
+			theDisablement = ObservableValue.firstValue(msg -> msg != null, () -> null, theDisablement, disabled);
 		return (P) this;
 	}
 
@@ -248,7 +236,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	@Override
 	public P dragSourceRow(Consumer<? super TransferSource<R>> source) {
 		if (theDragSource == null)
-			theDragSource = new SimpleTransferSource<>(getRowType());
+			theDragSource = new SimpleTransferSource<>((TypeToken<R>) TypeTokens.get().OBJECT);
 		// if (source == null)
 		// throw new IllegalArgumentException("Drag sourcing must be configured");
 		if (source != null)
@@ -259,7 +247,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	@Override
 	public P dragAcceptRow(Consumer<? super TransferAccepter<R, R, R>> accept) {
 		if (theDragAccepter == null)
-			theDragAccepter = new SimpleTransferAccepter<>(getRowType());
+			theDragAccepter = new SimpleTransferAccepter<>((TypeToken<R>) TypeTokens.get().OBJECT);
 		// if (accept == null)
 		// throw new IllegalArgumentException("Drag accepting must be configured");
 		if (accept != null)
@@ -288,13 +276,10 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		return null;
 	}
 
-	private static void handleColumnHeaderClick(ObservableValue<? extends TableContentControl> filter, String columnName, boolean checkType,
-		Object cause) {
+	static void handleColumnHeaderClick(ObservableValue<? extends TableContentControl> filter, String columnName, Object cause) {
 		TableContentControl filterV = filter.get();
 		TableContentControl sorted = filterV == null ? new TableContentControl.RowSorter(Arrays.asList(columnName))
 			: filterV.toggleSort(columnName, true);
-		if (checkType && TypeTokens.get().isInstance(filter.getType(), sorted))
-			return;
 		SettableValue<TableContentControl> settableFilter = (SettableValue<TableContentControl>) filter;
 		if (settableFilter.isAcceptable(sorted) == null)
 			settableFilter.set(sorted, cause);
@@ -322,12 +307,8 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	@Override
 	protected Component createComponent() {
-		theAnchor.event("create", null);
-		InstantiationTransaction instantiating = theAnchor.instantiating();
-
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns = createColumnSet().safe(ThreadConstraint.EDT, getUntil());
 
-		instantiating.watchFor(ObservableTableModel.DBUG, "model", tk -> tk.applyTo(1));
 		AbstractObservableTableModel<R> model = createTableModel(columns);
 
 		T table = getEditor();
@@ -373,7 +354,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		if (theSelectionValue != null)
 			syncSelection(table, model, theSelectionValue, false);
 		// Sync multi-selection so we can control the actions if nothing else
-		ObservableCollection<R> multiSelection = ObservableCollection.build(getRowType()).build().safe(ThreadConstraint.EDT, getUntil());
+		ObservableCollection<R> multiSelection = ObservableCollection.<R> build().build().safe(ThreadConstraint.EDT, getUntil());
 		syncMultiSelection(table, model, multiSelection);
 		if (theSelectionValues != null) {
 			// ObservableUtils.link(multiSelection, theSelectionValues);
@@ -453,7 +434,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 			table.setTransferHandler(handler);
 		}
 
-		instantiating.close();
 		decorate(comp);
 		return comp;
 	}
@@ -753,7 +733,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		}
 
 		void adjustScrollWidths() {
-			theAnchor.event("adjustWidth", null);
 			int spacing = table.getInsets().left + table.getInsets().right//
 				+ table.getColumnModel().getColumnMargin() * (table.getColumnCount() - 1)//
 				+ 2;
@@ -806,7 +785,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 			if (tableSize <= 0)
 				return;
 			isRecursive = true;
-			theAnchor.event("layoutColumns", null);
 			int[] total = new int[4];
 			// Figure out how things have changed--how much space the columns want compared to how much we have
 			for (int c = 0; c < theColumnWidths.size(); c++) {
@@ -977,7 +955,6 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		void adjustHeight() {
 			if (theAdaptivePrefRowHeight <= 0)
 				return; // Not adaptive
-			theAnchor.event("adjustHeight", null);
 			int insets = table.getInsets().top + table.getInsets().bottom + scroll.getInsets().top + scroll.getInsets().bottom;
 			int spacing = table.getIntercellSpacing().height;
 			int minHeight = insets, prefHeight = insets, maxHeight = insets;

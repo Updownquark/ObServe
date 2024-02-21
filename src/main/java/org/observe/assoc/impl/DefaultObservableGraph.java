@@ -3,7 +3,7 @@ package org.observe.assoc.impl;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.SimpleSettableValue;
 import org.observe.assoc.ObservableGraph;
@@ -14,9 +14,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableGraph;
-
-import com.google.common.reflect.TypeParameter;
-import com.google.common.reflect.TypeToken;
 
 /**
  * Default mutable implementation of {@link ObservableGraph}
@@ -31,7 +28,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		private ObservableCollection<ObservableGraph.Edge<N, E>> theBiEdges;
 
 		DefaultNode(DefaultObservableGraph<N, ?> graph, N value, ObservableCollection<ObservableGraph.Edge<N, E>> outEdges) {
-			super(theNodeType, null, true, __ -> graph, null, value);
+			super(null, true, __ -> graph, null, value);
 			theOutgoingEdges = outEdges;
 		}
 
@@ -50,7 +47,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		@Override
 		public ObservableCollection<ObservableGraph.Edge<N, E>> getEdges() {
 			if (theBiEdges == null)
-				theBiEdges = ObservableCollection.flattenCollections(theEdgeHolderType, theOutgoingEdges, getInward()).collect();
+				theBiEdges = ObservableCollection.flattenCollections(theOutgoingEdges, getInward()).collect();
 			return theBiEdges;
 		}
 
@@ -68,7 +65,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 		DefaultEdge(DefaultObservableGraph<N, ?> graph, ObservableGraph.Node<N, E> start, ObservableGraph.Node<N, E> end, boolean directed,
 			E value) {
-			super(theEdgeType, null, true, __ -> graph, null, value);
+			super(null, true, __ -> graph, null, value);
 			theStart = start;
 			theEnd = end;
 			isDirected = directed;
@@ -95,48 +92,29 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		}
 	}
 
-	private final TypeToken<N> theNodeType;
-	private final TypeToken<E> theEdgeType;
-	private final TypeToken<ObservableGraph.Edge<N, E>> theEdgeHolderType;
 	private final ObservableCollection<ObservableGraph.Node<N, E>> theNodes;
 	private final ObservableCollection<ObservableGraph.Node<N, E>> theExposedNodes;
 	private ObservableCollection<N> theNodeValues;
 
-	private final Function<TypeToken<ObservableGraph.Edge<N, E>>, ? extends ObservableCollection<ObservableGraph.Edge<N, E>>> theEdgeCreator;
+	private final Supplier<? extends ObservableCollection<ObservableGraph.Edge<N, E>>> theEdgeCreator;
 	private final ObservableCollection<ObservableGraph.Edge<N, E>> theEdges;
 	private final ObservableCollection<ObservableGraph.Edge<N, E>> theExposedEdges;
 
-	/**
-	 * @param nodeType The type of values associated with nodes
-	 * @param edgeType The type of value associated with edges
-	 */
-	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType) {
-		this(nodeType, edgeType, ObservableCollection::create, ObservableCollection::create);
+	/** Creates an observable graph */
+	public DefaultObservableGraph() {
+		this(ObservableCollection::create, ObservableCollection::create);
 	}
 
 	/**
-	 * @param nodeType The type of values associated with nodes
-	 * @param edgeType The type of value associated with edges
 	 * @param nodeList Creates the list of nodes
 	 * @param edgeList Creates the list of edges
 	 */
-	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType,
-		Function<TypeToken<ObservableGraph.Node<N, E>>, ? extends ObservableCollection<ObservableGraph.Node<N, E>>> nodeList,
-			Function<TypeToken<ObservableGraph.Edge<N, E>>, ? extends ObservableCollection<ObservableGraph.Edge<N, E>>> edgeList) {
-		theNodeType = nodeType;
-		theEdgeType = edgeType;
-
-		TypeToken<ObservableGraph.Node<N, E>> nodesType = new TypeToken<ObservableGraph.Node<N, E>>() {}//
-		.where(new TypeParameter<N>() {}, nodeType.wrap())//
-		.where(new TypeParameter<E>() {}, edgeType.wrap());
-		theEdgeHolderType = new TypeToken<ObservableGraph.Edge<N, E>>() {}//
-		.where(new TypeParameter<N>() {}, nodeType.wrap())//
-		.where(new TypeParameter<E>() {}, edgeType.wrap());
-
-		theNodes = nodeList.apply(nodesType);
+	public DefaultObservableGraph(Supplier<? extends ObservableCollection<ObservableGraph.Node<N, E>>> nodeList,
+		Supplier<? extends ObservableCollection<ObservableGraph.Edge<N, E>>> edgeList) {
+		theNodes = nodeList.get();
 		theExposedNodes = theNodes.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		theEdgeCreator = edgeList;
-		theEdges = theNodes.flow().flatMap(theEdgeHolderType, n -> n.getOutward().flow()).collect();
+		theEdges = theNodes.flow().<ObservableGraph.Edge<N, E>> flatMap(n -> n.getOutward().flow()).collect();
 		theExposedEdges = theEdges.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		theNodes.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.remove) {
@@ -161,9 +139,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	@Override
 	public ObservableCollection<N> getNodeValues() {
 		if (theNodeValues == null)
-			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit())
-			.transform(theNodeType,
-				tx -> tx.map(n -> n.get())//
+			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit()).<N> transform(tx -> tx.map(n -> n.get())//
 				.modifySource((node, nodeValue) -> node.set(nodeValue, null), //
 					rvrs -> rvrs.rejectWith((nodeValue, tv) -> tv.getCurrentSource().isAcceptable(nodeValue), false, true)//
 					.createWith(this::createNode)//
@@ -190,7 +166,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	 * @return A new node (not yet inserted) to go into this graph's node collection
 	 */
 	protected DefaultNode createNode(N value) {
-		ObservableCollection<ObservableGraph.Edge<N, E>> nodeEdges = theEdgeCreator.apply(theEdges.getType());
+		ObservableCollection<ObservableGraph.Edge<N, E>> nodeEdges = theEdgeCreator.get();
 		return new DefaultNode(this, value, nodeEdges);
 	}
 

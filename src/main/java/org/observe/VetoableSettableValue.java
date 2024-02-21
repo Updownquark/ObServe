@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.function.Function;
 
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
@@ -14,8 +13,6 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * <p>
@@ -32,7 +29,6 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public class VetoableSettableValue<T> implements SettableValue<T> {
-	private final TypeToken<T> theType;
 	private final String theDescription;
 	private final boolean isNullable;
 	private final CausalLock theLock;
@@ -45,9 +41,8 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	private Object theIdentity;
 	private Object theChangesIdentity;
 
-	VetoableSettableValue(TypeToken<T> type, String description, boolean nullable, ListenerList.Builder listening,
+	VetoableSettableValue(String description, boolean nullable, ListenerList.Builder listening,
 		Function<Object, Transactable> lock, T initialValue) {
-		theType = type;
 		theDescription = description;
 		isNullable = nullable;
 		if (lock == null)
@@ -64,11 +59,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		theListeners = listening.build();
 		theValue = initialValue;
 		isAlive = true;
-	}
-
-	@Override
-	public TypeToken<T> getType() {
-		return theType;
 	}
 
 	@Override
@@ -177,8 +167,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	public <V extends T> String isAcceptable(V value) {
 		if (value == null && !isNullable)
 			return "Null values not acceptable for this value";
-		if (value != null && !TypeTokens.get().isInstance(theType, value))
-			return "Value of type " + value.getClass().getName() + " cannot be assigned as " + theType;
 		return null;
 	}
 

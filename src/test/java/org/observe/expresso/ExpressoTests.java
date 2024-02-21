@@ -306,6 +306,7 @@ public class ExpressoTests extends AbstractExpressoTest<ExpressoHeadSection> {
 	 * A method called from some of the tests
 	 *
 	 * @param <C> The type to compare
+	 * @param type The type to compare
 	 * @param a The first value to compare
 	 * @param b The second value to compare
 	 * @param lt Whether a should be &lt; b
@@ -315,11 +316,11 @@ public class ExpressoTests extends AbstractExpressoTest<ExpressoHeadSection> {
 	 * @param eq Whether a should be == b
 	 * @param neq Whether a should be != b
 	 */
-	public static <C extends Comparable<C>> void testComparison(SettableValue<C> a, SettableValue<C> b, //
+	public static <C extends Comparable<C>> void testComparison(Class<C> type, SettableValue<C> a, SettableValue<C> b, //
 		SettableValue<Boolean> lt, SettableValue<Boolean> lte, SettableValue<Boolean> gt, SettableValue<Boolean> gte,
 		SettableValue<Boolean> eq, SettableValue<Boolean> neq) {
 		TestUtil helper = new TestUtil(123456789, 0);
-		Supplier<C> random = getRandom(TypeTokens.getRawType(a.getType()), helper);
+		Supplier<C> random = getRandom(type, helper);
 		checkComparison(a, b, lt, lte, gt, gte, eq, neq);
 
 		// Do some random operations with nobody listening to the values
@@ -330,12 +331,12 @@ public class ExpressoTests extends AbstractExpressoTest<ExpressoHeadSection> {
 		}
 
 		// Now listen to all the comparables and make sure they report the right changes
-		SettableValue<Boolean> ltCopy = SettableValue.build(boolean.class).withValue(false).build();
-		SettableValue<Boolean> lteCopy = SettableValue.build(boolean.class).withValue(false).build();
-		SettableValue<Boolean> gtCopy = SettableValue.build(boolean.class).withValue(false).build();
-		SettableValue<Boolean> gteCopy = SettableValue.build(boolean.class).withValue(false).build();
-		SettableValue<Boolean> eqCopy = eq == null ? null : SettableValue.build(boolean.class).withValue(false).build();
-		SettableValue<Boolean> neqCopy = neq == null ? null : SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> ltCopy = SettableValue.<Boolean> build().withValue(false).build();
+		SettableValue<Boolean> lteCopy = SettableValue.<Boolean> build().withValue(false).build();
+		SettableValue<Boolean> gtCopy = SettableValue.<Boolean> build().withValue(false).build();
+		SettableValue<Boolean> gteCopy = SettableValue.<Boolean> build().withValue(false).build();
+		SettableValue<Boolean> eqCopy = eq == null ? null : SettableValue.<Boolean> build().withValue(false).build();
+		SettableValue<Boolean> neqCopy = neq == null ? null : SettableValue.<Boolean> build().withValue(false).build();
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		lt.changes().act(evt -> ltCopy.set(evt.getNewValue(), evt));
 		lte.changes().act(evt -> lteCopy.set(evt.getNewValue(), evt));

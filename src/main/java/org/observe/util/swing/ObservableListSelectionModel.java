@@ -85,8 +85,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		theListModel = listModel;
 		theInitialSelection = initialSelection;
 
-		init(ObservableCollection.build(theListModel.getWrapped().getType()).withEquivalence(theListModel.getWrapped().equivalence())
-			.build(), until);
+		init(ObservableCollection.<E> build().withEquivalence(theListModel.getWrapped().equivalence()).build(), until);
 	}
 
 	/** @return The list model that this selection model manages selection of */

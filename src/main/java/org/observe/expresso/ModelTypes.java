@@ -6,6 +6,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.CausableChanging;
@@ -100,23 +101,22 @@ public class ModelTypes {
 	/** An {@link ObservableSortedMultiMap} */
 	public static final SortedMultiMapModelType SortedMultiMap = new SortedMultiMapModelType();
 
-	static final Map<ModelType<?>, Function<SettableValue<?>, Object>> MODEL_VALUE_FLATTENERS = QommonsUtils//
-		.<ModelType<?>, Function<SettableValue<?>, Object>> buildMap(null)//
-		.with(Event, value -> ObservableValue.flattenObservableValue((SettableValue<Observable<?>>) value))//
-		.with(Action, value -> {
+	static final Map<ModelType<?>, BiFunction<ModelType.ModelInstanceType<?, ?>, SettableValue<?>, Object>> MODEL_VALUE_FLATTENERS = QommonsUtils//
+		.<ModelType<?>, BiFunction<ModelType.ModelInstanceType<?, ?>, SettableValue<?>, Object>> buildMap(null)//
+		.with(Event, (type, value) -> ObservableValue.flattenObservableValue((SettableValue<Observable<?>>) value))//
+		.with(Action, (type, value) -> {
 			return ObservableAction.of(cause -> {
 				ObservableAction a = (ObservableAction) value.get();
 				if (a != null)
 					a.act(cause);
 			});
 		})//
-		.with(Value, value -> {
-			TypeToken<Object> type = (TypeToken<Object>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
-			Object defaultV = TypeTokens.get().getDefaultValue(type);
+		.with(Value, (type, value) -> {
+			Object defaultV = TypeTokens.get().getDefaultValue(type.getType(0));
 			return SettableValue.flattenAsSettable((ObservableValue<ObservableValue<Object>>) value, () -> defaultV);
 		})//
-		.with(Collection, value -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) value))//
-		.with(Set, value -> ObservableSet.flattenValue((ObservableValue<ObservableSet<Object>>) value))//
+		.with(Collection, (type, value) -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) value))//
+		.with(Set, (type, value) -> ObservableSet.flattenValue((ObservableValue<ObservableSet<Object>>) value))//
 		.getUnmodifiable();
 
 	static {
@@ -154,14 +154,6 @@ public class ModelTypes {
 
 		private EventModelType() {
 			super("Event", (Class<Observable<?>>) (Class<?>) Observable.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(Observable<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return null;
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -229,13 +221,8 @@ public class ModelTypes {
 
 			public HollowObservable(String name) {
 				theId = new NamedUniqueIdentity(name);
-				theContainer = SettableValue.build(TypeTokens.get().keyFor(Observable.class).<Observable<T>> wildCard()).build();
+				theContainer = SettableValue.<Observable<T>> build().build();
 				theFlatObservable = ObservableValue.flattenObservableValue(theContainer);
-			}
-
-			@Override
-			public ModelInstanceType<Observable<?>, Observable<T>> getModelType() {
-				return Event.anyAs();
 			}
 
 			@Override
@@ -321,11 +308,6 @@ public class ModelTypes {
 			}
 
 			@Override
-			public ModelInstanceType<ObservableAction, ObservableAction> getModelType() {
-				return Action.instance();
-			}
-
-			@Override
 			public void act(Object cause) throws IllegalStateException {
 				if (theSatisfied != null)
 					theSatisfied.act(cause);
@@ -396,14 +378,6 @@ public class ModelTypes {
 		}
 
 		@Override
-		public TypeToken<?> getType(SettableValue<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
-		}
-
-		@Override
 		public ModelInstanceType<SettableValue<?>, SettableValue<?>> any() {
 			return (ModelInstanceType<SettableValue<?>, SettableValue<?>>) super.any();
 		}
@@ -452,8 +426,7 @@ public class ModelTypes {
 		@Override
 		protected Function<SettableValue<?>, SettableValue<?>> convertType(ModelInstanceType<SettableValue<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> ((SettableValue<Object>) src).transformReversible((TypeToken<Object>) target.getType(0),
-				transformReversible(casts[0]));
+			return src -> ((SettableValue<Object>) src).transformReversible(transformReversible(casts[0]));
 		}
 
 		@Override
@@ -537,12 +510,11 @@ public class ModelTypes {
 								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
 									// This section creates a value that updates with the contained model value
 									return SettableValue.asSettable(//
-										ObservableValue.of((TypeToken<Object>) type.getType(0), () -> converted,
-											((Stamped) converted)::getStamp, ((CausableChanging) converted).simpleChanges()),
+										ObservableValue.of(() -> converted, ((Stamped) converted)::getStamp,
+											((CausableChanging) converted).simpleChanges()),
 										NOT_REVERSIBLE);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) type.getType(0), converted),
-										NOT_REVERSIBLE);
+									return SettableValue.asSettable(ObservableValue.of(converted), NOT_REVERSIBLE);
 								}
 							}
 
@@ -573,12 +545,11 @@ public class ModelTypes {
 								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
 									// This section creates a value that updates with the contained model value
 									container = SettableValue.asSettable(//
-										ObservableValue.of((TypeToken<Object>) sourceType.getType(0), () -> sourceV,
-											((Stamped) sourceV)::getStamp, ((CausableChanging) sourceV).simpleChanges()),
+										ObservableValue.of(() -> sourceV, ((Stamped) sourceV)::getStamp,
+											((CausableChanging) sourceV).simpleChanges()),
 										NOT_REVERSIBLE);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV),
-										NOT_REVERSIBLE);
+									return SettableValue.asSettable(ObservableValue.of(sourceV), NOT_REVERSIBLE);
 								}
 								return valueConverter.convert(container);
 							}
@@ -601,7 +572,8 @@ public class ModelTypes {
 					boolean ov = rawSourceType == ObservableValue.class;
 					if (ov && ((ModelType<?>) dest.getModelType()) == Value // This is a special case we can handle
 						|| dest.getModelType().modelType.isAssignableFrom(rawSourceType)) {
-						Function<SettableValue<?>, Object> flattener = MODEL_VALUE_FLATTENERS.get(dest.getModelType());
+						BiFunction<ModelInstanceType<?, ?>, SettableValue<?>, Object> flattener = MODEL_VALUE_FLATTENERS
+							.get(dest.getModelType());
 						if (flattener == null)
 							return null;
 						TypeToken<?>[] sourceParamTypes = new TypeToken[dest.getModelType().getTypeCount()];
@@ -616,7 +588,7 @@ public class ModelTypes {
 						return new ModelInstanceConverter<SettableValue<?>, Object>() {
 							@Override
 							public Object convert(SettableValue<?> sourceV) throws ModelInstantiationException {
-								Object v = flattener.apply(sourceV);
+								Object v = flattener.apply(dest, sourceV);
 								return valueConverter.convert(v);
 							}
 
@@ -682,18 +654,12 @@ public class ModelTypes {
 			private final NamedUniqueIdentity theId;
 
 			public HollowValue(String name, TypeToken<T> type) {
-				this(name, type, TypeTokens.get().getDefaultValue(type));
+				this(name, TypeTokens.get().getDefaultValue(type));
 			}
 
-			private HollowValue(String name, TypeToken<T> type, T defaultValue) {
-				super(SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(type)).build(),
-					() -> defaultValue);
+			private HollowValue(String name, T defaultValue) {
+				super(SettableValue.<SettableValue<T>> build().build(), () -> defaultValue);
 				theId = new NamedUniqueIdentity(name);
-			}
-
-			@Override
-			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getModelType() {
-				return Value.forType(getType());
 			}
 
 			@Override
@@ -711,7 +677,7 @@ public class ModelTypes {
 				if (realValue == getWrapped())
 					return;
 				else if (realValue == null)
-					throw new NullPointerException("Cannot satisfy a hollow value (Value<" + getType() + ">) with null");
+					throw new NullPointerException("Cannot satisfy a hollow value (Value>) with null");
 				getWrapped().set(realValue, null);
 			}
 
@@ -741,14 +707,6 @@ public class ModelTypes {
 	public static class CollectionModelType extends ModelType.SingleTyped<ObservableCollection<?>> {
 		private CollectionModelType() {
 			super("Collection", (Class<ObservableCollection<?>>) (Class<?>) ObservableCollection.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableCollection<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -805,8 +763,7 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableCollection<?>, ObservableCollection<?>> convertType(
 			ModelInstanceType<ObservableCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> ((ObservableCollection<Object>) src).flow()
-				.transform((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
+			return src -> ((ObservableCollection<Object>) src).flow().transform(transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -854,11 +811,9 @@ public class ModelTypes {
 						.convert(collectionType, env);
 					if (collectionConverter == null)
 						return null;
-					TypeToken<ObservableCollection<T>> ocType = TypeTokens.get().keyFor(ObservableCollection.class)
-						.<ObservableCollection<T>> parameterized(componentType);
 					return ModelType.converter(LambdaUtils.printableFn(arrayValue -> {
 						return ObservableCollection
-							.flattenValue(arrayValue.map(ocType, v -> v == null ? null : ObservableCollection.of(componentType, (T[]) v)));
+							.flattenValue(arrayValue.map(v -> v == null ? null : ObservableCollection.of((T[]) v)));
 					}, "asCollection", null), collectionConverter.getType());
 				}
 
@@ -870,8 +825,7 @@ public class ModelTypes {
 					if (collectionConverter == null)
 						return null;
 					return ModelType.converter(LambdaUtils.printableFn(collectionValue -> {
-						return ObservableCollection.flattenSimpleCollectionValue(componentType,
-							(SettableValue<? extends Collection<T>>) collectionValue);
+						return ObservableCollection.flattenSimpleCollectionValue((SettableValue<? extends Collection<T>>) collectionValue);
 					}, "asObservableCollection", null), collectionConverter.getType());
 				}
 			});
@@ -890,14 +844,8 @@ public class ModelTypes {
 
 			public HollowCollection(String name, TypeToken<T> type) {
 				theId = new NamedUniqueIdentity(name);
-				theContainer = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(type)).build();
+				theContainer = SettableValue.<ObservableCollection<T>> build().build();
 				init(ObservableCollection.flattenValue(theContainer));
-			}
-
-			@Override
-			public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getModelType() {
-				return Collection.forType(getType());
 			}
 
 			@Override
@@ -930,14 +878,6 @@ public class ModelTypes {
 	public static class SortedCollectionModelType extends ModelType.SingleTyped<ObservableSortedCollection<?>> {
 		SortedCollectionModelType() {
 			super("SortedCollection", (Class<ObservableSortedCollection<?>>) (Class<?>) ObservableSortedCollection.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableSortedCollection<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -998,8 +938,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedCollection<?>, ObservableSortedCollection<?>> convertType(
 			ModelInstanceType<ObservableSortedCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> ((ObservableSortedCollection<Object>) src).flow()
-				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
+			return src -> ((ObservableSortedCollection<Object>) src).flow().transformEquivalent(transformReversible(casts[0]))
+				.collectPassive();
 		}
 
 		@Override
@@ -1057,14 +997,6 @@ public class ModelTypes {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableSet<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
-		}
-
-		@Override
 		public ModelInstanceType<ObservableSet<?>, ObservableSet<?>> any() {
 			return (ModelInstanceType<ObservableSet<?>, ObservableSet<?>>) super.any();
 		}
@@ -1113,8 +1045,7 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSet<?>, ObservableSet<?>> convertType(ModelInstanceType<ObservableSet<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> ((ObservableSet<Object>) src).flow()
-				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
+			return src -> ((ObservableSet<Object>) src).flow().transformEquivalent(transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1156,14 +1087,8 @@ public class ModelTypes {
 
 			public HollowSet(String name, TypeToken<T> type) {
 				theId = new NamedUniqueIdentity(name);
-				theContainer = SettableValue.build(TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<T>> parameterized(type))
-					.build();
+				theContainer = SettableValue.<ObservableSet<T>> build().build();
 				init(ObservableCollection.flattenValue(theContainer));
-			}
-
-			@Override
-			public ModelInstanceType<ObservableSet<?>, ObservableSet<T>> getModelType() {
-				return Set.forType(getType());
 			}
 
 			@Override
@@ -1244,14 +1169,6 @@ public class ModelTypes {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableSortedSet<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
-		}
-
-		@Override
 		public ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<?>> any() {
 			return (ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<?>>) super.any();
 		}
@@ -1303,8 +1220,7 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedSet<?>, ObservableSortedSet<?>> convertType(ModelInstanceType<ObservableSortedSet<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> ((ObservableSortedSet<Object>) src).flow()
-				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
+			return src -> ((ObservableSortedSet<Object>) src).flow().transformEquivalent(transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1362,14 +1278,6 @@ public class ModelTypes {
 	public static class ValueSetModelType extends ModelType.SingleTyped<ObservableValueSet<?>> {
 		private ValueSetModelType() {
 			super("ValueSet", (Class<ObservableValueSet<?>>) (Class<?>) ObservableValueSet.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableValueSet<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getValues().getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -1462,16 +1370,6 @@ public class ModelTypes {
 	public static class MapModelType extends ModelType.DoubleTyped<ObservableMap<?, ?>> {
 		MapModelType() {
 			super("Map", (Class<ObservableMap<?, ?>>) (Class<?>) ObservableMap.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableMap<?, ?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getKeyType();
-			else if (typeIndex == 1)
-				return value.getValueType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1568,16 +1466,6 @@ public class ModelTypes {
 	public static class SortedMapModelType extends ModelType.DoubleTyped<ObservableSortedMap<?, ?>> {
 		SortedMapModelType() {
 			super("SortedMap", (Class<ObservableSortedMap<?, ?>>) (Class<?>) ObservableSortedMap.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableSortedMap<?, ?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getKeyType();
-			else if (typeIndex == 1)
-				return value.getValueType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1682,16 +1570,6 @@ public class ModelTypes {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableMultiMap<?, ?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getKeyType();
-			else if (typeIndex == 1)
-				return value.getValueType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 2");
-		}
-
-		@Override
 		public ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<?, ?>> any() {
 			return (ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<?, ?>>) super.any();
 		}
@@ -1744,12 +1622,10 @@ public class ModelTypes {
 			return src -> {
 				ObservableMultiMap.MultiMapFlow<Object, Object> flow = ((ObservableMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
-					flow = flow.withKeys(
-						keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])));
+					flow = flow.withKeys(keyFlow -> keyFlow.transformEquivalent(transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
-					flow = flow
-						.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transformReversible(casts[1])));
+					flow = flow.withValues(valueFlow -> valueFlow.transform(transformReversible(casts[1])));
 				}
 				return flow.gatherPassive();
 			};
@@ -1799,16 +1675,6 @@ public class ModelTypes {
 	public static class SortedMultiMapModelType extends ModelType.DoubleTyped<ObservableSortedMultiMap<?, ?>> {
 		SortedMultiMapModelType() {
 			super("SortedMultiMap", (Class<ObservableSortedMultiMap<?, ?>>) (Class<?>) ObservableSortedMultiMap.class);
-		}
-
-		@Override
-		public TypeToken<?> getType(ObservableSortedMultiMap<?, ?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getKeyType();
-			else if (typeIndex == 1)
-				return value.getValueType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1864,12 +1730,10 @@ public class ModelTypes {
 			return src -> {
 				ObservableSortedMultiMap.SortedMultiMapFlow<Object, Object> flow = ((ObservableSortedMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
-					flow = flow.withStillSortedKeys(
-						keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])));
+					flow = flow.withStillSortedKeys(keyFlow -> keyFlow.transformEquivalent(transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
-					flow = flow
-						.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transformReversible(casts[1])));
+					flow = flow.withValues(valueFlow -> valueFlow.transform(transformReversible(casts[1])));
 				}
 				return flow.gatherPassive();
 			};

@@ -24,7 +24,6 @@ import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationPrecursor;
-import org.observe.TypedValueContainer;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.FlowOptions.UniqueOptions;
@@ -33,7 +32,6 @@ import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredM
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
 import org.observe.util.SafeObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -50,8 +48,6 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An enhanced collection.
  *
@@ -64,18 +60,16 @@ import com.google.common.reflect.TypeToken;
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
  * collection is also updated accordingly. The {@link #flow() flow} API allows the creation of collections that are the result of
- * {@link CollectionDataFlow#transform(TypeToken, Function) transform}, {@link CollectionDataFlow#filter(Function) filter},
+ * {@link CollectionDataFlow#transform(Function) transform}, {@link CollectionDataFlow#filter(Function) filter},
  * {@link CollectionDataFlow#distinct(Consumer) unique}, {@link CollectionDataFlow#sorted(Comparator) sort},
- * {@link CollectionDataFlow#transform(TypeToken, Function) transformation} or other operations on the elements of the source. Collections
- * so derived from a source collection are themselves observable and reflect changes to the source. The derived collection may also be
- * mutable, with modifications to the derived collection affecting the source.</li>
+ * {@link CollectionDataFlow#transform(Function) transformation} or other operations on the elements of the source. Collections so derived
+ * from a source collection are themselves observable and reflect changes to the source. The derived collection may also be mutable, with
+ * modifications to the derived collection affecting the source.</li>
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
  * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
- * <li><b>Run-time type safety</b> ObservableCollections have a {@link #getType() type} associated with them, allowing them to enforce
- * type-safety at run time. How strictly this type-safety is enforced is implementation-dependent.</li>
  * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
  * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
  * {@link #contains(Object)} and {@link #remove()}.</li>
@@ -86,10 +80,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E>, Eventable, CausableChanging {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
-
+public interface ObservableCollection<E> extends BetterList<E>, Eventable, CausableChanging {
 	/**
 	 * It is illegal to attempt to modify a collection (or even fire an update event on it) as a result of a currently executing
 	 * modification (or update) to the collection. If such an attempt is made (and the implementation is able detect it), an
@@ -98,22 +89,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	String REENTRANT_EVENT_ERROR = "A collection may not be modified as a result of a change event";
 
 	// Additional contract methods
-
-	/** @return The type of elements in this collection */
-	@Override
-	TypeToken<E> getType();
-
-	@Override
-	default boolean belongs(Object value) {
-		if (!equivalence().isElement(value))
-			return false;
-		TypeToken<E> type = getType();
-		if (value == null)
-			return !type.isPrimitive();
-		else if (!TypeTokens.get().isInstance(getType(), value))
-			return false;
-		return true;
-	}
 
 	@Override
 	abstract boolean isLockSupported();
@@ -140,7 +115,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 				} else {
 					if (c.isEmpty())
 						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c, null);
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
 					CollectionElement<E> el = getTerminalElement(true);
 					while (el != null) {
 						if (cSet.contains(el.get()))
@@ -167,10 +142,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 				} else {
 					if (c.isEmpty())
 						return false;
-					boolean[] excluded = new boolean[1];
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c, excluded);
-					if (excluded[0])
-						return false;
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
 					cSet.removeAll(this);
 					return cSet.isEmpty();
 				}
@@ -228,9 +200,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * <li>{@link #remove(Object)}, which will only remove elements that match according to this method</li>
 	 * </ul>
 	 *
-	 * The equivalence's {@link Equivalence#isElement(Object)} method must return true for any element in this collection or any element for
-	 * which {@link #canAdd(Object)} returns null.
-	 *
 	 * For {@link ObservableSet}s, this method exposes a test of the set's exclusiveness. I.e. a set may not contain any 2 elements for
 	 * which this method returns true.
 	 *
@@ -241,10 +210,10 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	// Default implementations of redundant Collection methods
 
 	@Override
-	default E[] toArray() {
-		E[] array;
+	default Object[] toArray() {
+		Object[] array;
 		try (Transaction t = lock(false, null)) {
-			array = (E[]) java.lang.reflect.Array.newInstance(TypeTokens.get().wrap(TypeTokens.getRawType(getType())), size());
+			array = new Object[size()];
 			return toArray(array);
 		}
 	}
@@ -332,7 +301,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
+		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this) {
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(getCollection().getIdentity(), "size");
@@ -451,8 +420,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
 	default ObservableElement<E> observeElement(E value, boolean first) {
-		if (!belongs(value))
-			return ObservableElement.empty(getType());
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 
@@ -519,7 +486,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	}
 
 	/**
-	 * Equivalent to {@link #reduce(TypeToken, Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
+	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
 	 *
 	 * @param <T> The type of the reduced value
 	 * @param seed The seed value before the reduction
@@ -530,24 +497,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return The reduced value
 	 */
 	default <T> ObservableValue<T> reduce(T seed, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
-		return reduce((TypeToken<T>) TypeToken.of(add.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), seed, add, remove);
-	}
-
-	/**
-	 * Reduces all values in this collection to a single value
-	 *
-	 * @param <T> The compile-time type of the reduced value
-	 * @param type The run-time type of the reduced value
-	 * @param seed The seed value before the reduction
-	 * @param add The reducer function to accumulate the values. Must be associative.
-	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
-	 *        replacement of values will result in the entire collection being iterated over for each subscription. Null here will have no
-	 *        consequence if the result is never observed. Must be associative.
-	 * @return The reduced value
-	 */
-	default <T> ObservableValue<T> reduce(TypeToken<T> type, T seed, BiFunction<? super T, ? super E, T> add,
-		BiFunction<? super T, ? super E, T> remove) {
-		return new ObservableCollectionImpl.ReducedValue<E, T, T>(this, type) {
+		return new ObservableCollectionImpl.ReducedValue<E, T, T>(this) {
 			private final T RECALC = (T) new Object(); // Placeholder indicating that the value must be recalculated from scratch
 
 			@Override
@@ -631,18 +581,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
 	 */
-	static <E> ObservableCollection<E> of(TypeToken<E> type, E... values) {
-		return of(type, BetterList.of(values));
-	}
-
-	/**
-	 * @param <E> The type for the collection
-	 * @param type The type for the collection
-	 * @param values The values to be in the immutable collection
-	 * @return An immutable collection with the given values
-	 */
-	static <E> ObservableCollection<E> of(Class<E> type, E... values) {
-		return of(type, BetterList.of(values));
+	static <E> ObservableCollection<E> of(E... values) {
+		return of(BetterList.of(values));
 	}
 
 	/**
@@ -651,18 +591,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
 	 */
-	static <E> ObservableCollection<E> of(TypeToken<E> type, Collection<? extends E> values) {
-		return of(type, BetterList.of(values));
-	}
-
-	/**
-	 * @param <E> The type for the root collection
-	 * @param type The type for the root collection
-	 * @param values The values to be in the immutable collection
-	 * @return An immutable collection with the given values
-	 */
-	static <E> ObservableCollection<E> of(Class<E> type, Collection<? extends E> values) {
-		return of(type, BetterList.of(values));
+	static <E> ObservableCollection<E> of(Collection<? extends E> values) {
+		return of(BetterList.of(values));
 	}
 
 	/**
@@ -671,18 +601,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param values The values to be in the collection
 	 * @return An immutable observable collection with the given contents
 	 */
-	static <E> ObservableCollection<E> of(TypeToken<E> type, BetterList<? extends E> values) {
-		return new ObservableCollectionImpl.ConstantCollection<>(type, values);
-	}
-
-	/**
-	 * @param <E> The type for the collection
-	 * @param type The type for the collection
-	 * @param values The values to be in the collection
-	 * @return An immutable observable collection with the given contents
-	 */
-	static <E> ObservableCollection<E> of(Class<E> type, BetterList<? extends E> values) {
-		return of(TypeTokens.get().of(type), values);
+	static <E> ObservableCollection<E> of(BetterList<? extends E> values) {
+		return new ObservableCollectionImpl.ConstantCollection<>(values);
 	}
 
 	/**
@@ -690,8 +610,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param type The type for the collection
 	 * @return A new, empty, mutable observable collection
 	 */
-	static <E> ObservableCollection<E> create(TypeToken<E> type) {
-		return create(type, createDefaultBacking());
+	static <E> ObservableCollection<E> create() {
+		return create(createDefaultBacking());
 	}
 
 	/**
@@ -699,22 +619,13 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param type The type for the collection
 	 * @return A builder for a new, empty, mutable, observable collection
 	 */
-	static <E> ObservableCollectionBuilder<E, ?> build(TypeToken<E> type) {
-		return DefaultObservableCollection.build(type);
+	static <E> ObservableCollectionBuilder<E, ?> build() {
+		return DefaultObservableCollection.build();
 	}
 
 	/**
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
-	 * @return A builder for a new, empty, mutable, observable collection
-	 */
-	static <E> ObservableCollectionBuilder<E, ?> build(Class<E> type) {
-		return build(TypeTokens.get().of(type));
-	}
-
-	/**
-	 * @param <E> The type for the collection
-	 * @return A new list to back a collection created by {@link #create(TypeToken)}
+	 * @return A new list to back a collection created by {@link #create()}
 	 */
 	static <E> BetterList<E> createDefaultBacking() {
 		return BetterTreeList.<E> build().build();
@@ -727,8 +638,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return A new, empty, mutable observable collection whose performance and storage characteristics are determined by
 	 *         <code> backing</code>
 	 */
-	static <E> ObservableCollection<E> create(TypeToken<E> type, BetterList<E> backing) {
-		return new DefaultObservableCollection<>(type, backing);
+	static <E> ObservableCollection<E> create(BetterList<E> backing) {
+		return new DefaultObservableCollection<>(backing);
 	}
 
 	/**
@@ -757,35 +668,21 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * Turns a settable value containing a non-observable collection into the contents of the value
 	 *
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
 	 * @param collectionObservable The settable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	static <E> ObservableCollection<E> flattenSimpleCollectionValue(TypeToken<E> type,
-		SettableValue<? extends Collection<E>> collectionObservable) {
-		return new ObservableCollectionImpl.SimpleCollectionBackedObservable<>(ObservableCollection.build(type).build(),
+	static <E> ObservableCollection<E> flattenSimpleCollectionValue(SettableValue<? extends Collection<E>> collectionObservable) {
+		return new ObservableCollectionImpl.SimpleCollectionBackedObservable<>(ObservableCollection.<E> build().build(),
 			collectionObservable);
 	}
 
 	/**
 	 * @param <E> The super type of element in the collections
-	 * @param innerType The type of elements in the result
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
-	static <E> CollectionDataFlow<?, ?, E> flattenCollections(Class<E> innerType, ObservableCollection<? extends E>... colls) {
-		return flattenCollections(TypeTokens.get().of(innerType), colls);
-	}
-
-	/**
-	 * @param <E> The super type of element in the collections
-	 * @param innerType The type of elements in the result
-	 * @param colls The collections to flatten
-	 * @return A collection containing all elements of the given collections
-	 */
-	static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
-		return of(TypeTokens.get().keyFor(ObservableCollection.class).parameterized(innerType), colls).flow().flatMap(innerType,
-			LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
+	static <E> CollectionDataFlow<?, ?, E> flattenCollections(ObservableCollection<? extends E>... colls) {
+		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
 
 	/**
@@ -895,9 +792,6 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @param <T> The type of collection this flow may build
 	 */
 	interface CollectionDataFlow<E, I, T> extends Identifiable {
-		/** @return The type of collection this flow may build */
-		TypeToken<T> getTargetType();
-
 		Equivalence<? super T> equivalence();
 
 		// Flow operations
@@ -929,7 +823,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}, type.getName(), type)).transform(TypeTokens.get().of(type), tx -> tx.cache(false).map(v -> (X) v).withReverse(v -> (T) v));
+			}, type.getName(), type)).transform(tx -> tx.cache(false).map(v -> (X) v).withReverse(v -> (T) v));
 		}
 
 		/**
@@ -977,109 +871,54 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * an {@link #supportsPassive() active or passive} flow depending on the options selected on the builder.
 		 *
 		 * @param <X> The target type of the transformed flow
-		 * @param target The target type of the transformed flow
 		 * @param transform Configures the transformation
 		 * @return The transformed flow
 		 * @see Transformation for help using the API
 		 */
-		<X> CollectionDataFlow<E, T, X> transform(TypeToken<X> target, //
+		<X> CollectionDataFlow<E, T, X> transform(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform);
 
 		/**
-		 * Transforms each value in this flow to a new value by some function, possibly including other values. This operation may produce
-		 * an {@link #supportsPassive() active or passive} flow depending on the options selected on the builder.
-		 *
-		 * @param <X> The target type of the transformed flow
-		 * @param target The target type of the transformed flow
-		 * @param transform Configures the transformation
-		 * @return The transformed flow
-		 * @see Transformation for help using the API
-		 */
-		default <X> CollectionDataFlow<E, T, X> transform(Class<X> target, //
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform) {
-			return transform(TypeTokens.get().of(target), transform);
-		}
-
-		/**
 		 * @param <X> The type to map to
-		 * @param target The type to map to
 		 * @param map The mapping function to apply to each element
 		 * @return The mapped flow
 		 */
-		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map) {
-			return transform(target, tx -> tx.map(map));
+		default <X> CollectionDataFlow<E, T, X> map(Function<? super T, ? extends X> map) {
+			return transform(tx -> tx.map(map));
 		}
 
 		/**
-		 * @param <X> The type to map to
-		 * @param target The type to map to
-		 * @param map The mapping function to apply to each element
-		 * @return The mapped flow
-		 */
-		default <X> CollectionDataFlow<E, T, X> map(Class<X> target, Function<? super T, ? extends X> map) {
-			return transform(target, tx -> tx.map(map));
-		}
-
-		/**
-		 * @param target The target type
 		 * @param map A function that produces observable values from each element of the source
 		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values
 		 *         mapped to each element of the source.
 		 */
-		<X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map);
+		<X> CollectionDataFlow<E, ?, X> flattenValues(Function<? super T, ? extends ObservableValue<? extends X>> map);
 
 		/**
-		 * @param target The target type
-		 * @param map A function that produces observable values from each element of the source
-		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values
-		 *         mapped to each element of the source.
-		 */
-		default <X> CollectionDataFlow<E, ?, X> flattenValues(Class<X> target,
-			Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			return flattenValues(TypeTokens.get().of(target), map);
-		}
-
-		/**
-		 * @param target The type of values in the flattened result
 		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
 		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
 		 */
-		<X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
-			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
+		<X> CollectionDataFlow<E, ?, X> flatMap(Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
-		 *
-		 * @param target The type of values in the flattened result
-		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
-		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
-		 */
-		default <X> CollectionDataFlow<E, ?, X> flatMap(Class<X> target,
-			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
-			return flatMap(TypeTokens.get().of(target), map);
-		}
-
-		/**
-		 * @param target The type of values in the flattened result
 		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
 		 * @param options The options to use to combine the source element with each element in the mapped flow to produce the target values
 		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
 		 */
-		<V, X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
-			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends V>> map,
-				Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options);
+		<V, X> CollectionDataFlow<E, ?, X> flatMap(Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends V>> map,
+			Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options);
 
 		/**
-		 * @param target The type of values in the flattened result
 		 * @param other The flow to combine with this one
 		 * @param options The options to use to combine the elements of this flow and the other to produce the target values
 		 * @return A flow containing one element for each combination of an element from this flow and an element from the other flow. The
 		 *         resulting flow will have a number of elements equal to that of this flow times that of the other
 		 */
-		default <V, X> CollectionDataFlow<E, ?, X> cross(TypeToken<X> target, CollectionDataFlow<?, ?, ? extends V> other,
+		default <V, X> CollectionDataFlow<E, ?, X> cross(CollectionDataFlow<?, ?, ? extends V> other,
 			Function<FlatMapOptions<T, V, X>, FlatMapOptions.FlatMapDef<T, V, X>> options) {
 			// Don't allow structural modifications to crossed collections, as they have lots of side effects
 			String noModMsg = "Crossed collections cannot be structurally modified";
-			return flatMap(target, v -> other, options).filterMod(f -> f.noAdd(noModMsg).noRemove(noModMsg).noMove(noModMsg));
+			return flatMap(v -> other, options).filterMod(f -> f.noAdd(noModMsg).noRemove(noModMsg).noMove(noModMsg));
 		}
 
 		/**
@@ -1112,7 +951,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
 		 *        can be ignored if they are already represented.
 		 * @return A {@link #supportsPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
-		 *         duplicate elements according to the comparator's {@link Equivalence#sorted(Class, Comparator, boolean) equivalence}.
+		 *         duplicate elements according to the comparator's {@link Equivalence#sorted(Comparator, boolean) equivalence}.
 		 */
 		DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
@@ -1162,22 +1001,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 *        into the gathered multi-map.
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
-		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Function<? super T, K> keyMap,
 			BiFunction<K, T, T> reverse) {
-			return groupBy(flow -> flow.map(keyType, keyMap).distinct(), reverse);
-		}
-
-		/**
-		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
-		 * @param keyMap The function to produce keys from this flow's values
-		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
-		 *        into the gathered multi-map.
-		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
-		 */
-		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Class<K> keyType, Function<? super T, ? extends K> keyMap,
-			BiFunction<K, T, T> reverse) {
-			return groupBy(TypeTokens.get().of(keyType), keyMap, reverse);
+			return groupByFlow(flow -> flow.map(keyMap).distinct(), reverse);
 		}
 
 		/**
@@ -1190,30 +1016,15 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return A sorted multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key
 		 *         mapping
 		 */
-		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(Function<? super T, K> keyMap,
 			Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
-			return groupSorted(flow -> flow.map(keyType, keyMap).distinctSorted(keySorting, false), reverse);
+			return groupSortedFlow(flow -> flow.map(keyMap).distinctSorted(keySorting, false), reverse);
 		}
 
-		/**
-		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
-		 * @param keyMap The function to produce keys from this flow's values
-		 * @param keySorting The ordering for the key set
-		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
-		 *        into the gathered multi-map.
-		 * @return A sorted multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key
-		 *         mapping
-		 */
-		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(Class<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
-			return groupBy(TypeTokens.get().of(keyType), keyMap, keySorting, reverse);
-		}
+		<K> ObservableMultiMap.MultiMapFlow<K, T> groupByFlow(
+			Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow, BiFunction<K, T, T> reverse);
 
-		<K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow,
-			BiFunction<K, T, T> reverse);
-
-		<K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupSorted(
+		<K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupSortedFlow(
 			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow, BiFunction<K, T, T> reverse);
 
 		// Terminal operations
@@ -1324,7 +1135,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).transformEquivalent(TypeTokens.get().of(type), tx -> tx.cache(false).map(v -> (X) v).withReverse(x -> (T) x));
+			}).transformEquivalent(tx -> tx.cache(false).map(v -> (X) v).withReverse(x -> (T) x));
 		}
 
 		@Override
@@ -1345,37 +1156,24 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param map The mapping function for each source element's value
 		 * @param reverse The mapping function to recover source values from mapped values--required for equivalence
 		 * @return The mapped flow
-		 * @see #transformEquivalent(TypeToken, Function)
+		 * @see #transformEquivalent(Function)
 		 */
-		default <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctDataFlow<E, T, X> mapEquivalent(Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
-			return transformEquivalent(target, tx -> tx.map(map).withReverse(reverse));
-		}
-
-		/**
-		 * @param <X> The type for the mapped flow
-		 * @param target The type for the mapped flow
-		 * @param map The mapping function for each source element's value
-		 * @param reverse The mapping function to recover source values from mapped values--required for equivalence
-		 * @return The mapped flow
-		 * @see #transformEquivalent(TypeToken, Function)
-		 */
-		default <X> DistinctDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
-			Function<? super X, ? extends T> reverse) {
-			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
+			return transformEquivalent(tx -> tx.map(map).withReverse(reverse));
 		}
 
 		/**
 		 * <p>
-		 * Same as {@link #transform(TypeToken, Function)}, but with the additional assertion that the produced transformed values will be
-		 * one-to-one with the source values, such that the produced collection is unique in a similar way, without a need for an additional
+		 * Same as {@link #transform(Function)}, but with the additional assertion that the produced transformed values will be one-to-one
+		 * with the source values, such that the produced collection is unique in a similar way, without a need for an additional
 		 * {@link #distinct(Consumer) uniqueness} check.
 		 * </p>
 		 * <p>
 		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
 		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
 		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
-		 * When in doubt, use {@link #transform(TypeToken, Function)} and {@link #distinct(Consumer)}.
+		 * When in doubt, use {@link #transform(Function)} and {@link #distinct(Consumer)}.
 		 * </p>
 		 * <p>
 		 * There may be performance concerns with this method, as the resulting flows equivalence must perform reverse operations, which is
@@ -1389,20 +1187,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return The transformed flow
 		 * @see Transformation for help using the API
 		 */
-		<X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target, //
+		<X> DistinctDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
-
-		/**
-		 * @param <X> The type of the transformed values
-		 * @param target The type of the transformed values
-		 * @param transform Defines the transformation from source to target values and the reverse
-		 * @return The transformed flow
-		 * @see #transformEquivalent(TypeToken, Function)
-		 */
-		default <X> DistinctDataFlow<E, T, X> transformEquivalent(Class<X> target, //
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
-			return transformEquivalent(TypeTokens.get().of(target), transform);
-		}
 
 		@Override
 		default DistinctDataFlow<E, T, T> unmodifiable() {
@@ -1465,15 +1251,11 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		@Override
 		SortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
-		default <X> SortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
-			return transformEquivalent(target, tx -> tx.map(map).withReverse(reverse));
+			return transformEquivalent(tx -> tx.map(map).withReverse(reverse));
 		}
 
-		default <X> SortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
-			Function<? super X, ? extends T> reverse) {
-			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
-		}
 		/**
 		 * @param <X> The type for the mapped flow
 		 * @param target The type for the mapped flow
@@ -1481,23 +1263,14 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
 		 * @return The mapped flow
 		 */
-		default <X> SortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> SortedDataFlow<E, T, X> mapEquivalent(Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
-			return transformEquivalent(target, tx -> tx.map(map), compare);
+			return transformEquivalent(tx -> tx.map(map), compare);
 		}
 
-		default <X> SortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
-			Comparator<? super X> compare) {
-			return mapEquivalent(TypeTokens.get().of(target), map, compare);
-		}
-
-		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		<X> SortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
 
-		default <X> SortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
-			return transformEquivalent(TypeTokens.get().of(target), transform);
-		}
 
 		/**
 		 * @param <X> The compile-time transformed type
@@ -1507,15 +1280,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		 * @return The transformed flow
 		 * @see Transformation for help using the API
 		 */
-		<X> SortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		<X> SortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
 				Comparator<? super X> compare);
-
-		default <X> SortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
-				Comparator<? super X> compare) {
-			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
-		}
 
 		@Override
 		default SortedDataFlow<E, T, T> unmodifiable() {
@@ -1577,50 +1344,25 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
-			return (DistinctSortedDataFlow<E, T, X>) DistinctDataFlow.super.mapEquivalent(target, map, reverse);
+			return (DistinctSortedDataFlow<E, T, X>) DistinctDataFlow.super.mapEquivalent(map, reverse);
 		}
 
 		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
-			Function<? super X, ? extends T> reverse) {
-			return mapEquivalent(TypeTokens.get().of(target), map, reverse);
-		}
-
-		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
-			return transformEquivalent(target, tx -> tx.map(map), compare);
+			return transformEquivalent(tx -> tx.map(map), compare);
 		}
 
 		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(Class<X> target, Function<? super T, ? extends X> map,
-			Comparator<? super X> compare) {
-			return mapEquivalent(TypeTokens.get().of(target), map, compare);
-		}
-
-		@Override
-		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform);
 
 		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
-			return transformEquivalent(TypeTokens.get().of(target), transform);
-		}
-
-		@Override
-		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		<X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
 				Comparator<? super X> compare);
-
-		@Override
-		default <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(Class<X> target,
-			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
-				Comparator<? super X> compare) {
-			return transformEquivalent(TypeTokens.get().of(target), transform, compare);
-		}
 
 		@Override
 		default DistinctSortedDataFlow<E, T, T> unmodifiable() {

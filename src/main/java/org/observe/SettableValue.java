@@ -16,23 +16,10 @@ import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
-import org.qommons.CausalLock;
-import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
-import org.qommons.QommonsUtils;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.TransactableBuilder;
-import org.qommons.Transaction;
-import org.qommons.TriFunction;
+import org.qommons.*;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * An observable value for which a value can be assigned directly
@@ -40,16 +27,10 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<SettableValue<?>> TYPE = TypeTokens.get().keyFor(SettableValue.class).wildCard();
-
-	/** TypeToken for String.class */
-	TypeToken<String> STRING_TYPE = TypeTokens.get().of(String.class);
-
 	/** A string-typed observable that always returns null */
-	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
+	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(null);
 	/** A string-typed observable that always returns {@link org.qommons.collect.MutableCollectionElement.StdMsg#UNSUPPORTED_OPERATION} */
-	ObservableValue<String> ALWAYS_DISABLED = ObservableValue.of(STRING_TYPE, StdMsg.UNSUPPORTED_OPERATION);
+	ObservableValue<String> ALWAYS_DISABLED = ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
 
 	@Override
 	boolean isLockSupported();
@@ -136,8 +117,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 			@Override
 			public ObservableValue<String> isEnabled() {
 				BinaryOperator<String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
-				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
-					value.refresh(SettableValue.this.noInitChanges()).map(STRING_TYPE, v -> isAcceptable(v)),
+				return SettableValue.this.isEnabled().combine(combineFn,
+					value.refresh(SettableValue.this.noInitChanges()).map(v -> isAcceptable(v)),
 					options -> options.fireIfUnchanged(false));
 			}
 
@@ -220,10 +201,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
 	 * combination use cases.
 	 * </p>
-	 * <p>
-	 * If dynamic {@link #getType() types} are important, it is preferred to use {@link #transform(TypeToken, Function)}. If no target type
-	 * is supplied (as with this method), one will be inferred, but this is not always reliable, especially with lambdas.
-	 * </p>
 	 *
 	 * @param <R> The type of the combined value
 	 * @param combination Determines how this value an any other arguments are to be combined
@@ -232,40 +209,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 */
 	default <R> SettableValue<R> transformReversible(
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
-		return transformReversible((TypeToken<R>) null, combination);
-	}
-
-	/**
-	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
-	 * combination use cases.
-	 *
-	 * @param <R> The type of the combined value
-	 * @param type The type of the combined value
-	 * @param combination Determines how this value an any other arguments are to be combined
-	 * @return The transformed value
-	 * @see Transformation for help using the API
-	 */
-	default <R> SettableValue<R> transformReversible(TypeToken<R> type,
-		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
 		Transformation.ReversibleTransformation<T, R> def = combination.apply(new Transformation.ReversibleTransformationPrecursor<>());
-		if (def.getArgs().isEmpty() && getType().equals(type) && LambdaUtils.isTrivial(def.getCombination()))
+		if (def.getArgs().isEmpty() && LambdaUtils.isTrivial(def.getCombination()))
 			return (SettableValue<R>) this;
-		return new TransformedSettableValue<>(type, this, def);
-	}
-
-	/**
-	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
-	 * combination use cases.
-	 *
-	 * @param <R> The type of the combined value
-	 * @param type The type of the combined value
-	 * @param combination Determines how this value an any other arguments are to be combined
-	 * @return The transformed value
-	 * @see Transformation for help using the API
-	 */
-	default <R> SettableValue<R> transformReversible(Class<R> type,
-		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
-		return transformReversible(type == null ? null : TypeTokens.get().of(type), combination);
+		return new TransformedSettableValue<>(this, def);
 	}
 
 	/**
@@ -275,7 +222,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return The mapped settable value
 	 */
 	default <R> SettableValue<R> map(Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse) {
-		return map(null, function, reverse, null);
+		return map(function, reverse, null);
 	}
 
 	/**
@@ -286,9 +233,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse,
+	default <R> SettableValue<R> map(Function<? super T, ? extends R> function, Function<? super R, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		return transformReversible(type, tx -> {
+		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.map(function).withReverse(reverse);
@@ -303,9 +250,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, ? extends R> function,
+	default <R> SettableValue<R> map(Function<? super T, ? extends R> function,
 		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
-		return transformReversible(type, tx -> {
+		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.map(function).replaceSourceWith((r, rtx) -> {
@@ -323,28 +270,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options for the returned value--may be null
 	 * @return The field value
 	 */
-	default <F> SettableValue<F> asFieldEditor(TypeToken<F> fieldType, Function<? super T, ? extends F> getter,
+	default <F> SettableValue<F> asFieldEditor(Function<? super T, ? extends F> getter,
 		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
-		return transformReversible(fieldType, tx -> {
-			tx.nullToNull(true);
-			if (options != null)
-				options.accept(tx);
-			return tx.map(getter).modifySource(setter);
-		});
-	}
-
-	/**
-	 * Same as {@link #asFieldEditor(TypeToken, Function, BiConsumer, Consumer)}, but accepts a Class type
-	 *
-	 * @param fieldType The type of the field
-	 * @param getter The getter for the field
-	 * @param setter The setter for the field
-	 * @param options Options for the returned value--may be null
-	 * @return The field value
-	 */
-	default <F> SettableValue<F> asFieldEditor(Class<F> fieldType, Function<? super T, ? extends F> getter,
-		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
-		return transformReversible(fieldType, tx -> {
+		return transformReversible(tx -> {
 			tx.nullToNull(true);
 			if (options != null)
 				options.accept(tx);
@@ -364,7 +292,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 */
 	default <U, R> SettableValue<R> compose(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse) {
-		return combine(null, function, arg, reverse, null);
+		return combine(function, arg, null, reverse, null);
 	}
 
 	/**
@@ -379,9 +307,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> SettableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, Consumer<XformOptions> options) {
-		return combine(type, function, arg, (__, ___) -> null, reverse, options);
+		return combine(function, arg, null, reverse, options);
 	}
 
 	/**
@@ -397,10 +325,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> SettableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		return transformReversible(type, tx -> {
+		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.combineWith(arg).combine(function).replaceSource(reverse,
@@ -424,7 +352,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 */
 	default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
-		return combine(null, function, arg2, arg3, reverse, null);
+		return combine(function, arg2, arg3, reverse, null);
 	}
 
 	/**
@@ -441,10 +369,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	default <U, V, R> SettableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
+	default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		Consumer<XformOptions> options) {
-		return transformReversible(type, tx -> {
+		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.combineWith(arg2).combineWith(arg3).combine(function).withReverse(reverse);
@@ -483,12 +411,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
 		if (value.getThreadConstraint() == ThreadConstraint.NONE) {
-			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			SettableValue<? extends T> v = value.get();
 			if (v == null)
-				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
-			if (v.getType().equals(vType))
-				return (SettableValue<T>) v;
+				return SettableValue.of(defaultValue == null ? null : defaultValue.get(), "Constant value");
+			return (SettableValue<T>) v;
 		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
@@ -501,16 +427,13 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
 		Supplier<? extends T> defaultValue) {
 		if (value.getThreadConstraint() == ThreadConstraint.NONE) {
-			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			ObservableValue<? extends T> v = value.get();
 			if (v == null)
-				return SettableValue.of(vType, defaultValue == null ? null : defaultValue.get(), "Constant value");
-			if (v.getType().equals(vType)) {
-				if (v instanceof SettableValue)
-					return (SettableValue<T>) v;
-				else
-					return asSettable((ObservableValue<T>) v, __ -> "Not settable");
-			}
+				return SettableValue.of(defaultValue == null ? null : defaultValue.get(), "Constant value");
+			if (v instanceof SettableValue)
+				return (SettableValue<T>) v;
+			else
+				return asSettable((ObservableValue<T>) v, __ -> "Not settable");
 		}
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
@@ -527,24 +450,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 	/**
 	 * @param <T> The type of the value
-	 * @param type The type of the value
 	 * @param value The value
 	 * @param disabled The {@link SettableValue#isEnabled() disabled} message
 	 * @return An unmodifiable settable value
 	 */
-	public static <T> SettableValue<T> of(TypeToken<T> type, T value, String disabled) {
-		return asSettable(ObservableValue.of(type, value), LambdaUtils.constantFn(disabled, disabled, disabled));
-	}
-
-	/**
-	 * @param <T> The type of the value
-	 * @param type The type of the value
-	 * @param value The value
-	 * @param disabled The {@link SettableValue#isEnabled() disabled} message
-	 * @return An unmodifiable settable value
-	 */
-	public static <T> SettableValue<T> of(Class<T> type, T value, String disabled) {
-		return of(TypeTokens.get().of(type), value, disabled);
+	public static <T> SettableValue<T> of(T value, String disabled) {
+		return asSettable(ObservableValue.of(value), LambdaUtils.constantFn(disabled, disabled, disabled));
 	}
 
 	/**
@@ -552,7 +463,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
 	 *
 	 * <code>
-	 * 	{@link ObservableCollection#of(TypeToken, Object...) ObservableCollection.of(type, values)}.collect()
+	 * 	{@link ObservableCollection#of(Object...) ObservableCollection.of(type, values)}.collect()
 	 * {@link ObservableCollection#observeFind(Predicate) .observeFind(test, ()->null, true)}.find()
 	 * {{@link #map(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
@@ -561,16 +472,15 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * if one of the earlier values is likely to pass and some of the later values are expensive to compute.
 	 *
 	 * @param <T> The compile-time type of the value
-	 * @param type The run-time type of the value
 	 * @param test The test to for the value. If null, <code>v->v!=null</code> will be used
 	 * @param def Supplies a default value in the case that none of the values in the sequence pass the test. If null, a null default will
 	 *        be used.
 	 * @param values The sequence of ObservableValues to get the first passing value of
 	 * @return The observable for the first passing value in the sequence
 	 */
-	public static <T> SettableValue<T> firstValue(TypeToken<T> type, Predicate<? super T> test, Supplier<? extends T> def,
+	public static <T> SettableValue<T> firstValue(Predicate<? super T> test, Supplier<? extends T> def,
 		SettableValue<? extends T>... values) {
-		return new FirstSettableValue<>(type, values, test, def);
+		return new FirstSettableValue<>(values, test, def);
 	}
 
 	/**
@@ -588,11 +498,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		/** @return The source value */
 		protected SettableValue<T> getSource() {
 			return theSource;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theSource.getType();
 		}
 
 		@Override
@@ -642,11 +547,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		/** @return The wrapped value */
 		protected SettableValue<T> getWrapped() {
 			return theWrapped;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
 		}
 
 		@Override
@@ -726,20 +626,19 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
-	 * Implements {@link SettableValue#transformReversible(TypeToken, Function)}
+	 * Implements {@link SettableValue#transformReversible(Function)}
 	 *
 	 * @param <S> The type of the source value
 	 * @param <T> The type of the combined value
 	 */
 	public class TransformedSettableValue<S, T> extends TransformedObservableValue<S, T> implements SettableValue<T> {
 		/**
-		 * @param type The type of the combined value
 		 * @param source The source value to combine
 		 * @param combination The definition of the combination operation
 		 */
-		public TransformedSettableValue(TypeToken<T> type, SettableValue<S> source,
+		public TransformedSettableValue(SettableValue<S> source,
 			Transformation.ReversibleTransformation<S, T> combination) {
-			super(type, source, combination);
+			super(source, combination);
 		}
 
 		@Override
@@ -764,8 +663,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, () -> null, //
-				transform(TypeTokens.get().STRING, tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+			return ObservableValue.firstValue(e -> e != null, () -> null, //
+				transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
 					BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
 					return state.getValue1().isEnabled(state.getValue2());
 				}, "enabled", "enabled"))), //
@@ -1160,11 +1059,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theValue.getType();
-		}
-
-		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theValue.getThreadConstraint();
 		}
@@ -1278,19 +1172,19 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, isEnabled, getWrapped().isEnabled());
+			return ObservableValue.firstValue(s -> s != null, () -> null, isEnabled, getWrapped().isEnabled());
 		}
 	}
 
 	/**
-	 * Implements {@link SettableValue#firstValue(TypeToken, Predicate, Supplier, SettableValue...)}
+	 * Implements {@link SettableValue#firstValue(Predicate, Supplier, SettableValue...)}
 	 *
 	 * @param <T> The type of the value
 	 */
 	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {
-		public FirstSettableValue(TypeToken<T> type, SettableValue<? extends T>[] values, Predicate<? super T> test,
+		public FirstSettableValue(SettableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
-			super(type, values, test, def);
+			super(values, test, def);
 		}
 
 		@Override
@@ -1325,27 +1219,25 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 				ObservableValue<String> enabledI = getValues().get(i).isEnabled();
 				evs[i] = getValues().get(i).transform(tx -> tx.combineWith(enabledI).cache(false).combine((v, e) -> new BiTuple<>(v, e)));
 			}
-			return ObservableValue.firstValue((TypeToken<BiTuple<T, String>>) (TypeToken<?>) TypeTokens.get().of(BiTuple.class), tuple -> {
+			return ObservableValue.firstValue(tuple -> {
 				if (tuple.getValue2() == null)
 					return true;
 				else if (getTest().test(tuple.getValue1()))
 					return true;
 				else
 					return false;
-			}, null, evs).map(TypeTokens.get().STRING, tuple -> tuple == null ? StdMsg.UNSUPPORTED_OPERATION : tuple.getValue2());
+			}, null, evs).map(tuple -> tuple == null ? StdMsg.UNSUPPORTED_OPERATION : tuple.getValue2());
 		}
 
 		@Override
 		public <V extends T> String isAcceptable(V value) {
 			String enabled = null;
 			for (SettableValue<? extends T> v : getValues()) {
-				if (TypeTokens.get().isInstance(v.getType(), value)) {
-					String msg = ((SettableValue<T>) v).isAcceptable(value);
-					if (msg == null)
-						return null;
-					else if (enabled == null)
-						enabled = msg;
-				}
+				String msg = ((SettableValue<T>) v).isAcceptable(value);
+				if (msg == null)
+					return null;
+				else if (enabled == null)
+					enabled = msg;
 				if (getTest().test(v.get()))
 					return enabled;
 			}
@@ -1364,20 +1256,16 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 				boolean pass = getTest().test(vValue);
 				if (pass)
 					setValue = vValue;
-				if (TypeTokens.get().isInstance(v.getType(), value)) {
-					String msg = ((SettableValue<T>) v).isAcceptable(value);
-					if (msg == null)
-						return ((SettableValue<T>) v).set(value, cause);
-					else if (enabled == null)
-						enabled = msg;
-				}
+				String msg = ((SettableValue<T>) v).isAcceptable(value);
+				if (msg == null)
+					return ((SettableValue<T>) v).set(value, cause);
+				else if (enabled == null)
+					enabled = msg;
 				if (pass) {
 					if (set)
 						return setValue;
 					else if (enabled != null)
 						throw new IllegalArgumentException(enabled);
-					else
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			}
 			if (enabled != null)
@@ -1392,34 +1280,24 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param type The type for the new value
 	 * @return A builder to create a new settable value
 	 */
-	static <T> Builder<T> build(Class<T> type) {
-		return new Builder<>(TypeTokens.get().of(type));
+	static <T> Builder<T> build() {
+		return new Builder<>();
 	}
 
-	/**
-	 * @param <T> The type for the new value
-	 * @param type The type for the new value
-	 * @return A builder to create a new settable value
-	 */
-	static <T> Builder<T> build(TypeToken<T> type) {
-		return new Builder<>(type);
-	}
 
 	/** @param <T> The type for the settable value */
 	class Builder<T> extends TransactableBuilder.Default<Builder<T>> {
 		static final AtomicLong ID_GEN = new AtomicLong();
 
-		private final TypeToken<T> theType;
 		private boolean isVetoable;
 		private ListenerList.Builder theListenerBuilder;
 		private T theInitialValue;
 		private boolean isNullable;
 
-		Builder(TypeToken<T> type) {
+		Builder() {
 			super("settable-value");
-			theType = type;
 			theListenerBuilder = ListenerList.build();
-			isNullable = !type.isPrimitive();
+			isNullable = true;
 		}
 
 		public Builder<T> vetoable() {
@@ -1428,8 +1306,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		public Builder<T> nullable(boolean nullable) {
-			if (nullable && theType.isPrimitive())
-				throw new IllegalArgumentException("A primitive-typed value cannot be nullable");
 			isNullable = nullable;
 			return this;
 		}
@@ -1450,9 +1326,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 			if (!isNullable && theInitialValue == null)
 				throw new IllegalArgumentException("This value cannot be null.  Provide an initial value.");
 			if (isVetoable)
-				return new VetoableSettableValue<>(theType, getDescription(), isNullable, theListenerBuilder, getLocker(), theInitialValue);
+				return new VetoableSettableValue<>(getDescription(), isNullable, theListenerBuilder, getLocker(), theInitialValue);
 			else
-				return new SimpleSettableValue<>(theType, getDescription(), isNullable, getLocker(), theListenerBuilder, theInitialValue);
+				return new SimpleSettableValue<>(getDescription(), isNullable, getLocker(), theListenerBuilder, theInitialValue);
 		}
 	}
 }

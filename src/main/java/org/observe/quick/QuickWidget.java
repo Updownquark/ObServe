@@ -33,7 +33,6 @@ import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -395,20 +394,16 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		/** @param id The element identifier for this widget */
 		protected Abstract(Object id) {
 			super(id);
-			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
-			theTooltip = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			isVisible = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
-			theDialogs = ObservableCollection.build(QuickDialog.class).build();
+			theName = SettableValue.<SettableValue<String>> build().build();
+			theTooltip = SettableValue.<SettableValue<String>> build().build();
+			isVisible = SettableValue.<SettableValue<Boolean>> build().build();
+			theEventListeners = ObservableCollection.<QuickEventListener> build().build();
+			theDialogs = ObservableCollection.<QuickDialog> build().build();
 
-			isHovered = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			isFocused = SettableValue.build(isHovered.getType()).build();
-			isPressed = SettableValue.build(isHovered.getType()).build();
-			isRightPressed = SettableValue.build(isHovered.getType()).build();
+			isHovered = SettableValue.<SettableValue<Boolean>> build().build();
+			isFocused = SettableValue.<SettableValue<Boolean>> build().build();
+			isPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
 		}
 
 		@Override
@@ -567,18 +562,15 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		public QuickWidget.Abstract copy(ExElement parent) {
 			QuickWidget.Abstract copy = (QuickWidget.Abstract) super.copy(parent);
 
-			copy.theName = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			copy.theTooltip = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			copy.isVisible = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			copy.theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
+			copy.theName = SettableValue.<SettableValue<String>> build().build();
+			copy.theTooltip = SettableValue.<SettableValue<String>> build().build();
+			copy.isVisible = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.theEventListeners = ObservableCollection.<QuickEventListener> build().build();
 
-			copy.isHovered = SettableValue.build(isHovered.getType()).build();
-			copy.isFocused = SettableValue.build(isFocused.getType()).build();
-			copy.isPressed = SettableValue.build(isPressed.getType()).build();
-			copy.isRightPressed = SettableValue.build(isRightPressed.getType()).build();
+			copy.isHovered = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isFocused = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
 
 			if (theBorder != null)
 				copy.theBorder = theBorder.copy(copy);

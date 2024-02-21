@@ -31,11 +31,9 @@ import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.tree.BetterTreeMap;
 
-import com.google.common.reflect.TypeToken;
-
 /**
- * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flatMap(TypeToken, java.util.function.Function) flatMap()}. This
- * tests flat map functionality much more completely than {@link FactoringFlatMapCollectionLink}, but is much more expensive as well.
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flatMap(java.util.function.Function) flatMap()}. This tests flat
+ * map functionality much more completely than {@link FactoringFlatMapCollectionLink}, but is much more expensive as well.
  *
  * @param <S> The type of the source link
  * @param <V> The type of the flattened collections
@@ -63,12 +61,12 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 				TestValueType type = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
 				BetterSortedMap<T, ObservableCollectionLink<?, X>> buckets = createBuckets(path, sourceCL, type, helper);
 				ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow()//
-					.flatMap((TypeToken<X>) type.getType(), s -> {
+					.flatMap(s -> {
 						MapEntryHandle<T, ObservableCollectionLink<?, X>> bucket = FlattenedCollectionValuesLink.getBucket(buckets, s);
 						return bucket.get().getCollection().flow();
 					});
 				ObservableCollection.CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow.flatMap(
-					(TypeToken<X>) type.getType(), s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow);
+					s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow);
 				boolean orderImportant = sourceCL.getDef().orderImportant;
 				boolean checkOldValues = sourceCL.getDef().checkOldValues;
 				for (ObservableCollectionLink<?, X> bucket : buckets.values()) {
@@ -115,7 +113,6 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
 			boolean oneToMany = transform.isOneToMany();
 			boolean manyToOne = transform.isManyToOne();
-			TypeToken<X> typeToken = (TypeToken<X>) targetType.getType();
 			BetterSortedMap<S, ObservableCollectionLink<?, V>> buckets = createBuckets(path, sourceCL, flatType, helper);
 
 			ValueHolder<FlatMapOptions.FlatMapDef<S, V, X>> options = new ValueHolder<>();
@@ -127,12 +124,12 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 				options.accept(flatMap.map((s, v, x) -> transform.map(v, s)));
 				return options.get();
 			};
-			ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow().flatMap(typeToken, s -> {
+			ObservableCollection.CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow().flatMap(s -> {
 				MapEntryHandle<S, ObservableCollectionLink<?, V>> bucket = FlattenedCollectionValuesLink.getBucket(buckets, s);
 				return bucket.get().getCollection().flow();
 			}, combination);
 			ObservableCollection.CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow.flatMap(
-				(TypeToken<X>) targetType.getType(), s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow,
+				s -> FlattenedCollectionValuesLink.getBucket(buckets, s).get().getDef().multiStepFlow,
 				combination);
 			boolean orderImportant = sourceCL.getDef().orderImportant;
 			boolean checkOldValues = cache && sourceCL.getDef().checkOldValues;

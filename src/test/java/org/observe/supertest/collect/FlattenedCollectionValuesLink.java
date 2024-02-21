@@ -14,16 +14,14 @@ import org.observe.supertest.TestValueType;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
-import org.qommons.testing.TestHelper;
-import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.tree.BetterTreeMap;
 
-import com.google.common.reflect.TypeToken;
-
 /**
- * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flattenValues(TypeToken, Function)}
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#flattenValues(Function)}
  *
  * @param <S> The type of the source link's collection
  * @param <T> The type of this link's collection
@@ -44,21 +42,21 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			TestValueType type = targetType != null ? targetType : BaseCollectionLink.nextType(helper);
 			int bucketCount = helper.getInt(2, 10);
-			TypeToken<X> typeToken = (TypeToken<X>) type.getType();
 			BetterSortedMap<T, SettableValue<X>> buckets = BetterTreeMap.<T> build(SortedCollectionLink.compare(sourceCL.getType(), helper))
 				.buildMap();
 			Function<TestHelper, X> bucketValueGen = (Function<TestHelper, X>) ObservableChainTester.SUPPLIERS.get(type);
 			for (int i = 0; i < bucketCount; i++) {
 				T sourceValue = sourceCL.getValueSupplier().apply(helper);
 				buckets.computeIfAbsent(sourceValue, __ -> {
-					SettableValue<X> value = SettableValue.build(typeToken).build();
+					SettableValue<X> value = SettableValue.<X> build().build();
 					value.set(bucketValueGen.apply(helper), null);
 					return value;
 				});
 			}
-			CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow().flattenValues(typeToken,
-				sourceVal -> getBucket(buckets, sourceVal).get());
-			CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow.flattenValues(typeToken,
+			CollectionDataFlow<?, ?, X> oneStepFlow = sourceCL.getCollection().flow()
+				.flattenValues(sourceVal -> getBucket(buckets, sourceVal).get());
+			CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow
+				.flattenValues(
 				sourceVal -> getBucket(buckets, sourceVal).get());
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);

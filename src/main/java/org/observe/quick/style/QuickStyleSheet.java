@@ -53,8 +53,8 @@ import org.qommons.io.SimpleXMLParser;
 
 /** A structure containing many style values that may apply to all &lt;styled> elements in a document */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
-	qonfigType = QuickStyleSheet.STYLE_SHEET,
-	interpretation = QuickStyleSheet.Interpreted.class)
+qonfigType = QuickStyleSheet.STYLE_SHEET,
+interpretation = QuickStyleSheet.Interpreted.class)
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	/** The XML name for this type */
 	public static final String STYLE_SHEET = "style-sheet";
@@ -263,7 +263,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				session.setExpressoEnv(getExpressoEnv());
 				ObservableModelSet.Builder subSheetModel = builder.createSubModel(ref.getName(), ref.reporting().getPosition());
 				subSheetModel.with(SUB_SHEET_MODEL_NAME, ModelTypes.Value.forType(ModelSetInstance.class), ModelValueInstantiator
-					.of(msi -> SettableValue.build(ModelSetInstance.class).withDescription(SUB_SHEET_MODEL_NAME).build()), null);
+					.of(msi -> SettableValue.<ModelSetInstance> build().withDescription(SUB_SHEET_MODEL_NAME).build()), null);
 				ModelComponentId subSheetModelId = subSheetModel.getLocalComponent(SUB_SHEET_MODEL_NAME).getIdentity();
 				try {
 					addComponents(subSheetModel, ref.getTarget().getExpressoEnv(), subSheetModelId);

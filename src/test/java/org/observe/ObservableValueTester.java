@@ -4,8 +4,6 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.Objects;
 
-import org.observe.util.TypeTokens;
-
 /**
  * A utility for testing an observable value
  *
@@ -28,8 +26,6 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	 * @param tolerance The tolerance to use when checking the observable's value against internal or external state
 	 */
 	public ObservableValueTester(ObservableValue<? extends T> value, double tolerance) {
-		if (!Double.isNaN(tolerance) && TypeTokens.get().toNumber(value.getType()) == null)
-			throw new IllegalArgumentException("Cannot use a tolerance with a non-number value type: " + value.getType());
 		theValue = value;
 		theTolerance = tolerance;
 		setSynced(true);

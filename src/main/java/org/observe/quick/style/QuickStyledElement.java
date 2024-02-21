@@ -27,7 +27,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickInterpretedStyle.QuickStyleAttributeInstantiator;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
-import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
@@ -35,8 +34,6 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
-
-import com.google.common.reflect.TypeToken;
 
 /** A Quick element that has style */
 public interface QuickStyledElement extends ExElement {
@@ -535,7 +532,7 @@ public interface QuickStyledElement extends ExElement {
 			/** Creates the style */
 			protected Abstract() {
 				theApplicableAttributes = new LinkedHashMap<>();
-				theChanges = SettableValue.build((Class<Observable<ObservableValueEvent<?>>>) (Class<?>) Observable.class).build();
+				theChanges = SettableValue.<Observable<ObservableValueEvent<?>>> build().build();
 				theFlatChanges = ObservableValue.flattenObservableValue(theChanges);
 			}
 
@@ -611,7 +608,7 @@ public interface QuickStyledElement extends ExElement {
 				copy.theApplicableAttributes = new LinkedHashMap<>();
 				for (Map.Entry<QuickStyleAttribute<?>, StyleAttributeData<?>> attr : theApplicableAttributes.entrySet())
 					copy.theApplicableAttributes.put(attr.getKey(), new StyleAttributeData<>(attr.getValue().theInstantiator));
-				copy.theChanges = SettableValue.build((Class<Observable<ObservableValueEvent<?>>>) (Class<?>) Observable.class).build();
+				copy.theChanges = SettableValue.<Observable<ObservableValueEvent<?>>> build().build();
 				copy.theFlatChanges = ObservableValue.flattenObservableValue(copy.theChanges);
 				copy.initChanges();
 				return copy;
@@ -650,9 +647,7 @@ public interface QuickStyledElement extends ExElement {
 
 				StyleAttributeData(QuickStyleAttributeInstantiator<T> instantiator) {
 					theInstantiator = instantiator;
-					TypeToken<T> type = instantiator.getAttribute().getType();
-					theValueContainer = SettableValue
-						.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<T>> parameterized(type)).build();
+					theValueContainer = SettableValue.<ObservableValue<T>> build().build();
 					flatValue = ObservableValue.flatten(theValueContainer);
 				}
 

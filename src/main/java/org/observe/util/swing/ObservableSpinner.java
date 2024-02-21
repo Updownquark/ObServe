@@ -389,7 +389,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		private void startListening() {
 			// Combine with enabled so when enablement changes, the buttons become enabled/disabled
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			Subscription valueSub = theValue.transform(theValue.getType(), tx -> tx//
+			Subscription valueSub = theValue.transform(tx -> tx//
 				.combineWith(theValue.isEnabled()).combine((v, e) -> v))//
 				.safe(ThreadConstraint.EDT, until)//
 				.noInitChanges().act(evt -> {
@@ -417,7 +417,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			Component button = super.createPreviousButton();
 			if (button instanceof JComponent) {
 				JComponent jButton = (JComponent) button;
-				theModel.getObservableValue().transform(theModel.getObservableValue().getType(), tx -> tx//
+				theModel.getObservableValue().transform(tx -> tx//
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
 				.safe(ThreadConstraint.EDT, theUntil)//
 				.changes().takeUntil(theUntil).act(evt -> {
@@ -440,7 +440,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			Component button = super.createNextButton();
 			if (button instanceof JComponent) {
 				JComponent jButton = (JComponent) button;
-				theModel.getObservableValue().transform(theModel.getObservableValue().getType(), tx -> tx//
+				theModel.getObservableValue().transform(tx -> tx//
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
 				.safe(ThreadConstraint.EDT, theUntil)//
 				.changes().takeUntil(theUntil).act(evt -> {

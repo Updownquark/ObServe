@@ -19,11 +19,8 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A widget that allows the user to select a value from a collection (e.g. a combo box)
@@ -140,8 +137,9 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	/** @param id The element identity of the widget */
 	protected CollectionSelectorWidget(Object id) {
 		super(id);
-		theSelectedValue = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+		theValues = SettableValue.<ObservableCollection<T>> build().build();
+		theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		theSelectedValue = SettableValue.<SettableValue<Boolean>> build().build();
 	}
 
 	/** @return The elements the user may select from */
@@ -169,13 +167,6 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
-		TypeToken<T> valueType = (TypeToken<T>) myInterpreted.getValue().getType().getType(0);
-		if (theValues == null || !getValues().getType().equals(valueType)) {
-			theValues = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(valueType)).build();
-			theActiveValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType))
-				.build();
-		}
 		theValuesInstantiator = myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate();
 		theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
 		theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
@@ -200,9 +191,9 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	protected CollectionSelectorWidget<T> clone() {
 		CollectionSelectorWidget<T> copy = (CollectionSelectorWidget<T>) super.clone();
 
-		copy.theValues = SettableValue.build(theValues.getType()).build();
-		copy.theActiveValue = SettableValue.build(theActiveValue.getType()).build();
-		copy.theSelectedValue = SettableValue.build(theSelectedValue.getType()).build();
+		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
+		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		copy.theSelectedValue = SettableValue.<SettableValue<Boolean>> build().build();
 
 		return copy;
 	}

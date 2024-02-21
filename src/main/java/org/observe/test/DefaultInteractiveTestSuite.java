@@ -52,13 +52,12 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		theName = name;
 		isSequential = sequential;
 		theLocker = locker;
-		theContent = ObservableSortedCollection.build(InteractiveTestOrSuite.class, Named.DISTINCT_NUMBER_TOLERANT).withLocking(locker)
-			.build();
+		theContent = ObservableSortedCollection.<InteractiveTestOrSuite> build(Named.DISTINCT_NUMBER_TOLERANT).withLocking(locker).build();
 		theConfigLocations = new HashMap<>();
 		theConfigs = new HashMap<>();
 		theResults = new HashMap<>();
 		theAllTestResults = theContent.flow()//
-			.flatMap(TestResult.class, tos -> {
+			.flatMap(tos -> {
 				if (tos instanceof InteractiveTest)
 					return getModifiableResults(tos.getName()).flow();
 				else
@@ -179,7 +178,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		ObservableCollection<TestResult> results = theResults.get(testName);
 		if (results != null)
 			return results;
-		results = ObservableCollection.build(TestResult.class).build();
+		results = ObservableCollection.<TestResult> build().build();
 		theResults.put(testName, results);
 		InteractiveTestOrSuite test = null;
 		for (InteractiveTestOrSuite tos : theContent) {

@@ -72,7 +72,7 @@ public interface NonStructuredParser extends SelfDescribed {
 			T2 value = (T2) parseValue((TypeToken<? extends T>) type, text);
 			if (value != null && !TypeTokens.get().isInstance(type, value))
 				throw new IllegalStateException("Parser " + this + " parsed a value of type " + value.getClass() + " for type " + type);
-			return InterpretedValueSynth.literal(ModelTypes.Value.forType(type), SettableValue.of(type, value, "Literal"), text);
+			return InterpretedValueSynth.literal(ModelTypes.Value.forType(type), SettableValue.of(value, "Literal"), text);
 		}
 
 		/**

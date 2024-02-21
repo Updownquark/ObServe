@@ -303,8 +303,7 @@ public interface QuickInterpretedStyle {
 		 * @throws ModelInstantiationException If any model values fail to initialize
 		 */
 		public QuickStyleAttributeInstantiator<T> instantiate() throws ModelInstantiationException {
-			return new QuickStyleAttributeInstantiator<>(theAttribute,
-				QommonsUtils.filterMapE(theValues, v -> true, v -> v.instantiate()));
+			return new QuickStyleAttributeInstantiator<>(theAttribute, QommonsUtils.filterMapE(theValues, v -> true, v -> v.instantiate()));
 		}
 
 		@Override
@@ -378,21 +377,17 @@ public interface QuickInterpretedStyle {
 		public ObservableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException {
 			List<ObservableValue<ConditionalValue<T>>> valueList = getConditionalValues(models);
 			if (valueList.isEmpty())
-				return ObservableValue.of(theAttribute.getType(), null);
-			TypeToken<ObservableValue<T>> ovType = TypeTokens.get().keyFor(ObservableValue.class)
-				.<ObservableValue<T>> parameterized(theAttribute.getType());
+				return ObservableValue.of(null);
 			ObservableValue<ConditionalValue<T>> conditionalValue;
 			if (valueList.size() == 1)
 				conditionalValue = valueList.get(0);
 			else {
 				ObservableValue<ConditionalValue<T>>[] values = valueList.toArray(new ObservableValue[valueList.size()]);
-				TypeToken<ConditionalValue<T>> cvType = TypeTokens.get().keyFor(ConditionalValue.class)
-					.<ConditionalValue<T>> parameterized(theAttribute.getType());
-				conditionalValue = ObservableValue.firstValue(cvType, //
-					LambdaUtils.printablePred(cv -> cv.pass, "pass", null), LambdaUtils.constantSupplier(null, "null", null), values);
+				conditionalValue = ObservableValue.firstValue(LambdaUtils.printablePred(cv -> cv.pass, "pass", null),
+					LambdaUtils.constantSupplier(null, "null", null), values);
 			}
-			return ObservableValue.flatten(
-				conditionalValue.map(ovType, LambdaUtils.printableFn(cv -> (cv != null && cv.pass) ? cv.value : null, "value", null)));
+			return ObservableValue
+				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> (cv != null && cv.pass) ? cv.value : null, "value", null)));
 		}
 	}
 

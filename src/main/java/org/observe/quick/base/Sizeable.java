@@ -23,7 +23,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigExpression;
-import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
@@ -385,11 +384,10 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	/** @param element The element this sizeable is for */
 	protected Sizeable(ExElement element) {
 		super(element);
-		theSize = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
-		theMinimum = SettableValue.build(theSize.getType()).build();
-		thePreferred = SettableValue.build(theSize.getType()).build();
-		theMaximum = SettableValue.build(theSize.getType()).build();
+		theSize = SettableValue.<SettableValue<QuickSize>> build().build();
+		theMinimum = SettableValue.<SettableValue<QuickSize>> build().build();
+		thePreferred = SettableValue.<SettableValue<QuickSize>> build().build();
+		theMaximum = SettableValue.<SettableValue<QuickSize>> build().build();
 	}
 
 	/**
@@ -438,10 +436,10 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	protected Sizeable clone() {
 		Sizeable copy = (Sizeable) super.clone();
 
-		copy.theSize = SettableValue.build(theSize.getType()).build();
-		copy.theMinimum = SettableValue.build(theSize.getType()).build();
-		copy.thePreferred = SettableValue.build(theSize.getType()).build();
-		copy.theMaximum = SettableValue.build(theSize.getType()).build();
+		copy.theSize = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.theMinimum = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.thePreferred = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.theMaximum = SettableValue.<SettableValue<QuickSize>> build().build();
 
 		return copy;
 	}
@@ -562,7 +560,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 				}
 				return num.map(ModelTypes.Value.forType(QuickSize.class), numInst -> ModelValueInstantiator.of(msi -> {
 					SettableValue<Double> numV = numInst.get(msi);
-					return numV.transformReversible(QuickSize.class, tx -> tx//
+					return numV.transformReversible(tx -> tx//
 						.map(map)//
 						.replaceSource(reverse, rev -> rev.allowInexactReverse(true)));
 				}));
@@ -575,7 +573,8 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 					// If it doesn't parse as a position, try parsing as a number.
 					try {
 						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0, ExceptionHandler.thrower2())//
-							.map(ModelTypes.Value.forType(QuickSize.class), mvi -> mvi.map(v -> v.transformReversible(QuickSize.class,
+							.map(ModelTypes.Value.forType(QuickSize.class), mvi -> mvi
+								.map(v -> v.transformReversible(
 								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels))));
 					} catch (TypeConversionException e2) {
 						if (tce.get1() != null)

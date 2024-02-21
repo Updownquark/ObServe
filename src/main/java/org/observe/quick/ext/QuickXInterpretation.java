@@ -318,13 +318,13 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			@Override
 			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
-				SettableValue<Integer> width = SettableValue.build(int.class).withDescription("width").withValue(0).build();
-				SettableValue<Integer> height = SettableValue.build(int.class).withDescription("height").withValue(0).build();
-				SettableValue<Integer> x = SettableValue.build(int.class).withDescription("x").withValue(0).build();
-				SettableValue<Integer> y = SettableValue.build(int.class).withDescription("y").withValue(0).build();
-				SettableValue<Float> px = SettableValue.asSettable(x.transform(float.class, tx -> tx//
+				SettableValue<Integer> width = SettableValue.<Integer> build().withDescription("width").withValue(0).build();
+				SettableValue<Integer> height = SettableValue.<Integer> build().withDescription("height").withValue(0).build();
+				SettableValue<Integer> x = SettableValue.<Integer> build().withDescription("x").withValue(0).build();
+				SettableValue<Integer> y = SettableValue.<Integer> build().withDescription("y").withValue(0).build();
+				SettableValue<Float> px = SettableValue.asSettable(x.transform(tx -> tx//
 					.combineWith(width).combine((xv, wv) -> xv * 1.0f / wv)), __ -> "Not Settable");
-				SettableValue<Float> py = SettableValue.asSettable(y.transform(float.class, tx -> tx//
+				SettableValue<Float> py = SettableValue.asSettable(y.transform(tx -> tx//
 					.combineWith(height).combine((yv, hv) -> yv * 1.0f / hv)), __ -> "Not Settable");
 				ExFlexibleElementModelAddOn.satisfyElementValue(theWidthVariable, models, width);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theHeightVariable, models, height);
@@ -338,7 +338,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 				SettableValue<Float> lit = theLit.get(models);
 				SettableValue<Float> opacity = theOpacity == null ? null : theOpacity.get(models);
 				Observable<?> refresh = theRefresh == null ? null : theRefresh.get(models);
-				return SettableValue.of(QuickShading.class,
+				return SettableValue.of(
 					new QuickCustomShading(width, height, x, y, unitWidth, unitHeight, isStretchX, isStretchY, lit, opacity, refresh),
 					"Not Settable");
 			}
@@ -462,7 +462,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(QuickShading.class,
+				return SettableValue.of(
 					new QuickRaisedShading(isRound, isHorizontal, isVertical, theOpacity == null ? null : theOpacity.get(models)),
 					"Not Settable");
 			}

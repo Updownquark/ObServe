@@ -327,20 +327,6 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		/**
-		 * @param value The model value to check
-		 * @return Whether, to the best of this type's ability to discern, the given value is an instance of this model type
-		 */
-		public boolean isInstance(Object value) {
-			if (!(getModelType().modelType.isInstance(value)))
-				return false;
-			for (int t = 0; t < getModelType().getTypeCount(); t++) {
-				if (!TypeTokens.get().isAssignable(getType(t), getModelType().getType((M) value, t)))
-					return false;
-			}
-			return true;
-		}
-
-		/**
 		 * @param <M2> The type to convert to
 		 * @param target The type to convert to
 		 * @param env The environment which may contain information needed for the conversion
@@ -696,13 +682,6 @@ public abstract class ModelType<M> implements Named {
 	}
 
 	/**
-	 * @param value The value to get the type of
-	 * @param typeIndex the type index to get the type for
-	 * @return The type of the given value at the given index, or null if the information cannot be determined
-	 */
-	public abstract TypeToken<?> getType(M value, int typeIndex);
-
-	/**
 	 * @param types The parameter types to create the instance type for
 	 * @return A {@link ModelInstanceType} of this model type with the given parameter types
 	 */
@@ -779,11 +758,6 @@ public abstract class ModelType<M> implements Named {
 					return ModelType.UnTyped.this;
 				}
 			};
-		}
-
-		@Override
-		public TypeToken<?> getType(M value, int typeIndex) {
-			throw new IndexOutOfBoundsException(typeIndex + " of 0");
 		}
 
 		@Override
@@ -1207,9 +1181,6 @@ public abstract class ModelType<M> implements Named {
 	 * @param <MV> The type of the value
 	 */
 	public interface HollowModelValue<M, MV extends M> {
-		/** @return The instance type of this hollow model value */
-		ModelInstanceType<M, MV> getModelType();
-
 		/**
 		 * Satisfies this value with a real value, so that this value becomes a pass-through to the given value.
 		 *

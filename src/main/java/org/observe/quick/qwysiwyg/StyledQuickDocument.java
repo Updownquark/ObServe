@@ -9,7 +9,6 @@ import org.observe.SettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.collect.CollectionElement;
@@ -33,9 +32,8 @@ public class StyledQuickDocument {
 		theDocumentURL = documentURL;
 		theDocumentContent = content;
 		theLinkFollower = linkFollower;
-		theTooltip = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
-		theHovered = SettableValue.build(DocumentComponent.class).build();
+		theTooltip = SettableValue.<ObservableValue<String>> build().build();
+		theHovered = SettableValue.<DocumentComponent> build().build();
 
 		theRoot = new DocumentComponent(null, FilePosition.START);
 	}
@@ -121,7 +119,7 @@ public class StyledQuickDocument {
 		DocumentComponent(DocumentComponent parent, FilePosition start) {
 			this.parent = parent;
 			this.start = start;
-			children = ObservableCollection.build(DocumentComponent.class).build();
+			children = ObservableCollection.<DocumentComponent> build().build();
 			children.onChange(evt -> {
 				if (evt.getType() == CollectionChangeType.add)
 					evt.getNewValue().parentChild = evt.getElementId();

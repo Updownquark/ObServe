@@ -7,9 +7,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickMouseListener.QuickMouseButtonListener;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A widget that represents multiple values to the user
@@ -82,10 +79,10 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 				isSelected = selected;
 			}
 
-			/** @param valueType The type of values in the widget */
-			public Default(TypeToken<T> valueType) {
-				this(SettableValue.build(valueType).withDescription("activeValue").withValue(TypeTokens.get().getDefaultValue(valueType))
-					.build(), SettableValue.build(boolean.class).withDescription("selected").withValue(false).build());
+			/** Creates the context */
+			public Default() {
+				this(SettableValue.<T> build().withDescription("activeValue").build(),
+					SettableValue.<Boolean> build().withDescription("selected").withValue(false).build());
 			}
 
 			@Override

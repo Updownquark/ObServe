@@ -26,14 +26,11 @@ import org.observe.supertest.collect.CollectionLinkElement;
 import org.observe.supertest.collect.ExpectedCollectionOperation;
 import org.observe.supertest.collect.FilteredCollectionLink;
 import org.observe.supertest.collect.ObservableCollectionLink;
-import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
-import org.qommons.testing.TestHelper;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-
-import com.google.common.reflect.TypeToken;
+import org.qommons.testing.TestHelper;
 
 /** Container class for many {@link ObservableValueLink} classes derived from {@link ObservableCollectionLink}s */
 public class CollectionDerivedValues {
@@ -119,7 +116,7 @@ public class CollectionDerivedValues {
 		public <T, X> ObservableChainLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			ObservableCollection<T> values = ObservableCollection.build(sourceCL.getCollection().getType()).build();
+			ObservableCollection<T> values = ObservableCollection.<T> build().build();
 			boolean containsAny = helper.getBoolean();
 			return (ObservableChainLink<T, X>) new CollectionContainsValues<>(path, sourceCL, values, containsAny);
 		}
@@ -325,7 +322,7 @@ public class CollectionDerivedValues {
 
 		CollectionContainsValue(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
 			super(path, sourceLink, TestValueType.BOOLEAN, true);
-			theValue = SettableValue.build((TypeToken<T>) getSourceLink().getType().getType()).build();
+			theValue = SettableValue.<T> build().build();
 			theValue.set(sourceLink.getValueSupplier().apply(helper), null);
 		}
 
@@ -593,8 +590,7 @@ public class CollectionDerivedValues {
 
 		CollectionConditionFinder(String path, ObservableCollectionLink<?, T> sourceLink, TestHelper helper) {
 			super(path, sourceLink, sourceLink.getType(), true);
-			theConditionValue = SettableValue.build((TypeToken<Function<T, String>>) (TypeToken<?>) TypeTokens.get().OBJECT)
-				.build();
+			theConditionValue = SettableValue.<Function<T, String>> build().build();
 			theConditionValue.set(FilteredCollectionLink.filterFor(getType(), helper), null);
 			theLocation = Ternian.values()[helper.getInt(0, 3)];
 		}

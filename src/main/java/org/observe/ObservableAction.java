@@ -3,8 +3,6 @@ package org.observe;
 import java.util.function.Consumer;
 
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableCollectionImpl;
-import org.observe.util.TypeTokens;
 
 /** An action with an observable enabled property */
 public interface ObservableAction {
@@ -95,7 +93,7 @@ public interface ObservableAction {
 	 * @return A single action that invokes the given actions and returns their values as an array
 	 */
 	static ObservableAction and(ObservableAction... actions) {
-		return and(ObservableCollection.of(ObservableAction.class, actions));
+		return and(ObservableCollection.of(actions));
 	}
 
 	/**
@@ -157,7 +155,7 @@ public interface ObservableAction {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(TypeTokens.get().STRING, null, null, theDisablement, theParentAction.isEnabled());
+			return ObservableValue.firstValue(null, null, theDisablement, theParentAction.isEnabled());
 		}
 
 		@Override
@@ -187,9 +185,8 @@ public interface ObservableAction {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.flatten(
-				theWrapper//
-				.map(action -> action == null ? ObservableValue.of(TypeTokens.get().STRING, "Empty Action") : action.isEnabled()), //
+			return ObservableValue.flatten(theWrapper//
+				.map(action -> action == null ? ObservableValue.of("Empty Action") : action.isEnabled()), //
 				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}
@@ -216,8 +213,8 @@ public interface ObservableAction {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return theActions.flow().flattenValues(ObservableCollectionImpl.STRING_TYPE, action -> action.isEnabled()).collect()
-				.observeFind(enabled -> enabled != null).first().find();
+			return theActions.flow().flattenValues(action -> action.isEnabled()).collect().observeFind(enabled -> enabled != null).first()
+				.find();
 		}
 
 		@Override

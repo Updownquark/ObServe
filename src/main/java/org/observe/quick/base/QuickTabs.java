@@ -196,11 +196,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		protected AbstractTab(ExElement element) {
 			super(element);
 
-			theTabName = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			theTabIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
-				.build();
-			isTabSelected = SettableValue.build(boolean.class).withValue(false).build();
+			theTabName = SettableValue.<SettableValue<String>> build().build();
+			theTabIcon = SettableValue.<SettableValue<Image>> build().build();
+			isTabSelected = SettableValue.<Boolean> build().withValue(false).build();
 		}
 
 		@Override
@@ -273,9 +271,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		public AbstractTab copy(ExElement element) {
 			AbstractTab copy = (AbstractTab) super.copy(element);
 
-			copy.theTabName = SettableValue.build(theTabName.getType()).build();
-			copy.theTabIcon = SettableValue.build(theTabIcon.getType()).build();
-			copy.isTabSelected = SettableValue.build(boolean.class).withValue(false).build();
+			copy.theTabName = SettableValue.<SettableValue<String>> build().build();
+			copy.theTabIcon = SettableValue.<SettableValue<Image>> build().build();
+			copy.isTabSelected = SettableValue.<Boolean> build().withValue(false).build();
 
 			return copy;
 		}
@@ -544,16 +542,15 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		private SettableValue<ObservableCollection<T>> theValues;
 		private ModelComponentId theTabIdVariable;
 		private ObservableCollection<TabSetTabInstance> theTabInstances;
-		private TypeToken<T> theTabIdType;
 		private QuickWidget theRenderer;
 		private int theInstantiatedModel;
 
 		/** @param id The element ID for this tab set */
 		protected TabSet(Object id) {
 			super(id);
-			theValues = SettableValue.build((Class<ObservableCollection<T>>) (Class<?>) ObservableCollection.class).build();
+			theValues = SettableValue.<ObservableCollection<T>> build().build();
 			theTabInstances = getValues().flow()//
-				.transform((Class<TabSetTabInstance>) (Class<?>) TabSetTabInstance.class, //
+				.<TabSetTabInstance> transform(
 					tx -> tx.cache(true).reEvalOnUpdate(false).fireIfUnchanged(true).build(this::createTabInstance))//
 				.collectActive(isDestroyed().noInitChanges().take(1));
 			Subscription sub = theTabInstances.onChange(evt -> {
@@ -596,7 +593,6 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-			theTabIdType = myInterpreted.getTabIdType();
 			theValuesInstantiator = myInterpreted.getValues().instantiate();
 			theTabIdVariable = myInterpreted.getDefinition().getTabIdVariable();
 			if (theRenderer == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getIdentity()) {
@@ -641,7 +637,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		public TabSet<T> copy(ExElement parent) {
 			TabSet<T> copy = (TabSet<T>) super.copy(parent);
 
-			copy.theValues = SettableValue.build(theValues.getType()).build();
+			copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
 
 			return copy;
 		}
@@ -686,7 +682,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				ModelSetInstance copy = getModels()
 					.createCopy(models, Observable.or(models.getUntil(), theTabRenderer.isDestroyed().noInitChanges().take(1))).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTabIdVariable, copy,
-					SettableValue.of(theTabIdType, theTabId, "Tab ID is not modifiable"));
+					SettableValue.of(theTabId, "Tab ID is not modifiable"));
 				theTabRenderer.instantiate(copy);
 				theInstanceInstantiatedModel = theInstantiatedModel;
 			}
@@ -717,7 +713,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 			@Override
 			public ObservableValue<Boolean> isRemovable() {
-				return ObservableValue.of(TypeTokens.get().BOOLEAN, () -> theTabInstances.mutableElement(theElement).canRemove() == null,
+				return ObservableValue.of(() -> theTabInstances.mutableElement(theElement).canRemove() == null,
 					theTabInstances::getStamp, theTabInstances.changes());
 			}
 
@@ -863,7 +859,6 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	private ModelValueInstantiator<SettableValue<T>> theSelectedTabInstantiator;
-	private TypeToken<T> theTabIdType;
 	private SettableValue<SettableValue<T>> theSelectedTab;
 	private ObservableCollection<TabSet<? extends T>> theTabSets;
 	private ObservableSortedCollection<TabSource<? extends T>> theTabSources;
@@ -877,23 +872,23 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	private void createTabData() {
-		theTabSets = ObservableCollection.build((Class<TabSet<? extends T>>) (Class<?>) TabSet.class).build();
-		theTabSources = ObservableCollection.flattenCollections((Class<TabSource<? extends T>>) (Class<?>) TabSource.class, //
+		theTabSets = ObservableCollection.<TabSet<? extends T>> build().build();
+		theTabSources = ObservableCollection.flattenCollections(
 			getContents().flow()//
-			.transform((Class<TabSource<? extends T>>) (Class<?>) TabSource.class,
-				tx -> tx.cache(false).map(content -> new SingleTabSource<>(content)))//
+				.<TabSource<? extends T>> transform(tx -> tx.cache(false).map(content -> new SingleTabSource<>(content)))//
 			.collectPassive(), //
 			theTabSets)//
 			.sorted(TabSource::compareTo)//
 			.collectActive(isDestroyed().noInitChanges().take(1));
 		theTabs = theTabSources.flow()//
-			.flatMap((Class<TabInstance<? extends T>>) (Class<?>) TabInstance.class, tabSource -> tabSource.getTabInstances().flow())//
+			.<TabInstance<? extends T>> flatMap(tabSource -> tabSource.getTabInstances().flow())//
 			.collectActive(isDestroyed().noInitChanges().take(1));
 
 		theTabs.changes().takeUntil(isDestroyed().noInitChanges().take(1)).act(evt -> {
 			for (TabInstance<? extends T> tab : evt.getValues())
 				tab.setSelectListener(() -> onSelect(tab));
 		});
+		theSelectedTab = SettableValue.<SettableValue<T>> build().build();
 	}
 
 	private void onSelect(TabInstance<? extends T> selected) {
@@ -921,12 +916,6 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		// Do this before the super call because the content will need it
-		if (theSelectedTab == null || !theTabIdType.equals(myInterpreted.getTabIdType())) {
-			theTabIdType = myInterpreted.getTabIdType();
-			theSelectedTab = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theTabIdType)).build();
-		}
 		super.doUpdate(interpreted);
 		theSelectedTabVariable = myInterpreted.getDefinition().getSelectedTabVariable();
 		theSelectedTabInstantiator = myInterpreted.getSelectedTab() == null ? null : myInterpreted.getSelectedTab().instantiate();
@@ -957,7 +946,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedTabVariable, myModels, theSelectedTab);
 		if (theSelectedTabInstantiator == null)
-			theSelectedTab.set(SettableValue.build(theTabIdType).build(), null);
+			theSelectedTab.set(SettableValue.<T> build().build(), null);
 		else
 			theSelectedTab.set(theSelectedTabInstantiator.get(myModels), null);
 
@@ -969,7 +958,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	public QuickTabs<T> copy(ExElement parent) {
 		QuickTabs<T> copy = (QuickTabs<T>) super.copy(parent);
 
-		copy.theSelectedTab = SettableValue.build(theSelectedTab.getType()).build();
+		copy.theSelectedTab = SettableValue.<SettableValue<T>> build().build();
 		copy.createTabData();
 
 		for (TabSet<? extends T> tabSet : theTabSets)
@@ -1008,7 +997,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public ObservableCollection<? extends TabInstance<T>> getTabInstances() {
-			return ObservableCollection.of((Class<TabInstance<T>>) (Class<?>) TabInstance.class, this);
+			return ObservableCollection.<TabInstance<T>> of(this);
 		}
 
 		@Override
@@ -1023,8 +1012,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public ObservableValue<String> getTabName() {
-			return ObservableValue.firstValue(TypeTokens.get().STRING, v -> v != null, () -> getTabValue().toString(),
-				theAbstractTab.getTabName());
+			return ObservableValue.firstValue(v -> v != null, () -> getTabValue().toString(), theAbstractTab.getTabName());
 		}
 
 		@Override
@@ -1034,7 +1022,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public ObservableValue<Boolean> isRemovable() {
-			return theRenderer.isVisible().assignmentTo(ObservableValue.of(boolean.class, false)).isEnabled().map(e -> e == null);
+			return theRenderer.isVisible().assignmentTo(ObservableValue.of(false)).isEnabled().map(e -> e == null);
 		}
 
 		@Override

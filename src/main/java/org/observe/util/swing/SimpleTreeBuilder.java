@@ -25,14 +25,18 @@ import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
+import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterList;
 
@@ -104,7 +108,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
 		super(null, new JTree(model), until);
-		theRenderer = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) root.getType(),
+		theRenderer = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) TypeTokens.get().OBJECT,
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
 		isRootVisible = true;
@@ -189,7 +193,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		if (theDisablement == null)
 			theDisablement = disabled;
 		else
-			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
+			theDisablement = ObservableValue.firstValue(msg -> msg != null, () -> null, theDisablement, disabled);
 		return (P) this;
 	}
 
@@ -337,23 +341,38 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		getUntil().take(1).act(__ -> {
 			getEditor().removeMouseMotionListener(motion);
 		});
+		// Create our own multi-selection collection free of constraints.
+		// We don't support preventing the user from selecting things.
+		// We also need to control the actions if nothing else
+		ObservableCollection<BetterList<F>> multiSelection = ObservableCollection.<BetterList<F>> build().build().safe(ThreadConstraint.EDT,
+			getUntil());
+		ObservableTreeModel.syncSelection(getEditor(), multiSelection, getUntil());
 		ObservableTreeModel<F> model = (ObservableTreeModel<F>) getEditor().getModel();
-		if (thePathMultiSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(), thePathMultiSelection, getUntil());
-		if (theValueMultiSelection != null)
-			ObservableTreeModel.syncSelection(getEditor(),
-				theValueMultiSelection.flow()
-				.transform(TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-					tx -> tx.map(v -> model.getBetterPath(v, true)))
-				.filter(p -> p == null ? "Value not present" : null).collectActive(getUntil()),
-				getUntil());
+		if (theValueMultiSelection != null) {
+			ObservableCollection<F> modelValueSel = multiSelection.flow()//
+				.<F> transform(tx -> tx//
+					.cache(false).reEvalOnUpdate(false).fireIfUnchanged(true)//
+					.map(path -> path == null ? null : path.getLast())//
+					.replaceSource(value -> model.getBetterPath(value, true), null))//
+				.collect();
+			Subscription sub = ObservableCollectionSynchronization.synchronize(modelValueSel, theValueMultiSelection)//
+				.synchronize();
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+		}
+		if (thePathMultiSelection != null) {
+			Subscription sub = ObservableCollectionSynchronization.synchronize(multiSelection, thePathMultiSelection)//
+				.synchronize();
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+		}
 		if (thePathSingleSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(),
-				theValueSingleSelection.safe(ThreadConstraint.EDT, getUntil()).transformReversible(//
-					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
-					tx -> tx.map(v -> model.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
+				theValueSingleSelection//
+				.safe(ThreadConstraint.EDT, getUntil()).//
+				<BetterList<F>> transformReversible(tx -> tx//
+					.map(v -> model.getBetterPath(v, true))//
+					.withReverse(path -> path == null ? null : path.getLast())),
 				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
@@ -369,40 +388,58 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		JScrollPane scroll = new JScrollPane(getEditor());
 		Component comp = scroll;
 		if (!theActions.isEmpty()) {
-			SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
-			getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
-				List<BetterList<F>> selection = getSelection();
-				for (SimpleDataAction<BetterList<F>, ?> action : actions)
-					action.updateSelection(selection, evt);
-			});
 			boolean hasPopups = false, hasButtons = false;
-			for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-				if (action.isPopup())
-					hasPopups = true;
-				if (action.isButton())
+			for (Object action : theActions) {
+				if (!(action instanceof SimpleDataAction))
 					hasButtons = true;
+				else {
+					if (((SimpleDataAction<BetterList<F>, ?>) action).isPopup())
+						hasPopups = true;
+					if (((SimpleDataAction<BetterList<F>, ?>) action).isButton())
+						hasButtons = true;
+				}
 			}
+			multiSelection.simpleChanges().act(e -> {
+				List<BetterList<F>> copy = QommonsUtils.unmodifiableCopy(multiSelection);
+				for (Object action : theActions) {
+					if (action instanceof SimpleDataAction)
+						((SimpleDataAction<BetterList<F>, ?>) action).updateSelection(copy, e);
+				}
+			});
+			List<BetterList<F>> copy = QommonsUtils.unmodifiableCopy(multiSelection);
+			for (Object action : theActions) {
+				if (action instanceof SimpleDataAction)
+					((SimpleDataAction<BetterList<F>, ?>) action).updateSelection(copy, null);
+			}
+
 			if (hasPopups) {
 				withPopupMenu(popupMenu -> {
-					for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-						if (action.isPopup())
-							popupMenu.withAction("Action", action.theObservableAction, action::modifyButtonEditor);
+					for (Object action : theActions) {
+						if (action instanceof SimpleDataAction && ((SimpleDataAction<BetterList<F>, ?>) action).isPopup()) {
+							SimpleDataAction<BetterList<F>, ?> dataAction = (SimpleDataAction<BetterList<F>, ?>) action;
+							popupMenu.withAction("Action", dataAction.theObservableAction, dataAction::modifyButtonEditor);
+						}
 					}
 				});
 			}
 			if (hasButtons) {
 				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
 					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
-				for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-					if (((SimpleDataAction<?, ?>) action).isButton())
-						((SimpleDataAction<BetterList<F>, ?>) action).addButton(buttonPanel);
+				for (Object action : theActions) {
+					if (action instanceof SimpleDataAction) {
+						if (((SimpleDataAction<?, ?>) action).isButton())
+							((SimpleDataAction<BetterList<F>, ?>) action).addButton(buttonPanel);
+					} else if (action instanceof Consumer)
+						buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
 				}
-				JPanel treePanel = new JPanel(new BorderLayout());
-				treePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
-				treePanel.add(scroll, BorderLayout.CENTER);
-				comp = treePanel;
-			}
-		}
+				JPanel tablePanel = new JPanel(new BorderLayout());
+				tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
+				tablePanel.add(scroll, BorderLayout.CENTER);
+				comp = tablePanel;
+			} else
+				comp = scroll;
+		} else
+			comp = scroll;
 		return comp;
 	}
 

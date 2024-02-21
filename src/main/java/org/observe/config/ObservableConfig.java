@@ -85,9 +85,6 @@ import com.google.common.reflect.TypeToken;
  * </p>
  */
 public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventable {
-	/** {@link TypeToken}&lt;ObservableConfig> */
-	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
-
 	/** Fired from {@link ObservableConfig#watch(ObservableConfigPath)} when content at or beneath the watched config is modified */
 	public static class ObservableConfigEvent extends Causable.AbstractCausable {
 		/**
@@ -277,11 +274,9 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 				children = new SimpleObservableConfigContent(this, path.getLastElement());
 		} else {
 			ObservableConfigPath last = path.getLast();
-			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
-				.parameterized(TYPE);
 			ObservableValue<? extends ObservableConfig> descendant = observeDescendant(path.getParent());
-			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of(TYPE);
-			children = ObservableCollection.flattenValue(descendant.map(collType,
+			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of();
+			children = ObservableCollection.flattenValue(descendant.map(
 				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last).getValues()), //
 				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
@@ -630,7 +625,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		 */
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(theConfig, getSession(), getDescendant(false),
-				createDescendant(false)::apply, getUntil(), theType, getFormat(), true, findRefs), preReturnGet);
+				createDescendant(false)::apply, getUntil(), getFormat(), true, findRefs), preReturnGet);
 		}
 
 		/**
@@ -641,7 +636,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		 */
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(theConfig, getSession(), //
-				getDescendant(thePath != null), createDescendant(thePath != null)::apply, theType, getFormat(), getChildName(), getUntil(),
+				getDescendant(thePath != null), createDescendant(thePath != null)::apply, getFormat(), getChildName(), getUntil(),
 				true, findRefs), preReturnGet);
 		}
 
@@ -1253,7 +1248,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 	 */
 	public static class XmlEncoding {
 		/** Default encoding */
-		public static final XmlEncoding DEFAULT = new XmlEncoding("::", "::", "__", Collections.emptyMap()); // TODO
+		public static final XmlEncoding DEFAULT = new XmlEncoding("::", "::", "_::_", Collections.emptyMap()); // TODO
 
 		/** The prefix to use before characters that are not XML-compatible */
 		public final String encodingPrefix;

@@ -32,7 +32,6 @@ import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
-import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.CausalLock;
@@ -41,25 +40,11 @@ import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
+import org.qommons.collect.*;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
-import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Default, actively-gathered implementation of {@link ObservableMultiMap}
@@ -635,8 +620,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					}
 				}
 				// Remove this value from keys it no longer belongs to
-				TypeToken<K> keyType = null;
-				TypeToken<V> valueType = null;
 				MapEntryHandle<KeyEntry, ElementId> oldKey = theKeyMembership.getTerminalEntry(true);
 				List<MapEntryHandle<KeyEntry, ElementId>> updated = null;
 				while (oldKey != null) {
@@ -648,10 +631,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 						}
 					} else {
 						// This key no longer represents the source
-						oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), oldValue, //
-							(keyType != null ? keyType : (keyType = getKeyType())),
-							(valueType != null ? valueType : (valueType = getValueType())), //
-							-1, causes);
+						oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), oldValue, -1, causes);
 						theKeyMembership.mutableEntry(oldKey.getElementId()).remove();
 					}
 					oldKey = theKeyMembership.getAdjacentEntry(oldKey.getElementId(), true);
@@ -669,14 +649,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		void removed(V value, Object... causes) {
 			synchronized (DefaultActiveMultiMap.this) {
-				TypeToken<K> keyType = null;
-				TypeToken<V> valueType = null;
 				MapEntryHandle<KeyEntry, ElementId> oldKey = theKeyMembership.getTerminalEntry(true);
 				while (oldKey != null) {
-					oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), value, //
-						(keyType != null ? keyType : (keyType = getKeyType())),
-						(valueType != null ? valueType : (valueType = getValueType())), //
-						-1, causes);
+					oldKey.getKey().theValues.valueRemoved(oldKey.getValue(), oldKey.getKey().get(), value, -1, causes);
 					theKeyMembership.mutableEntry(oldKey.getElementId()).remove();
 					oldKey = theKeyMembership.getAdjacentEntry(oldKey.getElementId(), true);
 				}
@@ -702,12 +677,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		CollectionElement<ValueRef> addValue(ValueRef value, V val, Object... causes) {
 			K key = theEntry.get();
 			boolean newKey = theEntry.activate(key);
-			return addValue(value, getKeyType(), getValueType(), theActiveEntries.getElementsBefore(theEntry.activeEntryId), key, val,
+			return addValue(value, theActiveEntries.getElementsBefore(theEntry.activeEntryId), key, val,
 				newKey, causes);
 		}
 
-		private CollectionElement<ValueRef> addValue(ValueRef value, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex, K key,
-			V val, boolean newKey, Object... causes) {
+		private CollectionElement<ValueRef> addValue(ValueRef value, int keyIndex, K key, V val, boolean newKey, Object... causes) {
 			CollectionElement<ValueRef> added = theValues.addElement(value, false);
 			theValueSize++;
 			if (keyIndex < 0)
@@ -773,7 +747,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			}
 		}
 
-		void valueRemoved(ElementId id, K key, V value, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex, Object... causes) {
+		void valueRemoved(ElementId id, K key, V value, int keyIndex, Object... causes) {
 			if (!id.isPresent())
 				return; // This can happen when the last value for a key is removed
 			theValueSize--;
@@ -851,11 +825,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public CoreId getCoreId() {
 			return getValueManager().getCoreId();
-		}
-
-		@Override
-		public boolean belongs(Object o) {
-			return TypeTokens.get().isInstance(getValueManager().getTargetType(), o);
 		}
 
 		@Override
@@ -1193,11 +1162,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public TypeToken<K> getType() {
-			return getKeyType();
-		}
-
-		@Override
 		public Equivalence<? super K> equivalence() {
 			return theKeyManager.equivalence();
 		}
@@ -1484,11 +1448,6 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(DefaultActiveMultiMap.this.getIdentity(), "values", theKey);
-		}
-
-		@Override
-		public TypeToken<V> getType() {
-			return getValueType();
 		}
 
 		@Override

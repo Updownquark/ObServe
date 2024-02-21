@@ -36,7 +36,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
-import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.*;
 import org.qommons.Causable.CausableKey;
@@ -74,18 +73,13 @@ public final class ObservableCollectionImpl {
 	 *        used)
 	 * @param equiv The equivalence set to make a set of
 	 * @param c The collection whose values to add to the set
-	 * @param excluded A boolean flag that will be set to true if any elements in the second are excluded as not belonging to the
-	 *        BetterCollection
 	 * @return The set
 	 */
-	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c, boolean[] excluded) {
+	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c) {
 		try (Transaction t = Transactable.lock(c, false, null)) {
 			Set<E> set = equiv.createSet();
 			for (Object value : c) {
-				if (collection.belongs(value))
-					set.add((E) value);
-				else if (excluded != null)
-					excluded[0] = true;
+				set.add((E) value);
 			}
 			return set;
 		}
@@ -136,11 +130,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public TypeToken<E> getType() {
-			return theCollection.getType();
-		}
-
-		@Override
 		public long getStamp() {
 			return theCollection.getStamp();
 		}
@@ -171,11 +160,6 @@ public final class ObservableCollectionImpl {
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(OnlyElement.this.getIdentity(), "enabled");
-				}
-
-				@Override
-				public TypeToken<String> getType() {
-					return TypeTokens.get().STRING;
 				}
 
 				@Override
@@ -473,11 +457,6 @@ public final class ObservableCollectionImpl {
 		/** @return The default value supplier for this finder (used when no element in the collection matches the search) */
 		protected Supplier<? extends E> getDefault() {
 			return theDefault;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theCollection.getType();
 		}
 
 		@Override
@@ -933,11 +912,6 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public TypeToken<String> getType() {
-					return TypeTokens.get().STRING;
-				}
-
-				@Override
 				public String get() {
 					String msg = null;
 					try (Transaction t = getCollection().lock(false, null)) {
@@ -1224,26 +1198,16 @@ public final class ObservableCollectionImpl {
 	 */
 	public static abstract class ReducedValue<E, X, T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableCollection<E> theCollection;
-		private final TypeToken<T> theDerivedType;
 		private Object theChangesIdentity;
 
-		/**
-		 * @param collection The collection to reduce
-		 * @param derivedType The type of the produced value
-		 */
-		public ReducedValue(ObservableCollection<E> collection, TypeToken<T> derivedType) {
+		/** @param collection The collection to reduce */
+		protected ReducedValue(ObservableCollection<E> collection) {
 			theCollection = collection;
-			theDerivedType = derivedType;
 		}
 
 		/** @return The reduced collection */
 		protected ObservableCollection<E> getCollection() {
 			return theCollection;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theDerivedType;
 		}
 
 		@Override
@@ -1497,10 +1461,8 @@ public final class ObservableCollectionImpl {
 			try (Transaction lt = left.lock(false, null); Transaction rt = right.lock(false, null)) {
 				for (E e : left)
 					modify(e, true, true, null);
-				for (X x : right) {
-					if (leftEquiv.isElement(x))
-						modify((E) x, true, false, null);
-				}
+				for (X x : right)
+					modify((E) x, true, false, null);
 
 				Consumer<ObservableCollectionEvent<? extends E>> leftListener = evt -> onEvent(evt, true);
 				Consumer<ObservableCollectionEvent<? extends X>> rightListener = evt -> onEvent(evt, false);
@@ -1530,23 +1492,18 @@ public final class ObservableCollectionImpl {
 			try {
 				switch (evt.getType()) {
 				case add:
-					if (onLeft || leftEquiv.isElement(evt.getNewValue()))
-						modify((E) evt.getNewValue(), true, onLeft, evt);
+					modify((E) evt.getNewValue(), true, onLeft, evt);
 					break;
 				case remove:
-					if (onLeft || leftEquiv.isElement(evt.getOldValue()))
-						modify((E) evt.getOldValue(), false, onLeft, evt);
+					modify((E) evt.getOldValue(), false, onLeft, evt);
 					break;
 				case set:
-					boolean oldApplies = onLeft || leftEquiv.isElement(evt.getOldValue());
-					boolean newApplies = onLeft || leftEquiv.isElement(evt.getNewValue());
-					if ((oldApplies != newApplies) || (oldApplies && !leftEquiv.elementEquals((E) evt.getOldValue(), evt.getNewValue()))) {
-						if (oldApplies)
-							modify((E) evt.getOldValue(), false, onLeft, evt);
-						if (newApplies)
-							modify((E) evt.getNewValue(), true, onLeft, evt);
-					} else if (oldApplies)
+					if (!leftEquiv.elementEquals((E) evt.getOldValue(), evt.getNewValue())) {
+						modify((E) evt.getOldValue(), false, onLeft, evt);
+						modify((E) evt.getNewValue(), true, onLeft, evt);
+					} else
 						update(evt.getOldValue(), evt.getNewValue(), onLeft, evt);
+					break;
 				}
 			} finally {
 				theLock.unlock();
@@ -1659,11 +1616,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public TypeToken<Boolean> getType() {
-			return TypeToken.of(Boolean.TYPE);
-		}
-
-		@Override
 		public long getStamp() {
 			return theLeft.getStamp() ^ Long.rotateRight(theRight.getStamp(), 32);
 		}
@@ -1767,7 +1719,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		private static <T> ObservableCollection<T> toCollection(ObservableValue<T> value) {
-			ObservableValue<ObservableCollection<T>> cv = value.map(v -> ObservableCollection.of(value.getType(), v));
+			ObservableValue<ObservableCollection<T>> cv = value.map(v -> ObservableCollection.of(v));
 			return ObservableCollection.flattenValue(cv);
 		}
 
@@ -1846,11 +1798,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public TypeToken<E> getType() {
-			return getWrapped().getType();
-		}
-
-		@Override
 		public Equivalence<? super E> equivalence() {
 			return getWrapped().equivalence();
 		}
@@ -1878,11 +1825,6 @@ public final class ObservableCollectionImpl {
 				return getWrapped();
 			else
 				return ObservableCollection.super.reverse();
-		}
-
-		@Override
-		public E[] toArray() {
-			return ObservableCollection.super.toArray();
 		}
 
 		@Override
@@ -1981,11 +1923,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean isContentControlled() {
 			return theFlow.isContentControlled();
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theFlow.getTargetType();
 		}
 
 		@Override
@@ -2184,8 +2121,6 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			if (!belongs(value))
-				return null;
 			try (Transaction t = lock(false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				boolean forward = first ^ isReversed;
@@ -2779,11 +2714,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theFlow.getTargetType();
-		}
-
-		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theFlow.getThreadConstraint();
 		}
@@ -3131,11 +3061,8 @@ public final class ObservableCollectionImpl {
 	 * @param <E> The type of values in the collection
 	 */
 	public static class ConstantCollection<E> extends BetterList.ConstantList<E> implements ObservableCollection<E> {
-		private final TypeToken<E> theType;
-
-		ConstantCollection(TypeToken<E> type, BetterList<? extends E> values) {
+		ConstantCollection(BetterList<? extends E> values) {
 			super(values);
-			theType = type;
 		}
 
 		@Override
@@ -3146,11 +3073,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Equivalence<? super E> equivalence() {
 			return Equivalence.DEFAULT;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theType;
 		}
 
 		@Override
@@ -3173,7 +3095,6 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class FlattenedValueCollection<E> extends AbstractIdentifiable implements ObservableCollection<E> {
 		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
-		private final TypeToken<E> theType;
 		private final Equivalence<? super E> theEquivalence;
 
 		/**
@@ -3183,18 +3104,12 @@ public final class ObservableCollectionImpl {
 		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable,
 			Equivalence<? super E> equivalence) {
 			theCollectionObservable = collectionObservable;
-			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			theEquivalence = equivalence;
 		}
 
 		/** @return The value that backs this collection */
 		protected ObservableValue<? extends ObservableCollection<? extends E>> getWrapped() {
 			return theCollectionObservable;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theType;
 		}
 
 		@Override
@@ -3391,8 +3306,6 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
 				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-			else if (value != null && !TypeTokens.get().isInstance(current.getType(), value))
-				return MutableCollectionElement.StdMsg.BAD_TYPE;
 			return ((ObservableCollection<E>) current).canAdd(//
 				value, strip(current, after), strip(current, before));
 		}
@@ -3404,8 +3317,6 @@ public final class ObservableCollectionImpl {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
 				if (coll == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				if (value != null && !TypeTokens.get().isInstance(coll.getType(), value))
-					throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 				return getElement(coll, ((ObservableCollection<E>) coll).addElement(//
 					value, strip(coll, after), strip(coll, before), first));
 			}
@@ -3886,8 +3797,6 @@ public final class ObservableCollectionImpl {
 			public String isAcceptable(E value) {
 				if (!getElementId().check())
 					return StdMsg.UNSUPPORTED_OPERATION;
-				else if (!getWrapped().get().belongs(value))
-					return StdMsg.BAD_TYPE;
 				return ((MutableCollectionElement<E>) getElement()).isAcceptable(value);
 			}
 
@@ -3895,8 +3804,6 @@ public final class ObservableCollectionImpl {
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (!getElementId().check())
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				else if (!getWrapped().get().belongs(value))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				((MutableCollectionElement<E>) getElement()).set(value);
 			}
 
@@ -3917,7 +3824,7 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableCollection#flattenSimpleCollectionValue(TypeToken, SettableValue)}.
+	 * Implements {@link ObservableCollection#flattenSimpleCollectionValue(SettableValue)}.
 	 *
 	 * @param <T> The type of the collection
 	 */
@@ -4238,11 +4145,6 @@ public final class ObservableCollectionImpl {
 		public long getStamp() {
 			update();
 			return theStampCopy;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theCollection.getType();
 		}
 
 		@Override
@@ -4591,7 +4493,7 @@ public final class ObservableCollectionImpl {
 			theSynchronizer = synchronizer;
 			theAdjustmentOrder = adjustmentOrder;
 			theListeningCount = theAutoRefresh == null ? null : new AtomicInteger();
-			isRefreshing = SettableValue.build(boolean.class).withLocking(backing).withValue(false).build();
+			isRefreshing = SettableValue.<Boolean> build().withLocking(backing).withValue(false).build();
 
 			init(backing// TODO Maybe one day add capability for callers to affect the backing data
 				.flow().unmodifiable(false).collectPassive());

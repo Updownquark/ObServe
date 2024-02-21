@@ -22,7 +22,6 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickDialog;
-import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -198,11 +197,10 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	/** @param id The element ID for this widget */
 	protected QuickFileChooser(Object id) {
 		super(id);
-		theDirectory = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<File>> parameterized(File.class))
-			.build();
-		theOnSelect = SettableValue.build(ObservableAction.class).build();
-		theOnCancel = SettableValue.build(ObservableAction.class).build();
-		theChosenFiles = ObservableCollection.build(File.class).build();
+		theDirectory = SettableValue.<SettableValue<File>> build().build();
+		theOnSelect = SettableValue.<ObservableAction> build().build();
+		theOnCancel = SettableValue.<ObservableAction> build().build();
+		theChosenFiles = ObservableCollection.<File> build().build();
 	}
 
 	/** @return Whether this dialog is to select files to open (that must exist) or to save (which may not exist) */
@@ -290,7 +288,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		if (theDirectoryInstantiator != null)
 			theDirectory.set(theDirectoryInstantiator.get(myModels), null);
 		else {
-			SettableValue<File> dir = SettableValue.build(File.class).build();
+			SettableValue<File> dir = SettableValue.<File> build().build();
 			if (theDirectory.get() != null)
 				dir.set(theDirectory.get().get(), null);
 			theDirectory.set(dir, null);
@@ -304,10 +302,10 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	public QuickFileChooser copy(ExElement parent) {
 		QuickFileChooser copy = (QuickFileChooser) super.copy(parent);
 
-		copy.theDirectory = SettableValue.build(theDirectory.getType()).build();
-		copy.theOnSelect = SettableValue.build(ObservableAction.class).build();
-		copy.theOnCancel = SettableValue.build(ObservableAction.class).build();
-		copy.theChosenFiles = ObservableCollection.build(File.class).build();
+		copy.theDirectory = SettableValue.<SettableValue<File>> build().build();
+		copy.theOnSelect = SettableValue.<ObservableAction> build().build();
+		copy.theOnCancel = SettableValue.<ObservableAction> build().build();
+		copy.theChosenFiles = ObservableCollection.<File> build().build();
 
 		return copy;
 	}

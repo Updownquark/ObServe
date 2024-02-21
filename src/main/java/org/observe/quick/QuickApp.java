@@ -489,25 +489,23 @@ public class QuickApp extends QonfigApp {
 		MV value;
 		if (modelType == ModelTypes.Value) {
 			if (valueType == boolean.class && !hasDefault)
-				value = (MV) SettableValue.of(boolean.class, parsedArgs.has(argName), "Command-line argument");
+				value = (MV) SettableValue.of(parsedArgs.has(argName), "Command-line argument");
 			else
-				value = (MV) SettableValue.of((Class<Object>) valueType, parsedArgs.get(argName), "Command-line argument");
+				value = (MV) SettableValue.of(parsedArgs.get(argName), "Command-line argument");
 		} else {
 			ObservableCollection<Object> collection;
 			if (modelType == ModelTypes.Collection)
-				collection = ObservableCollection.build((Class<Object>) valueType).build();
+				collection = ObservableCollection.build().build();
 			else if (modelType == ModelTypes.SortedCollection) {
 				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(valueType)))
 					return;
-				collection = ObservableSortedCollection
-					.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
+				collection = ObservableSortedCollection.build((o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
 			} else if (modelType == ModelTypes.Set)
-				collection = ObservableSet.build((Class<Object>) valueType).build();
+				collection = ObservableSet.build().build();
 			else if (modelType == ModelTypes.SortedSet) {
 				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(valueType)))
 					return;
-				collection = ObservableSortedSet.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
-					.build();
+				collection = ObservableSortedSet.build((o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
 			} else
 				return;
 

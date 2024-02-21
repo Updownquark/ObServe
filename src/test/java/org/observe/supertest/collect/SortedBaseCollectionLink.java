@@ -20,8 +20,6 @@ import org.qommons.testing.TestHelper;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.SortedTreeList;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * Tests basic {@link ObservableSortedSet}s and non-distinct sorted {@link ObservableCollection}s
  *
@@ -48,10 +46,10 @@ public class SortedBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			boolean distinct = helper.getBoolean();
 			if (distinct) {
 				BetterSortedSet<X> backing = BetterTreeSet.<X> buildTreeSet(compare).build();
-				base = new DefaultObservableSortedSet<>((TypeToken<X>) type.getType(), backing);
+				base = new DefaultObservableSortedSet<>(backing);
 			} else {
 				BetterSortedList<X> backing = SortedTreeList.<X> buildTreeList(compare).build();
-				base = new DefaultObservableCollection<>((TypeToken<X>) type.getType(), backing);
+				base = new DefaultObservableCollection<>(backing);
 			}
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, base.flow(), base.flow(), true, true);
 			return (ObservableCollectionLink<T, X>) new SortedBaseCollectionLink<>(path, def, compare, distinct, helper);

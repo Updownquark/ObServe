@@ -294,7 +294,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A ModelValueSynth that always produces a constant value for the given value
 		 */
 		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literalValue(TypeToken<T> type, T value, String text) {
-			return literal(ModelTypes.Value.forType(type), SettableValue.of(type, value, "Literal"), text);
+			return literal(ModelTypes.Value.forType(type), SettableValue.of(value, "Literal"), text);
 		}
 
 		/**
@@ -983,7 +983,7 @@ public interface ObservableModelSet extends Identifiable {
 	 * @return A SettableValue that is not modifiable
 	 */
 	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
-		return SettableValue.asSettable(ObservableValue.of(type, value), __ -> "Literal value '" + text + "'");
+		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
 	}
 
 	/**

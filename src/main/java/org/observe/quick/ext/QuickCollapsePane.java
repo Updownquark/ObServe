@@ -19,7 +19,6 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -142,8 +141,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	/** @param id The element ID for this widget */
 	protected QuickCollapsePane(Object id) {
 		super(id);
-		isCollapsed = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+		isCollapsed = SettableValue.<SettableValue<Boolean>> build().build();
 	}
 
 	/** @return Whether the content is currently hidden */
@@ -196,7 +194,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 
-		isCollapsed.set(isCollapsedInstantiator == null ? SettableValue.build(boolean.class).withValue(true).build()
+		isCollapsed.set(isCollapsedInstantiator == null ? SettableValue.<Boolean> build().withValue(true).build()
 			: isCollapsedInstantiator.get(myModels), null);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theCollapsedVariable, myModels, isCollapsed());
 
@@ -208,7 +206,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	public QuickCollapsePane copy(ExElement parent) {
 		QuickCollapsePane copy = (QuickCollapsePane) super.copy(parent);
 
-		copy.isCollapsed = SettableValue.build(isCollapsed.getType()).build();
+		copy.isCollapsed = SettableValue.<SettableValue<Boolean>> build().build();
 		if (theHeader != null)
 			copy.theHeader = theHeader.copy(copy);
 

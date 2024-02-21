@@ -13,7 +13,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -154,16 +153,14 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 	public static class Default extends ExAddOn.Abstract<ExElement> implements QuickAbstractWindow {
 		private ModelValueInstantiator<SettableValue<String>> theTitleInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
-		private final SettableValue<SettableValue<String>> theTitle;
-		private final SettableValue<SettableValue<Boolean>> isVisible;
+		private SettableValue<SettableValue<String>> theTitle;
+		private SettableValue<SettableValue<Boolean>> isVisible;
 
 		/** @param element The element that this add-on is added onto */
 		public Default(ExElement element) {
 			super(element);
-			theTitle = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
-			isVisible = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			theTitle = SettableValue.<SettableValue<String>> build().build();
+			isVisible = SettableValue.<SettableValue<Boolean>> build().build();
 		}
 
 		@Override
@@ -219,6 +216,16 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 
 			theTitle.set(theTitleInstantiator == null ? null : theTitleInstantiator.get(models), null);
 			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models), null);
+		}
+
+		@Override
+		public Default copy(ExElement element) {
+			Default copy = (Default) super.copy(element);
+
+			copy.theTitle = SettableValue.<SettableValue<String>> build().build();
+			copy.isVisible = SettableValue.<SettableValue<Boolean>> build().build();
+
+			return copy;
 		}
 	}
 }

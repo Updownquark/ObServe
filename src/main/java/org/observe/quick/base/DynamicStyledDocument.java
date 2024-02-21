@@ -250,9 +250,9 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 				theNodeValue = nodeValue;
 			}
 
-			/** @param type The type of the document value */
-			public Default(TypeToken<T> type) {
-				theNodeValue = SettableValue.build(type).build();
+			/** Creates the context */
+			public Default() {
+				theNodeValue = SettableValue.<T> build().build();
 			}
 
 			@Override
@@ -277,6 +277,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	/** @param id The element identity of the widget */
 	protected DynamicStyledDocument(Object id) {
 		super(id);
+		theRoot = SettableValue.<SettableValue<T>> build().build();
+		theNodeValue = SettableValue.<T> build().build();
 	}
 
 	/** @return The root of the document */
@@ -355,16 +357,6 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		theNodeValueId = myInterpreted.getDefinition().getNodeValue();
-		TypeToken<T> valueType;
-		try {
-			valueType = myInterpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not interpreted?", e);
-		}
-		if (theRoot == null || !valueType.equals(getValueType().getType(0))) {
-			theRoot = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType)).build();
-			theNodeValue = SettableValue.build(valueType).build();
-		}
 
 		theRootInstantiator = myInterpreted.getRoot().instantiate();
 		theFormatInstantiator = myInterpreted.getFormat().instantiate();
@@ -408,8 +400,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	public DynamicStyledDocument<T> copy(ExElement parent) {
 		DynamicStyledDocument<T> copy = (DynamicStyledDocument<T>) super.copy(parent);
 
-		copy.theRoot = SettableValue.build(theRoot.getType()).build();
-		copy.theNodeValue = SettableValue.build(theNodeValue.getType()).build();
+		copy.theRoot = SettableValue.<SettableValue<T>> build().build();
+		copy.theNodeValue = SettableValue.<T> build().build();
 
 		return copy;
 	}

@@ -1,7 +1,6 @@
 package org.observe.collect;
 
 import java.util.Collection;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -17,7 +16,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
-import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -136,8 +134,6 @@ public class ObservableCollectionPassiveManagers {
 	 * @param <E> The type of the collection and therefore the flow
 	 */
 	public static class BaseCollectionPassThrough<E> implements PassiveCollectionManager<E, E, E> {
-		private static final ConcurrentHashMap<TypeToken<?>, TypeToken<? extends Function<?, ?>>> thePassThroughFunctionTypes = new ConcurrentHashMap<>();
-
 		private final ObservableCollection<E> theSource;
 		private final ObservableValue<Function<? super E, E>> theFunctionValue;
 
@@ -145,10 +141,7 @@ public class ObservableCollectionPassiveManagers {
 		public BaseCollectionPassThrough(ObservableCollection<E> source) {
 			theSource = source;
 
-			TypeToken<E> srcType = theSource.getType();
-			TypeToken<Function<? super E, E>> functionType = (TypeToken<Function<? super E, E>>) thePassThroughFunctionTypes
-				.computeIfAbsent(srcType, st -> functionType(st, st));
-			theFunctionValue = ObservableValue.of(functionType, LambdaUtils.identity());
+			theFunctionValue = ObservableValue.of(LambdaUtils.identity());
 		}
 
 		@Override
@@ -194,11 +187,6 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public long getStamp() {
 			return theSource.getStamp();
-		}
-
-		@Override
-		public TypeToken<E> getTargetType() {
-			return theSource.getType();
 		}
 
 		@Override
@@ -269,11 +257,6 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "reverse");
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
 		}
 
 		@Override
@@ -392,11 +375,6 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
 		public Equivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -494,9 +472,9 @@ public class ObservableCollectionPassiveManagers {
 
 	static class PassiveTransformedCollectionManager<E, I, T> extends AbstractTransformedManager<E, I, T>
 	implements PassiveCollectionManager<E, I, T> {
-		PassiveTransformedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
-			super(parent, targetType, transformation, equivalence);
+		PassiveTransformedCollectionManager(PassiveCollectionManager<E, ?, I> parent, Transformation<I, T> transformation,
+			Equivalence<? super T> equivalence) {
+			super(parent, transformation, equivalence);
 		}
 
 		@Override
@@ -529,7 +507,6 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return getParent().map().transform(//
-				(TypeToken<Function<? super E, ? extends T>>) (TypeToken<?>) TypeTokens.get().of(Function.class), //
 				tx -> tx.combineWith(getEngine()).combine((parentMap, state) -> {
 					return new TransformedMap(parentMap, state);
 				}));
@@ -692,11 +669,6 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
-		}
-
-		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
 		}
@@ -804,11 +776,6 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "filterMod", theFilter);
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
 		}
 
 		@Override

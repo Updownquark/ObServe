@@ -234,10 +234,10 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public <F, TB extends JToggleButton> AbstractQuickContainerPopulator addToggleField(String fieldName, SettableValue<F> value,
-		List<? extends F> values, Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator,
+		List<? extends F> values, Function<? super F, ? extends TB> buttonCreator,
 		Consumer<ToggleEditor<F, TB, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> p.addToggleField(fieldName, value, values, buttonType, buttonCreator, modify));
+			p -> p.addToggleField(fieldName, value, values, buttonCreator, modify));
 	}
 
 	@Override
@@ -370,6 +370,6 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public ObservableValue<String> getTooltip() {
-		return ObservableValue.of(String.class, null);
+		return ObservableValue.of(null);
 	}
 }

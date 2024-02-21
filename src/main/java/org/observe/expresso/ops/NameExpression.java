@@ -278,8 +278,7 @@ public class NameExpression implements ObservableExpression, Named {
 				return null;
 			} catch (SecurityException e) {
 				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed",
-					reporting.getFileLocation().getPosition(0), theNames.get(nameIndex).length(),
-					e));
+					reporting.getFileLocation().getPosition(0), theNames.get(nameIndex).length(), e));
 				return null;
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //
@@ -392,7 +391,7 @@ public class NameExpression implements ObservableExpression, Named {
 		@Override
 		public SettableValue<F> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			SettableValue<C> ctx = theContext == null ? null : theContext.get(models);
-			return new FieldValue<>(ctx, theField, theType, theReporting);
+			return new FieldValue<>(ctx, theField, TypeTokens.get().getDefaultValue(theType), theReporting);
 		}
 
 		@Override
@@ -404,7 +403,7 @@ public class NameExpression implements ObservableExpression, Named {
 			SettableValue<C> newCtx = theContext.forModelCopy(oldCtx, sourceModels, newModels);
 			if (oldCtx == newCtx)
 				return value;
-			return new FieldValue<>(newCtx, theField, theType, theReporting);
+			return new FieldValue<>(newCtx, theField, TypeTokens.get().getDefaultValue(theType), theReporting);
 		}
 
 		@Override
@@ -420,24 +419,24 @@ public class NameExpression implements ObservableExpression, Named {
 		private final SettableValue<?> theContext;
 		private final Field theField;
 		private final boolean isFinal;
-		private final TypeToken<F> theType;
 		private final SimpleObservable<Void> theChanges;
 		private final ObservableValue<F> theMappedValue;
+		private final F theDefaultValue;
 		private final ErrorReporting theReporting;
 		private long theStamp;
 
-		FieldValue(SettableValue<?> context, Field field, TypeToken<F> type, ErrorReporting reporting) {
+		FieldValue(SettableValue<?> context, Field field, F defaultValue, ErrorReporting reporting) {
 			theContext = context;
 			theField = field;
 			isFinal = Modifier.isFinal(theField.getModifiers());
-			theType = type;
 			theChanges = SimpleObservable.build().build();
 			if (theContext == null)
-				theMappedValue = ObservableValue.of(type, LambdaUtils.printableSupplier(this::getStatic, theField::getName, null),
-					this::getStamp, theChanges);
+				theMappedValue = ObservableValue.of(LambdaUtils.printableSupplier(this::getStatic, theField::getName, null), this::getStamp,
+					theChanges);
 			else
-				theMappedValue = theContext.transform(theType, tx -> tx.cache(isFinal).map(//
+				theMappedValue = theContext.transform(tx -> tx.cache(isFinal).map(//
 					LambdaUtils.printableFn(this::getFromContext, theField.getName(), null)));
+			theDefaultValue = defaultValue;
 			theReporting = reporting;
 		}
 
@@ -447,11 +446,6 @@ public class NameExpression implements ObservableExpression, Named {
 				return Identifiable.wrap(theContext.getIdentity(), theField.getName());
 			else
 				return Identifiable.baseId(theField.getName(), theField);
-		}
-
-		@Override
-		public TypeToken<F> getType() {
-			return theType;
 		}
 
 		@Override
@@ -490,7 +484,7 @@ public class NameExpression implements ObservableExpression, Named {
 
 		private F getFromContext(Object context) {
 			if (context == null)
-				return TypeTokens.get().getDefaultValue(theType);
+				return theDefaultValue;
 			try {
 				return (F) theField.get(context);
 			} catch (IllegalArgumentException | IllegalAccessException e) {
@@ -516,7 +510,7 @@ public class NameExpression implements ObservableExpression, Named {
 			if (Modifier.isFinal(theField.getModifiers()))
 				return ObservableValue.of("Final field cannot be assigned");
 			else if (theContext != null)
-				return theContext.map(String.class, ctx -> ctx == null ? "Cannot assign the field of a null value" : null);
+				return theContext.map(ctx -> ctx == null ? "Cannot assign the field of a null value" : null);
 			else
 				return SettableValue.ALWAYS_ENABLED;
 		}

@@ -332,7 +332,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				ObservableValue<Integer> s1Inst = s1.evaluate(models);
 				ObservableValue<Boolean> s2Inst = s2.evaluate(models);
 
-				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
+				return SettableValue.of(new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
 			}
 
 			@Override
@@ -350,7 +350,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				ObservableValue<Integer> s1Inst = s1.evaluate(newModels);
 				ObservableValue<Boolean> s2Inst = s2.evaluate(newModels);
 
-				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
+				return SettableValue.of(new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
 			}
 		}
 
@@ -670,7 +670,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			protected SettableValue<T> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3Inst,
 				ObservableValue<Integer> s4Inst, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
-				return (SettableValue<T>) SettableValue.of(B.class, new B(eInst, fInst, s3Inst, s4Inst, children), "Not settable");
+				return (SettableValue<T>) SettableValue.of(new B(eInst, fInst, s3Inst, s4Inst, children), "Not settable");
 			}
 
 			@Override
@@ -895,7 +895,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Boolean> gInst = g.get(models);
 				ObservableValue<Boolean> s5Inst = s5.evaluate(models);
-				return SettableValue.of(C.class, new C(eInst, fInst, gInst, s3, s4, s5Inst, children), "Not settable");
+				return SettableValue.of(new C(eInst, fInst, gInst, s3, s4, s5Inst, children), "Not settable");
 			}
 		}
 
@@ -1080,7 +1080,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				SettableValue<Integer> hInst = h.get(models);
 				ObservableValue<Integer> s6Inst = s6.evaluate(models);
 
-				return SettableValue.of(D.class, new D(eInst, fInst, hInst, s3, s4, s6Inst, children), "Not settable");
+				return SettableValue.of(new D(eInst, fInst, hInst, s3, s4, s6Inst, children), "Not settable");
 			}
 		}
 

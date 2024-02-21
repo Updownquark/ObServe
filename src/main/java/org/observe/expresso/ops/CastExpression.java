@@ -118,7 +118,7 @@ public class CastExpression implements ObservableExpression {
 		if (evaldX != null) {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> synth = InterpretedValueSynth.of(ModelTypes.Value.forType(valueType),
 				() -> evaldX.instantiate()
-				.map(sv -> sv.transformReversible(valueType, tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.identity()))),
+				.map(sv -> sv.transformReversible(tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.identity()))),
 				evaldX);
 			return ObservableExpression.evEx(0, getExpressionLength(), synth, valueType, evaldX);
 		}
@@ -155,8 +155,9 @@ public class CastExpression implements ObservableExpression {
 			return null;
 		} else {
 			Class<S> sourceClass = TypeTokens.getRawType(sourceType);
-			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), valueContainer
-				.map(ModelTypes.Value.forType(valueType), vc -> new CheckingInstantiator<>(vc, sourceClass, valueType, reporting)),
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				valueContainer.map(ModelTypes.Value.forType(valueType),
+					vc -> new CheckingInstantiator<>(vc, sourceClass, TypeTokens.getRawType(valueType), reporting)),
 				valueContainer);
 		}
 	}
@@ -188,7 +189,7 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		private SettableValue<T> transform(SettableValue<S> value) {
-			return value.transformReversible((TypeToken<T>) theConverter.getConvertedType(), tx -> tx//
+			return value.transformReversible(tx -> tx//
 				.map(theConverter).replaceSource(theConverter::reverse, rev -> rev.rejectWith(theConverter::isReversible)));
 		}
 
@@ -206,16 +207,14 @@ public class CastExpression implements ObservableExpression {
 	static class CheckingInstantiator<S, T> implements ModelValueInstantiator<SettableValue<T>> {
 		private final ModelValueInstantiator<SettableValue<S>> theValue;
 		private final Class<S> theSourceClass;
-		private final TypeToken<T> theType;
 		private final Class<T> theCastClass;
 		private final ErrorReporting theReporting;
 
-		public CheckingInstantiator(ModelValueInstantiator<SettableValue<S>> value, Class<S> sourceClass, TypeToken<T> type,
+		public CheckingInstantiator(ModelValueInstantiator<SettableValue<S>> value, Class<S> sourceClass, Class<T> castClass,
 			ErrorReporting reporting) {
 			theValue = value;
 			theSourceClass = sourceClass;
-			theType = type;
-			theCastClass = TypeTokens.getRawType(theType);
+			theCastClass = castClass;
 			theReporting = reporting;
 		}
 
@@ -231,17 +230,17 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		private SettableValue<T> transform(SettableValue<S> value) {
-			return value.transformReversible(theType, tx -> tx//
+			return value.transformReversible(tx -> tx//
 				.map(LambdaUtils.printableFn(v -> {
 					if (v == null || theCastClass.isInstance(v))
 						return (T) v;
 					else {
-						theReporting.error("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + theType);
+						theReporting.error("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + theCastClass);
 						return null;
 					}
-				}, "as(" + theType + ")", null)).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
+				}, "as(" + theCastClass.getName() + ")", null)).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
 					if (v != null && !theSourceClass.isInstance(v))
-						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + theType;
+						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + theCastClass;
 					return null;
 				})));
 		}

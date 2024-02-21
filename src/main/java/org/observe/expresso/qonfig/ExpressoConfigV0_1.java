@@ -256,9 +256,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final ModelValueInstantiator<SettableValue<T>> theDefaultValue;
 
 			Instantiator(ConfigValue.Interpreted<T> interpreted) throws ModelInstantiationException {
-				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
-					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
-						interpreted.getFormatSet());
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
 				theDefaultValue = interpreted.getDefaultValue() == null ? null : interpreted.getDefaultValue().instantiate();
 			}
 
@@ -317,9 +316,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		static class Instantiator<T> extends ConfigModelValue<T, ObservableValueSet<T>> {
 			public Instantiator(ConfigValueSet.Interpreted<T> interpreted) throws ModelInstantiationException {
-				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
-					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
-						interpreted.getFormatSet());
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
 			}
 
 			@Override
@@ -530,9 +528,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
 			public Instantiator(ExConfigMap.Interpreted<K, V> interpreted) throws ModelInstantiationException {
-				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(),
-					interpreted.getConfigPath(), interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(),
-						interpreted.getFormatSet());
+				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
 				theKeyType = interpreted.getKeyType();
 				theKeyFormat = interpreted.getKeyFormat() == null ? null : interpreted.getKeyFormat().instantiate();
 			}
@@ -669,10 +666,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				super.doUpdate(env);
 				theWrapped = interpret(getDefinition().getWrapped(), ModelTypes.Value.forType(FileDataSource.class));
 				theMaxArchiveDepth = interpret(getDefinition().getMaxArchiveDepth(), ModelTypes.Value.INT);
-				syncChildren(getDefinition().getArchiveMethods(), theArchiveMethods, (def,
-					vEnv) -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>) def
-					.interpret(vEnv),
-					(i, vEnv) -> i.updateValue(vEnv));
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
+					syncChildren(getDefinition().getArchiveMethods(), theArchiveMethods, (def,
+						vEnv) -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>) def
+						.interpret(vEnv),
+						(i, vEnv) -> i.updateValue(vEnv));
+				}
 			}
 
 			@Override
@@ -715,13 +714,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				SettableValue<FileDataSource> wrapped = theWrapped == null
-					? SettableValue.of(FileDataSource.class, new NativeFileSource(), "Unmodifiable") : theWrapped.get(models);
+				SettableValue<FileDataSource> wrapped = theWrapped == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+					: theWrapped.get(models);
 				SettableValue<Integer> maxArchiveDepth = theMaxArchiveDepth.get(models);
 				List<ArchiveEnabledFileSource.FileArchival> archiveMethods = new ArrayList<>(theArchiveMethods.size());
 				for (ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.FileArchival>> am : theArchiveMethods)
 					archiveMethods.add(am.get(models).get());
-				return SettableValue.asSettable(wrapped.transform(ArchiveEnabledFileSource.class, tx -> tx.map(w -> {
+				return SettableValue.asSettable(wrapped.transform(tx -> tx.map(w -> {
 					ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(w)//
 						.withArchival(archiveMethods);
 					maxArchiveDepth.changes().takeUntil(wrapped.noInitChanges()).act(evt -> aefs.setMaxArchiveDepth(evt.getNewValue()));
@@ -732,8 +731,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource> forModelCopy(SettableValue<ArchiveEnabledFileSource> value,
 				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<FileDataSource> srcWrapped = theWrapped == null
-					? SettableValue.of(FileDataSource.class, new NativeFileSource(), "Unmodifiable") : theWrapped.get(sourceModels);
+				SettableValue<FileDataSource> srcWrapped = theWrapped == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+					: theWrapped.get(sourceModels);
 				SettableValue<FileDataSource> newWrapped = theWrapped == null ? srcWrapped
 					: theWrapped.forModelCopy(srcWrapped, sourceModels, newModels);
 				SettableValue<Integer> srcMAD = theMaxArchiveDepth.get(sourceModels);
@@ -748,7 +747,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 				if (!diff)
 					return value;
-				return SettableValue.asSettable(newWrapped.transform(ArchiveEnabledFileSource.class, tx -> tx.map(w -> {
+				return SettableValue.asSettable(newWrapped.transform(tx -> tx.map(w -> {
 					ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(w)//
 						.withArchival(archiveMethods);
 					newMAD.changes().takeUntil(newWrapped.noInitChanges()).act(evt -> aefs.setMaxArchiveDepth(evt.getNewValue()));
@@ -809,8 +808,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.ZipCompression> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(ArchiveEnabledFileSource.ZipCompression.class, new ArchiveEnabledFileSource.ZipCompression(),
-					"Unmodifiable");
+				return SettableValue.of(new ArchiveEnabledFileSource.ZipCompression(), "Unmodifiable");
 			}
 
 			@Override
@@ -874,8 +872,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.GZipCompression> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(ArchiveEnabledFileSource.GZipCompression.class, new ArchiveEnabledFileSource.GZipCompression(),
-					"Unmodifiable");
+				return SettableValue.of(new ArchiveEnabledFileSource.GZipCompression(), "Unmodifiable");
 			}
 
 			@Override
@@ -939,8 +936,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.TarArchival> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(ArchiveEnabledFileSource.TarArchival.class, new ArchiveEnabledFileSource.TarArchival(),
-					"Unmodifiable");
+				return SettableValue.of(new ArchiveEnabledFileSource.TarArchival(), "Unmodifiable");
 			}
 
 			@Override
@@ -1029,22 +1025,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		public static abstract class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<Format<T>>> {
-			private final TypeToken<Format<T>> theFormatType;
 			private final List<FormatValidation.Instantiator<T, ?>> theValidation;
 
 			protected Instantiator(AbstractFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theFormatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(interpreted.getValueType());
 				theValidation = new ArrayList<>(interpreted.getValidation().size());
 				for (FormatValidation.Interpreted<T, ?> validation : interpreted.getValidation()) {
 					FormatValidation.Instantiator<T, ?> v = validation.create();
 					v.update(validation, null);
 					theValidation.add(v);
 				}
-			}
-
-			protected TypeToken<Format<T>> getFormatType() {
-				return theFormatType;
 			}
 
 			@Override
@@ -1061,7 +1051,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				SettableValue<Format<T>> sourceFormat = createFormat(models);
 				if (validation.isEmpty())
 					return sourceFormat;
-				return new ValidatedFormatValue<>(theFormatType, sourceFormat, validation);
+				return new ValidatedFormatValue<>(sourceFormat, validation);
 			}
 
 			protected abstract SettableValue<Format<T>> createFormat(ModelSetInstance models)
@@ -1089,7 +1079,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (newSource != validatedValue.getSourceFormat() && newValidation == null)
 					newValidation = validatedValue.getValidation();
 				if (newValidation != null)
-					return new ValidatedFormatValue<>(theFormatType, newSource, newValidation);
+					return new ValidatedFormatValue<>(newSource, newValidation);
 				return value;
 			}
 
@@ -1098,7 +1088,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		private static class ValidatedFormatValue<T> implements SettableValue<Format<T>> {
-			private final TypeToken<Format<T>> theType;
 			private final SettableValue<Format<T>> theSourceFormat;
 			private final List<FormatValidation<T>> theValidation;
 
@@ -1106,8 +1095,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private ValidatedFormat<T> thePreviousFormat;
 			private ValidatedFormat<T> theValidatedFormat;
 
-			ValidatedFormatValue(TypeToken<Format<T>> type, SettableValue<Format<T>> sourceFormat, List<FormatValidation<T>> validation) {
-				theType = type;
+			ValidatedFormatValue(SettableValue<Format<T>> sourceFormat, List<FormatValidation<T>> validation) {
 				theSourceFormat = sourceFormat;
 				theValidation = validation;
 				theStamp = -1;
@@ -1195,11 +1183,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						return sourceChanges.tryLock();
 					}
 				};
-			}
-
-			@Override
-			public TypeToken<Format<T>> getType() {
-				return theType;
 			}
 
 			@Override
@@ -1391,27 +1374,24 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected SettableValue<Format<BetterFile>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				SettableValue<FileDataSource> fileSource = theFileSource == null
-					? SettableValue.of(FileDataSource.class, new NativeFileSource(), "Unmodifiable") : theFileSource.get(models);
+				SettableValue<FileDataSource> fileSource = theFileSource == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+					: theFileSource.get(models);
 				SettableValue<BetterFile> workingDir;
 				if (theWorkingDir != null)
 					workingDir = theWorkingDir.get(models);
 				else
-					workingDir = SettableValue.asSettable(
-						fileSource.map(BetterFile.class, fs -> BetterFile.at(fs, System.getProperty("user.dir"))), __ -> "Unmodifiable");
+					workingDir = SettableValue.asSettable(fileSource.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
+						__ -> "Unmodifiable");
 
-				return SettableValue.asSettable(
-					fileSource.transform(TypeTokens.get().keyFor(Format.class).<Format<BetterFile>> parameterized(BetterFile.class),
-						tx -> tx.combineWith(workingDir)//
-						.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))),
-					__ -> "Unmodifiable");
+				return SettableValue.asSettable(fileSource.transform(tx -> tx.combineWith(workingDir)//
+					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> "Unmodifiable");
 			}
 
 			@Override
 			protected SettableValue<Format<BetterFile>> copyFormat(SettableValue<Format<BetterFile>> format, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<FileDataSource> srcFS = theFileSource == null
-					? SettableValue.of(FileDataSource.class, new NativeFileSource(), "Unmodifiable") : theFileSource.get(sourceModels);
+				SettableValue<FileDataSource> srcFS = theFileSource == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+					: theFileSource.get(sourceModels);
 				SettableValue<FileDataSource> newFS = theFileSource == null ? srcFS
 					: theFileSource.forModelCopy(srcFS, sourceModels, newModels);
 				SettableValue<BetterFile> srcWD, newWD;
@@ -1419,21 +1399,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					srcWD = theWorkingDir.get(sourceModels);
 					newWD = theWorkingDir.forModelCopy(srcWD, sourceModels, newModels);
 				} else {
-					srcWD = SettableValue.asSettable(srcFS.map(BetterFile.class, fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
+					srcWD = SettableValue.asSettable(srcFS.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
 						__ -> "Unmodifiable");
 					if (newFS == srcFS)
 						newWD = srcWD;
 					else
-						newWD = SettableValue.asSettable(
-							newFS.map(BetterFile.class, fs -> BetterFile.at(fs, System.getProperty("user.dir"))), __ -> "Unmodifiable");
+						newWD = SettableValue.asSettable(newFS.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
+							__ -> "Unmodifiable");
 				}
 				if (srcFS == newFS && srcWD == newWD)
 					return format;
 
-				return SettableValue.asSettable(newFS.transform(
-					TypeTokens.get().keyFor(Format.class).<Format<BetterFile>> parameterized(BetterFile.class), tx -> tx.combineWith(newWD)//
-					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))),
-					__ -> "Unmodifiable");
+				return SettableValue.asSettable(newFS.transform(tx -> tx.combineWith(newWD)//
+					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> "Unmodifiable");
 			}
 		}
 	}
@@ -1591,18 +1569,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			private SettableValue<Format<Double>> createFormat(SettableValue<Integer> sigDigs) {
-				return SettableValue
-					.asSettable(sigDigs.map(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(double.class), sd -> {
-						Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sd);
-						builder.withUnit(theUnit, isUnitRequired);
-						if (isMetricPrefixed)
-							builder.withMetricPrefixes();
-						else if (isMetricPrefixedP2)
-							builder.withMetricPrefixesPower2();
-						for (Map.Entry<String, Double> prefix : thePrefixMults.entrySet())
-							builder.withPrefix(prefix.getKey(), prefix.getValue());
-						return builder.build();
-					}), __ -> "Unmodifiable");
+				return SettableValue.asSettable(sigDigs.map(sd -> {
+					Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sd);
+					builder.withUnit(theUnit, isUnitRequired);
+					if (isMetricPrefixed)
+						builder.withMetricPrefixes();
+					else if (isMetricPrefixedP2)
+						builder.withMetricPrefixesPower2();
+					for (Map.Entry<String, Double> prefix : thePrefixMults.entrySet())
+						builder.withPrefix(prefix.getKey(), prefix.getValue());
+					return builder.build();
+				}), __ -> "Unmodifiable");
 			}
 
 			@Override
@@ -1829,13 +1806,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				throws ModelInstantiationException, IllegalStateException {
 				Supplier<Instant> relativeTo = theRelativeTo == null ? LambdaUtils.printableSupplier(Instant::now, () -> "now", null)
 					: theRelativeTo.get(models);
-				return SettableValue.of(TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class), //
-					SpinnerFormat.flexDate(relativeTo, theDayFormat, teo -> teo//
-						.withTimeZone(theTimeZone)//
-						.withMaxResolution(theMaxResolution)//
-						.with24HourFormat(isFormat24H)//
-						.withEvaluationType(theRelativeEvaluation)),
-					"Unsettable");
+				return SettableValue.of(SpinnerFormat.flexDate(relativeTo, theDayFormat, teo -> teo//
+					.withTimeZone(theTimeZone)//
+					.withMaxResolution(theMaxResolution)//
+					.with24HourFormat(isFormat24H)//
+					.withEvaluationType(theRelativeEvaluation)), "Unsettable");
 			}
 
 			@Override
@@ -1847,13 +1822,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				SettableValue<Instant> newRT = theRelativeTo.forModelCopy(sourceRT, sourceModels, newModels);
 				if (sourceRT == newRT)
 					return format;
-				return SettableValue.of(TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class), //
-					SpinnerFormat.flexDate(newRT, theDayFormat, teo -> teo//
-						.withTimeZone(theTimeZone)//
-						.withMaxResolution(theMaxResolution)//
-						.with24HourFormat(isFormat24H)//
-						.withEvaluationType(theRelativeEvaluation)),
-					"Unsettable");
+				return SettableValue.of(SpinnerFormat.flexDate(newRT, theDayFormat, teo -> teo//
+					.withTimeZone(theTimeZone)//
+					.withMaxResolution(theMaxResolution)//
+					.with24HourFormat(isFormat24H)//
+					.withEvaluationType(theRelativeEvaluation)), "Unsettable");
 			}
 		}
 	}
@@ -1932,8 +1905,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected SettableValue<Format<String>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class), INSTANCE,
-					"Unmodifiable");
+				return SettableValue.of(INSTANCE, "Unmodifiable");
 			}
 
 			@Override
@@ -2023,7 +1995,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected SettableValue<Format<T>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(getFormatType(), theFormat, StdMsg.UNSUPPORTED_OPERATION);
+				return SettableValue.of(theFormat, StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override
@@ -2122,7 +2094,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends ExElement.Abstract implements FormatValidation.Instantiator<T, FilterValidation<T>> {
-			private TypeToken<T> theValueType;
 			private ModelComponentId theFilterValueVariable;
 			private ModelValueInstantiator<SettableValue<String>> theTest;
 
@@ -2135,7 +2106,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				super.doUpdate(interpreted);
 
 				FilterValidation.Interpreted<T> myInterpreted = (FilterValidation.Interpreted<T>) interpreted;
-				theValueType = myInterpreted.getValueType();
 				theFilterValueVariable = myInterpreted.getDefinition().getFilterValueVariable();
 				theTest = myInterpreted.getTest().instantiate();
 			}
@@ -2153,7 +2123,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			@Override
 			public FilterValidation<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<T> filterValue = SettableValue.build(theValueType).build();
+				SettableValue<T> filterValue = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theFilterValueVariable, models, filterValue);
 				SettableValue<String> test = theTest.get(models);
 				return new FilterValidation<>(filterValue, test);
@@ -2164,7 +2134,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				throws ModelInstantiationException {
 				SettableValue<String> newTest = theTest.forModelCopy(value.getTest(), sourceModels, newModels);
 				if (newTest != value.getTest()) {
-					SettableValue<T> filterValue = SettableValue.build(theValueType).build();
+					SettableValue<T> filterValue = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theFilterValueVariable, newModels, filterValue);
 					return new FilterValidation<>(filterValue, newTest);
 				} else
@@ -2341,20 +2311,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<ObservableConfigFormat<T>>> {
-			private final TypeToken<T> theType;
 			private final ModelValueInstantiator<SettableValue<Format<T>>> theTextFormat;
 			private final Format<T> theDefaultFormat;
 			private final ModelValueInstantiator<SettableValue<T>> theDefaultValue;
 			private final String theDefaultText;
+			private final T theStaticDefaultValue;
 			private final ErrorReporting theReporting;
 
 			Instantiator(TextConfigFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theType = interpreted.getValueType();
 				theTextFormat = interpreted.getTextFormat() == null ? null : interpreted.getTextFormat().instantiate();
 				theDefaultFormat = interpreted.getDefaultFormat();
 				theDefaultValue = interpreted.getDefaultValue() == null ? null : interpreted.getDefaultValue().instantiate();
 				theDefaultText = interpreted.getDefinition().getDefaultText();
+				theStaticDefaultValue = TypeTokens.get().getDefaultValue(interpreted.getValueType());
 				theReporting = interpreted.reporting();
 			}
 
@@ -2373,25 +2343,22 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (theTextFormat != null)
 					textFormat = theTextFormat.get(models);
 				else
-					textFormat = SettableValue.of(TypeTokens.get().of((Class<Format<T>>) (Class<?>) Format.class), theDefaultFormat,
-						"Unmodifiable");
+					textFormat = SettableValue.of(theDefaultFormat, "Unmodifiable");
 				ObservableValue<T> defaultValue;
 				if (theDefaultValue != null)
 					defaultValue = theDefaultValue.get(models);
 				else if (theDefaultText != null) {
-					defaultValue = textFormat.map(theType, tf -> {
+					defaultValue = textFormat.map(tf -> {
 						try {
 							return tf.parse(theDefaultText);
 						} catch (ParseException e) {
 							theReporting.error("Could not parse default value", e);
-							return TypeTokens.get().getDefaultValue(theType);
+							return theStaticDefaultValue;
 						}
 					});
 				} else
-					defaultValue = ObservableValue.of(theType, TypeTokens.get().getDefaultValue(theType));
-				return SettableValue.asSettable(
-					textFormat.map(TypeTokens.get().of((Class<ObservableConfigFormat<T>>) (Class<?>) ObservableConfigFormat.class),
-						tf -> ObservableConfigFormat.ofQommonFormat(tf, defaultValue)),
+					defaultValue = ObservableValue.of(theStaticDefaultValue);
+				return SettableValue.asSettable(textFormat.map(tf -> ObservableConfigFormat.ofQommonFormat(tf, defaultValue)),
 					__ -> "Unmodifiable");
 			}
 
@@ -2403,29 +2370,26 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					srcTextFormat = theTextFormat.get(sourceModels);
 					newTextFormat = theTextFormat.forModelCopy(srcTextFormat, sourceModels, newModels);
 				} else
-					srcTextFormat = newTextFormat = SettableValue.of(TypeTokens.get().of((Class<Format<T>>) (Class<?>) Format.class),
-						theDefaultFormat, "Unmodifiable");
+					srcTextFormat = newTextFormat = SettableValue.of(theDefaultFormat, "Unmodifiable");
 
 				ObservableValue<T> srcDefaultValue, newDefaultValue;
 				if (theDefaultValue != null) {
 					srcDefaultValue = theDefaultValue.get(sourceModels);
 					newDefaultValue = theDefaultValue.forModelCopy((SettableValue<T>) srcDefaultValue, sourceModels, newModels);
 				} else if (theDefaultText != null) {
-					srcDefaultValue = newDefaultValue = newTextFormat.map(theType, tf -> {
+					srcDefaultValue = newDefaultValue = newTextFormat.map(tf -> {
 						try {
 							return tf.parse(theDefaultText);
 						} catch (ParseException e) {
 							theReporting.error("Could not parse default value", e);
-							return TypeTokens.get().getDefaultValue(theType);
+							return theStaticDefaultValue;
 						}
 					});
 				} else
-					srcDefaultValue = newDefaultValue = ObservableValue.of(theType, TypeTokens.get().getDefaultValue(theType));
+					srcDefaultValue = newDefaultValue = ObservableValue.of(theStaticDefaultValue);
 				if (srcTextFormat == newTextFormat && srcDefaultValue == newDefaultValue)
 					return value;
-				return SettableValue.asSettable(
-					newTextFormat.map(TypeTokens.get().of((Class<ObservableConfigFormat<T>>) (Class<?>) ObservableConfigFormat.class),
-						tf -> ObservableConfigFormat.ofQommonFormat(tf, newDefaultValue)),
+				return SettableValue.asSettable(newTextFormat.map(tf -> ObservableConfigFormat.ofQommonFormat(tf, newDefaultValue)),
 					__ -> "Unmodifiable");
 			}
 		}
@@ -2617,9 +2581,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						builder.withFieldChildName(field.getKey(), configName);
 					builder.withFieldFormat(field.getKey(), field.getValue().get(models).get());
 				}
-				return SettableValue.of(
-					TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<E>> parameterized(theEntityType),
-					builder.build(), "Unmodifiable");
+				return SettableValue.of(builder.build(), "Unmodifiable");
 			}
 
 			@Override

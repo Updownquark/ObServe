@@ -49,7 +49,7 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			ObservableCollection<T> filter = ObservableCollection.build(sourceCL.getCollection().getType()).build();
+			ObservableCollection<T> filter = ObservableCollection.<T> build().build();
 			int values = sourceCL.getType() == TestValueType.BOOLEAN ? 1 : helper.getInt(0, 100);
 			for (int i = 0; i < values; i++)
 				filter.add(sourceCL.getValueSupplier().apply(helper));

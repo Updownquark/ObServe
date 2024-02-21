@@ -22,7 +22,6 @@ import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -198,10 +197,10 @@ public interface QuickWithBackground extends QuickStyledElement {
 
 			/** Creates context with default value containers */
 			public Default() {
-				this(SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build());
+				this(SettableValue.<Boolean> build().withValue(false).build(), //
+					SettableValue.<Boolean> build().withValue(false).build(), //
+					SettableValue.<Boolean> build().withValue(false).build(), //
+					SettableValue.<Boolean> build().withValue(false).build());
 			}
 
 			@Override
@@ -262,11 +261,10 @@ public interface QuickWithBackground extends QuickStyledElement {
 		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
-			isHovered = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			isFocused = SettableValue.build(isHovered.getType()).build();
-			isPressed = SettableValue.build(isHovered.getType()).build();
-			isRightPressed = SettableValue.build(isHovered.getType()).build();
+			isHovered = SettableValue.<SettableValue<Boolean>> build().build();
+			isFocused = SettableValue.<SettableValue<Boolean>> build().build();
+			isPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
 		}
 
 		@Override
@@ -328,10 +326,10 @@ public interface QuickWithBackground extends QuickStyledElement {
 		public QuickWithBackground.Abstract copy(ExElement parent) {
 			QuickWithBackground.Abstract copy = (QuickWithBackground.Abstract) super.copy(parent);
 
-			copy.isHovered = SettableValue.build(isHovered.getType()).build();
-			copy.isFocused = SettableValue.build(isFocused.getType()).build();
-			copy.isPressed = SettableValue.build(isPressed.getType()).build();
-			copy.isRightPressed = SettableValue.build(isRightPressed.getType()).build();
+			copy.isHovered = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isFocused = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
 
 			return copy;
 		}

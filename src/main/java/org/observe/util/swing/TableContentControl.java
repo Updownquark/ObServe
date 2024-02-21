@@ -4,18 +4,7 @@ import java.awt.EventQueue;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -39,8 +28,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.SimpleImmutableList;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A structure that may be parsed from a String and allows easy control of a table, including row filtering by many powerful and intuitive
@@ -488,7 +475,7 @@ public interface TableContentControl {
 		filter.changes().act(evt -> {
 			evt.getRootCausable().onFinish(key);
 		});*/
-		return values.flow().transform((TypeToken<FilteredValue<E>>) (TypeToken<?>) TypeTokens.get().of(FilteredValue.class), //
+		return values.flow().<FilteredValue<E>> transform( //
 			combine -> combine.combineWith(filter).build(LambdaUtils.printableBiFn((x, cv) -> {
 				Collection<? extends ValueRenderer<? super E>> renders = render.get();
 				int i = 0;
@@ -2535,18 +2522,17 @@ public interface TableContentControl {
 	 * @param args Command-line arguments, ignored
 	 */
 	public static void main(String... args) {
-		SettableValue<TableContentControl> control = SettableValue.build(TableContentControl.class).onEdt().withValue(DEFAULT).build();
+		SettableValue<TableContentControl> control = SettableValue.<TableContentControl> build().onEdt().withValue(DEFAULT).build();
 		control.noInitChanges().act(evt -> {
 			System.out.println(evt.getNewValue());
 		});
 		ObservableCollection<Map<String, String>> rows = ObservableCollection
-			.build(TypeTokens.get().keyFor(Map.class).<Map<String, String>> parameterized(String.class, String.class)).onEdt().build();
+			.<Map<String, String>> build().onEdt().build();
 		ObservableCollection<CategoryRenderStrategy<Map<String, String>, String>> columns = ObservableCollection
-			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
-				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
+			.<CategoryRenderStrategy<Map<String, String>, String>> build()
 			.onEdt().build();
-		SettableValue<Boolean> updating = SettableValue.build(boolean.class).withValue(false).build();
-		ObservableCollection<Map<String, String>> selectedRows = ObservableCollection.build(rows.getType()).build();
+		SettableValue<Boolean> updating = SettableValue.<Boolean> build().withValue(false).build();
+		ObservableCollection<Map<String, String>> selectedRows = ObservableCollection.<Map<String, String>> build().build();
 		Random random = new Random();
 		QommonsTimer.TaskHandle updateHandle = QommonsTimer.getCommonInstance().build(() -> {
 			int updatedRows = random.nextInt(rows.size() / 10);

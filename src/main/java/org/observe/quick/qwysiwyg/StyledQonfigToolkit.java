@@ -47,7 +47,7 @@ public class StyledQonfigToolkit {
 
 	public StyledQonfigToolkit(QonfigToolkit toolkit) {
 		this.toolkit = toolkit;
-		selected = SettableValue.build(Node.class).build();
+		selected = SettableValue.<Node> build().build();
 		theRoot = new GenericNode("root");
 		theLinkTargets = new HashMap<>();
 

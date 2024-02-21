@@ -26,10 +26,8 @@ import org.qommons.ValueHolder;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
-import com.google.common.reflect.TypeToken;
-
 /**
- * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#transform(TypeToken, Function)}
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#transform(Function)}
  *
  * @param <S> The source link type
  * @param <V> The type of the value to combine with the source values
@@ -62,7 +60,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			int valueCount = helper.getInt(1, 5); // Between 1 and 4, inclusive
 			List<SettableValue<V>> values = new ArrayList<>(valueCount);
 			for (int i = 0; i < valueCount; i++)
-				values.add(SettableValue.build((TypeToken<V>) transform.getValueType().getType()).build());
+				values.add(SettableValue.<V> build().build());
 			Function<TestHelper, V> valueSupplier = (Function<TestHelper, V>) ObservableChainTester.SUPPLIERS.get(transform.getValueType());
 			for (int i = 0; i < valueCount; i++)
 				values.get(i).set(valueSupplier.apply(helper), null);
@@ -89,7 +87,6 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 			boolean reEvalOnUpdate = needsUpdateReeval || helper.getBoolean();
 			boolean oneToMany = transform.isOneToMany();
 			boolean manyToOne = transform.isManyToOne();
-			TypeToken<T> type = (TypeToken<T>) transform.getTargetType().getType();
 			ValueHolder<Transformation<S, T>> options = new ValueHolder<>();
 			Function<ReversibleTransformationPrecursor<S, T, ?>, Transformation<S, T>> combination = combine -> {
 				ReversibleTransformationPrecursor<S, T, ?> combinePre = combine.cache(cache).manyToOne(manyToOne).oneToMany(oneToMany)//
@@ -106,8 +103,8 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 				options.accept(def);
 				return def;
 			};
-			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow().transform(type, combination);
-			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.transform(type, combination);
+			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow().transform(combination);
+			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.transform(combination);
 
 			ObservableCollectionTestDef<T> newDef = new ObservableCollectionTestDef<>(transform.getTargetType(), oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, cache);

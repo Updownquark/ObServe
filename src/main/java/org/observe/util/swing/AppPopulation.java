@@ -38,7 +38,6 @@ import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
-import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
@@ -433,7 +432,7 @@ public class AppPopulation {
 					onNoBackup.run();
 				return;
 			}
-			SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
+			SettableValue<Instant> selectedBackup = SettableValue.<Instant> build().build();
 			Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy",
 				opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 			JFrame[] frame = new JFrame[1];
@@ -446,7 +445,7 @@ public class AppPopulation {
 					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
 						.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
 					content.addLabel(null, "Please choose a backup to restore", null)//
-					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
+						.addTable(ObservableCollection.of(backupTimes.reverse()), table -> {
 						table.fill()
 						.withColumn("Date", Instant.class, t -> t,
 							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
@@ -494,9 +493,8 @@ public class AppPopulation {
 			AboutDialogBuilder(ObservableUiBuilder app, Class<?> appClass, JDialog dialog, Observable<?> until, boolean disposeOnClose) {
 				super(dialog, until, disposeOnClose);
 				theAppClass = appClass;
-				theCurrentVersion = SettableValue.build(String.class).build();
-				theUpgrader = SettableValue.build(TypeTokens.get().keyFor(Consumer.class).<Consumer<Version>> parameterized(Version.class))
-					.build();
+				theCurrentVersion = SettableValue.<String> build().build();
+				theUpgrader = SettableValue.<Consumer<Version>> build().build();
 				SimpleObservable<Object> shown = SimpleObservable.build().build();
 				shown.act(__ -> {
 					if (theLatestReleaseGetter != null)
@@ -505,8 +503,7 @@ public class AppPopulation {
 						theLatestRelease = null;
 					getWindow().setSize(600, 400);
 				});
-				theLatestVersionValue = ObservableValue.of(TypeTokens.get().of(Version.class), () -> theLatestRelease, //
-					() -> 1, // Hopefully nobody asks for the stamp
+				theLatestVersionValue = ObservableValue.of(() -> theLatestRelease, () -> 1, // Hopefully nobody asks for the stamp
 					shown);
 				getWindow().addComponentListener(new ComponentAdapter() {
 					@Override
@@ -516,7 +513,7 @@ public class AppPopulation {
 				});
 
 				withVContent(content -> {
-					content.addLabel("Current Version:", theCurrentVersion.map(String.class, v -> (v == null ? "Unknown" : v)), Format.TEXT,
+					content.addLabel("Current Version:", theCurrentVersion.map(v -> (v == null ? "Unknown" : v)), Format.TEXT,
 						label -> label.visibleWhen(theCurrentVersion.map(v -> v != null)));
 					content.addVPanel(lvp -> lvp.fill().fillV().visibleWhen(theLatestVersionValue.map(v -> v != null))
 						.decorate(deco -> deco.withTitledBorder("Latest Version", Color.black))//

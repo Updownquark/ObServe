@@ -25,7 +25,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -457,7 +456,7 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditError()
 	 */
 	public ObservableValue<String> getErrorState() {
-		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, getStatusChanges());
+		return ObservableValue.of(() -> theError, () -> theStateStamp, getStatusChanges());
 	}
 
 	/**
@@ -465,7 +464,7 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditWarning()
 	 */
 	public ObservableValue<String> getWarningState() {
-		return ObservableValue.of(TypeTokens.get().STRING, () -> theWarningMsg, () -> theStateStamp, getStatusChanges());
+		return ObservableValue.of(() -> theWarningMsg, () -> theStateStamp, getStatusChanges());
 	}
 
 	/** @return An observable that fires whenever the {@link #getErrorState()} or {@link #getWarningState()} values change */

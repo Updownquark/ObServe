@@ -17,7 +17,7 @@ import org.qommons.QommonsUtils;
 /** A {@link StyleApplicationDef} evaluated for an {@link InterpretedExpressoEnv environment} */
 public class InterpretedStyleApplication {
 	/** Constant value returning true */
-	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(boolean.class, true);
+	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(true);
 
 	private final InterpretedStyleApplication theParent;
 	private final StyleApplicationDef theDefinition;
@@ -113,30 +113,30 @@ public class InterpretedStyleApplication {
 				if (localCond.length == 1)
 					return localCond[0];
 				else {
-					return localCond[0].transform(boolean.class, tx -> {
+					return localCond[0].transform(tx -> {
 						Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
 						for (int i = 1; i < localCond.length; i++)
 							txb = txb.combineWith(localCond[i]);
 						return txb.build(LambdaUtils.printableBiFn((c1, txv) -> {
-							if (!c1)
+							if (c1 == null || !c1)
 								return false;
 							for (int i = 1; i < localCond.length; i++)
-								if (!txv.get(localCond[i]))
+								if (!Boolean.TRUE.equals(txv.get(localCond[i])))
 									return false;
 							return true;
 						}, "&&", null));
 					});
 				}
 			} else {
-				return parentCond.transform(boolean.class, tx -> {
+				return parentCond.transform(tx -> {
 					Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
 					for (int i = 0; i < localCond.length; i++)
 						txb = txb.combineWith(localCond[i]);
 					return txb.build(LambdaUtils.printableBiFn((pc, txv) -> {
-						if (!pc)
+						if (pc == null || !pc)
 							return false;
 						for (int i = 0; i < localCond.length; i++)
-							if (!txv.get(localCond[i]))
+							if (!Boolean.TRUE.equals(txv.get(localCond[i])))
 								return false;
 						return true;
 					}, "&&", null));

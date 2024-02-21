@@ -520,11 +520,6 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		}
 
 		@Override
-		public TypeToken<ModelSetInstance> getType() {
-			return TypeTokens.get().of(ModelSetInstance.class);
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Transaction.NONE;
 		}

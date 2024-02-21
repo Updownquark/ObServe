@@ -166,23 +166,21 @@ public class ObservableCollectionTransformations {
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType());
+						getEquivalence() == null ? null : getEquivalence().instantiate());
 			}
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
 		extends ExpressoTransformations.AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2>
 		implements FlowTransformInstantiator<CV1, CV2, S, T> {
-			private final TypeToken<T> theTargetValueType;
 
 			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
 				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
 				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType) {
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
 				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
 					manyToOne, oneToMany, equivalence);
-				theTargetValueType = targetValueType;
 			}
 
 			@Override
@@ -198,7 +196,7 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				try {
-					return source.transform(theTargetValueType, tx -> {
+					return source.transform(tx -> {
 						try {
 							return transform(tx, models);
 						} catch (ModelInstantiationException e) {
@@ -303,13 +301,11 @@ public class ObservableCollectionTransformations {
 
 		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelInstantiator theModels;
-			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
 
 			Instantiator(Interpreted<T, ?, CV> interpreted) throws ModelInstantiationException {
 				theModels = interpreted.getModels().instantiate();
-				theSourceType = interpreted.getSourceType();
 				theSourceVariable = interpreted.getDefinition().getSourceVariable();
 				theTest = interpreted.getTest().instantiate();
 			}
@@ -324,7 +320,7 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				models = theModels.wrap(models);
-				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
+				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> testV = theTest.get(models);
 				String print = theTest.toString();
@@ -719,7 +715,7 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theSourceType, getDefinition().getSourceVariable(),
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getDefinition().getSourceVariable(),
 					theRefresh.instantiate());
 			}
 
@@ -731,14 +727,12 @@ public class ObservableCollectionTransformations {
 
 		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelInstantiator theLocalModel;
-			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<Observable<?>>> theRefresh;
 
-			Instantiator(ModelInstantiator localModel, TypeToken<T> sourceType, ModelComponentId sourceVariable,
+			Instantiator(ModelInstantiator localModel, ModelComponentId sourceVariable,
 				ModelValueInstantiator<SettableValue<Observable<?>>> refresh) {
 				theLocalModel = localModel;
-				theSourceType = sourceType;
 				theSourceVariable = sourceVariable;
 				theRefresh = refresh;
 			}
@@ -753,7 +747,7 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
-				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
+				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<Observable<?>> refresh = theRefresh.get(models);
 				String print = theRefresh.toString();
@@ -1262,14 +1256,13 @@ public class ObservableCollectionTransformations {
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType(),
-							theSort == null ? null : theSort.instantiateSort(), reporting().getPosition());
+						getEquivalence() == null ? null : getEquivalence().instantiate(), theSort == null ? null : theSort.instantiateSort(),
+							reporting().getPosition());
 			}
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
 		extends AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2> implements FlowTransformInstantiator<CV1, CV2, S, T> {
-			private final TypeToken<T> theTargetValueType;
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 			private final LocatedFilePosition theLocation;
 
@@ -1277,11 +1270,10 @@ public class ObservableCollectionTransformations {
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
 				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
 				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
 				ModelValueInstantiator<Comparator<? super T>> sort, LocatedFilePosition location) {
 				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
 					manyToOne, oneToMany, equivalence);
-				theTargetValueType = targetValueType;
 				theSort = sort;
 				theLocation = location;
 			}
@@ -1309,7 +1301,7 @@ public class ObservableCollectionTransformations {
 					if (source instanceof SortedDataFlow) {
 						if (theSort != null) {
 							Comparator<? super T> sort = theSort.get(models);
-							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
+							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(tx -> {
 								try {
 									return transform(tx, models);
 								} catch (ModelInstantiationException e) {
@@ -1317,7 +1309,7 @@ public class ObservableCollectionTransformations {
 								}
 							}, sort);
 						} else {
-							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
+							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(tx -> {
 								try {
 									return (Transformation.ReversibleTransformation<S, T>) transform(tx, models);
 								} catch (ModelInstantiationException e) {
@@ -1326,7 +1318,7 @@ public class ObservableCollectionTransformations {
 							});
 						}
 					} else if (source instanceof DistinctDataFlow) {
-						return ((DistinctDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
+						return ((DistinctDataFlow<?, ?, S>) source).transformEquivalent(tx -> {
 							try {
 								return (Transformation.ReversibleTransformation<S, T>) transform(tx, models);
 							} catch (ModelInstantiationException e) {
@@ -1496,23 +1488,21 @@ public class ObservableCollectionTransformations {
 				TypeToken<T> resultType;
 				if (ObservableValue.class.isAssignableFrom(raw)) {
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableValue.class.getTypeParameters()[0]);
-					theFlatten = flatValues(resultType);
+					theFlatten = flatValues();
 				} else if (ObservableCollection.class.isAssignableFrom(raw)) {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableCollection.class.getTypeParameters()[0]);
-					theFlatten = flatCollections(resultType, //
-						getDefinition().isPropagateToParent(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
-						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
-						getDefinition().isOneToMany());
+					theFlatten = flatCollections(getDefinition().isPropagateToParent(), getDefinition().isCached(),
+						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
+						getDefinition().isManyToOne(), getDefinition().isOneToMany());
 				} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
-					theFlatten = flatFlows(resultType, //
-						getDefinition().isPropagateToParent(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
-						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
-						getDefinition().isOneToMany());
+					theFlatten = flatFlows(getDefinition().isPropagateToParent(), getDefinition().isCached(),
+						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
+						getDefinition().isManyToOne(), getDefinition().isOneToMany());
 				} else
 					throw new ExpressoInterpretationException("Cannot flatten a collection of type " + sourceType.getType(0),
 						reporting().getFileLocation().getPosition(0), 0);
@@ -1553,33 +1543,26 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatValues(TypeToken<T> resultType) {
-			return LambdaUtils.printableFn(flow -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v), "flatValues",
-				null);
+		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatValues() {
+			return LambdaUtils.printableFn(flow -> flow.flattenValues(v -> (ObservableValue<? extends T>) v), "flatValues", null);
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatCollections(TypeToken<T> resultType,
-			boolean propagateToParent, boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
-			boolean manyToOne, boolean oneToMany) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow(),
-				opts -> opts//
-				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
-				.manyToOne(manyToOne).oneToMany(oneToMany)//
+		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatCollections(boolean propagateToParent,
+			boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany) {
+			return LambdaUtils.printableFn(flow -> flow.flatMap(v -> ((ObservableCollection<? extends T>) v).flow(), opts -> opts//
+				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
+				.oneToMany(oneToMany)//
 				.propagateUpdateToParent(propagateToParent)//
-				.map((s, v) -> v)),
-				"FlatCollections", null);
+				.map((s, v) -> v)), "FlatCollections", null);
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatFlows(TypeToken<T> resultType,
-			boolean propagateToParent, boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
-			boolean manyToOne, boolean oneToMany) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v,
-				opts -> opts//
-				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
-				.manyToOne(manyToOne).oneToMany(oneToMany)//
+		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatFlows(boolean propagateToParent, boolean cache,
+			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany) {
+			return LambdaUtils.printableFn(flow -> flow.flatMap(v -> (CollectionDataFlow<?, ?, ? extends T>) v, opts -> opts//
+				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
+				.oneToMany(oneToMany)//
 				.propagateUpdateToParent(propagateToParent)//
-				.map((s, v) -> v)),
-				"flatFlows", null);
+				.map((s, v) -> v)), "flatFlows", null);
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
@@ -1848,9 +1831,6 @@ public class ObservableCollectionTransformations {
 		static class Instantiator<CV1 extends ObservableCollection<?>, S, T, X>
 		implements FlowTransformInstantiator<CV1, ObservableCollection<T>, S, T> {
 			private final ModelInstantiator theModels;
-			private final TypeToken<S> theSourceType;
-			private final TypeToken<X> theCrossedType;
-			private final TypeToken<T> theTargetType;
 			private final ModelComponentId theSourceAs;
 			private final ModelComponentId theCrossedAs;
 			private final ModelValueInstantiator<ObservableCollection<X>> theWith;
@@ -1868,9 +1848,6 @@ public class ObservableCollectionTransformations {
 
 			Instantiator(Interpreted<? super CV1, S, T, CV1, X> interpreted) throws ModelInstantiationException {
 				theModels = interpreted.getModels().instantiate();
-				theSourceType = interpreted.getSourceType();
-				theCrossedType = (TypeToken<X>) interpreted.getWith().getType().getType(0);
-				theTargetType = (TypeToken<T>) interpreted.getElementValue().getType().getType(0);
 				theSourceAs = interpreted.getDefinition().getSourceAs();
 				theCrossedAs = interpreted.getDefinition().getCrossAs();
 				theWith = interpreted.getWith().instantiate();
@@ -1899,15 +1876,15 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				models = theModels.wrap(models);
-				SettableValue<S> sourceAs = SettableValue.build(theSourceType).build();
-				SettableValue<X> crossedAs = SettableValue.build(theCrossedType).build();
+				SettableValue<S> sourceAs = SettableValue.<S> build().build();
+				SettableValue<X> crossedAs = SettableValue.<X> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, sourceAs);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theCrossedAs, models, crossedAs);
 				SettableValue<T> result = theValue.get(models);
 				ObservableCollection<X> with = theWith.get(models);
 				Comparator<? super T> sort = theSort == null ? null : theSort.get(models);
 
-				CollectionDataFlow<?, ?, T> crossed = source.cross(theTargetType, with.flow(), opts -> opts//
+				CollectionDataFlow<?, ?, T> crossed = source.cross(with.flow(), opts -> opts//
 					.propagateUpdateToParent(isPropagateToParent)//
 					.cache(isCached).reEvalOnUpdate(isReEvalOnUpdate).fireIfUnchanged(isFireIfUnchanged).nullToNull(isNullToNull)
 					.manyToOne(isManyToOne).oneToMany(isOneToMany)//
@@ -2326,8 +2303,6 @@ public class ObservableCollectionTransformations {
 
 		static class Instantiator<C extends ObservableCollection<?>, S, T> implements Operation.Instantiator<C, SettableValue<T>> {
 			private final ModelInstantiator theModels;
-			private final TypeToken<S> theSourceType;
-			private final TypeToken<T> theTargetType;
 			private final ModelComponentId theSourceAs;
 			private final ModelComponentId theTempAs;
 			private final ModelValueInstantiator<SettableValue<T>> theSeed;
@@ -2335,8 +2310,6 @@ public class ObservableCollectionTransformations {
 
 			Instantiator(Interpreted<?, C, S, T> interpreted) throws ModelInstantiationException {
 				theModels = interpreted.getModels().instantiate();
-				theSourceType = interpreted.getSourceType();
-				theTargetType = (TypeToken<T>) interpreted.getElementValue().getType().getType(0);
 				theSourceAs = interpreted.getDefinition().getSourceAs();
 				theTempAs = interpreted.getDefinition().getTempAs();
 				theSeed = interpreted.getSeed().instantiate();
@@ -2354,8 +2327,8 @@ public class ObservableCollectionTransformations {
 			public SettableValue<T> transform(C source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> seed = theSeed.get(models);
 				models = theModels.wrap(models);
-				SettableValue<S> sourceAs = SettableValue.build(theSourceType).build();
-				SettableValue<T> tempAs = SettableValue.build(theTargetType).build();
+				SettableValue<S> sourceAs = SettableValue.<S> build().build();
+				SettableValue<T> tempAs = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, sourceAs);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTempAs, models, tempAs);
 				SettableValue<T> value = theValue.get(models);

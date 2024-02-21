@@ -24,10 +24,8 @@ import org.qommons.ValueHolder;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
-import com.google.common.reflect.TypeToken;
-
 /**
- * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#map(TypeToken, Function)}
+ * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#map(Function)}
  *
  * @param <S> The type of the source link's collection
  * @param <T> The type of this link's collection
@@ -50,9 +48,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceCL.getDef().type, targetType, helper, true, false);
-			SettableValue<TypeTransformation<T, X>> txValue = SettableValue
-				.build((TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {
-				}).build();
+			SettableValue<TypeTransformation<T, X>> txValue = SettableValue.<TypeTransformation<T, X>> build().build();
 			txValue.set(transform, null);
 			boolean variableMap = helper.getBoolean();
 			CollectionDataFlow<?, ?, T> oneStepFlow = sourceCL.getCollection().flow();
@@ -71,7 +67,6 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			boolean oneToMany = variableMap || transform.isOneToMany();
 			boolean manyToOne = variableMap || transform.isManyToOne();
 			boolean allowInexactReversible = withReverse ? helper.getBoolean(0.1) : false;
-			TypeToken<X> type = (TypeToken<X>) transform.getType().getType();
 			Function<T, X> map = LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
 			Function<X, T> reverse = LambdaUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
 			Consumer<TransformationPrecursor<T, X, ?>> opts = o -> {
@@ -82,19 +77,17 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			boolean mapEquivalent;
 			if (oneStepFlow instanceof ObservableCollection.DistinctDataFlow && !variableMap && withReverse && !oneToMany && !manyToOne) {
 				mapEquivalent = true;
-				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).transformEquivalent(//
-					type, tx -> {
-						opts.accept(tx);
-						return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
-					});
-				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).transformEquivalent(//
-					type, tx -> {
-						opts.accept(tx);
-						return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
-					});
+				derivedOneStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) oneStepFlow).transformEquivalent(tx -> {
+					opts.accept(tx);
+					return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
+				});
+				derivedMultiStepFlow = ((ObservableCollection.DistinctDataFlow<?, ?, T>) multiStepFlow).transformEquivalent(tx -> {
+					opts.accept(tx);
+					return tx.map(map).replaceSource(reverse, rvrs -> rvrs.allowInexactReverse(allowInexactReversible));
+				});
 			} else {
 				mapEquivalent = false;
-				derivedOneStepFlow = oneStepFlow.transform(type, tx -> {
+				derivedOneStepFlow = oneStepFlow.transform(tx -> {
 					opts.accept(tx);
 					MaybeReversibleMapping<T, X> def = tx.map(map);
 					if (withReverse)
@@ -102,7 +95,7 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 					else
 						return def;
 				});
-				derivedMultiStepFlow = multiStepFlow.transform(type, tx -> {
+				derivedMultiStepFlow = multiStepFlow.transform(tx -> {
 					opts.accept(tx);
 					MaybeReversibleMapping<T, X> def = tx.map(map);
 					if (withReverse)
@@ -135,8 +128,8 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 	 * @param mapValue The value holding the current mapping
 	 * @param mapVariable Whether to vary the mapping periodically
 	 * @param mapEquivalent Whether the operation was a
-	 *        {@link org.observe.collect.ObservableCollection.DistinctDataFlow#mapEquivalent(TypeToken, Function, Function) mapEquivalent}
-	 *        operation on a distinct flow
+	 *        {@link org.observe.collect.ObservableCollection.DistinctDataFlow#mapEquivalent(Function, Function) mapEquivalent} operation on
+	 *        a distinct flow
 	 * @param reversible Whether this flow supports setting values, which flow back to the parent
 	 * @param options The options used to create the mapping
 	 */

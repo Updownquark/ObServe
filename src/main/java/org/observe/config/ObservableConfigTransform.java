@@ -32,7 +32,6 @@ import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.config.ObservableConfigFormat.Impl;
 import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
-import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -78,7 +77,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			isConnected = ObservableValue.of(true);
 			theUntil = theParent.noInitChanges().filter(evt -> evt.getOldValue() != evt.getNewValue());
 		} else {
-			isConnected = ObservableValue.of(TypeTokens.get().BOOLEAN, () -> _isConnected, () -> _isConnected ? 0 : 1, until.take(1));
+			isConnected = ObservableValue.of(() -> _isConnected, () -> _isConnected ? 0 : 1, until.take(1));
 			theUntil = Observable.or(until, //
 				theParent.noInitChanges().takeUntil(until).filter(evt -> evt.getOldValue() != evt.getNewValue()));
 		}
@@ -238,7 +237,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 	 * @param <E> The type of the value
 	 */
 	static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
-		private final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 
 		private final ListenerList<Observer<? super ObservableValueEvent<E>>> theListeners;
@@ -251,10 +249,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		private Object theChangesIdentity;
 
 		ObservableConfigValue(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until, TypeToken<E> type,
+			ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until,
 			ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
 			super(lock, session, parent, ceCreate, until);
-			theType = type;
 			theFormat = format;
 
 			theListeners = ListenerList.build().withFastSize(false).build();
@@ -275,10 +272,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			return theIdentity;
 		}
 
-		@Override
-		public TypeToken<E> getType() {
-			return theType;
-		}
 
 		@Override
 		public E get() {
@@ -367,8 +360,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		public <V extends E> String isAcceptable(V value) {
 			if (!isConnected().get())
 				return "Not connected";
-			if (!TypeTokens.get().isInstance(theType, value))
-				return StdMsg.ILLEGAL_ELEMENT;
 			return null;
 		}
 
@@ -440,7 +431,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 	 * @param <E> The type of the collection
 	 */
 	static abstract class ObservableConfigBackedCollection<E> extends ObservableConfigTransform {
-		final TypeToken<E> theType;
 		private final ObservableConfigFormat<E> theFormat;
 		private final String theChildName;
 
@@ -453,10 +443,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		E theMovingValue;
 
 		ObservableConfigBackedCollection(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			super(lock, session, collectionElement, ceCreate, until);
-			theType = type;
 			theFormat = format;
 			theChildName = childName;
 
@@ -826,11 +815,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			}
 
 			@Override
-			public TypeToken<E> getType() {
-				return theType;
-			}
-
-			@Override
 			public boolean isContentControlled() {
 				return false;
 			}
@@ -999,9 +983,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		private final Backing<E> theBacking;
 
 		ObservableConfigValues(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
 			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theBacking = new Backing<>(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
+			theBacking = new Backing<>(lock, session, collectionElement, ceCreate, format, childName, until, listen, findRefs);
 
 			init(theBacking.getCollection());
 		}
@@ -1016,9 +1000,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 
 		static class Backing<E> extends ObservableConfigBackedCollection<E> {
 			Backing(CausalLock lock, ObservableConfigParseSession session,
-				ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, TypeToken<E> type,
+				ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
 				ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-				super(lock, session, collectionElement, ceCreate, type, format, childName, until, listen, findRefs);
+				super(lock, session, collectionElement, ceCreate, format, childName, until, listen, findRefs);
 			}
 
 			@Override
@@ -1026,8 +1010,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 				return new OCBCCollection() {
 					@Override
 					public String canAdd(E value, ElementId after, ElementId before) {
-						if (!belongs(value))
-							return StdMsg.ILLEGAL_ELEMENT;
 						ObservableConfig parent = getParent().get();
 						return parent.canAddChild(//
 							after == null ? null : parent.getContent().getElement(after).get(), //
@@ -1037,8 +1019,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 					@Override
 					public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 						throws UnsupportedOperationException, IllegalArgumentException {
-						if (!belongs(value))
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 						return Backing.this.add(cfg -> value, after, before, first, null);
 					}
 				};
@@ -1098,7 +1078,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		ObservableConfigEntityValues(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, EntityConfigFormat<E> format,
 			String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
-			super(lock, session, collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen, findRefs);
+			super(lock, session, collectionElement, ceCreate, format, childName, until, listen, findRefs);
 		}
 
 		@Override
@@ -1243,21 +1223,18 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		ObservableConfigMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			TypeToken<K> keyType = entryFormat.getKeyField().type;
-			TypeToken<V> valueType = entryFormat.getValueField().type;
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
-				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				entryFormat, entryFormat.getValueField().childName,
 				until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()
-					.groupBy(keyType, //
+					.<K> groupBy(
 						LambdaUtils.printableFn(entry -> entry.key, "key", null), //
 						LambdaUtils.printableBiFn((key, entry) -> {
 							entry.key = key;
 							return entry;
 						}, "setKey", null))//
-					.withValues(values -> values.transform(valueType, tx -> {
+					.withValues(values -> values.<V> transform(tx -> {
 						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
 							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
 								rvrs -> rvrs
@@ -1273,21 +1250,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		@Override
 		public Object getIdentity() {
 			return theWrapped.getIdentity();
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theWrapped.getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theWrapped.getValueType();
-		}
-
-		@Override
-		public TypeToken<java.util.Map.Entry<K, V>> getEntryType() {
-			return theWrapped.getEntryType();
 		}
 
 		@Override
@@ -1343,9 +1305,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 
 		@Override
 		public String canPut(K key, V value) {
-			if (!keySet().belongs(key))
-				return StdMsg.ILLEGAL_ELEMENT;
-			else if (containsKey(key))
+			if (containsKey(key))
 				return StdMsg.ELEMENT_EXISTS;
 			else
 				return null;
@@ -1385,20 +1345,16 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		ObservableConfigMultiMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			TypeToken<K> keyType = entryFormat.getKeyField().type;
-			TypeToken<V> valueType = entryFormat.getValueField().type;
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
-				TypeTokens.get().keyFor(MapEntry.class).<MapEntry<K, V>> parameterized(keyType, valueType), //
 				entryFormat, entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
 				theWrapped = theCollection.flow()
-					.groupBy(keyType, //
-						LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+					.<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
 						LambdaUtils.printableBiFn((key, entry) -> {
 							entry.key = key;
 							return entry;
 						}, "setKey", null))//
-					.withValues(values -> values.transform(valueType, tx -> {
+					.withValues(values -> values.<V> transform(tx -> {
 						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
 							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
 								rvrs -> rvrs
@@ -1454,26 +1410,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		@Override
 		public long getStamp() {
 			return theWrapped.getStamp();
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theWrapped.getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theWrapped.getValueType();
-		}
-
-		@Override
-		public TypeToken<MultiEntryHandle<K, V>> getEntryType() {
-			return theWrapped.getEntryType();
-		}
-
-		@Override
-		public TypeToken<MultiEntryValueHandle<K, V>> getEntryValueType() {
-			return theWrapped.getEntryValueType();
 		}
 
 		@Override

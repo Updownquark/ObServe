@@ -27,7 +27,6 @@ import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
-import org.observe.util.TypeTokens;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
@@ -640,8 +639,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 
 	QuickStyleElement(Object id) {
 		super(id);
-		theCondition = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+		theCondition = SettableValue.<SettableValue<Boolean>> build().build();
 		theChildren = new ArrayList<>();
 	}
 
@@ -653,7 +651,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	/** @return The value for the style */
 	public SettableValue<T> getValue() {
 		if (theValue == null)
-			return (SettableValue<T>) SettableValue.of(Object.class, null, "Unsettable");
+			return (SettableValue<T>) SettableValue.of(null, "Unsettable");
 		else
 			return SettableValue.flatten(theValue);
 	}
@@ -671,8 +669,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		if (attr == null || myInterpreted.getValue() == null)
 			theValue = null;
 		else
-			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(attr.getType()))
-			.build();
+			theValue = SettableValue.<SettableValue<T>> build().build();
 		theConditionInstantiator = myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().instantiate();
 		if (theValue != null)
 			theValueInstantiator = myInterpreted.getValue().instantiate();

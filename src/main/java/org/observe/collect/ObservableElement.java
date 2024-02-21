@@ -11,8 +11,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableValue} whose state reflects a (possibly absent) element in a {@link ObservableCollection collection}
  *
@@ -98,13 +96,8 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 * @param type The type of the element
 	 * @return An element that is always empty ({@link #get() value}==null, {@link #getElementId() element}==null)
 	 */
-	static <T> ObservableElement<T> empty(TypeToken<T> type) {
+	static <T> ObservableElement<T> empty() {
 		class EmptyElement extends AbstractIdentifiable implements ObservableElement<T> {
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-
 			@Override
 			public long getStamp() {
 				return 0;

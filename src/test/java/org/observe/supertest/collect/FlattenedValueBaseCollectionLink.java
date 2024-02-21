@@ -12,12 +12,9 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Tests {@link org.observe.collect.ObservableCollection#flattenValue(org.observe.ObservableValue)}
@@ -40,12 +37,9 @@ public class FlattenedValueBaseCollectionLink<T> extends BaseCollectionLink<T> {
 			int collectionCount = helper.getInt(2, 4);
 			List<ObservableCollection<X>> collections = new ArrayList<>(collectionCount);
 			TestValueType type = targetType != null ? targetType : nextType(helper);
-			TypeToken<X> collectionType = (TypeToken<X>) type.getType();
 			for (int i = 0; i < collectionCount; i++)
-				collections.add(ObservableCollection.build(collectionType).build());
-			SettableValue<ObservableCollection<X>> collectionValue = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<X>> parameterized(collectionType))
-				.build();
+				collections.add(ObservableCollection.<X> build().build());
+			SettableValue<ObservableCollection<X>> collectionValue = SettableValue.<ObservableCollection<X>> build().build();
 			int collectionIdx = getRandomCollectionIndex(collections.size(), helper);
 			ObservableCollection<X> initCollection = collectionIdx == collections.size() ? null : collections.get(collectionIdx);
 			collectionValue.set(initCollection, null);

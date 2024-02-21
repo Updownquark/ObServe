@@ -4,7 +4,6 @@ import java.util.Comparator;
 import java.util.function.BiFunction;
 
 import org.observe.Equivalence;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -15,8 +14,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ValueStoredCollection;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableSortedCollection} implementation based on a backing {@link BetterSortedList}
  *
@@ -24,26 +21,22 @@ import com.google.common.reflect.TypeToken;
  */
 public class DefaultObservableSortedCollection<E> extends DefaultObservableCollection<E> implements ObservableSortedCollection<E> {
 	/**
-	 * @param type The type of elements in the set
 	 * @param sorting The sorting for the set
 	 * @return A builder to build a new sorted set
 	 */
-	public static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> sorting) {
-		return new ObservableCollectionBuilder.SortedBuilderImpl<>(type, "observable-sorted-collection", sorting);
+	public static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(Comparator<? super E> sorting) {
+		return new ObservableCollectionBuilder.SortedBuilderImpl<>("observable-sorted-collection", sorting);
 	}
 
-	/**
-	 * @param type The type for the sorted collection
-	 * @param sortedSet The backing sorted list to hold this observable set's values
-	 */
-	public DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> sortedSet) {
-		this(type, sortedSet, null, null);
+	/** @param sortedSet The backing sorted list to hold this observable set's values */
+	public DefaultObservableSortedCollection(BetterSortedList<E> sortedSet) {
+		this(sortedSet, null, null);
 	}
 
-	DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> list,
+	DefaultObservableSortedCollection(BetterSortedList<E> list,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false));
+		super(list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(list.comparator(), false));
 	}
 
 	@Override

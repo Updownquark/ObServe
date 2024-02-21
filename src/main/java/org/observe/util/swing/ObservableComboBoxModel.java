@@ -31,7 +31,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
@@ -56,7 +55,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 	@Override
 	public void setSelectedItem(Object anItem) {
-		theSelectedValue = TypeTokens.get().cast(getWrapped().getType(), anItem);
+		theSelectedValue = (E) anItem;
 	}
 
 	@Override
@@ -92,7 +91,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, Function<? super T, String> valueTooltip,
 		ObservableCollection<? extends T> availableValues, SettableValue<T> selected) {
-		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
+		return comboFor(comboBox, ObservableValue.of(descrip), valueTooltip, availableValues, selected);
 	}
 
 	/** A subscription to a combo box hookup situation which also provides the item which the mouse is currently hovering over */
@@ -353,9 +352,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			String enabled = selected.isEnabled().get();
 			callbackLock[0] = true;
 			try (Transaction avT = availableValues.lock(false, null)) {
-				CollectionElement<? extends T> found = availableValues.belongs(evt.getNewValue()) //
-					? ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true)//
-						: null;
+				CollectionElement<? extends T> found = ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true);
 				if (found != null) {
 					currentSelectedElement[0] = found.getElementId();
 					currentSelected[0] = found.get();

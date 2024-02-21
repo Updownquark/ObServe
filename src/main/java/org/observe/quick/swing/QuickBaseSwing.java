@@ -83,8 +83,6 @@ import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.io.Format;
 
-import com.google.common.reflect.TypeToken;
-
 /** Quick interpretation of the base toolkit for Swing */
 public class QuickBaseSwing implements QuickInterpretation {
 	/**
@@ -637,7 +635,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 	static <T> QuickSwingDocument<T> interpretDynamicStyledDoc(DynamicStyledDocument.Interpreted<T, ?> interpreted,
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		TypeToken<T> valueType = interpreted.getValueType();
 		return new QuickSwingDocument<T>() {
 			private JTextComponent theWidget;
 
@@ -652,10 +649,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 					@Override
 					protected ObservableCollection<? extends T> getChildren(T value) {
 						try {
-							return doc.getChildren(staCtx(valueType, value, false, false, false, false));
+							return doc.getChildren(staCtx(value, false, false, false, false));
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
-							return ObservableCollection.of(valueType);
+							return ObservableCollection.of();
 						}
 					}
 
@@ -667,7 +664,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 						boolean rightPressed = hovered && QuickCoreSwing.isRightPressed();
 						StyledDocument.TextStyle textStyle;
 						try {
-							textStyle = doc.getStyle(staCtx(valueType, value, hovered, focused, pressed, rightPressed));
+							textStyle = doc.getStyle(staCtx(value, hovered, focused, pressed, rightPressed));
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
 							return;
@@ -701,7 +698,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				if (doc.hasPostText()) {
 					swingDoc.withPostNodeText(node -> {
 						try {
-							return doc.getPostText(staCtx(valueType, node, false, false, false, false)).get();
+							return doc.getPostText(staCtx(node, false, false, false, false)).get();
 						} catch (ModelInstantiationException e) {
 							doc.reporting().error(e.getMessage(), e);
 							return null;
@@ -839,14 +836,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 		};
 	}
 
-	private static final SettableValue<Boolean> TRUE = SettableValue.of(boolean.class, true, "Unmodifiable");
-	private static final SettableValue<Boolean> FALSE = SettableValue.of(boolean.class, false, "Unmodifiable");
+	private static final SettableValue<Boolean> TRUE = SettableValue.of(true, "Unmodifiable");
+	private static final SettableValue<Boolean> FALSE = SettableValue.of(false, "Unmodifiable");
 
-	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value, boolean hovered, boolean focused,
+	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(T value, boolean hovered, boolean focused,
 		boolean pressed, boolean rightPressed) {
 		return new DynamicStyledDocument.StyledTextAreaContext.Default<>(//
 			hovered ? TRUE : FALSE, focused ? TRUE : FALSE, pressed ? TRUE : FALSE, rightPressed ? TRUE : FALSE, //
-				SettableValue.of(type, value, "Unmodifiable"));
+				SettableValue.of(value, "Unmodifiable"));
 	}
 
 	static class SwingCheckBox extends QuickSwingPopulator.Abstract<QuickCheckBox> {
@@ -944,11 +941,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickComboBox<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
-			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.getValue().getType(),
-				quick.toString());
+			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.toString());
 			quick.setContext(tableCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T> renderer = theRenderer == null ? null
-				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValue().getType(), quick.getValue(),
+				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValue(),
 					quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
@@ -1144,13 +1140,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickToggleButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			panel.addToggleField(null, quick.getValue(), quick.getValues(), JToggleButton.class, __ -> new JToggleButton(),
-				rf -> component.accept(rf));
+			panel.addToggleField(null, quick.getValue(), quick.getValues(), __ -> new JToggleButton(), rf -> component.accept(rf));
 		}
 	}
 
 	static class SwingTable<R> extends QuickSwingPopulator.Abstract<QuickTable<R>> {
-		private final TypeToken<R> rowType;
 		private final Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
 		private final Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
 		private boolean renderersInitialized;
@@ -1159,7 +1153,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 		SwingTable(QuickTable.Interpreted<R> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			rowType = interpreted.getValueType();
 			Subscription sub;
 			try {
 				sub = interpreted.getColumns().subscribe(evt -> {
@@ -1219,12 +1212,12 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
+			TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(
 				quick.reporting().getPosition().toShortString());
 			quick.setContext(ctx);
 			TableBuilder<R, ?, ?>[] parent = new TableBuilder[1];
 			ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//
-				.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
+				.<InterpretedSwingTableColumn<R, ?>> map(column -> {
 					try {
 						return new InterpretedSwingTableColumn<>(quick, column, ctx, panel.getUntil(), () -> parent[0],
 							renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()));
@@ -1245,8 +1238,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}, true);
 			panel.getUntil().take(1).act(__ -> columnsSub.unsubscribe());
 			ObservableCollection<CategoryRenderStrategy<R, ?>> crss = columns.flow()//
-				.map((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, //
-					column -> column.getCRS())//
+				.<CategoryRenderStrategy<R, ?>> map(column -> column.getCRS())//
 				.collect();
 			panel.addTable(quick.getRows(), table -> {
 				component.accept(table);
@@ -1294,8 +1286,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTree<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			MultiValueRenderable.MultiValueRenderContext<BetterList<T>> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>(
-				TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(quick.getNodeType()));
+			MultiValueRenderable.MultiValueRenderContext<BetterList<T>> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>();
 			quick.setContext(ctx);
 			InterpretedSwingTableColumn<BetterList<T>, T> treeColumn;
 			ValueHolder<PanelPopulation.TreeEditor<T, ?>> treeHolder = new ValueHolder<>();
@@ -1303,9 +1294,9 @@ public class QuickBaseSwing implements QuickInterpretation {
 				treeColumn = null;
 			else {
 				TabularWidget.TabularContext<BetterList<T>> tableCtx = new TabularWidget.TabularContext<BetterList<T>>() {
-					private final SettableValue<Integer> theRow = SettableValue.build(int.class).withDescription("row").withValue(0)
+					private final SettableValue<Integer> theRow = SettableValue.<Integer> build().withDescription("row").withValue(0)
 						.build();
-					private final SettableValue<Integer> theColumn = SettableValue.build(int.class).withDescription("column").withValue(0)
+					private final SettableValue<Integer> theColumn = SettableValue.<Integer> build().withDescription("column").withValue(0)
 						.build();
 
 					@Override
@@ -1332,15 +1323,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 					(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, panel.getUntil(),
 					treeHolder, theRenderer, theEditor);
 			}
-			TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
-				.<BetterList<T>> parameterized(quick.getNodeType());
 			Map<BetterList<T>, ObservableCollection<? extends T>> childrenCache = new HashMap<>();
 			panel.addTree3(quick.getModel().getValue(), (parentPath, nodeUntil) -> {
 				ObservableCollection<? extends T> children = childrenCache.get(parentPath);
 				if (children != null)
 					return children;
 				try {
-					children = quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					children = quick.getModel().getChildren(ObservableValue.of(parentPath), nodeUntil);
 					childrenCache.put(parentPath, children);
 					nodeUntil.take(1).act(__ -> childrenCache.remove(parentPath));
 					return children;

@@ -253,7 +253,6 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		static abstract class SortInstantiator<OT, IT> implements ModelValueInstantiator<Comparator<? super OT>> {
-			protected final TypeToken<OT> theSortType;
 			protected final ModelComponentId theSortValue;
 			protected final ModelComponentId theSortCompareValue;
 			protected final ModelValueInstantiator<SettableValue<Integer>> theSortWith;
@@ -261,10 +260,9 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			protected final Comparator<? super IT> theDefaultSorting;
 			protected final boolean isAscending;
 
-			protected SortInstantiator(TypeToken<OT> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+			protected SortInstantiator(ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
 				Comparator<? super IT> defaultSorting, boolean ascending) {
-				theSortType = sortType;
 				theSortValue = sortValue;
 				theSortCompareValue = sortCompareValue;
 				theSortWith = sortWith;
@@ -275,10 +273,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			@Override
 			public Comparator<? super OT> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<OT> left = SettableValue.build(theSortType).withDescription(theSortValue.getName())
-					.withValue(TypeTokens.get().getDefaultValue(theSortType)).build();
-				SettableValue<OT> right = SettableValue.build(theSortType).withDescription(theSortValue.getName())
-					.withValue(TypeTokens.get().getDefaultValue(theSortType)).build();
+				SettableValue<OT> left = SettableValue.<OT> build().withDescription(theSortValue.getName()).build();
+				SettableValue<OT> right = SettableValue.<OT> build().withDescription(theSortValue.getName()).build();
 				Supplier<Integer> sorting = getExternalSorting(models, left, right);
 				return new SortWithComparator<>(left, right, sorting, isAscending);
 			}
@@ -326,8 +322,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			 * @param compareResult Provides the sorting result once the values are populated
 			 * @param ascending Whether to reverse the result
 			 */
-			public SortWithComparator(SettableValue<T> left, SettableValue<T> right, Supplier<Integer> compareResult,
-				boolean ascending) {
+			public SortWithComparator(SettableValue<T> left, SettableValue<T> right, Supplier<Integer> compareResult, boolean ascending) {
 				theLeftValue = left;
 				theRightValue = right;
 				theCompareResult = compareResult;
@@ -497,7 +492,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			@Override
 			protected SortInstantiator<T, T> doInstantiateSort() throws ModelInstantiationException {
-				return new RootSortInstantiator<>(getSortType(), getDefinition().getSortValue(), getDefinition().getSortCompareValue(), //
+				return new RootSortInstantiator<>(getDefinition().getSortValue(), getDefinition().getSortCompareValue(), //
 					getSortWith() == null ? null : getSortWith().instantiate(), //
 						instantiateSortBy(), getDefaultSorting(), getDefinition().isAscending(), getExpressoEnv().getModels().instantiate());
 			}
@@ -506,10 +501,10 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		static class RootSortInstantiator<T> extends SortInstantiator<T, T> {
 			private final ModelInstantiator theLocalModel;
 
-			RootSortInstantiator(TypeToken<T> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+			RootSortInstantiator(ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<T, ?>> sortBy,
 				Comparator<? super T> defaultSorting, boolean ascending, ModelInstantiator localModel) {
-				super(sortType, sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
+				super(sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
 				theLocalModel = localModel;
 			}
 
@@ -613,7 +608,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			@Override
 			protected SortInstantiator<OT, IT> doInstantiateSort() throws ModelInstantiationException {
-				return new SortByInstantiator<>(getSortType(), getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
+				return new SortByInstantiator<>(getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
 					getSortWith() == null ? null : getSortWith().instantiate(), instantiateSortBy(), getDefaultSorting(),
 						getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
 						getParentElement().getDefinition().getSortValue(), theAttribute.instantiate());
@@ -625,11 +620,11 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			private final ModelComponentId theParentSortValue;
 			private final ModelValueInstantiator<SettableValue<IT>> theAttribute;
 
-			SortByInstantiator(TypeToken<OT> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+			SortByInstantiator(ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
 				Comparator<? super IT> defaultSorting, boolean ascending, ModelInstantiator localModel, ModelComponentId parentSortValue,
 				ModelValueInstantiator<SettableValue<IT>> attribute) {
-				super(sortType, sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
+				super(sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
 				theLocalModel = localModel;
 				theParentSortValue = parentSortValue;
 				theAttribute = attribute;

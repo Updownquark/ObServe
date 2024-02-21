@@ -51,14 +51,11 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.io.TextParseException;
-
-import com.google.common.reflect.TypeToken;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
@@ -94,7 +91,7 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription checkFor(JToggleButton checkBox, String descrip, SettableValue<Boolean> selected) {
-		return checkFor(checkBox, ObservableValue.of(TypeTokens.get().STRING, descrip), selected);
+		return checkFor(checkBox, ObservableValue.of(descrip), selected);
 	}
 
 	/**
@@ -274,7 +271,6 @@ public class ObservableSwingUtils {
 	/**
 	 * @param availableValues The set of values to represent, each with its own button
 	 * @param selected The selected value
-	 * @param buttonType The type of the buttons to use to represent each value
 	 * @param buttonCreator Creates a button for initial or new values
 	 * @param withButtons Accepts the observable collection of buttons created by this method
 	 * @param render Allows initialization and modification of the buttons with their values
@@ -283,7 +279,7 @@ public class ObservableSwingUtils {
 	 */
 	public static <T, TB extends JToggleButton> Subscription togglesFor(ObservableCollection<? extends T> availableValues,
 		SettableValue<T> selected, //
-		TypeToken<TB> buttonType, Function<? super T, ? extends TB> buttonCreator, Consumer<ObservableCollection<TB>> withButtons,
+		Function<? super T, ? extends TB> buttonCreator, Consumer<ObservableCollection<TB>> withButtons,
 		BiConsumer<? super TB, ? super T> render, Function<? super T, String> descrip) {
 		List<Subscription> subs = new LinkedList<>();
 		ObservableCollection<? extends T> safeValues;
@@ -291,7 +287,7 @@ public class ObservableSwingUtils {
 		subs.add(() -> safeUntil.onNext(null));
 		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
 		safeValues = availableValues.safe(ThreadConstraint.EDT, safeUntil);
-		ObservableCollection<TB> buttons = safeValues.flow().transform(buttonType, tx -> tx.map((value, button) -> {
+		ObservableCollection<TB> buttons = safeValues.flow().<TB> transform(tx -> tx.map((value, button) -> {
 			if (button == null)
 				button = buttonCreator.apply(value);
 			render.accept(button, value);
@@ -336,8 +332,6 @@ public class ObservableSwingUtils {
 		ButtonGroup group = new ButtonGroup();
 		ActionListener selectListener = evt -> {
 			Object button = evt.getSource();
-			if (!TypeTokens.get().isInstance(buttonType, button))
-				return;
 			int index = buttons.indexOf(button);
 			if (index >= 0 && listener[0] != null)
 				listener[0].apply(safeValues.get(index), index, evt);

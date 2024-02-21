@@ -16,7 +16,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -273,10 +272,9 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	/** @param element The element this positionable applies to */
 	protected Positionable(ExElement element) {
 		super(element);
-		theLeading = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
-		theCenter = SettableValue.build(theLeading.getType()).build();
-		theTrailing = SettableValue.build(theLeading.getType()).build();
+		theLeading = SettableValue.<SettableValue<QuickSize>> build().build();
+		theCenter = SettableValue.<SettableValue<QuickSize>> build().build();
+		theTrailing = SettableValue.<SettableValue<QuickSize>> build().build();
 	}
 
 	/** @return The position for the leading edge (top or left) of the widget */
@@ -315,9 +313,9 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	protected Positionable clone() {
 		Positionable copy = (Positionable) super.clone();
 
-		copy.theLeading = SettableValue.build(theLeading.getType()).build();
-		copy.theCenter = SettableValue.build(theLeading.getType()).build();
-		copy.theTrailing = SettableValue.build(theLeading.getType()).build();
+		copy.theLeading = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.theCenter = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.theTrailing = SettableValue.<SettableValue<QuickSize>> build().build();
 
 		return copy;
 	}

@@ -28,7 +28,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Colors;
@@ -1680,10 +1679,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	 */
 	public static MultiRangeSlider single(boolean vertical, ObservableValue<Range> sliderRange, SettableValue<Range> range,
 		Observable<?> until) {
-		ObservableCollection<Range> ranges = ObservableCollection
-			.of(TypeTokens.get().keyFor(SettableValue.class).parameterized(Range.class), //
-				range)
-			.flow().flattenValues(TypeTokens.get().of(Range.class), v -> v)//
+		ObservableCollection<Range> ranges = ObservableCollection.of(range).flow().flattenValues(v -> v)//
 			.collectActive(until);
 		return multi(vertical, sliderRange, ranges, until);
 	}
@@ -1701,7 +1697,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	public static MultiRangeSlider forValueExtent(boolean vertical, ObservableValue<Range> sliderRange, SettableValue<Double> value,
 		SettableValue<Double> extent, Observable<?> until) {
 		boolean[] callbackLock = new boolean[1];
-		SettableValue<Range> range = SettableValue.build(Range.class).withValue(Range.forValueExtent(value.get(), extent.get()))//
+		SettableValue<Range> range = SettableValue.<Range> build().withValue(Range.forValueExtent(value.get(), extent.get()))//
 			.withLocking(value).build()//
 			.filterAccept(r -> {
 				if (callbackLock[0])
@@ -1792,7 +1788,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	 */
 	public static SettableValue<Range> transformToRange(SettableValue<Double> min, SettableValue<Double> max, Observable<?> until) {
 		boolean[] callbackLock = new boolean[1];
-		SettableValue<Range> range = SettableValue.build(Range.class).withValue(Range.forMinMax(min.get(), max.get()))//
+		SettableValue<Range> range = SettableValue.<Range> build().withValue(Range.forMinMax(min.get(), max.get()))//
 			.withLocking(min).build()//
 			.filterAccept(r -> {
 				if (callbackLock[0])
@@ -1866,12 +1862,12 @@ public class MultiRangeSlider extends ConformingPanel {
 		frame.setSize(800, 640);
 		frame.setLocationRelativeTo(null);
 		JPanel panel = new JPanel(new JustifiedBoxLayout(false).mainJustified().crossCenter());
-		ObservableCollection<Range> vRanges = ObservableCollection.build(Range.class).build();
+		ObservableCollection<Range> vRanges = ObservableCollection.<Range> build().build();
 		MultiRangeSlider vSlider = multi(true, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), vRanges, Observable.empty())//
 			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			;
 		panel.add(vSlider);
-		ObservableCollection<Range> hRanges = ObservableCollection.build(Range.class).build();
+		ObservableCollection<Range> hRanges = ObservableCollection.<Range> build().build();
 		MultiRangeSlider hSlider = multi(false, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), hRanges, Observable.empty())//
 			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			.setMaxUpdateInterval(Duration.ofMillis(250))//

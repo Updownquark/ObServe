@@ -50,7 +50,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 	 */
 	public DefaultInteractiveTestService(String name, String globalConfig, ThreadConstraint threadConstraint) {
 		super(null, name, false, new StampedLockingStrategy(name, threadConstraint));
-		theCurrentTest = SettableValue.build(DefaultTesting.class).build();
+		theCurrentTest = SettableValue.<DefaultTesting> build().build();
 		theValues = new ConcurrentHashMap<>();
 		theGlobalConfigLocation = globalConfig;
 		theTestResourceLocations = new ArrayList<>();
@@ -118,7 +118,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 
 	@Override
 	public ObservableValue<TestingState> getCurrentTest() {
-		return theCurrentTest.map(TestingState.class, t -> t);
+		return theCurrentTest.map(t -> t);
 	}
 
 	@Override

@@ -19,7 +19,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -210,14 +209,10 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		super.doUpdate(interpreted);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
 
-		theRows = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
-		theSelection = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType()))
-			.build();
-		theMultiSelection = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
-		theActions = ObservableCollection.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<R>> parameterized(getRowType()))
-			.build();
+		theRows = SettableValue.<ObservableCollection<R>> build().build();
+		theSelection = SettableValue.<SettableValue<R>> build().build();
+		theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
+		theActions = ObservableCollection.<ValueAction<R>> build().build();
 
 		theRowsInstantiator = myInterpreted.getRows().instantiate();
 		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
@@ -262,10 +257,10 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public QuickTable<R> copy(ExElement parent) {
 		QuickTable<R> copy = (QuickTable<R>) super.copy(parent);
 
-		copy.theRows = SettableValue.build(theRows.getType()).build();
-		copy.theSelection = SettableValue.build(theSelection.getType()).build();
-		copy.theMultiSelection = SettableValue.build(theMultiSelection.getType()).build();
-		copy.theActions = ObservableCollection.build(theActions.getType()).build();
+		copy.theRows = SettableValue.<ObservableCollection<R>> build().build();
+		copy.theSelection = SettableValue.<SettableValue<R>> build().build();
+		copy.theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
+		copy.theActions = ObservableCollection.<ValueAction<R>> build().build();
 
 		for (ValueAction<R> action : theActions)
 			copy.theActions.add(action.copy(copy));

@@ -14,7 +14,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
-import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -33,8 +32,6 @@ import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.SortedTreeList;
-
-import com.google.common.reflect.TypeToken;
 
 /** Contains some implementations of {@link ActiveCollectionManager} and its dependencies */
 public class ObservableCollectionActiveManagers {
@@ -433,11 +430,6 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public TypeToken<E> getTargetType() {
-			return theSource.getType();
-		}
-
-		@Override
 		public Equivalence<? super E> equivalence() {
 			return theSource.equivalence();
 		}
@@ -621,11 +613,6 @@ public class ObservableCollectionActiveManagers {
 		/** @return This manager's parent */
 		protected ActiveCollectionManager<E, ?, T> getParent() {
 			return theParent;
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
 		}
 
 		@Override
@@ -941,9 +928,7 @@ public class ObservableCollectionActiveManagers {
 			super(parent);
 			theCompare = compare;
 			theValues = SortedTreeList.<SortedElement> buildTreeList(SortedElement::compareWithValue).build();
-			theEquivalence = parent.equivalence().sorted(//
-				TypeTokens.getRawType(parent.getTargetType()), //
-				theCompare, true);
+			theEquivalence = parent.equivalence().sorted(theCompare, true);
 		}
 
 		@Override
@@ -1525,9 +1510,9 @@ public class ObservableCollectionActiveManagers {
 		// Need to keep track of these to update them when the combined values change
 		private final BetterSortedSet<TransformedElement> theElements;
 
-		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Transformation<I, T> def,
+		ActiveTransformedCollectionManager(ActiveCollectionManager<E, ?, I> parent, Transformation<I, T> def,
 			Equivalence<? super T> equivalence) {
-			super(parent, targetType, def, equivalence);
+			super(parent, def, equivalence);
 
 			theElements = BetterTreeSet.<TransformedElement> buildTreeSet(TransformedElement::compareTo).build();
 		}

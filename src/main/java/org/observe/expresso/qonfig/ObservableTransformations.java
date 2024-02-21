@@ -548,7 +548,7 @@ public class ObservableTransformations {
 
 			@Override
 			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theMap.instantiate());
+				return new Instantiator<>(getDefinition().getSourceVariable(), theMap.instantiate());
 			}
 
 			@Override
@@ -558,12 +558,10 @@ public class ObservableTransformations {
 		}
 
 		static class Instantiator<S, T> implements Operation.EfficientCopyingInstantiator<Observable<S>, Observable<T>> {
-			private final TypeToken<S> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<T>> theMap;
 
-			Instantiator(TypeToken<S> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<T>> map) {
-				theSourceType = sourceType;
+			Instantiator(ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<T>> map) {
 				theSourceVariable = sourceVariable;
 				theMap = map;
 			}
@@ -580,7 +578,7 @@ public class ObservableTransformations {
 
 			@Override
 			public Observable<T> transform(Observable<S> source, ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<S> sourceV = SettableValue.build(theSourceType).build();
+				SettableValue<S> sourceV = SettableValue.<S> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<T> targetV = theMap.get(models);
 				return new MappedObservable<>(source, sourceV, targetV);
@@ -605,7 +603,7 @@ public class ObservableTransformations {
 				if (newSource == mapped.getWrapped() && newTarget == mapped.getTargetValue())
 					return prevValue;
 				else {
-					SettableValue<S> newSourceV = SettableValue.build(theSourceType).build();
+					SettableValue<S> newSourceV = SettableValue.<S> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new MappedObservable<>(newSource, newSourceV, newTarget);
 				}
@@ -720,7 +718,7 @@ public class ObservableTransformations {
 
 			@Override
 			public Instantiator<T> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+				return new Instantiator<>(getDefinition().getSourceVariable(), theTest.instantiate());
 			}
 
 			@Override
@@ -730,12 +728,10 @@ public class ObservableTransformations {
 		}
 
 		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
-			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
 
-			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
-				theSourceType = sourceType;
+			Instantiator(ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
 				theSourceVariable = sourceVariable;
 				theTest = test;
 			}
@@ -752,7 +748,7 @@ public class ObservableTransformations {
 
 			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
+				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> testV = theTest.get(models);
 				return new FilteredObservable<>(source, sourceV, testV);
@@ -777,7 +773,7 @@ public class ObservableTransformations {
 				if (newSource == filtered.getWrapped() && newTest == filtered.getTest())
 					return prevValue;
 				else {
-					SettableValue<T> newSourceV = SettableValue.build(theSourceType).build();
+					SettableValue<T> newSourceV = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new FilteredObservable<>(newSource, newSourceV, newTest);
 				}

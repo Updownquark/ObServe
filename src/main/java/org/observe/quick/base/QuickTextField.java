@@ -13,7 +13,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -141,10 +140,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	/** @param id The element ID for this widget */
 	protected QuickTextField(Object id) {
 		super(id);
-		isPassword = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
-			.build();
-		theEmptyText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-			.build();
+		isPassword = SettableValue.<SettableValue<Boolean>> build().build();
+		theEmptyText = SettableValue.<SettableValue<String>> build().build();
 	}
 
 	/** @return The number of columns of text to display--the horizontal size of the text field */
@@ -190,8 +187,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public QuickTextField<T> copy(ExElement parent) {
 		QuickTextField<T> copy = (QuickTextField<T>) super.copy(parent);
 
-		copy.isPassword = SettableValue.build(isPassword.getType()).build();
-		copy.theEmptyText = SettableValue.build(theEmptyText.getType()).build();
+		copy.isPassword = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theEmptyText = SettableValue.<SettableValue<String>> build().build();
 
 		return copy;
 	}

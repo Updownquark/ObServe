@@ -125,7 +125,7 @@ public class DefaultMultiMapFlow<S, K0, V0, K, V> implements MultiMapFlow<K, V> 
 			// No worries about thread safety though, since anyone adding a value will obtain a write lock first
 			BetterSortedSet<K> keys = BetterTreeSet.<K> buildTreeSet((k1, k2) -> 0).build();
 			CollectionElement<K> keyEl = keys.addElement(null, false);
-			ObservableSortedSet<K> keySet = ObservableSortedSet.create(theKeyFlow.getTargetType(), keys);
+			ObservableSortedSet<K> keySet = ObservableSortedSet.create(keys);
 			ObservableSet<K2> derivedKeys = keyMap.apply(keySet.flow()).collect();
 			MutableCollectionElement<K2> derivedKeyEl = derivedKeys.mutableElement(derivedKeys.getTerminalElement(true).getElementId());
 			newAddKey = theAddKey.map(k2 -> {
@@ -174,7 +174,7 @@ public class DefaultMultiMapFlow<S, K0, V0, K, V> implements MultiMapFlow<K, V> 
 			// This is annoying and kind of hacky, but there's no actual passive value flow instance we can use otherwise
 			// It should be safe though, because the flow should never be collected
 			CollectionDataFlow<?, ?, V2> hackValueFlow = valueMap
-				.apply(theSource.flow().transform(theValueFlow.getTargetType(), tx -> tx.cache(false).map(s -> (V) s)));
+				.apply(theSource.flow().<V> transform(tx -> tx.cache(false).map(s -> (V) s)));
 			passive = hackValueFlow.supportsPassive();
 			passivePreferred = passive && hackValueFlow.prefersPassive();
 		}

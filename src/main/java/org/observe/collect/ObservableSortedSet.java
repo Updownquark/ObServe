@@ -65,7 +65,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	}
 
 	@Override
-	default E[] toArray() {
+	default Object[] toArray() {
 		return ObservableSet.super.toArray();
 	}
 
@@ -230,37 +230,34 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 
 	/**
 	 * @param <E> The type for the set
-	 * @param type The type for the set
 	 * @param compare The comparator for the set
 	 * @param values The values to be in the immutable set
 	 * @return An immutable set with the given values
 	 */
-	static <E> ObservableSortedSet<E> of(TypeToken<E> type, Comparator<? super E> compare, E... values) {
-		return of(type, compare, Arrays.asList(values));
+	static <E> ObservableSortedSet<E> of(Comparator<? super E> compare, E... values) {
+		return of(compare, Arrays.asList(values));
 	}
 
 	/**
 	 * @param <E> The type for the set
-	 * @param type The type for the set
 	 * @param compare The comparator for the set
 	 * @param values The values to be in the immutable set
 	 * @return An immutable set with the given values
 	 */
-	static <E> ObservableSortedSet<E> of(TypeToken<E> type, Comparator<? super E> compare, Collection<? extends E> values) {
+	static <E> ObservableSortedSet<E> of(Comparator<? super E> compare, Collection<? extends E> values) {
 		java.util.TreeSet<E> valueSet = new java.util.TreeSet<>(compare);
 		valueSet.addAll(values);
-		return ObservableCollection.create(type, BetterTreeList.<E> build().build().withAll(valueSet))//
+		return ObservableCollection.create(BetterTreeList.<E> build().build().withAll(valueSet))//
 			.flow().distinctSorted(compare, false).unmodifiable(false).collect();
 	}
 
 	/**
 	 * @param <E> The type for the set
-	 * @param type The type for the set
 	 * @param compare The comparator to use to sort the set's values
 	 * @return A new, empty, mutable observable sorted set
 	 */
-	static <E> ObservableSortedSet<E> create(TypeToken<E> type, Comparator<? super E> compare) {
-		return create(type, createDefaultBacking(compare));
+	static <E> ObservableSortedSet<E> create(Comparator<? super E> compare) {
+		return create(createDefaultBacking(compare));
 	}
 
 	/**
@@ -269,24 +266,14 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	 * @param compare The comparator to use to sort the set's values
 	 * @return A builder to create a new, empty, mutable observable sorted set
 	 */
-	static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> compare) {
-		return DefaultObservableSortedSet.build(type, compare);
-	}
-
-	/**
-	 * @param <E> The type for the set
-	 * @param type The type for the set
-	 * @param compare The comparator to use to sort the set's values
-	 * @return A builder to create a new, empty, mutable observable sorted set
-	 */
-	static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(Class<E> type, Comparator<? super E> compare) {
-		return build(TypeTokens.get().of(type), compare);
+	static <E> ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> build(Comparator<? super E> compare) {
+		return DefaultObservableSortedSet.build(compare);
 	}
 
 	/**
 	 * @param <E> The type for the set
 	 * @param compare The comparator to use to sort the set's values
-	 * @return A new sorted set to back a collection created by {@link #create(TypeToken, Comparator)}
+	 * @return A new sorted set to back a collection created by {@link #create(Comparator)}
 	 */
 	static <E> BetterSortedSet<E> createDefaultBacking(Comparator<? super E> compare) {
 		return BetterTreeSet.<E> buildTreeSet(compare).build();
@@ -299,8 +286,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	 * @return A new, empty, mutable observable sorted set whose performance and storage characteristics are determined by
 	 *         <code>backing</code>
 	 */
-	static <E> ObservableSortedSet<E> create(TypeToken<E> type, BetterSortedSet<E> backing) {
-		return new DefaultObservableSortedSet<>(type, backing);
+	static <E> ObservableSortedSet<E> create(BetterSortedSet<E> backing) {
+		return new DefaultObservableSortedSet<>(backing);
 	}
 
 	/**

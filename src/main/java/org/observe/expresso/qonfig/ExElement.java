@@ -1329,7 +1329,7 @@ public interface ExElement extends Identifiable {
 					setParentElement(parent);
 				theAddOns = new ClassMap<>();
 				theAddOnSequence = new LinkedHashSet<>();
-				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+				isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
 
 				if (theDefinition.theExternalView != null)
 					theExternalView = new ExtElementView();
@@ -1881,7 +1881,7 @@ public interface ExElement extends Identifiable {
 			theId = id;
 			theAddOns = new ClassMap<>();
 			theAddOnSequence = new LinkedHashSet<>();
-			isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+			isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
 		}
 
 		@Override
@@ -2163,7 +2163,7 @@ public interface ExElement extends Identifiable {
 			copy.theParent = parent;
 			copy.theAddOns = new ClassMap<>();
 			copy.theAddOnSequence = new LinkedHashSet<>();
-			copy.isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+			copy.isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
 
 			if (theExternalView != null)
 				copy.theExternalView = theExternalView.copy(this);

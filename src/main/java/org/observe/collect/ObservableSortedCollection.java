@@ -58,7 +58,7 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	}
 
 	@Override
-	default E[] toArray() {
+	default Object[] toArray() {
 		return ObservableCollection.super.toArray();
 	}
 
@@ -187,8 +187,8 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
 	 */
-	static <E> ObservableSortedCollection<E> of(TypeToken<E> type, Comparator<? super E> compare, E... values) {
-		return of(type, compare, Arrays.asList(values));
+	static <E> ObservableSortedCollection<E> of(Comparator<? super E> compare, E... values) {
+		return of(compare, Arrays.asList(values));
 	}
 
 	/**
@@ -198,8 +198,8 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
 	 */
-	static <E> ObservableSortedCollection<E> of(TypeToken<E> type, Comparator<? super E> compare, Collection<? extends E> values) {
-		return ObservableCollection.create(type, BetterTreeList.<E> build().build().withAll(values))//
+	static <E> ObservableSortedCollection<E> of(Comparator<? super E> compare, Collection<? extends E> values) {
+		return ObservableCollection.create(BetterTreeList.<E> build().build().withAll(values))//
 			.flow().distinctSorted(compare, false).unmodifiable(false).collect();
 	}
 
@@ -209,8 +209,8 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @param compare The comparator to use to sort the collection's values
 	 * @return A new, empty, mutable observable sorted collection
 	 */
-	static <E> ObservableSortedCollection<E> create(TypeToken<E> type, Comparator<? super E> compare) {
-		return create(type, createDefaultBacking(compare));
+	static <E> ObservableSortedCollection<E> create(Comparator<? super E> compare) {
+		return create(createDefaultBacking(compare));
 	}
 
 	/**
@@ -219,24 +219,14 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @param compare The comparator to use to sort the collection's values
 	 * @return A builder to create a new, empty, mutable observable sorted collection
 	 */
-	static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(TypeToken<E> type, Comparator<? super E> compare) {
-		return DefaultObservableSortedCollection.build(type, compare);
-	}
-
-	/**
-	 * @param <E> The type for the collection
-	 * @param type The type for the collection
-	 * @param compare The comparator to use to sort the collection's values
-	 * @return A builder to create a new, empty, mutable observable sorted collection
-	 */
-	static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(Class<E> type, Comparator<? super E> compare) {
-		return build(TypeTokens.get().of(type), compare);
+	static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(Comparator<? super E> compare) {
+		return DefaultObservableSortedCollection.build(compare);
 	}
 
 	/**
 	 * @param <E> The type for the collection
 	 * @param compare The comparator to use to sort the collection's values
-	 * @return A new sorted collection to back a collection created by {@link #create(TypeToken, Comparator)}
+	 * @return A new sorted collection to back a collection created by {@link #create(Comparator)}
 	 */
 	static <E> BetterSortedList<E> createDefaultBacking(Comparator<? super E> compare) {
 		return SortedTreeList.<E> buildTreeList(compare).build();
@@ -249,8 +239,8 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	 * @return A new, empty, mutable observable sorted collection whose performance and storage characteristics are determined by
 	 *         <code>backing</code>
 	 */
-	static <E> ObservableSortedCollection<E> create(TypeToken<E> type, BetterSortedList<E> backing) {
-		return new DefaultObservableSortedCollection<>(type, backing);
+	static <E> ObservableSortedCollection<E> create(BetterSortedList<E> backing) {
+		return new DefaultObservableSortedCollection<>(backing);
 	}
 
 	/**

@@ -14,7 +14,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -197,8 +196,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	/** @param element The container whose contents to manage */
 	protected QuickGridFlowLayout(QuickWidget element) {
 		super(element);
-		theMaxRowCount = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
-			.build();
+		theMaxRowCount = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	/** @return The starting edge for widget in a row of the layout */
@@ -270,7 +268,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	public QuickGridFlowLayout copy(QuickWidget element) {
 		QuickGridFlowLayout copy = (QuickGridFlowLayout) super.copy(element);
 
-		copy.theMaxRowCount = SettableValue.build(theMaxRowCount.getType()).build();
+		copy.theMaxRowCount = SettableValue.<SettableValue<Integer>> build().build();
 
 		return copy;
 	}

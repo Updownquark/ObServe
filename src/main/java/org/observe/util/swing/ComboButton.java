@@ -53,6 +53,8 @@ import com.google.common.reflect.TypeToken;
  * https://stackoverflow.com/questions/36352707/actions-inside-of-another-action-like-netbeans It's original author seems to be unknown.
  *
  * Modification by Updownquark to work with observables.
+ *
+ * @param <E> The type of values representing actions to present to the user
  */
 public class ComboButton<E> extends JButton {
 	private int separatorSpacing = 4;
@@ -65,7 +67,6 @@ public class ComboButton<E> extends JButton {
 	private Color disabledArrowColor = Color.GRAY;
 	private Image image;
 	private MouseHandler mouseHandler;
-	private boolean toolBarButton;
 
 	private JPopupMenu jpopupMenu;
 
@@ -74,10 +75,9 @@ public class ComboButton<E> extends JButton {
 	private final ListenerList<BiConsumer<? super E, Object>> theListeners;
 
 	/**
-	 * Creates a button with initial text and an icon.
-	 *
-	 * @param text the text of the button
-	 * @param windowIcon the Icon image to display on the button
+	 * @param values The values to represent actions to present to the user
+	 * @param column The render strategy to render the action values in the list
+	 * @param until An observable to stop all listening
 	 */
 	public ComboButton(ObservableCollection<E> values, CategoryRenderStrategy<E, ?> column, Observable<?> until) {
 		setMargin(new Insets(2, 2, 2, 0));
@@ -97,7 +97,7 @@ public class ComboButton<E> extends JButton {
 
 		theListeners = ListenerList.build().build();
 		configureForToolBar();
-		SettableValue<E> selection = SettableValue.build(TypeTokens.get().wrap(values.getType())).build();
+		SettableValue<E> selection = SettableValue.<E> build().build();
 		PanelPopulation.populateHPanel(getPopupMenu(), new JustifiedBoxLayout(true).mainJustified().crossJustified(), until)//
 		.addTable(values, table -> table//
 			.withColumnHeader(false)//
@@ -119,24 +119,38 @@ public class ComboButton<E> extends JButton {
 			l -> l.accept(value, cause));
 	}
 
+	/** @return The values to represent actions to present to the user */
 	public ObservableCollection<E> getValues() {
 		return theValues;
 	}
 
+	/** @return The render strategy to render the action values in the list */
 	public CategoryRenderStrategy<E, ?> getColumn() {
 		return theColumn;
 	}
 
+	/**
+	 * @param listener A listener to be notified when the user selects a value from the list
+	 * @return This button
+	 */
 	public ComboButton<E> addListener(BiConsumer<? super E, Object> listener) {
 		theListeners.add(listener, true);
 		return this;
 	}
 
+	/**
+	 * @param text The text for this button
+	 * @return This button
+	 */
 	public ComboButton<E> withText(String text) {
 		setText(text);
 		return this;
 	}
 
+	/**
+	 * @param icon The icon for this button
+	 * @return This button
+	 */
 	public ComboButton<E> withIcon(Icon icon) {
 		setIcon(icon);
 		return this;
@@ -187,24 +201,7 @@ public class ComboButton<E> extends JButton {
 		}
 	}
 
-	public void addActionAt(Action a, int index) {
-		getPopupMenu().insert(a, index);
-	}
-
-	public void addAction(Action a) {
-		getPopupMenu().add(a);
-	}
-
-	public void setPopupMenu(JPopupMenu popup) {
-		jpopupMenu = popup;
-		this.setComponentPopupMenu(popup);
-	}
-
-	/**
-	 * Returns the buttons popup menu.
-	 *
-	 * @return
-	 */
+	/** @return The buttons popup menu */
 	public JPopupMenu getPopupMenu() {
 		if (jpopupMenu == null) {
 			jpopupMenu = new JPopupMenu();
@@ -213,19 +210,9 @@ public class ComboButton<E> extends JButton {
 	}
 
 	/**
-	 * Used to determine if the button is begin configured for use on a tool bar
-	 *
-	 * @return
-	 */
-	public boolean isToolBarButton() {
-		return toolBarButton;
-	}
-
-	/**
 	 * Configures this button for use on a tool bar...
 	 */
 	public void configureForToolBar() {
-		toolBarButton = true;
 		if (getIcon() != null) {
 			setHideActionText(true);
 		}
@@ -305,10 +292,7 @@ public class ComboButton<E> extends JButton {
 	}
 
 	/**
-	 * Sets the separatorSpacing.Separator spacing is the space above and below the separator( the line drawn when you hover your mouse over
-	 * the split part of the button).
-	 *
-	 * @param spacing
+	 * @param spacing The space above and below the separator( the line drawn when you hover your mouse over the split part of the button).
 	 */
 	public void setSeparatorSpacing(int spacing) {
 		if (spacing != separatorSpacing && spacing >= 0) {
@@ -353,11 +337,7 @@ public class ComboButton<E> extends JButton {
 		return arrowColor;
 	}
 
-	/**
-	 * Set the arrow color.
-	 *
-	 * @param color
-	 */
+	/** @param color The arrow color */
 	public void setArrowColor(Color color) {
 		if (arrowColor != color) {
 			Color old = arrowColor;
@@ -377,11 +357,7 @@ public class ComboButton<E> extends JButton {
 		return disabledArrowColor;
 	}
 
-	/**
-	 * sets the disabled arrow color
-	 *
-	 * @param color color of the arrow if no popup attached.
-	 */
+	/** @param color color of the arrow if no popup attached */
 	public void setDisabledArrowColor(Color color) {
 		if (disabledArrowColor != color) {
 			Color old = disabledArrowColor;
@@ -391,20 +367,12 @@ public class ComboButton<E> extends JButton {
 		}
 	}
 
-	/**
-	 * Splitwidth is the width of the split part of the button.
-	 *
-	 * @return splitWidth
-	 */
+	/** @return splitWidth The width of the split part of the button */
 	public int getSplitWidth() {
 		return splitWidth;
 	}
 
-	/**
-	 * Splitwidth is the width of the split part of the button.
-	 *
-	 * @param width
-	 */
+	/** @param width The width of the split part of the button */
 	public void setSplitWidth(int width) {
 		if (splitWidth != width) {
 			int old = splitWidth;
@@ -424,11 +392,7 @@ public class ComboButton<E> extends JButton {
 		return arrowSize;
 	}
 
-	/**
-	 * sets the size of the arrow
-	 *
-	 * @param size
-	 */
+	/** @param size The size of the arrow */
 	public void setArrowSize(int size) {
 		if (arrowSize != size) {
 			int old = arrowSize;
@@ -476,10 +440,7 @@ public class ComboButton<E> extends JButton {
 		return image;
 	}
 
-	/**
-	 *
-	 * @param g
-	 */
+	/** @param g The graphics to paint */
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
@@ -512,7 +473,7 @@ public class ComboButton<E> extends JButton {
 	private BufferedImage rotate(BufferedImage img, int angle) {
 		int w = img.getWidth();
 		int h = img.getHeight();
-		BufferedImage dimg = dimg = new BufferedImage(w, h, img.getType());
+		BufferedImage dimg = new BufferedImage(w, h, img.getType());
 		Graphics2D g = dimg.createGraphics();
 		g.rotate(Math.toRadians(angle), w / 2, h / 2);
 		g.drawImage(img, null, 0, 0);
@@ -560,7 +521,8 @@ public class ComboButton<E> extends JButton {
 	}
 
 	public static <E> ComboButton<E> create(String text, ObservableCollection<E> available) {
-		return new ComboButton<>(available, createDefaultComboBoxColumn(available.getType()), Observable.empty()).withText(text);
+		return new ComboButton<>(available, createDefaultComboBoxColumn((TypeToken<E>) TypeTokens.get().WILDCARD), Observable.empty())
+			.withText(text);
 	}
 
 	public static <E> CategoryRenderStrategy<E, E> createDefaultComboBoxColumn(TypeToken<E> type) {

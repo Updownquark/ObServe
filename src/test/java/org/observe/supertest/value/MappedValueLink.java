@@ -18,8 +18,6 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * Tests {@link ObservableValue#map(Function)}
  *
@@ -46,9 +44,7 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 			TestHelper helper) {
 			ObservableValueLink<?, T> sourceVL = (ObservableValueLink<?, T>) sourceLink;
 			TypeTransformation<T, X> transform = MappedCollectionLink.transform(sourceVL.getType(), targetType, helper, true, false);
-			SettableValue<TypeTransformation<T, X>> txValue = SettableValue
-				.build((TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {
-				}).build();
+			SettableValue<TypeTransformation<T, X>> txValue = SettableValue.<TypeTransformation<T, X>> build().build();
 			txValue.set(transform, null);
 			boolean variableMap = helper.getBoolean();
 			boolean needsUpdateReeval = !sourceVL.isCheckingOldValues() || variableMap;
@@ -112,12 +108,11 @@ public class MappedValueLink<S, T> extends ObservableValueLink<S, T> implements 
 		Consumer<XformOptions> options = opts -> {
 			opts.cache(theOptions.isCached()).reEvalOnUpdate(theOptions.isReEvalOnUpdate()).fireIfUnchanged(theOptions.isFireIfUnchanged());
 		};
-		TypeToken<T> type = (TypeToken<T>) getType().getType();
 		if (isReversible)
-			return ((SettableValue<S>) sourceValue).map(type, src -> src == null ? null : theMap.get().map(src),
+			return ((SettableValue<S>) sourceValue).map(src -> src == null ? null : theMap.get().map(src),
 				mapped -> theMap.get().reverse(mapped), options);
 		else
-			return sourceValue.map(type, src -> src == null ? null : theMap.get().map(src), options);
+			return sourceValue.map(src -> src == null ? null : theMap.get().map(src), options);
 	}
 
 	@Override

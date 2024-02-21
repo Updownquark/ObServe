@@ -19,7 +19,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
@@ -194,10 +193,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				theRowType = (TypeToken<R>) getAddOn(ExWithElementModel.Interpreted.class).getElement().getExpressoEnv().getModels()
 					.getComponent(getDefinition().getActiveValueVariable()).interpreted().getType().getType(0);
 				if (theColumns == null)
-					theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
-						QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> parameterized(
-							getValueType(), TypeTokens.get().WILDCARD))//
-					.build();
+					theColumns = ObservableCollection.<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> build().build();
 				syncChildren(getDefinition().getColumns(), theColumns, def -> def.interpret(this),
 					TableColumnSet.Interpreted::updateColumns);
 			}
@@ -249,17 +245,13 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				theColumnIndex = columnIndex;
 			}
 
-			/**
-			 * @param rowType The row type of the tabular widget
-			 * @param descrip A description of this context for debugging
-			 */
-			public Default(TypeToken<R> rowType, String descrip) {
+			/** @param descrip A description of this context for debugging */
+			public Default(String descrip) {
 				this(
-					SettableValue.build(rowType).withDescription(descrip + ".rowValue").withValue(TypeTokens.get().getDefaultValue(rowType))
-					.build(), //
-					SettableValue.build(boolean.class).withValue(false).withDescription(descrip + ".selected").build(),
-					SettableValue.build(int.class).withValue(0).withDescription(descrip + ".rowIndex").build(), //
-					SettableValue.build(int.class).withValue(0).withDescription(descrip + ".columnIndex").build());
+					SettableValue.<R> build().withDescription(descrip + ".rowValue").build(), //
+					SettableValue.<Boolean> build().withValue(false).withDescription(descrip + ".selected").build(),
+					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".rowIndex").build(), //
+					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".columnIndex").build());
 			}
 
 			@Override
@@ -273,9 +265,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 		}
 	}
-
-	/** @return The row type of the widget */
-	TypeToken<R> getRowType();
 
 	@Override
 	ModelComponentId getActiveValueVariable();
@@ -304,7 +293,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 	 * @param <R> The row type of the tabular widget
 	 */
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
-		private TypeToken<R> theRowType;
 		private ObservableCollection<QuickTableColumn.TableColumnSet<R>> theColumnSets;
 		private ObservableCollection<QuickTableColumn<R, ?>> theColumns;
 
@@ -321,12 +309,13 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		/** @param id The element ID for this widget */
 		protected Abstract(Object id) {
 			super(id);
-			isSelected = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(TypeTokens.get().BOOLEAN))
-				.build();
-			theRowIndex = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(TypeTokens.get().INT)).build();
-			theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+			isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+			theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+			theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
+			theColumnSets = ObservableCollection.<TableColumnSet<R>> build().build();
+			theColumns = theColumnSets.flow().<QuickTableColumn<R, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
+				.collect();
+			theActiveValue = SettableValue.<SettableValue<R>> build().build();
 		}
 
 		@Override
@@ -337,11 +326,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		@Override
 		public ObservableCollection<QuickTableColumn<R, ?>> getAllColumns() {
 			return theColumns.flow().unmodifiable(false).collect();
-		}
-
-		@Override
-		public TypeToken<R> getRowType() {
-			return theRowType;
 		}
 
 		@Override
@@ -381,23 +365,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
-			TypeToken<R> rowType;
-			try {
-				rowType = myInterpreted.getValueType();
-			} catch (ExpressoInterpretationException e) {
-				throw new IllegalStateException("Not initialized?", e);
-			}
-			if (theRowType == null || !theRowType.equals(rowType)) {
-				theRowType = rowType;
-				theColumnSets = ObservableCollection.build((Class<TableColumnSet<R>>) (Class<?>) TableColumnSet.class).build();
-				TypeToken<QuickTableColumn<R, ?>> columnType = TypeTokens.get().keyFor(QuickTableColumn.class)//
-					.<QuickTableColumn<R, ?>> parameterized(theRowType, TypeTokens.get().WILDCARD);
-				theColumns = theColumnSets.flow()//
-					.<QuickTableColumn<R, ?>> flatMap(columnType, columnSet -> columnSet.getColumns().flow())//
-					.collect();
-				theActiveValue = SettableValue
-					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(theRowType)).build();
-			}
 			theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 			theRowIndexVariable = myInterpreted.getDefinition().getRowIndexVariable();
 			theColumnIndexVariable = myInterpreted.getDefinition().getColumnIndexVariable();
@@ -487,14 +454,13 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		public TabularWidget.Abstract<R> copy(ExElement parent) {
 			TabularWidget.Abstract<R> copy = (TabularWidget.Abstract<R>) super.copy(parent);
 
-			copy.theColumnSets = ObservableCollection.build(theColumnSets.getType()).build();
-			copy.theColumns = copy.theColumnSets.flow()//
-				.<QuickTableColumn<R, ?>> flatMap(theColumns.getType(), columnSet -> columnSet.getColumns().flow())//
+			copy.theColumnSets = ObservableCollection.<TableColumnSet<R>> build().build();
+			copy.theColumns = copy.theColumnSets.flow().<QuickTableColumn<R, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 				.collect();
-			copy.theActiveValue = SettableValue.build(theActiveValue.getType()).build();
-			copy.isSelected = SettableValue.build(isSelected.getType()).build();
-			copy.theRowIndex = SettableValue.build(theRowIndex.getType()).build();
-			copy.theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+			copy.theActiveValue = SettableValue.<SettableValue<R>> build().build();
+			copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+			copy.theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
 
 			for (TableColumnSet<R> columnSet : theColumnSets)
 				copy.theColumnSets.add(columnSet.copy(this));

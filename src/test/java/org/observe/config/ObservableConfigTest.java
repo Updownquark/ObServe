@@ -904,10 +904,9 @@ public class ObservableConfigTest {
 		TestEntity2Tester(TestEntity2 entity1, TestEntity2 entity2) {
 			theText = entity1.getText();
 			theEntityField = deepCopy(entity1.getEntityField());
-			theTexts = ObservableCollection.build(String.class).build()//
+			theTexts = ObservableCollection.<String> build().build()//
 				.withAll(entity1.getTexts());
-			theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class),
-				BetterTreeList.<TestEntity4> build().build());
+			theListedEntities = ObservableCollection.create(BetterTreeList.<TestEntity4> build().build());
 			for (TestEntity4 te4 : entity1.getListedEntities().getValues())
 				theListedEntities.add(deepCopy(te4));
 

@@ -1,16 +1,6 @@
 package org.observe.util.swing;
 
-import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Image;
-import java.awt.LayoutManager;
-import java.awt.Point;
-import java.awt.RenderingHints;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.DecimalFormat;
@@ -67,7 +57,7 @@ public class ObservableColorEditor extends JPanel {
 		Observable<?> until) {
 		theSelectedColor = selectedValue;
 		isWithAlpha = withAlpha;
-		theSelectedHsbColor = SettableValue.build(Colors.HsbColor.class)
+		theSelectedHsbColor = SettableValue.<Colors.HsbColor> build()
 			.withValue(new Colors.HsbColor(selectedValue.get(), withAlpha.get())).build()//
 			.disableWith(selectedValue.isEnabled())//
 			.refresh(withAlpha.noInitChanges())//
@@ -109,42 +99,42 @@ public class ObservableColorEditor extends JPanel {
 		} else
 			thePersistentHistoryPanel = null;
 
-		SettableValue<Boolean> rgbOrHsb = SettableValue.build(boolean.class).withValue(true).build();
-		SettableValue<Integer> red = theSelectedHsbColor.transformReversible(int.class, tx -> tx//
+		SettableValue<Boolean> rgbOrHsb = SettableValue.<Boolean> build().withValue(true).build();
+		SettableValue<Integer> red = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(Colors.HsbColor::getRed).replaceSourceWith((r, txv) -> txv.getCurrentSource().setRed(r)));
-		SettableValue<Integer> green = theSelectedHsbColor.transformReversible(int.class, tx -> tx//
+		SettableValue<Integer> green = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(Colors.HsbColor::getGreen).replaceSourceWith((g, txv) -> txv.getCurrentSource().setGreen(g)));
-		SettableValue<Integer> blue = theSelectedHsbColor.transformReversible(int.class, tx -> tx//
+		SettableValue<Integer> blue = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(Colors.HsbColor::getBlue).replaceSourceWith((b, txv) -> txv.getCurrentSource().setBlue(b)));
-		SettableValue<Integer> alpha = theSelectedHsbColor.transformReversible(int.class, tx -> tx//
+		SettableValue<Integer> alpha = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(Colors.HsbColor::getAlpha).replaceSourceWith((a, txv) -> txv.getCurrentSource().setAlpha(a)));
-		SettableValue<Double> redDouble = red.transformReversible(double.class, tx -> tx//
+		SettableValue<Double> redDouble = red.transformReversible(tx -> tx//
 			.map(Number::doubleValue).replaceSource(d -> (int) Math.round(d), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> greenDouble = green.transformReversible(double.class, tx -> tx//
+		SettableValue<Double> greenDouble = green.transformReversible(tx -> tx//
 			.map(Number::doubleValue).replaceSource(d -> (int) Math.round(d), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> blueDouble = blue.transformReversible(double.class, tx -> tx//
+		SettableValue<Double> blueDouble = blue.transformReversible(tx -> tx//
 			.map(Number::doubleValue).replaceSource(d -> (int) Math.round(d), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> alphaDouble = alpha.transformReversible(double.class, tx -> tx//
+		SettableValue<Double> alphaDouble = alpha.transformReversible(tx -> tx//
 			.map(Number::doubleValue).replaceSource(d -> (int) Math.round(d), rev -> rev.allowInexactReverse(true)));
 
-		SettableValue<Double> huePercent = theSelectedHsbColor.transformReversible(float.class, tx -> tx//
+		SettableValue<Double> huePercent = theSelectedHsbColor.<Float> transformReversible(tx -> tx//
 			.map(hsb -> hsb.getHue()).replaceSourceWith((h, txv) -> txv.getCurrentSource().setHue(h)))//
-			.transformReversible(double.class, tx -> tx//
+			.transformReversible(tx -> tx//
 				.map(f -> f * 100.0).replaceSource(d -> (float) (d / 100), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> saturationPercent = theSelectedHsbColor.transformReversible(float.class, tx -> tx//
+		SettableValue<Double> saturationPercent = theSelectedHsbColor.<Float> transformReversible(tx -> tx//
 			.map(hsb -> hsb.getSaturation()).replaceSourceWith((s, txv) -> txv.getCurrentSource().setSaturation(s)))//
-			.transformReversible(double.class, tx -> tx//
+			.transformReversible(tx -> tx//
 				.map(f -> f * 100.0).replaceSource(d -> (float) (d / 100), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> brightnessPercent = theSelectedHsbColor.transformReversible(float.class, tx -> tx//
+		SettableValue<Double> brightnessPercent = theSelectedHsbColor.<Float> transformReversible(tx -> tx//
 			.map(hsb -> hsb.getBrightness()).replaceSourceWith((b, txv) -> txv.getCurrentSource().setBrightness(b)))//
-			.transformReversible(double.class, tx -> tx//
+			.transformReversible(tx -> tx//
 				.map(f -> f * 100.0).replaceSource(d -> (float) (d / 100), rev -> rev.allowInexactReverse(true)));
-		SettableValue<Double> alphaPercent = alpha.transformReversible(double.class, tx -> tx//
+		SettableValue<Double> alphaPercent = alpha.transformReversible(tx -> tx//
 			.map(a -> a * 100.0 / 255.0).replaceSource(d -> (int) Math.round(d / 100.0 * 255.0), rev -> rev.allowInexactReverse(true)));
 
-		SettableValue<String> rgbOrHsbName = rgbOrHsb.transformReversible(String.class, tx -> tx//
+		SettableValue<String> rgbOrHsbName = rgbOrHsb.transformReversible(tx -> tx//
 			.map(rgb -> rgb ? "RGB" : "HSB").withReverse(str -> "RGB".equals(str)));
-		SettableValue<String> colorName = theSelectedHsbColor.transformReversible(String.class, tx -> tx//
+		SettableValue<String> colorName = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(c -> {
 				return Colors.getColorName(c.toOpaqueColor());
 			}).replaceSource(name -> {
@@ -153,7 +143,7 @@ public class ObservableColorEditor extends JPanel {
 				return prev.setRGB(c.getRed(), c.getGreen(), c.getBlue());
 			}, rev -> rev.allowInexactReverse(true) // Inexact reverse is needed here because there are several synonyms in Colors
 				));
-		SettableValue<Color> color = theSelectedHsbColor.transformReversible(Color.class, tx -> tx//
+		SettableValue<Color> color = theSelectedHsbColor.transformReversible(tx -> tx//
 			.map(Colors.HsbColor::toColor).replaceSourceWith((c, txv) -> txv.getCurrentSource().setRGB(c.getRed(), c.getGreen(), c.getBlue())));
 		ObservableValue<Boolean> hsbSelected = rgbOrHsb.map(rgb -> !rgb);
 		List<MultiRangeSlider> sliders = new ArrayList<>();
@@ -315,7 +305,7 @@ public class ObservableColorEditor extends JPanel {
 
 	/**
 	 * Adds a color into the persistent history of this editor. Useful for using this editor in a modal dialog.
-	 * 
+	 *
 	 * @param color The color to add to the history
 	 */
 	public void addPersistentHistory(Color color) {

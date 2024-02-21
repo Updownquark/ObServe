@@ -86,9 +86,8 @@ public abstract class Invocation implements ObservableExpression {
 			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
-				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
-					ModelTypes.Value.any(), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
-					expressionOffset, exHandler);
+				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(ModelTypes.Value.any(), env,
+					new ArgOption(env, expressionOffset + getInitialArgOffset()), expressionOffset, exHandler);
 				if (result == null)
 					return null;
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
@@ -513,9 +512,11 @@ public abstract class Invocation implements ObservableExpression {
 					if (converter == null) {
 						if (methodErrors == null)
 							methodErrors = new LinkedHashMap<>();
-						methodErrors.put(m,
-							new ExpressoInterpretationException("Return type " + returnType + " of method " + Invocation.printSignature(m)
-							+ " cannot be assigned to type " + targetType, env.reporting().getPosition(), 0));
+						methodErrors
+						.put(m,
+							new ExpressoInterpretationException("Return type " + returnType + " of method "
+								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType,
+								env.reporting().getPosition(), 0));
 					} else {
 						if (specificity < 0) {
 							specificity = 0;
@@ -823,9 +824,8 @@ public abstract class Invocation implements ObservableExpression {
 			return returnValue;
 		}
 
-		protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
-			Observable<?> changes) {
-			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
+		protected <X2> SettableValue<X2> syntheticResultValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<?> changes) {
+			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(() -> {
 				try {
 					return (X2) invoke(false);
 				} catch (Throwable e) {
@@ -844,7 +844,7 @@ public abstract class Invocation implements ObservableExpression {
 					__ -> theImpl + "s are not reversible");
 			} else {
 				long[] stamp = new long[1];
-				return SettableValue.asSettable(ObservableValue.of(type, //
+				return SettableValue.asSettable(ObservableValue.of(//
 					() -> {
 						stamp[0]++;
 						return backing.get();
@@ -912,8 +912,7 @@ public abstract class Invocation implements ObservableExpression {
 			}
 		}
 
-		static class InvocationAction<X extends Executable, T> extends InvocationInstance<X, SettableValue<T>>
-		implements ObservableAction {
+		static class InvocationAction<X extends Executable, T> extends InvocationInstance<X, SettableValue<T>> implements ObservableAction {
 			protected InvocationAction(MethodResult<X, SettableValue<T>> method, boolean caching, ErrorReporting reporting,
 				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, TypeToken<T> type) {
 				super(method, caching, reporting, impl, context, arguments, testing, null);
@@ -985,8 +984,7 @@ public abstract class Invocation implements ObservableExpression {
 				else
 					defaultValue = null;
 				SettableValue<Object> value = new InvocationInstance<>(getMethod(), isCaching, theReporting, theImpl,
-					(SettableValue<Object>) ctxV, argVs, isTesting, defaultValue)
-					.syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
+					(SettableValue<Object>) ctxV, argVs, isTesting, defaultValue).syntheticResultValue(ctxV, argVs, changes);
 				return getMethod().converter.convert(value);
 			}
 		}

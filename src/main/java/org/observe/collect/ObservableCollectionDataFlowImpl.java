@@ -33,7 +33,6 @@ import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionE
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
-import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
@@ -47,8 +46,6 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-
-import com.google.common.reflect.TypeToken;
 
 /** Contains implementations of {@link CollectionDataFlow} and its dependencies */
 public class ObservableCollectionDataFlowImpl {
@@ -176,9 +173,6 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of the derived collection that can use this manager
 	 */
 	public static interface CollectionOperation<E, I, T> extends Identifiable, CausalLock {
-		/** @return The type of collection that this operation would produce */
-		TypeToken<T> getTargetType();
-
 		/** @return The equivalence of the collection that this operation would produce */
 		Equivalence<? super T> equivalence();
 
@@ -579,20 +573,16 @@ public class ObservableCollectionDataFlowImpl {
 	public static abstract class AbstractDataFlow<E, I, T> extends AbstractIdentifiable implements CollectionDataFlow<E, I, T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, I> theParent;
-		private final TypeToken<T> theTargetType;
 		private final Equivalence<? super T> theEquivalence;
 
 		/**
 		 * @param source The source collection
 		 * @param parent The parent flow (may be null)
-		 * @param targetType The type of this flow
 		 * @param equivalence The equivalence of this flow
 		 */
-		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
-			Equivalence<? super T> equivalence) {
+		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, Equivalence<? super T> equivalence) {
 			theSource = source;
 			theParent = parent;
-			theTargetType = targetType;
 			theEquivalence = equivalence;
 		}
 
@@ -606,10 +596,6 @@ public class ObservableCollectionDataFlowImpl {
 			return theParent;
 		}
 
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theTargetType;
-		}
 
 		@Override
 		public Equivalence<? super T> equivalence() {
@@ -647,26 +633,26 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, T, X> transform(TypeToken<X> targetType,
+		public <X> CollectionDataFlow<E, T, X> transform(
 			Function<? super Transformation.ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> combination) {
 			Transformation<T, X> def = combination.apply(new ReversibleTransformationPrecursor<>());
-			return new TransformedCollectionOp<>(theSource, this, targetType, def);
+			return new TransformedCollectionOp<>(theSource, this, def);
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target,
+		public <X> CollectionDataFlow<E, ?, X> flattenValues(
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			return new FlattenedValuesOp<>(theSource, this, target, map);
+			return new FlattenedValuesOp<>(theSource, this, map);
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+		public <X> CollectionDataFlow<E, ?, X> flatMap(
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
-			return new FlattenedOp<>(theSource, this, target, map, null);
+			return new FlattenedOp<>(theSource, this, map, null);
 		}
 
 		@Override
-		public <V, X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+		public <V, X> CollectionDataFlow<E, ?, X> flatMap(
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends V>> map,
 				Function<FlatMapOptions<T, V, X>, FlatMapDef<T, V, X>> options) {
 			if (options == null)
@@ -674,7 +660,7 @@ public class ObservableCollectionDataFlowImpl {
 			FlatMapDef<T, V, X> def = options.apply(new FlatMapOptions.SimpleFlatMapOptions<>());
 			if (def == null)
 				throw new IllegalArgumentException("options required");
-			return new FlattenedOp<>(theSource, this, target, map, def);
+			return new FlattenedOp<>(theSource, this, map, def);
 		}
 
 		@Override
@@ -708,7 +694,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> MultiMapFlow<K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow,
+		public <K> MultiMapFlow<K, T> groupByFlow(Function<? super CollectionDataFlow<E, I, T>, DistinctDataFlow<E, ?, K>> keyFlow,
 			BiFunction<K, T, T> reverse) {
 			DistinctDataFlow<E, ?, K> keys = keyFlow.apply(this);
 			CollectionDataFlow<E, ?, T> values;
@@ -728,7 +714,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> SortedMultiMapFlow<K, T> groupSorted(
+		public <K> SortedMultiMapFlow<K, T> groupSortedFlow(
 			Function<? super CollectionDataFlow<E, I, T>, DistinctSortedDataFlow<E, ?, K>> keyFlow, BiFunction<K, T, T> reverse) {
 			DistinctSortedDataFlow<E, ?, K> keys = keyFlow.apply(this);
 			CollectionDataFlow<E, ?, T> values;
@@ -744,7 +730,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private <K> CollectionDataFlow<E, ?, T> gatherValues(AddKeyHolder.Default<K> addKey, BiFunction<K, T, T> reverse) {
-			return transform(getTargetType(), tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.printableFn(v -> {
+			return transform(tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.printableFn(v -> {
 				if (addKey.get() != null)
 					return reverse.apply(addKey.get(), v);
 				else
@@ -773,7 +759,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
 		/** @param source The source collection */
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
-			super(source, null, source.getType(), source.equivalence());
+			super(source, null, source.equivalence());
 		}
 
 		@Override
@@ -804,7 +790,7 @@ public class ObservableCollectionDataFlowImpl {
 
 	private static class ReverseOp<E, T> extends AbstractDataFlow<E, T, T> {
 		ReverseOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 		}
 
 		@Override
@@ -832,7 +818,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theFilter;
 
 		FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theFilter = filter;
 		}
 
@@ -863,7 +849,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		IntersectionFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter,
 			boolean exclude) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theFilter = filter;
 			isExclude = exclude;
 		}
@@ -891,7 +877,7 @@ public class ObservableCollectionDataFlowImpl {
 
 	private static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
 		EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
-			super(source, parent, parent.getTargetType(), equivalence);
+			super(source, parent, equivalence);
 		}
 
 		@Override
@@ -928,17 +914,15 @@ public class ObservableCollectionDataFlowImpl {
 		/**
 		 * @param source The source collection
 		 * @param parent This flow's parent (not null)
-		 * @param target The type of this flow
 		 * @param def The combination definition used to produce this flow's values from its parent's and to govern certain aspects of this
 		 *        flow's behavior, e.g. caching
 		 */
-		protected TransformedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Transformation<I, T> def) {
-			super(source, parent, target, transformEquivalence(parent.equivalence(), TypeTokens.getRawType(target), def));
+		protected TransformedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, Transformation<I, T> def) {
+			super(source, parent, transformEquivalence(parent.equivalence(), def));
 			theDef = def;
 		}
 
-		private static <I, T> Equivalence<? super T> transformEquivalence(Equivalence<? super I> sourceEquivalence, Class<T> target,
+		private static <I, T> Equivalence<? super T> transformEquivalence(Equivalence<? super I> sourceEquivalence,
 			Transformation<I, T> def) {
 			if (def instanceof Transformation.ReversibleTransformation) {
 				Transformation.TransformReverse<I, T> reverse = ((Transformation.ReversibleTransformation<I, T>) def).getReverse();
@@ -953,7 +937,7 @@ public class ObservableCollectionDataFlowImpl {
 						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 						return engine.map(v, engine.get());
 					}, def::toString, def);
-					Equivalence<T> mappedEquivalence = sourceEquivalence.map(target, //
+					Equivalence<T> mappedEquivalence = sourceEquivalence.map( //
 						LambdaUtils.printablePred(v -> {
 							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
@@ -990,13 +974,13 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new ObservableCollectionPassiveManagers.PassiveTransformedCollectionManager<>(getParent().managePassive(),
-				getTargetType(), theDef, equivalence());
+			return new ObservableCollectionPassiveManagers.PassiveTransformedCollectionManager<>(getParent().managePassive(), theDef,
+				equivalence());
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers.ActiveTransformedCollectionManager<>(getParent().manageActive(), getTargetType(),
+			return new ObservableCollectionActiveManagers.ActiveTransformedCollectionManager<>(getParent().manageActive(),
 				theDef, equivalence());
 		}
 	}
@@ -1005,7 +989,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Observable<?> theRefresh;
 
 		RefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Observable<?> refresh) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theRefresh = refresh;
 		}
 
@@ -1035,7 +1019,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		ElementRefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Function<? super T, ? extends Observable<?>> elementRefresh) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theElementRefresh = elementRefresh;
 		}
 
@@ -1081,9 +1065,9 @@ public class ObservableCollectionDataFlowImpl {
 	private static class FlattenedValuesOp<E, I, T> extends AbstractDataFlow<E, I, T> {
 		private final Function<? super I, ? extends ObservableValue<? extends T>> theMap;
 
-		FlattenedValuesOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
+		FlattenedValuesOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent,
 			Function<? super I, ? extends ObservableValue<? extends T>> map) {
-			super(source, parent, targetType.wrap(), Equivalence.DEFAULT);
+			super(source, parent, Equivalence.DEFAULT);
 			theMap = map;
 		}
 
@@ -1104,8 +1088,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			TypeToken<ObservableValue<? extends T>> valueType = TypeTokens.get().keyFor(ObservableValue.class)
-				.parameterized(getTargetType());
 			ValueHolder<DerivedCollectionElement<? extends ObservableValue<? extends T>>> settingElement = new ValueHolder<>();
 			class RefreshingMapReverse implements FlowElementSetter<ObservableValue<? extends T>, T> {
 				@Override
@@ -1128,8 +1110,6 @@ public class ObservableCollectionDataFlowImpl {
 					ObservableValue<? extends T> sourceValue = transformValues.getCurrentSource();
 					if (!(sourceValue instanceof SettableValue))
 						return Transformation.ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
-					if (!TypeTokens.get().isInstance(sourceValue.getType(), newValue))
-						return Transformation.ReverseQueryResult.reject(StdMsg.BAD_TYPE);
 					if(test){
 						String msg = ((SettableValue<T>) sourceValue).isAcceptable(newValue);
 						if (msg != null)
@@ -1161,9 +1141,9 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
-				.map(valueType, theMap)//
+				.map(theMap)//
 				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
-				.transform(getTargetType(), tx -> {
+				.<T> transform(tx -> {
 					return tx.map(LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
 						.withReverse(new RefreshingMapReverse());
 				})//
@@ -1206,7 +1186,7 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param options The modification filter options to enforce
 		 */
 		protected ModFilteredOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ModFilterer<T> options) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theOptions = options;
 		}
 
@@ -1235,7 +1215,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final ThreadConstraint theConstraint;
 
 		UpdateCatchingOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ThreadConstraint constraint) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+			super(source, parent, parent.equivalence());
 			theConstraint = constraint;
 		}
 
@@ -1267,9 +1247,9 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> theMap;
 		private final FlatMapDef<I, V, T> theOptions;
 
-		FlattenedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
+		FlattenedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent,
 			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> map, FlatMapDef<I, V, T> options) {
-			super(source, parent, targetType, Equivalence.DEFAULT);
+			super(source, parent, Equivalence.DEFAULT);
 			theMap = map;
 			theOptions = options;
 		}
@@ -1291,14 +1271,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableCollectionActiveManagers2.FlattenedManager<>(getParent().manageActive(), getTargetType(), theMap,
-				theOptions);
+			return new ObservableCollectionActiveManagers2.FlattenedManager<>(getParent().manageActive(), theMap, theOptions);
 		}
 	}
 
 	static abstract class AbstractTransformedManager<E, I, T> implements CollectionOperation<E, I, T> {
 		final CollectionOperation<E, ?, I> theParent;
-		private final TypeToken<T> theTargetType;
 		final Transformation.Engine<I, T> theEngine;
 		private final Equivalence<? super T> theEquivalence;
 		/**
@@ -1306,10 +1284,9 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		boolean propagateUpdatesToParent;
 
-		protected AbstractTransformedManager(CollectionOperation<E, ?, I> parent, TypeToken<T> targetType,
+		protected AbstractTransformedManager(CollectionOperation<E, ?, I> parent,
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
 			theParent = parent;
-			theTargetType = targetType;
 			theEngine = transformation.createEngine(null, theParent.equivalence());
 			propagateUpdatesToParent = true;
 			theEquivalence = equivalence;
@@ -1317,11 +1294,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected CollectionOperation<E, ?, I> getParent() {
 			return theParent;
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theTargetType;
 		}
 
 		protected Transformation.Engine<I, T> getEngine() {

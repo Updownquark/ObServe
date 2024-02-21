@@ -15,12 +15,9 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.observe.util.TypeTokens;
 import org.qommons.*;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * <p>
@@ -40,10 +37,10 @@ import com.google.common.reflect.TypeToken;
  *
  * <p>
  * Observable structures supporting transformation provide a method of the form <br>
- * <code> &lt;T> transform(TypeToken&lt;T>, Function&lt;{@link TransformationPrecursor}&lt;S, T>,
+ * <code> &lt;T> transform(Function&lt;{@link TransformationPrecursor}&lt;S, T>,
  *  {@link Transformation}&lt;S, T>>)</code><br>
  * or<br>
- * <code> &lt;T> transform(TypeToken&lt;T>, Function&lt;{@link ReversibleTransformationPrecursor}&lt;S, T>,
+ * <code> &lt;T> transform(Function&lt;{@link ReversibleTransformationPrecursor}&lt;S, T>,
  *  {@link ReversibleTransformation}&lt;S, T>>)</code> if the structure supports modification.<br>
  * To configure a transformed structure call this method on the source structure with the target type of the transformation and a function
  * that uses the methods on {@link TransformationBuilder} to create a {@link Transformation}.
@@ -95,11 +92,11 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <S> The type of the source values that this transformation can map
  * @param <T> The type of the result values that this transformation can produce
- * @see ObservableValue#transform(TypeToken, Function)
- * @see SettableValue#transformReversible(TypeToken, Function)
- * @see org.observe.collect.ObservableCollection.CollectionDataFlow#transform(TypeToken, Function)
- * @see org.observe.collect.ObservableCollection.DistinctDataFlow#transformEquivalent(TypeToken, Function)
- * @see org.observe.collect.ObservableCollection.DistinctSortedDataFlow#transformEquivalent(TypeToken, Function, java.util.Comparator)
+ * @see ObservableValue#transform(Function)
+ * @see SettableValue#transformReversible(Function)
+ * @see org.observe.collect.ObservableCollection.CollectionDataFlow#transform(Function)
+ * @see org.observe.collect.ObservableCollection.DistinctDataFlow#transformEquivalent(Function)
+ * @see org.observe.collect.ObservableCollection.DistinctSortedDataFlow#transformEquivalent(Function, java.util.Comparator)
  */
 public class Transformation<S, T> extends XformOptions.XformDef implements Identifiable {
 	/**
@@ -221,7 +218,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * @return A new transformation that uses the given result equivalence
 	 * @see Equivalence#DEFAULT
 	 * @see Equivalence#ID
-	 * @see Equivalence#sorted(Class, java.util.Comparator, boolean)
+	 * @see Equivalence#sorted(java.util.Comparator, boolean)
 	 */
 	public Transformation<S, T> withEquivalence(Equivalence<? super T> resultEquivalence) {
 		if (resultEquivalence.equals(equivalence()))
@@ -2242,11 +2239,6 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		@Override
 		public Transformation<S, T> getTransformation() {
 			return theTransformation;
-		}
-
-		@Override
-		public TypeToken<TransformationState> getType() {
-			return TypeTokens.get().of(TransformationState.class);
 		}
 
 		@Override

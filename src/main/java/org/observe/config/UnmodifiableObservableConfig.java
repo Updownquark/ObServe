@@ -194,11 +194,6 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public boolean belongs(Object o) {
-			return theBacking.belongs(o);
-		}
-
-		@Override
 		public boolean isContentControlled() {
 			return true;
 		}

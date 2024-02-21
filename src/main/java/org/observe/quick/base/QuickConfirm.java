@@ -18,7 +18,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContentDialog;
 import org.observe.quick.QuickCoreInterpretation;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -139,10 +138,9 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	/** @param id The element ID for this dialog */
 	protected QuickConfirm(Object id) {
 		super(id);
-		theOnConfirm = SettableValue.build(ObservableAction.class).build();
-		theOnCancel = SettableValue.build(ObservableAction.class).build();
-		theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Image>> parameterized(Image.class))
-			.build();
+		theOnConfirm = SettableValue.<ObservableAction> build().build();
+		theOnCancel = SettableValue.<ObservableAction> build().build();
+		theIcon = SettableValue.<SettableValue<Image>> build().build();
 	}
 
 	/** @return The action to perform when the user selects "OK" */
@@ -193,9 +191,9 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 	public QuickConfirm copy(ExElement parent) {
 		QuickConfirm copy = (QuickConfirm) super.copy(parent);
 
-		copy.theOnConfirm = SettableValue.build(ObservableAction.class).build();
-		copy.theOnCancel = SettableValue.build(ObservableAction.class).build();
-		copy.theIcon = SettableValue.build(theIcon.getType()).build();
+		copy.theOnConfirm = SettableValue.<ObservableAction> build().build();
+		copy.theOnCancel = SettableValue.<ObservableAction> build().build();
+		copy.theIcon = SettableValue.<SettableValue<Image>> build().build();
 
 		return copy;
 	}

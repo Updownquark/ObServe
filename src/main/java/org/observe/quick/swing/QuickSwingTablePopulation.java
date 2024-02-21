@@ -63,8 +63,6 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.io.Format;
 
-import com.google.common.reflect.TypeToken;
-
 /** Code to populate Quick-sourced tables in Java swing */
 class QuickSwingTablePopulation {
 	static class InterpretedSwingTableColumn<R, C> {
@@ -160,7 +158,6 @@ class QuickSwingTablePopulation {
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
 		private Runnable thePreRender;
-		private final TypeToken<C> theValueType;
 		private final Supplier<C> theValue;
 
 		protected JComponent theOwner;
@@ -169,12 +166,11 @@ class QuickSwingTablePopulation {
 
 		private boolean isUpdating;
 
-		QuickSwingRenderer(QuickWidget quickParent, TypeToken<C> valueType, Supplier<C> value, QuickWidget renderer,
+		QuickSwingRenderer(QuickWidget quickParent, Supplier<C> value, QuickWidget renderer,
 			TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
 				QuickSwingPopulator<QuickWidget> swingRenderer) throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theParent = parent;
-			theValueType = valueType;
 			theValue = value;
 			theRenderer = renderer;
 			theRenderTableContext = ctx;
@@ -216,10 +212,6 @@ class QuickSwingTablePopulation {
 
 		public ComponentEditor<?, ?> getParent() {
 			return theParent.get();
-		}
-
-		public TypeToken<C> getValueType() {
-			return theValueType;
 		}
 
 		public TabularWidget.TabularContext<R> getContext() {
@@ -326,7 +318,7 @@ class QuickSwingTablePopulation {
 		}
 
 		ObservableValue<String> getTooltipValue() {
-			return theTooltip == null ? ObservableValue.of(String.class, null) : theTooltip;
+			return theTooltip == null ? ObservableValue.of(null) : theTooltip;
 		}
 	}
 
@@ -344,15 +336,15 @@ class QuickSwingTablePopulation {
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
 			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
-			super(quickParent, column.getType(), column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
+			super(quickParent, column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
 			theColumn = column;
 
 			if (theColumn.getEditing() != null) {
 				if (swingEditor != null) {
 					swingEditor.populate(new SwingCellPopulator<>(this, false), theColumn.getEditing().getEditor());
 				}
-				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
-					theColumn.getType(), theColumn.getEditing().reporting().getPosition().toShortString());
+				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(
+					theColumn.getEditing().reporting().getPosition().toShortString());
 				theColumn.getEditing().setEditorContext(theEditContext);
 			} else
 				theEditContext = null;
@@ -890,7 +882,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public ObservableValue<String> getTooltip() {
-			return ObservableValue.of(String.class, null);
+			return ObservableValue.of(null);
 		}
 
 		@Override
@@ -1155,7 +1147,7 @@ class QuickSwingTablePopulation {
 			if (availableValues instanceof ObservableCollection)
 				values = (ObservableCollection<C>) availableValues;
 			else
-				values = ObservableCollection.of(theRenderer.getValueType(), (List<C>) availableValues);
+				values = ObservableCollection.of((List<C>) availableValues);
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues, modify);
 			else {
@@ -1405,12 +1397,12 @@ class QuickSwingTablePopulation {
 
 			ButtonRenderEditor(String buttonText, ObservableCellRenderer<R, C> cellRenderer) {
 				super(cellRenderer);
-				theButtonText = ObservableValue.of(String.class, buttonText);
+				theButtonText = ObservableValue.of(buttonText);
 			}
 
 			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor, B editorComponent) {
 				super(cellEditor, editorComponent);
-				theButtonText = ObservableValue.of(String.class, buttonText);
+				theButtonText = ObservableValue.of(buttonText);
 			}
 
 			@Override
@@ -1435,7 +1427,7 @@ class QuickSwingTablePopulation {
 					theDisabled = disabled;
 				else {
 					ObservableValue<String> old = theDisabled;
-					theDisabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, old, disabled);
+					theDisabled = ObservableValue.firstValue(msg -> msg != null, () -> null, old, disabled);
 				}
 				return (E) this;
 			}
@@ -1498,7 +1490,7 @@ class QuickSwingTablePopulation {
 	static <R> QuickSwingTableAction<R, ValueAction.Single<R>> interpretValueAction(ValueAction.Single.Interpreted<R, ?> interpreted,
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 		return (table, action) -> {
-			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
+			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>();
 			action.setActionContext(ctx);
 			long[] lastUpdate = new long[1];
 			table.withAction(null, LambdaUtils.printableConsumer(v -> {
@@ -1538,7 +1530,7 @@ class QuickSwingTablePopulation {
 	static <R> QuickSwingTableAction<R, ValueAction.Multi<R>> interpretMultiValueAction(ValueAction.Multi.Interpreted<R, ?> interpreted,
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 		return (table, action) -> {
-			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>(action.getValueType());
+			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>();
 			action.setActionContext(ctx);
 			Supplier<List<R>>[] actionValues = new Supplier[1];
 			long[] lastUpdate = new long[1];

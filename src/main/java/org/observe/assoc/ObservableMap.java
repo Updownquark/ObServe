@@ -24,7 +24,6 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
@@ -41,8 +40,6 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * A map with observable capabilities
  *
@@ -50,32 +47,6 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values this map stores
  */
 public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, CausableChanging {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
-
-	/** The wildcard {@link java.util.Map.Entry Map.Entry} {@link TypeToken} */
-	static TypeToken<Map.Entry<?, ?>> ENTRY_TYPE = TypeTokens.get().keyFor(Map.Entry.class).wildCard();
-
-	/** @return The type of keys this map uses */
-	TypeToken<K> getKeyType();
-
-	/** @return The type of values this map stores */
-	TypeToken<V> getValueType();
-
-	/** @return The type of elements in the entry set. Should be cached, as type tokens aren't cheap to build. */
-	TypeToken<Map.Entry<K, V>> getEntryType();
-
-	/**
-	 * Builds an {@link #getEntryType() entry type} from the key and value types
-	 *
-	 * @param keyType The key type of the map
-	 * @param valueType The value type of the map
-	 * @return The entry type for the map
-	 */
-	static <K, V> TypeToken<Map.Entry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return TypeTokens.get().keyFor(Map.Entry.class).parameterized(keyType, valueType);
-	}
-
 	@Override
 	abstract boolean isLockSupported();
 
@@ -158,15 +129,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
 	default SettableElement<V> observe(K key) {
-		if (!keySet().belongs(key))
-			return SettableElement.empty(getValueType());
 		class MapValueObservable extends AbstractIdentifiable implements SettableElement<V> {
 			private ElementId thePreviousElement;
-
-			@Override
-			public TypeToken<V> getType() {
-				return getValueType();
-			}
 
 			@Override
 			public ElementId getElementId() {
@@ -305,11 +269,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					@Override
 					public Object createIdentity() {
 						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "enabled");
-					}
-
-					@Override
-					public TypeToken<String> getType() {
-						return TypeTokens.get().STRING;
 					}
 
 					@Override
@@ -509,23 +468,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	/**
 	 * Creates a builder to build an unconstrained {@link ObservableMap}
 	 *
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
 	 * @return The builder to build the map
 	 */
-	static <K, V> Builder<K, V, ?> build(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new Builder<>(keyType, valueType, "ObservableMap");
-	}
-
-	/**
-	 * Creates a builder to build an unconstrained {@link ObservableMap}
-	 *
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
-	 * @return The builder to build the map
-	 */
-	static <K, V> Builder<K, V, ?> build(Class<K> keyType, Class<V> valueType) {
-		return build(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
+	static <K, V> Builder<K, V, ?> build() {
+		return new Builder<>("ObservableMap");
 	}
 
 	/**
@@ -536,40 +484,30 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <B> The sub-type of the builder
 	 */
 	class Builder<K, V, B extends Builder<K, V, ? extends B>> extends ObservableCollectionBuilder.CollectionBuilderImpl<K, B> {
-		private final TypeToken<V> theValueType;
-
-		Builder(TypeToken<K> keyType, TypeToken<V> valueType, String initDescrip) {
-			super(keyType, initDescrip);
-			theValueType = valueType;
-		}
-
-		protected TypeToken<V> getValueType() {
-			return theValueType;
+		Builder(String initDescrip) {
+			super(initDescrip);
 		}
 
 		public ObservableMap<K, V> buildMap() {
 			Comparator<? super K> compare = getSorting();
-			ObservableCollectionBuilder<Entry<K, V>, ?> entryBuilder = ObservableCollection
-				.build(buildEntryType(getType(), theValueType))//
+			ObservableCollectionBuilder<Entry<K, V>, ?> entryBuilder = ObservableCollection.<Entry<K, V>> build()//
 				.withBacking((BetterList<Map.Entry<K, V>>) (BetterList<?>) getBacking())//
 				.withDescription(getDescription());
 			entryBuilder.withElementsBySource(getElementsBySource()).withSourceElements(getSourceElements());
 			entryBuilder.withCollectionLocking(getLocker());
 			if (compare != null)
 				entryBuilder = entryBuilder.sortBy((entry1, entry2) -> compare.compare(entry1.getKey(), entry2.getKey()));
-			return new DefaultObservableMap<>(getType(), theValueType, getEquivalence(), entryBuilder.build());
+			return new DefaultObservableMap<>(getEquivalence(), entryBuilder.build());
 		}
 	}
 
 	/**
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
-	 * @param keyType The key type for the map
-	 * @param valueType The value type for the map
 	 * @return An immutable, empty map with the given types
 	 */
-	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new EmptyObservableMap<>(keyType, valueType);
+	static <K, V> ObservableMap<K, V> empty() {
+		return new EmptyObservableMap<>();
 	}
 
 	/**
@@ -606,11 +544,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public boolean isContentControlled() {
 			return true;
-		}
-
-		@Override
-		public TypeToken<V> getType() {
-			return getMap().getValueType();
 		}
 
 		@Override
@@ -656,7 +589,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <V> The value type of the map
 	 */
 	class ObservableEntrySet<K, V> extends BetterMap.BetterEntrySet<K, V> implements ObservableSet<Map.Entry<K, V>> {
-		private TypeToken<Map.Entry<K, V>> theType;
 		private Equivalence<Map.Entry<K, V>> theEquivalence;
 
 		public ObservableEntrySet(ObservableMap<K, V> map) {
@@ -674,13 +606,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public TypeToken<Map.Entry<K, V>> getType() {
-			if (theType == null)
-				theType = buildEntryType(getMap().getKeyType(), getMap().getValueType());
-			return theType;
-		}
-
-		@Override
 		public boolean isContentControlled() {
 			return getMap().keySet().isContentControlled();
 		}
@@ -688,7 +613,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public Equivalence<? super Map.Entry<K, V>> equivalence() {
 			if (theEquivalence == null)
-				theEquivalence = getMap().keySet().equivalence().map((Class<Map.Entry<K, V>>) (Class<?>) Map.Entry.class, null, //
+				theEquivalence = getMap().keySet().equivalence().map(null, //
 					key -> new SimpleMapEntry<>(key, null, false), Map.Entry::getKey);
 			return theEquivalence;
 		}
@@ -758,17 +683,15 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <V> The value type of the map
 	 */
 	class DefaultObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
-		private final TypeToken<V> theValueType;
 		private final ObservableSet<Map.Entry<K, V>> theEntries;
 		private final ObservableSet<K> theKeySet;
 		private ObservableCollection<V> theValues;
 		private ObservableSet<Map.Entry<K, V>> theExposedEntries;
 
-		public DefaultObservableMap(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
+		public DefaultObservableMap(Equivalence<? super K> keyEquivalence,
 			ObservableCollection<Map.Entry<K, V>> entries) {
 			if (keyEquivalence == null)
 				throw new NullPointerException();
-			theValueType = valueType;
 			if (keyEquivalence instanceof Equivalence.SortedEquivalence) {
 				Comparator<? super K> compare = ((Equivalence.SortedEquivalence<? super K>) keyEquivalence).comparator();
 				if (compare == null)
@@ -790,10 +713,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					.collect();
 			} else
 				theEntries = entries.flow().distinct().collect();
-			theKeySet = theEntries.flow()
-				.transformEquivalent(keyType,
-					tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
-					.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
+			theKeySet = theEntries.flow().<K> transformEquivalent(tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
+				.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
 				.collectPassive();
 		}
 
@@ -815,21 +736,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theEntries.lock(write, cause);
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theKeySet.getType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theValueType;
-		}
-
-		@Override
-		public TypeToken<Map.Entry<K, V>> getEntryType() {
-			return theEntries.getType();
 		}
 
 		@Override
@@ -960,15 +866,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 				@Override
 				public String isAcceptable(V value) {
-					if (value != null && !TypeTokens.get().isInstance(theValueType, value))
-						return StdMsg.BAD_TYPE;
 					return null;
 				}
 
 				@Override
 				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (value != null && !TypeTokens.get().isInstance(theValueType, value))
-						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 					entryEl.get().setValue(value);
 				}
 
@@ -991,9 +893,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public String canPut(K key, V value) {
-			if (!keySet().belongs(key))
-				return StdMsg.ILLEGAL_ELEMENT;
-			else if (containsKey(key))
+			if (containsKey(key))
 				return StdMsg.ELEMENT_EXISTS;
 			else
 				return theEntries.canAdd(new MapEntry(key, value));
@@ -1091,17 +991,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <V> The value type of the map
 	 */
 	class EmptyObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
-		private final TypeToken<K> theKeyType;
-		private final TypeToken<V> theValueType;
-		private TypeToken<Map.Entry<K, V>> theEntryType;
 		private final ObservableSet<K> theKeySet;
 		private ObservableCollection<V> theValues;
 		private ObservableSet<Map.Entry<K, V>> theEntries;
 
-		public EmptyObservableMap(TypeToken<K> keyType, TypeToken<V> valueType) {
-			theKeyType = keyType;
-			theValueType = valueType;
-			theKeySet = ObservableCollection.of(keyType).flow().distinct().collect();
+		public EmptyObservableMap() {
+			theKeySet = ObservableSet.<K> of();
 		}
 
 		@Override
@@ -1112,23 +1007,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public Object createIdentity() {
 			return Identifiable.idFor(this, this::toString, this::hashCode, other -> other instanceof EmptyCollection);
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theKeyType;
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theValueType;
-		}
-
-		@Override
-		public TypeToken<Map.Entry<K, V>> getEntryType() {
-			if (theEntryType == null)
-				theEntryType = buildEntryType(theKeyType, theValueType);
-			return theEntryType;
 		}
 
 		@Override
@@ -1261,21 +1139,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public Object getIdentity() {
 			return theWrapped.getIdentity();
-		}
-
-		@Override
-		public TypeToken<K> getKeyType() {
-			return theWrapped.getKeyType();
-		}
-
-		@Override
-		public TypeToken<V> getValueType() {
-			return theWrapped.getValueType();
-		}
-
-		@Override
-		public TypeToken<Map.Entry<K, V>> getEntryType() {
-			return theWrapped.getEntryType();
 		}
 
 		@Override

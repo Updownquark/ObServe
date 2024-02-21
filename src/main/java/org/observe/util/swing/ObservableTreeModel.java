@@ -26,7 +26,6 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.IdentityKey;
 import org.qommons.ThreadConstraint;
@@ -39,8 +38,6 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A swing tree model well suited to visualizing observable structures
@@ -56,8 +53,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	/** @param rootValue The root of the model */
 	protected ObservableTreeModel(T rootValue) {
-		this(ObservableValue.<T> of(rootValue == null ? (TypeToken<T>) (TypeToken<?>) TypeTokens.get().OBJECT
-			: (TypeToken<T>) TypeTokens.get().of(rootValue.getClass()), rootValue));
+		this(ObservableValue.of(rootValue));
 	}
 
 	/** @param root The observable value for the root of the model */

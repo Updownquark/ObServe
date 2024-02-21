@@ -16,7 +16,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionBuilder.DataControlledCollectionBuilderImpl;
-import org.observe.util.TypeTokens;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
@@ -265,14 +264,14 @@ public class ObservableFile implements BetterFile {
 	@Override
 	public DataControlledCollection<? extends ObservableFile, ?> listFiles() {
 		if (!isDirectory()) {
-			return DataControlledCollection.empty(TypeTokens.get().of(ObservableFile.class));
+			return DataControlledCollection.empty();
 		}
 		DataControlledCollection<? extends ObservableFile, ?> contents = theContents == null ? null : theContents.get();
 		if (contents == null) {
 			synchronized (this) {
 				contents = theContents == null ? null : theContents.get();
 				if (contents == null) {
-					ObservableCollectionBuilder<ObservableFile, ?> builder = ObservableCollection.build(ObservableFile.class)
+					ObservableCollectionBuilder<ObservableFile, ?> builder = ObservableCollection.<ObservableFile> build()
 						.withLocking(theFileSet.getLocking()).withDescription("Directory content of " + getPath());
 					DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?> dataBuilder;
 					dataBuilder = (DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?>) builder
@@ -363,7 +362,7 @@ public class ObservableFile implements BetterFile {
 	 * @return Observable files representing the roots of the given file source
 	 */
 	public static DataControlledCollection<ObservableFile, ?> getRoots(FileDataSource dataSource) {
-		ObservableCollectionBuilder.SortedBuilder<ObservableFile, ?> builder = ObservableCollection.build(ObservableFile.class)
+		ObservableCollectionBuilder.SortedBuilder<ObservableFile, ?> builder = ObservableCollection.<ObservableFile> build()
 			.sortBy(BetterFile.DISTINCT_NUMBER_TOLERANT).withLocking(ObservableFile.getDefaultFileSet().getLocking());
 		DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?> dataBuilder;
 		dataBuilder = (DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?>) builder

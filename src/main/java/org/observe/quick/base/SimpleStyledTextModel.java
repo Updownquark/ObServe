@@ -112,7 +112,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 
 	/** @return The root value for a dynamic styled document containing a {@link SimpleStyledTextModel} */
 	public static ObservableValue<SimpleStyledTextModel> createRoot() {
-		SettableValue<SimpleStyledTextModel> value = SettableValue.build(SimpleStyledTextModel.class).build();
+		SettableValue<SimpleStyledTextModel> value = SettableValue.<SimpleStyledTextModel> build().build();
 		value.set(new Root(value), null);
 		return value.unsettable();
 	}
@@ -139,7 +139,7 @@ public class SimpleStyledTextModel implements CharSequence, Appendable {
 		else
 			theRoot = parent.theRoot;
 		isInBatch = theRoot.isInBatch();
-		theChildren = ObservableCollection.build(SimpleStyledTextModel.class).build();
+		theChildren = ObservableCollection.<SimpleStyledTextModel> build().build();
 		theChildren.onChange(evt -> {
 			switch (evt.getType()) {
 			case add:

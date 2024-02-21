@@ -64,8 +64,6 @@ import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeEntry;
 
-import com.google.common.reflect.TypeToken;
-
 /** Holds default implementation methods and classes for {@link ObservableSet} and {@link DistinctDataFlow} methods */
 public class ObservableSetImpl {
 	private ObservableSetImpl() {
@@ -144,7 +142,7 @@ public class ObservableSetImpl {
 		 */
 		protected DistinctDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Equivalence<? super T> equivalence) {
-			super(source, parent, parent.getTargetType(), equivalence);
+			super(source, parent, equivalence);
 		}
 
 		@Override
@@ -168,10 +166,10 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctTransformOp<>(getSource(), this, target, def);
+			return new DistinctTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
@@ -309,11 +307,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public TypeToken<T> getTargetType() {
-			return theWrapped.getTargetType();
-		}
-
-		@Override
 		public Equivalence<? super T> equivalence() {
 			return theWrapped.equivalence();
 		}
@@ -412,7 +405,7 @@ public class ObservableSetImpl {
 	}
 
 	/**
-	 * Implements {@link DistinctDataFlow#transformEquivalent(TypeToken, Function)}
+	 * Implements {@link DistinctDataFlow#transformEquivalent(Function)}
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <I> The type of the parent flow
@@ -423,12 +416,10 @@ public class ObservableSetImpl {
 		/**
 		 * @param source The source collection
 		 * @param parent The parent flow
-		 * @param target The type of this flow
 		 * @param def The transform definition of this flow
 		 */
-		public DistinctTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Transformation<I, T> def) {
-			super(source, parent, target, def);
+		public DistinctTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, Transformation<I, T> def) {
+			super(source, parent, def);
 		}
 
 		@Override
@@ -447,10 +438,10 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctTransformOp<>(getSource(), this, target, def);
+			return new DistinctTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
@@ -521,10 +512,10 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctDataFlow<E, E, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ReversibleTransformation<E, X>> transform) {
 			ReversibleTransformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctTransformOp<>(getSource(), this, target, def);
+			return new DistinctTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
@@ -667,11 +658,6 @@ public class ObservableSetImpl {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "distinct");
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
 		}
 
 		@Override
@@ -1037,7 +1023,7 @@ public class ObservableSetImpl {
 					T oldValue = theValue;
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
-					//Fire an internal-only event if there's not actually a change
+					// Fire an internal-only event if there's not actually a change
 					ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, oldValue == newActiveValue, causes);
 				} else {
 					theDebug.act("add:no-effect").param("value", theValue).exec();
@@ -1191,7 +1177,7 @@ public class ObservableSetImpl {
 								// So we need to just remove and re-add this element
 								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
 								theAccepter.accept(UniqueElement.this, innerCauses);
-							} else //Fire an internal-only event if there's no actual change
+							} else // Fire an internal-only event if there's no actual change
 								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, oldValue == theValue,
 								innerCauses);
 						} else
@@ -1546,12 +1532,11 @@ public class ObservableSetImpl {
 		private final BetterMap<T, ElementId> theIndex;
 
 		/**
-		 * @param type The type of values in the set
 		 * @param equivalence The equivalence of the set
 		 * @param values The values for the set
 		 */
-		public ConstantObservableSet(TypeToken<T> type, Equivalence<? super T> equivalence, BetterList<? extends T> values) {
-			super(type, values);
+		public ConstantObservableSet(Equivalence<? super T> equivalence, BetterList<? extends T> values) {
+			super(values);
 			theEquivalence = equivalence;
 			theIndex = theEquivalence.createMap();
 			CollectionElement<T> el = getTerminalElement(true);

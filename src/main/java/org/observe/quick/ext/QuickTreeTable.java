@@ -19,15 +19,12 @@ import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
 import org.observe.quick.base.QuickTree;
 import org.observe.quick.base.TabularWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A tree that can display extra information for each node in columns, like a table
@@ -116,9 +113,7 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 			super.doUpdate(env);
 
 			if (theColumns == null)
-				theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
-					QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> parameterized(
-						getValueType(), TypeTokens.get().WILDCARD))//
+				theColumns = ObservableCollection.<QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> build()//
 				.build();
 			syncChildren(getDefinition().getColumns(), theColumns, def -> def.interpret(this), TableColumnSet.Interpreted::updateColumns);
 		}
@@ -149,14 +144,12 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	protected QuickTreeTable(Object id) {
 		super(id);
 
-		theRowIndex = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(TypeTokens.get().INT)).build();
-		theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
-	}
-
-	@Override
-	public TypeToken<BetterList<N>> getRowType() {
-		return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
+		theColumnSets = ObservableCollection.<QuickTableColumn.TableColumnSet<BetterList<N>>> build().build();
+		theColumns = theColumnSets.flow()//
+			.<QuickTableColumn<BetterList<N>, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
+			.collect();
+		theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+		theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	@Override
@@ -189,23 +182,7 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		Interpreted<N> myInterpreted = (Interpreted<N>) interpreted;
-		TypeToken<BetterList<N>> rowType;
-		boolean newType;
-		try {
-			newType = getNodeType() == null || !getNodeType().equals(myInterpreted.getNodeType());
-			rowType = myInterpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not initialized?", e);
-		}
 		super.doUpdate(interpreted);
-		if (newType) {
-			theColumnSets = ObservableCollection.build((Class<TableColumnSet<BetterList<N>>>) (Class<?>) TableColumnSet.class).build();
-			TypeToken<QuickTableColumn<BetterList<N>, ?>> columnType = TypeTokens.get().keyFor(QuickTableColumn.class)//
-				.<QuickTableColumn<BetterList<N>, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
-			theColumns = theColumnSets.flow()//
-				.<QuickTableColumn<BetterList<N>, ?>> flatMap(columnType, columnSet -> columnSet.getColumns().flow())//
-				.collect();
-		}
 		theRowIndexVariable = myInterpreted.getDefinition().getRowIndexVariable();
 		theColumnIndexVariable = myInterpreted.getDefinition().getColumnIndexVariable();
 		CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getIdentity() == i.getIdentity())//
@@ -291,12 +268,12 @@ public class QuickTreeTable<N> extends QuickTree<N> implements TabularWidget<Bet
 	public QuickTreeTable<N> copy(ExElement parent) {
 		QuickTreeTable<N> copy = (QuickTreeTable<N>) super.copy(parent);
 
-		copy.theColumnSets = ObservableCollection.build(theColumnSets.getType()).build();
+		copy.theColumnSets = ObservableCollection.<QuickTableColumn.TableColumnSet<BetterList<N>>> build().build();
 		copy.theColumns = copy.theColumnSets.flow()//
-			.<QuickTableColumn<BetterList<N>, ?>> flatMap(theColumns.getType(), columnSet -> columnSet.getColumns().flow())//
+			.<QuickTableColumn<BetterList<N>, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 			.collect();
-		copy.theRowIndex = SettableValue.build(theRowIndex.getType()).build();
-		copy.theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+		copy.theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
 
 		for (TableColumnSet<BetterList<N>> columnSet : theColumnSets)
 			copy.theColumnSets.add(columnSet.copy(this));

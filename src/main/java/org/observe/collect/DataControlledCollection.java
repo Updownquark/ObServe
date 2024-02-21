@@ -5,11 +5,9 @@ import java.util.Collections;
 import org.observe.ObservableValue;
 import org.qommons.ex.CheckedExceptionWrapper;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableCollection} backed by data from another source
- * 
+ *
  * @param <E> The type of the values in the collection
  * @param <V> The type of the source data
  */
@@ -17,11 +15,10 @@ public interface DataControlledCollection<E, V> extends ObservableCollection<E> 
 	/**
 	 * @param <E> The type of the collection values
 	 * @param <V> The type of the source data (unused)
-	 * @param type The type of the collection values
 	 * @return A {@link DataControlledCollection} that is always empty
 	 */
-	public static <E, V> DataControlledCollection<E, V> empty(TypeToken<E> type) {
-		return new ObservableCollectionBuilder.DataControlledCollectionBuilderImpl<>(ObservableCollection.of(type),
+	public static <E, V> DataControlledCollection<E, V> empty() {
+		return new ObservableCollectionBuilder.DataControlledCollectionBuilderImpl<>(ObservableCollection.<E> of(),
 			Collections::<V> emptyList).build(v -> null, null);
 	}
 
@@ -53,7 +50,7 @@ public interface DataControlledCollection<E, V> extends ObservableCollection<E> 
 
 	/**
 	 * A {@link DataControlledCollection} that is also an {@link ObservableSet}
-	 * 
+	 *
 	 * @param <E> The type of the values in the set
 	 * @param <V> The type of the source data
 	 */
@@ -64,7 +61,7 @@ public interface DataControlledCollection<E, V> extends ObservableCollection<E> 
 
 	/**
 	 * A {@link DataControlledCollection} that is also an {@link ObservableSortedCollection}
-	 * 
+	 *
 	 * @param <E> The type of the values in the collection
 	 * @param <V> The type of the source data
 	 */
@@ -75,7 +72,7 @@ public interface DataControlledCollection<E, V> extends ObservableCollection<E> 
 
 	/**
 	 * A {@link DataControlledCollection} that is also an {@link ObservableSortedSet}
-	 * 
+	 *
 	 * @param <E> The type of the values in the set
 	 * @param <V> The type of the source data
 	 */

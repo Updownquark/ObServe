@@ -23,7 +23,6 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -230,9 +229,9 @@ public interface QuickEventListener extends ExElement {
 
 			/** Creates context with default value containers */
 			public Default() {
-				isAltPressed = SettableValue.build(boolean.class).withValue(false).build();
-				isCtrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				isShiftPressed = SettableValue.build(boolean.class).withValue(false).build();
+				isAltPressed = SettableValue.<Boolean> build().withValue(false).build();
+				isCtrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				isShiftPressed = SettableValue.<Boolean> build().withValue(false).build();
 			}
 
 			@Override
@@ -295,10 +294,9 @@ public interface QuickEventListener extends ExElement {
 		protected Abstract(Object id) {
 			super(id);
 			theFilters = new ArrayList<>();
-			isAltPressed = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			isCtrlPressed = SettableValue.build(isAltPressed.getType()).build();
-			isShiftPressed = SettableValue.build(isAltPressed.getType()).build();
+			isAltPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isCtrlPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isShiftPressed = SettableValue.<SettableValue<Boolean>> build().build();
 		}
 
 		@Override
@@ -377,9 +375,9 @@ public interface QuickEventListener extends ExElement {
 			copy.theFilters = new ArrayList<>();
 			for (EventFilter filter : theFilters)
 				copy.theFilters.add(filter.copy(copy));
-			copy.isAltPressed = SettableValue.build(isAltPressed.getType()).build();
-			copy.isCtrlPressed = SettableValue.build(isAltPressed.getType()).build();
-			copy.isShiftPressed = SettableValue.build(isAltPressed.getType()).build();
+			copy.isAltPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isCtrlPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isShiftPressed = SettableValue.<SettableValue<Boolean>> build().build();
 
 			return copy;
 		}

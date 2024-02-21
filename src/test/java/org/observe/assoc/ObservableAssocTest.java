@@ -1,7 +1,5 @@
 package org.observe.assoc;
 
-import static org.observe.collect.ObservableCollectionsTest.intType;
-
 import java.time.Duration;
 import java.util.*;
 import java.util.function.BiFunction;
@@ -17,21 +15,18 @@ import org.observe.assoc.impl.DefaultObservableGraph;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
-import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.testing.QommonsTestUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.Testable;
 
-import com.google.common.reflect.TypeToken;
-
 /** Runs tests on the data structures built on top of observable collections. */
 public class ObservableAssocTest {
-	/** Tests the default multi-map produced by {@link ObservableMultiMap#build(TypeToken, TypeToken)} */
+	/** Tests the default multi-map produced by {@link ObservableMultiMap#build()} */
 	@Test
 	public void testDefaultMultiMap() {
-		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.build(intType, intType).build(null);
+		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.<Integer, Integer> build().build(null);
 		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>("keys", map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
 
@@ -77,8 +72,8 @@ public class ObservableAssocTest {
 	/** Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#groupBy(Function, BiFunction)} */
 	@Test
 	public void testGroupedMultiMap() {
-		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(intType, v -> v % 9, null).gather();
+		ObservableCollection<Integer> list = ObservableCollection.create();
+		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(v -> v % 9, null).gather();
 
 		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>("keys", map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
@@ -117,10 +112,10 @@ public class ObservableAssocTest {
 	/** Tests {@link DefaultObservableGraph} */
 	@Test
 	public void testGraph() {
-		DefaultObservableGraph<Integer, Integer> graph = new DefaultObservableGraph<>(intType, intType);
+		DefaultObservableGraph<Integer, Integer> graph = new DefaultObservableGraph<>();
 		ObservableCollectionTester<Integer> nodeChecker = new ObservableCollectionTester<>("nodes", graph.getNodeValues());
 		ObservableCollectionTester<Integer> edgeChecker = new ObservableCollectionTester<>("edges",
-			graph.getEdges().flow().flattenValues(intType, e -> e).collect());
+			graph.getEdges().flow().flattenValues(e -> e).collect());
 		Node<Integer, Integer> node0 = graph.addNode(0);
 		nodeChecker.add(0);
 		nodeChecker.check();
@@ -206,7 +201,7 @@ public class ObservableAssocTest {
 
 			ValueHolder(int id, TestHelper helper) {
 				this.id = id;
-				values = ObservableCollection.build(int.class).build();
+				values = ObservableCollection.<Integer> build().build();
 				int initValues = helper.getInt(0, 10);
 				for (int i = 0; i < initValues; i++)
 					values.add(helper.getInt(0, 20)); // Narrow range so there's lots of grouping
@@ -252,13 +247,11 @@ public class ObservableAssocTest {
 		}
 
 		final SimpleObservable<Void> testUntil = SimpleObservable.build().build();
-		final ObservableCollection<ValueHolder> holders = ObservableCollection.build(ValueHolder.class).build();
-		private final TypeToken<BiTuple<ValueHolder, Integer>> tupleType = TypeTokens.get().keyFor(BiTuple.class)
-			.<BiTuple<ValueHolder, Integer>> parameterized(ValueHolder.class, Integer.class);
+		final ObservableCollection<ValueHolder> holders = ObservableCollection.<ValueHolder> build().build();
 		final ObservableMultiMap<Integer, ValueHolder> test = holders.flow()
-			.flatMap(tupleType, holder -> holder.values.flow().map(tupleType, v -> new BiTuple<>(holder, v)))//
-			.groupBy(Integer.class, tuple -> tuple.getValue2(), Integer::compare, null)//
-			.withValues(values -> values.map(ValueHolder.class, tuple -> tuple.getValue1()).distinctSorted(ValueHolder::compareTo, false))//
+			.<BiTuple<ValueHolder, Integer>> flatMap(holder -> holder.values.flow().map(v -> new BiTuple<>(holder, v)))//
+			.groupBy(tuple -> tuple.getValue2(), Integer::compare, null)//
+			.withValues(values -> values.map(tuple -> tuple.getValue1()).distinctSorted(ValueHolder::compareTo, false))//
 			.gather();
 		int expectedValueSize;
 		final SortedMap<Integer, SortedMap<ValueHolder, Integer>> expected = new TreeMap<>();

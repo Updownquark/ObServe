@@ -22,11 +22,8 @@ import java.util.function.Supplier;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.*;
 import org.qommons.collect.ListenerList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A value holder that can notify listeners when the value changes. The {@link #changes()} observable will always notify subscribers with an
@@ -35,11 +32,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T>
-extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable, CausableChanging {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
-
+public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Identifiable, Eventable, CausableChanging {
 	/** @return The current value of this observable */
 	@Override
 	T get();
@@ -204,11 +197,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ObservableValueEvent<T>> eventMap) {
 		return new WrappingObservableValue<T, T>(this) {
 			@Override
-			public TypeToken<T> getType() {
-				return getWrapped().getType();
-			}
-
-			@Override
 			public CoreId getCoreId() {
 				return getWrapped().getCoreId();
 			}
@@ -235,10 +223,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
 	 * combination use cases.
 	 * </p>
-	 * <p>
-	 * If dynamic {@link #getType() types} are important, it is preferred to use {@link #transform(TypeToken, Function)}. If no target type
-	 * is supplied (as with this method), one will be inferred, but this is not always reliable, especially with lambdas.
-	 * </p>
 	 *
 	 * @param <R> The type for the combined value
 	 * @param transform Determines how this value and any other arguments are to be combined
@@ -246,23 +230,8 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @see Transformation for help using the API
 	 */
 	default <R> ObservableValue<R> transform(Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
-		return transform((TypeToken<R>) null, transform);
-	}
-
-	/**
-	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
-	 * combination use cases.
-	 *
-	 * @param <R> The type for the combined value
-	 * @param targetType The type for the transformed value
-	 * @param transform Determines how this value and any other arguments are to be combined
-	 * @return The transformed value
-	 * @see Transformation for help using the API
-	 */
-	default <R> ObservableValue<R> transform(TypeToken<R> targetType, //
-		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
 		Transformation<T, R> def = transform.apply(new Transformation.TransformationPrecursor<>());
-		if (def.getArgs().isEmpty() && getType().equals(targetType) && LambdaUtils.isTrivial(def.getCombination()))
+		if (def.getArgs().isEmpty() && LambdaUtils.isTrivial(def.getCombination()))
 			return (ObservableValue<R>) this;
 		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
 		argValues[0] = this;
@@ -273,22 +242,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 			argValues[i] = arg;
 			otherArgs.put(arg, i - 1);
 		}
-		return new TransformedObservableValue<>(targetType, this, def);
-	}
-
-	/**
-	 * Transforms this value into a derived value, potentially including other sources as well. This method satisfies both mapping and
-	 * combination use cases.
-	 *
-	 * @param <R> The type for the combined value
-	 * @param targetType The type for the transformed value
-	 * @param transform Determines how this value and any other arguments are to be combined
-	 * @return The transformed value
-	 * @see Transformation for help using the API
-	 */
-	default <R> ObservableValue<R> transform(Class<R> targetType, //
-		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
-		return transform(targetType == null ? null : TypeTokens.get().of(targetType), transform);
+		return new TransformedObservableValue<>(this, def);
 	}
 
 	/**
@@ -296,8 +250,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Composes this observable into another observable that depends on this one
 	 * </p>
 	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <R> The type of the new observable
@@ -310,44 +263,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 
 	/**
 	 * <p>
-	 * Composes this observable into another observable that depends on this one
-	 * </p>
-	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
-	 * </p>
-	 *
-	 * @param <R> The type of the new observable
-	 * @param type The run-time type of the new observable
-	 * @param function The function to apply to this observable's value
-	 * @return The new observable whose value is a function of this observable's value
-	 */
-	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function) {
-		return map(type, function, null);
-	}
-
-	/**
-	 * <p>
-	 * Composes this observable into another observable that depends on this one
-	 * </p>
-	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
-	 * </p>
-	 *
-	 * @param <R> The type of the new observable
-	 * @param type The run-time type of the new observable
-	 * @param function The function to apply to this observable's value
-	 * @return The new observable whose value is a function of this observable's value
-	 */
-	default <R> ObservableValue<R> map(Class<R> type, Function<? super T, R> function) {
-		return map(type == null ? null : TypeTokens.get().of(type), function);
-	}
-
-	/**
-	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <R> The type of the new observable
@@ -356,8 +272,8 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Consumer<XformOptions> options) {
-		return transform(type, tx -> {
+	default <R> ObservableValue<R> map(Function<? super T, R> function, Consumer<XformOptions> options) {
+		return transform(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.map(function);
@@ -379,8 +295,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Composes this observable into another observable that depends on this one and one other
 	 * </p>
 	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <U> The type of the other argument observable
@@ -390,7 +305,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	default <U, R> ObservableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg) {
-		return combine(null, function, arg, null);
+		return combine(function, arg, null);
 	}
 
 	/**
@@ -398,8 +313,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Composes this observable into another observable that depends on this one and one other
 	 * </p>
 	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <U> The type of the other argument observable
@@ -410,9 +324,9 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
-	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> ObservableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		Consumer<XformOptions> options) {
-		return transform(type, tx -> {
+		return transform(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.combineWith(arg).combine(function);
@@ -424,8 +338,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Composes this observable into another observable that depends on this one and two others
 	 * </p>
 	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <U> The type of the first other argument observable
@@ -438,7 +351,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 */
 	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3) {
-		return combine(null, function, arg2, arg3, null);
+		return combine(function, arg2, arg3, null);
 	}
 
 	/**
@@ -446,8 +359,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * Composes this observable into another observable that depends on this one and two others
 	 * </p>
 	 * <p>
-	 * This method is supported for compatibility, but {@link #transform(TypeToken, Function)} is a more flexible method for combining
-	 * values
+	 * This method is supported for compatibility, but {@link #transform(Function)} is a more flexible method for combining values
 	 * </p>
 	 *
 	 * @param <U> The type of the first other argument observable
@@ -460,9 +372,9 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
-	default <U, V, R> ObservableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
+	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, Consumer<XformOptions> options) {
-		return transform(type, tx -> {
+		return transform(tx -> {
 			if (options != null)
 				options.accept(tx);
 			return tx.combineWith(arg2).combineWith(arg3).combine(function);
@@ -506,79 +418,36 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	}
 
 	/**
-	 * A shortened version of {@link #of(TypeToken, Object)}. The type of the object will be value's class. This is not always a good
-	 * idea. If the variable passed to this method may have a value that is a subclass of the variable's type, there may be unintended
-	 * consequences of using this method. Also, the type cannot be derived if the value is null, so an {@link IllegalArgumentException} will
-	 * be thrown in this case.
-	 *
-	 * In general, this shorthand method should only be used if the value is a literal or a newly constructed value.
-	 *
-	 * @param <X> The type of the value to wrap
+	 * @param <X> The compile-time type of the value to wrap
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
 	public static <X> ObservableValue<X> of(X value) {
-		if (value == null)
-			throw new IllegalArgumentException("Cannot call constant(value) with a null value.  Use constant(TypeToken<X>, X).");
-		return new ConstantObservableValue<>(TypeTokens.get().of((Class<X>) value.getClass()), value);
+		return new ConstantObservableValue<>(value);
 	}
 
 	/**
 	 * @param <X> The compile-time type of the value to wrap
-	 * @param type The run-time type of the value to wrap
-	 * @param value The value to wrap
-	 * @return An observable that always returns the given value
-	 */
-	public static <X> ObservableValue<X> of(Class<X> type, X value) {
-		return new ConstantObservableValue<>(TypeTokens.get().of(type), value);
-	}
-
-	/**
-	 * @param <X> The compile-time type of the value to wrap
-	 * @param type The run-time type of the value to wrap
-	 * @param value The value to wrap
-	 * @return An observable that always returns the given value
-	 */
-	public static <X> ObservableValue<X> of(TypeToken<X> type, X value) {
-		return new ConstantObservableValue<>(type, value);
-	}
-
-	/**
-	 * @param <X> The compile-time type of the value to wrap
-	 * @param type The run-time type of the value to wrap
 	 * @param value Supplies the value for the observable
 	 * @param stamp The stamp for the synthetic value
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> SyntheticObservable<X> of(Class<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
-		return of(TypeTokens.get().of(type), value, stamp, changes);
+	public static <X> SyntheticObservable<X> of(Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
+		return of(value, stamp, changes, () -> Identifiable.wrap(changes.getIdentity(), "synthetic", value));
 	}
 
 	/**
 	 * @param <X> The compile-time type of the value to wrap
-	 * @param type The run-time type of the value to wrap
-	 * @param value Supplies the value for the observable
-	 * @param stamp The stamp for the synthetic value
-	 * @param changes The observable that signals that the value may have changed
-	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
-	 */
-	public static <X> SyntheticObservable<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
-		return of(type, value, stamp, changes, () -> Identifiable.wrap(changes.getIdentity(), "synthetic", value));
-	}
-
-	/**
-	 * @param <X> The compile-time type of the value to wrap
-	 * @param type The run-time type of the value to wrap
 	 * @param value Supplies the value for the observable
 	 * @param stamp The stamp for the synthetic value
 	 * @param changes The observable that signals that the value may have changed
 	 * @param identity The identity for the observable
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> SyntheticObservable<X> of(TypeToken<X> type, Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes,
+	public static <X> SyntheticObservable<X> of(Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes,
 		Supplier<?> identity) {
-		return new SyntheticObservable<>(type, value, stamp, changes, identity);
+		return new SyntheticObservable<>(value, stamp, changes, identity);
 	}
 
 	/**
@@ -599,12 +468,10 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov,
 		Supplier<? extends T> defaultValue) {
 		if (ov instanceof ConstantObservableValue) {
-			TypeToken<T> vType = (TypeToken<T>) ov.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			ObservableValue<? extends T> v = ov.get();
 			if (v == null)
-				return ObservableValue.of(vType, defaultValue == null ? null : defaultValue.get());
-			if (v.getType().equals(vType))
-				return (ObservableValue<T>) v;
+				return ObservableValue.of(defaultValue == null ? null : defaultValue.get());
+			return (ObservableValue<T>) v;
 		}
 		return new FlattenedObservableValue<>(ov, defaultValue);
 	}
@@ -678,7 +545,7 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
 	 *
 	 * <code>
-	 * 	{@link ObservableCollection#of(TypeToken, Object...) ObservableCollection.of(type, values)}.collect()
+	 * 	{@link ObservableCollection#of(Object...) ObservableCollection.of(type, values)}.collect()
 	 * {@link ObservableCollection#observeFind(Predicate) .observeFind(test, ()->null, true)}.find()
 	 * {{@link #map(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
@@ -687,32 +554,30 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * if one of the earlier values is likely to pass and some of the later values are expensive to compute.
 	 *
 	 * @param <T> The compile-time type of the value
-	 * @param type The run-time type of the value
 	 * @param test The test to for the value. If null, <code>v->v!=null</code> will be used
 	 * @param def Supplies a default value in the case that none of the values in the sequence pass the test. If null, a null default will
 	 *        be used.
 	 * @param values The sequence of ObservableValues to get the first passing value of
 	 * @return The observable for the first passing value in the sequence
 	 */
-	public static <T> ObservableValue<T> firstValue(TypeToken<T> type, Predicate<? super T> test, Supplier<? extends T> def,
+	public static <T> ObservableValue<T> firstValue(Predicate<? super T> test, Supplier<? extends T> def,
 		ObservableValue<? extends T>... values) {
-		return new FirstObservableValue<>(type, values, test, def);
+		return new FirstObservableValue<>(values, test, def);
 	}
 
 	/**
 	 * Assembles an observable value, with changes occurring on the basis of changes to a set of components
 	 *
 	 * @param <T> The type of the value to produce
-	 * @param type The type of the new value
 	 * @param value The function to get the new value on demand
 	 * @param components The components whose changes require a new value to be produced
 	 * @return The new observable value
 	 */
-	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, ObservableValue<?>... components) {
+	public static <T> ObservableValue<T> assemble(Supplier<T> value, ObservableValue<?>... components) {
 		Observable<?>[] changes = new Observable[components.length];
 		for (int i = 0; i < components.length; i++)
 			changes[i] = components[i] == null ? null : components[i].noInitChanges();
-		return of(type, value, () -> Stamped.compositeStamp(Arrays.asList(components)), Observable.or(changes));
+		return of(value, () -> Stamped.compositeStamp(Arrays.asList(components)), Observable.or(changes));
 	}
 
 	/**
@@ -878,10 +743,9 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 *
 	 * @param <S> The type of the source value
 	 * @param <T> The type of the transformed value
-	 * @see ObservableValue#transform(TypeToken, Function)
+	 * @see ObservableValue#transform(Function)
 	 */
 	public class TransformedObservableValue<S, T> extends AbstractIdentifiable implements ObservableValue<T> {
-		private final TypeToken<T> theType;
 		private final ObservableValue<S> theSource;
 		private final Transformation<S, T> theTransformation;
 		private final Transformation.Engine<S, T> theEngine;
@@ -891,13 +755,10 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theObservers;
 
 		/**
-		 * @param type The type for this value
 		 * @param source The source value to be transformed
 		 * @param transformation The transformation to apply to the source value
 		 */
-		public TransformedObservableValue(TypeToken<T> type, ObservableValue<S> source, Transformation<S, T> transformation) {
-			theType = type != null ? type : (TypeToken<T>) TypeToken.of(transformation.getCombination().getClass())
-				.resolveType(BiFunction.class.getTypeParameters()[1]);
+		public TransformedObservableValue(ObservableValue<S> source, Transformation<S, T> transformation) {
 			theSource = source;
 			theTransformation = transformation;
 			theEngine = theTransformation.createEngine(source, Equivalence.DEFAULT);
@@ -1016,11 +877,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theType;
-		}
-
-		@Override
 		public boolean isLockSupported() {
 			return theSource.isLockSupported() || theEngine.isLockSupported();
 		}
@@ -1103,11 +959,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
 		public T get() {
 			return theWrapped.get();
 		}
@@ -1139,11 +990,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 
 		protected Observable<?> getRefresh() {
 			return theRefresh;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
 		}
 
 		@Override
@@ -1286,11 +1132,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return getWrapped().getType();
-		}
-
-		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(getWrapped().getIdentity(), "safe", theThreading);
 		}
@@ -1354,18 +1195,13 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @param <T> The type of this value
 	 */
 	class ConstantObservableValue<T> implements ObservableValue<T> {
-		private final TypeToken<T> theType;
 		private final T theValue;
 
 		private Object theIdentity;
 
-		/**
-		 * @param type The type of this observable value
-		 * @param value This observable value's value
-		 */
-		public ConstantObservableValue(TypeToken<T> type, T value) {
-			theType = type;
-			theValue = TypeTokens.get().cast(type, value);
+		/** @param value This observable value's value */
+		public ConstantObservableValue(T value) {
+			theValue = value;
 		}
 
 		@Override
@@ -1437,11 +1273,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theType;
-		}
-
-		@Override
 		public T get() {
 			return theValue;
 		}
@@ -1453,12 +1284,11 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	}
 
 	/**
-	 * Implements {@link ObservableValue#of(TypeToken, Supplier, LongSupplier, Observable)}
+	 * Implements {@link ObservableValue#of(Supplier, LongSupplier, Observable)}
 	 *
 	 * @param <T> The type of this value
 	 */
 	class SyntheticObservable<T> extends AbstractIdentifiable implements ObservableValue<T> {
-		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theValue;
 		private final LongSupplier theStamp;
 		private final Observable<?> theChanges;
@@ -1466,18 +1296,12 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 		private Object theChangeIdentity;
 		private Object theNoInitChangeIdentity;
 
-		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes,
+		public SyntheticObservable(Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes,
 			Supplier<?> identity) {
-			theType = type;
 			theValue = value;
 			theStamp = stamp;
 			theChanges = changes;
 			theIdentity = identity;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theType;
 		}
 
 		@Override
@@ -1631,11 +1455,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 			}
 
 			@Override
-			public TypeToken<T> getType() {
-				return theValue.getType();
-			}
-
-			@Override
 			public long getStamp() {
 				return theValue.getStamp();
 			}
@@ -1679,7 +1498,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 */
 	class FlattenedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
-		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theDefaultValue;
 		private Object theChangesIdentity;
 		private Object theNoInitChangesIdentity;
@@ -1689,7 +1507,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 			if (value == null)
 				throw new NullPointerException("Null observable");
 			theValue = value;
-			theType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			theDefaultValue = defaultValue;
 		}
 
@@ -1709,27 +1526,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 			if (wrapped != null)
 				stamp = Stamped.compositeStamp(stamp, wrapped.getStamp());
 			return stamp;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			if (theType != null)
-				return theType;
-			ObservableValue<? extends T> outerVal = theValue.get();
-			if (outerVal == null)
-				throw new IllegalStateException("Flattened observable is null and no type given: " + theValue);
-			return (TypeToken<T>) outerVal.getType();
-		}
-
-		/** @return The type of the currently held observable */
-		public TypeToken<? extends T> getDeepType() {
-			ObservableValue<? extends T> inner = theValue.get();
-			if (inner == null)
-				return getType();
-			else if (inner instanceof FlattenedObservableValue)
-				return ((FlattenedObservableValue<? extends T>) inner).getDeepType();
-			else
-				return inner.getType();
 		}
 
 		/** @return The supplier of the default value, in case the outer observable is empty */
@@ -1929,21 +1725,19 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	}
 
 	/**
-	 * Implements {@link ObservableValue#firstValue(TypeToken, Predicate, Supplier, ObservableValue...)}
+	 * Implements {@link ObservableValue#firstValue(Predicate, Supplier, ObservableValue...)}
 	 *
 	 * @param <T> The type of the value
 	 */
 	class FirstObservableValue<T> implements ObservableValue<T> {
-		private final TypeToken<T> theType;
 		private final ObservableValue<? extends T>[] theValues;
 		private final Predicate<? super T> theTest;
 		private final Supplier<? extends T> theDefault;
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		protected FirstObservableValue(TypeToken<T> type, ObservableValue<? extends T>[] values, Predicate<? super T> test,
+		protected FirstObservableValue(ObservableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
-			theType = type;
 			theValues = values;
 			theTest = test;
 			theDefault = def;
@@ -1960,11 +1754,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 
 		protected Supplier<? extends T> getDefault() {
 			return theDefault;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theType;
 		}
 
 		@Override
@@ -2197,15 +1986,13 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 	 * @param <T> The type of the value
 	 */
 	abstract class LazyObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
-		private final TypeToken<T> theType;
 		private final Transactable theLock;
 		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
 		volatile boolean isValueUpToDate;
 		volatile T theLastRememberedValue;
 		volatile long theStamp;
 
-		public LazyObservableValue(TypeToken<T> type, Transactable lock) {
-			theType = type;
+		public LazyObservableValue(Transactable lock) {
 			theLock = lock;
 			theStamp = -1;
 			theListeners = ListenerList.build().withInUse(new ListenerList.InUseListener() {
@@ -2231,11 +2018,6 @@ extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Ev
 					}
 				}
 			}).build();
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theType;
 		}
 
 		@Override

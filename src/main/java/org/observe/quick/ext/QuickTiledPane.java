@@ -25,7 +25,6 @@ import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickComboBox;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.TabularWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -186,7 +185,6 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 	}
 
-	private TypeToken<T> theValueType;
 	private ModelComponentId theSelectedVariable;
 	private ModelComponentId theValueIndexVariable;
 	private ModelComponentId theActiveValueVariable;
@@ -201,10 +199,10 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	/** @param id The element ID for this widget */
 	protected QuickTiledPane(Object id) {
 		super(id);
-		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
-			.build();
-		theValueIndex = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
-			.build();
+		theValues = SettableValue.<ObservableCollection<T>> build().build();
+		theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		theValueIndex = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	@Override
@@ -257,19 +255,6 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		super.doUpdate(interpreted);
 
 		QuickTiledPane.Interpreted<T> myInterpreted = (QuickTiledPane.Interpreted<T>) interpreted;
-		TypeToken<T> valueType;
-		try {
-			valueType = myInterpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not initialized?", e);
-		}
-		if (theValueType == null || !theValueType.equals(valueType)) {
-			theValueType = valueType;
-			theValues = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(theValueType)).build();
-			theActiveValue = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theValueType)).build();
-		}
 		theValuesInstantiator = myInterpreted.getValues().instantiate();
 		theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 		theValueIndexVariable = myInterpreted.getDefinition().getValueIndexVariable();
@@ -313,10 +298,10 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	public QuickTiledPane<T> copy(ExElement parent) {
 		QuickTiledPane<T> copy = (QuickTiledPane<T>) super.copy(parent);
 
-		copy.theValues = SettableValue.build(theValues.getType()).build();
-		copy.theActiveValue = SettableValue.build(theActiveValue.getType()).build();
-		copy.isSelected = SettableValue.build(isSelected.getType()).build();
-		copy.theValueIndex = SettableValue.build(theValueIndex.getType()).build();
+		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
+		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theValueIndex = SettableValue.<SettableValue<Integer>> build().build();
 		if (theRenderer != null)
 			copy.theRenderer = theRenderer.copy(copy);
 

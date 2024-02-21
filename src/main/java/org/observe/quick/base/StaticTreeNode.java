@@ -162,7 +162,6 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 	}
 
-	private TypeToken<N> theNodeType;
 	private ModelValueInstantiator<? extends SettableValue<? extends N>> theValueInstantiator;
 
 	private SettableValue<SettableValue<N>> theValue;
@@ -179,15 +178,16 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	}
 
 	private void initChildren() {
-		theInitializedChildren = ObservableCollection.build((Class<TreeModel<? extends N>>) (Class<?>) TreeModel.class).build();
+		theInitializedChildren = ObservableCollection.<TreeModel<? extends N>> build().build();
 		theChildValues = theInitializedChildren.flow()//
-			.flattenValues(theNodeType, model -> model.getValue())//
+			.<N> flattenValues(model -> model.getValue())//
 			.collectActive(isDestroyed().noInitChanges());
 		theChildrenByValue = theInitializedChildren.flow()//
 			.refreshEach(model -> model.getValue().noInitChanges())//
-			.groupBy(theNodeType, model -> model.getValue().get(), null)//
+			.<N> groupBy(model -> model.getValue().get(), null)//
 			.gatherActive(isDestroyed().noInitChanges())//
 			.singleMap(false);
+		theValue = SettableValue.<SettableValue<N>> build().build();
 	}
 
 	@Override
@@ -205,9 +205,9 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		TreeModel<? extends N> child = theChildrenByValue.get(key);
 		if (child == null) {
 			reporting().error("Asked for child of " + key + " but not found here");
-			return ObservableCollection.of(theNodeType);
+			return ObservableCollection.of();
 		}
-		return ((TreeModel<N>) child).getChildren(path.map(path.getType(), p -> p.subList(1, p.size())), until);
+		return ((TreeModel<N>) child).getChildren(path.map(p -> p.subList(1, p.size())), until);
 	}
 
 	@Override
@@ -230,16 +230,6 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 
 		theValueInstantiator = myInterpreted.getValue().instantiate();
 
-		TypeToken<N> nodeType;
-		try {
-			nodeType = (TypeToken<N>) myInterpreted.getNodeType(null);
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not evaluated?", e);
-		}
-		if (theValue == null || !theNodeType.equals(nodeType)) {
-			theNodeType = nodeType;
-			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType)).build();
-		}
 		if (theInitializedChildren == null)
 			initChildren();
 		theInitializedChildren.clear();
@@ -273,7 +263,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	@Override
 	public StaticTreeNode<N> copy(ExElement parent) {
 		StaticTreeNode<N> copy = (StaticTreeNode<N>) super.copy(parent);
-		copy.theValue = SettableValue.build(theValue.getType()).build();
+		copy.theValue = SettableValue.<SettableValue<N>> build().build();
 		copy.theChildren = new ArrayList<>();
 		copy.initChildren();
 		for (TreeModel<? extends N> child : theChildren)

@@ -19,7 +19,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.dbug.Dbug;
-import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.Causable;
@@ -114,8 +113,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		}
 	}
 
-	@SuppressWarnings("rawtypes")
-	private final DbugAnchor<SafeObservableCollection> theAnchor;
 	/** The source collection whose data this safe collection represents */
 	protected final ObservableCollection<E> theCollection;
 	/**
@@ -154,16 +151,12 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threading, Observable<?> until) {
 		if (!threading.supportsInvoke())
 			throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
-		theAnchor = DBUG.instance(this, a -> a//
-			.setField("type", collection.getType(), null)//
-			);
 		theCollection = collection;
 		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threading).build();
 		theThreadConstraint = threading;
 		isLocked = new AtomicBoolean();
 
-		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection
-			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
+		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection.<ElementRef<E>> build()//
 			.withBacking(theSyntheticBacking);
 		builder.withSourceElements(this::_getSourceElements).withElementsBySource(this::_getElementsBySource);
 		theSyntheticCollection = builder.build();
@@ -218,7 +211,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	protected void init(Observable<?> until) {
 		try (Transaction t = theCollection.lock(false, null)) {
 			init(theSyntheticCollection.flow()//
-				.transform(theCollection.getType(), tx -> tx.cache(false).map(ref -> ref.value))
+				.<E> transform(tx -> tx.cache(false).map(ref -> ref.value))
 				.withEquivalence(theCollection.equivalence())//
 				.collectPassive());
 
@@ -296,7 +289,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private void doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (isFinished)
 			return;
-		theAnchor.event("handleEvent", evt);
 		switch (evt.getType()) {
 		case add:
 			theAddedElements.add(evt.getElementId());
@@ -362,7 +354,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				Thread.currentThread().interrupt();
 			}
 		}
-		theAnchor.event("flush", null);
 		isFlushing = true;
 		boolean flushed = false;
 		try (Transaction t = theSyntheticCollection.lock(true, null)) {

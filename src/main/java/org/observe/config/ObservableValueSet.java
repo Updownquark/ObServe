@@ -6,7 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * Represents a collection of values with {@link #create() addition} capability
- * 
+ *
  * @param <E> The type of values in the set
  */
 public interface ObservableValueSet<E> {
@@ -39,7 +39,7 @@ public interface ObservableValueSet<E> {
 
 	/**
 	 * Implements {@link ObservableValueSet#empty(TypeToken)}
-	 * 
+	 *
 	 * @param <E> The type of the set
 	 */
 	class EmptyValueSet<E> implements ObservableValueSet<E> {
@@ -48,7 +48,7 @@ public interface ObservableValueSet<E> {
 
 		public EmptyValueSet(TypeToken<E> type) {
 			theType = ConfiguredValueType.empty(type);
-			theValues = ObservableCollection.of(type);
+			theValues = ObservableCollection.of();
 		}
 
 		@Override

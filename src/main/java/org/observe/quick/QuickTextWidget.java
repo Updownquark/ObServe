@@ -260,8 +260,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		/** @param id The element identifier for this text widget */
 		protected Abstract(Object id) {
 			super(id);
-			isEditable = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			isEditable = SettableValue.<SettableValue<Boolean>> build().build();
 		}
 
 		@Override
@@ -279,14 +278,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			super.doUpdate(interpreted);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
 			if (theFormat == null) {
-				TypeToken<Format<T>> formatType;
-				try {
-					formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(myInterpreted.getValueType());
-				} catch (ExpressoInterpretationException e) {
-					throw new IllegalStateException("Value type not evaluated?", e);
-				}
-				theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
-					formatType)).build();
+				theFormat = SettableValue.<SettableValue<Format<T>>> build().build();
 			}
 
 			theFormatInstantiator = myInterpreted.getFormat() == null ? null : myInterpreted.getFormat().instantiate();
@@ -314,8 +306,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		public QuickTextWidget.Abstract<T> copy(ExElement parent) {
 			QuickTextWidget.Abstract<T> copy = (QuickTextWidget.Abstract<T>) super.copy(parent);
 
-			copy.theFormat = SettableValue.build(theFormat.getType()).build();
-			copy.isEditable = SettableValue.build(isEditable.getType()).build();
+			copy.theFormat = SettableValue.<SettableValue<Format<T>>> build().build();
+			copy.isEditable = SettableValue.<SettableValue<Boolean>> build().build();
 
 			return copy;
 		}

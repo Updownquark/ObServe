@@ -23,7 +23,6 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyledElement;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -298,10 +297,9 @@ public interface ValueAction<T> extends QuickStyledElement {
 		/** @param id The element ID for the action */
 		protected Abstract(Object id) {
 			super(id);
-			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
-			isEnabled = SettableValue.build(theName.getType()).build();
-			theTooltip = SettableValue.build(theName.getType()).build();
+			theName = SettableValue.<SettableValue<String>> build().build();
+			isEnabled = SettableValue.<SettableValue<String>> build().build();
+			theTooltip = SettableValue.<SettableValue<String>> build().build();
 		}
 
 		/** @return The type of values in the widget */
@@ -381,9 +379,9 @@ public interface ValueAction<T> extends QuickStyledElement {
 		public ValueAction.Abstract<T> copy(ExElement parent) {
 			ValueAction.Abstract<T> copy = (ValueAction.Abstract<T>) super.copy(parent);
 
-			copy.theName = SettableValue.build(theName.getType()).build();
-			copy.isEnabled = SettableValue.build(isEnabled.getType()).build();
-			copy.theTooltip = SettableValue.build(theTooltip.getType()).build();
+			copy.theName = SettableValue.<SettableValue<String>> build().build();
+			copy.isEnabled = SettableValue.<SettableValue<String>> build().build();
+			copy.theTooltip = SettableValue.<SettableValue<String>> build().build();
 
 			return copy;
 		}
@@ -411,9 +409,9 @@ public interface ValueAction<T> extends QuickStyledElement {
 				theActionValue = actionValue;
 			}
 
-			/** @param type The type of the value */
-			public Default(TypeToken<T> type) {
-				this(SettableValue.build(type).build());
+			/** Creates the context */
+			public Default() {
+				this(SettableValue.<T> build().build());
 			}
 
 			@Override
@@ -445,9 +443,9 @@ public interface ValueAction<T> extends QuickStyledElement {
 				theActionValue = actionValues;
 			}
 
-			/** @param type The type of the values */
-			public Default(TypeToken<T> type) {
-				this(ObservableCollection.build(type).build());
+			/** Creates the context */
+			public Default() {
+				this(ObservableCollection.<T> build().build());
 			}
 
 			@Override
@@ -572,8 +570,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueVariable = myInterpreted.getDefinition().getValueVariable();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
-			theActionValue = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(myInterpreted.getValueType())).build();
+			theActionValue = SettableValue.<SettableValue<T>> build().build();
 		}
 
 		@Override
@@ -586,7 +583,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		public Single<T> copy(ExElement parent) {
 			Single<T> copy = (Single<T>) super.copy(parent);
 
-			copy.theActionValue = SettableValue.build(theActionValue.getType()).build();
+			copy.theActionValue = SettableValue.<SettableValue<T>> build().build();
 
 			return copy;
 		}
@@ -708,9 +705,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesVariable = myInterpreted.getDefinition().getValuesVariable();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
-			theActionValues = SettableValue.build(
-				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(myInterpreted.getValueType()))
-				.build();
+			theActionValues = SettableValue.<ObservableCollection<T>> build().build();
 		}
 
 		@Override
@@ -724,7 +719,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 		public Multi<T> copy(ExElement parent) {
 			Multi<T> copy = (Multi<T>) super.copy(parent);
 
-			copy.theActionValues = SettableValue.build(theActionValues.getType()).build();
+			copy.theActionValues = SettableValue.<ObservableCollection<T>> build().build();
 
 			return copy;
 		}

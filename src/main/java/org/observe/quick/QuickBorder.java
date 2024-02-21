@@ -27,7 +27,6 @@ import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -280,8 +279,7 @@ public interface QuickBorder extends QuickStyledElement {
 		/** @param id The element identifier for this border */
 		public TitledBorder(Object id) {
 			super(id);
-			theTitle = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
+			theTitle = SettableValue.<SettableValue<String>> build().build();
 		}
 
 		/** @return The title for the border */
@@ -305,8 +303,7 @@ public interface QuickBorder extends QuickStyledElement {
 		@Override
 		protected TitledBorder clone() {
 			TitledBorder copy = (TitledBorder) super.clone();
-			copy.theTitle = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
+			copy.theTitle = SettableValue.<SettableValue<String>> build().build();
 			return copy;
 		}
 

@@ -326,21 +326,21 @@
 			<!-- Equality and inequality operators are different for objects -->
 		</model>
 
-		<action>testComparison(intA, intB, intAltB, intAlteB, intAgtB, intAgteB, intAeqB, intAneqB)</action>
+		<action>testComparison(int.class, intA, intB, intAltB, intAlteB, intAgtB, intAgteB, intAeqB, intAneqB)</action>
 
-		<action>testComparison(dblA, dblB, dblAltB, dblAlteB, dblAgtB, dblAgteB, dblAeqB, dblAneqB)</action>
+		<action>testComparison(double.class, dblA, dblB, dblAltB, dblAlteB, dblAgtB, dblAgteB, dblAeqB, dblAneqB)</action>
 
-		<action>testComparison(longA, longB, longAltB, longAlteB, longAgtB, longAgteB, longAeqB, longAneqB)</action>
+		<action>testComparison(long.class, longA, longB, longAltB, longAlteB, longAgtB, longAgteB, longAeqB, longAneqB)</action>
 
-		<action>testComparison(fltA, fltB, fltAltB, fltAlteB, fltAgtB, fltAgteB, fltAeqB, fltAneqB)</action>
+		<action>testComparison(float.class, fltA, fltB, fltAltB, fltAlteB, fltAgtB, fltAgteB, fltAeqB, fltAneqB)</action>
 
-		<action>testComparison(shortA, shortB, shortAltB, shortAlteB, shortAgtB, shortAgteB, shortAeqB, shortAneqB)</action>
+		<action>testComparison(short.class, shortA, shortB, shortAltB, shortAlteB, shortAgtB, shortAgteB, shortAeqB, shortAneqB)</action>
 
-		<action>testComparison(byteA, byteB, byteAltB, byteAlteB, byteAgtB, byteAgteB, byteAeqB, byteAneqB)</action>
+		<action>testComparison(byte.class, byteA, byteB, byteAltB, byteAlteB, byteAgtB, byteAgteB, byteAeqB, byteAneqB)</action>
 
-		<action>testComparison(charA, charB, charAltB, charAlteB, charAgtB, charAgteB, charAeqB, charAneqB)</action>
+		<action>testComparison(char.class, charA, charB, charAltB, charAlteB, charAgtB, charAgteB, charAeqB, charAneqB)</action>
 
-		<action>testComparison(stringA, stringB, stringAltB, stringAlteB, stringAgtB, stringAgteB, null, null)</action>
+		<action>testComparison(String.class, stringA, stringB, stringAltB, stringAlteB, stringAgtB, stringAgteB, null, null)</action>
 	</test>
 	<test name="mathOperators">
 		<!--

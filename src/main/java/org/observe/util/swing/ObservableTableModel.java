@@ -54,8 +54,7 @@ public class ObservableTableModel<R> extends AbstractObservableTableModel<R> imp
 			columns[i] = new CategoryRenderStrategy<>(colNames[i], (TypeToken<Object>) detectColumnClass(columnAccessors[i]),
 				columnAccessors[i]);
 		}
-		return ObservableCollection.of(new TypeToken<CategoryRenderStrategy<R, ?>>() {
-		}, columns);
+		return ObservableCollection.of(columns);
 	}
 
 	private static TypeToken<?> detectColumnClass(Function<?, ?> accessor) {

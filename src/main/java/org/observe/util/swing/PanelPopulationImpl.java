@@ -222,7 +222,7 @@ class PanelPopulationImpl {
 		SettingsMenuImpl(String fieldName, C container, Observable<?> until) {
 			super(fieldName, container, until);
 			thePopup = new JPopupMenu();
-			theIcon = ObservableValue.of(Icon.class, ObservableSwingUtils.getFixedIcon(null, "icons/gear.png", 20, 20));
+			theIcon = ObservableValue.of(ObservableSwingUtils.getFixedIcon(null, "icons/gear.png", 20, 20));
 			theMenuCloser = new JLabel();
 			theMenuCloser.addMouseListener(new MouseAdapter() {
 				@Override
@@ -504,7 +504,7 @@ class PanelPopulationImpl {
 
 		public SimpleImageControl(String location) {
 			theTweakObservable = new SimpleObservable<>();
-			theSettableIcon = SettableValue.build((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class).build();
+			theSettableIcon = SettableValue.<ObservableValue<? extends Icon>> build().build();
 			setLocation(location);
 			theIcon = ObservableValue.flatten(theSettableIcon).refresh(theTweakObservable).map(this::adjustIcon);
 			theWidth = -1;
@@ -535,7 +535,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public ImageControl setLocation(String location) {
-			return variableLocation(ObservableValue.of(TypeTokens.get().STRING, location));
+			return variableLocation(ObservableValue.of(location));
 		}
 
 		@Override
@@ -570,7 +570,7 @@ class PanelPopulationImpl {
 			Observable<?> until) {
 			super(fieldName, button, until);
 			theAction = action;
-			theText = ObservableValue.of(TypeTokens.get().STRING, buttonText);
+			theText = ObservableValue.of(buttonText);
 			theDisablement = action == null ? null : action.isEnabled();
 			isPostButton = postButton;
 		}
@@ -603,7 +603,7 @@ class PanelPopulationImpl {
 				theDisablement = disabled;
 			else {
 				ObservableValue<String> old = theDisablement;
-				theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, Objects::nonNull, () -> null, old, disabled);
+				theDisablement = ObservableValue.firstValue(Objects::nonNull, () -> null, old, disabled);
 			}
 			return (P) this;
 		}
@@ -616,7 +616,7 @@ class PanelPopulationImpl {
 			if (theDisablement != null)
 				enabled = theDisablement;
 			else
-				enabled = ObservableValue.of(String.class, null);
+				enabled = ObservableValue.of(null);
 			enabled.combine((e, tt) -> e == null ? tt : e, getTooltip()).changes().takeUntil(getUntil())
 			.act(evt -> getEditor().setToolTipText(evt.getNewValue()));
 			enabled.takeUntil(getUntil()).changes().act(evt -> getEditor().setEnabled(evt.getNewValue() == null));
@@ -674,7 +674,7 @@ class PanelPopulationImpl {
 			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			MultiRangeSlider slider = MultiRangeSlider.forValueExtent(false, sliderBounds, value,
-				SettableValue.of(double.class, 0.0, "Range is not editable"), until);
+				SettableValue.of(0.0, "Range is not editable"), until);
 			((MultiRangeSlider.RangeRenderer.Default) slider.getRangeRenderer()).withColor(r -> Color.blue, r -> Color.blue);
 			return new SimpleMultiSliderEditor<>(fieldName, slider, minMax, until);
 		}
@@ -693,7 +693,7 @@ class PanelPopulationImpl {
 			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			return new SimpleMultiSliderEditor<>(fieldName, //
-				MultiRangeSlider.multi(false, sliderBounds, values.flow().transform(MultiRangeSlider.Range.class, tx -> tx.cache(false)//
+				MultiRangeSlider.multi(false, sliderBounds, values.flow().<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
 					.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
 					.replaceSource(r -> r.getValue(), null)//
 					).collectPassive(), //
@@ -720,12 +720,10 @@ class PanelPopulationImpl {
 		}
 
 		static SettableValue<ObservableValue<Double>>[] createMinMax() {
-			SettableValue<ObservableValue<Double>> min = SettableValue
-				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
-				.withValue(SettableValue.build(double.class).withValue(0.0).build()).build();
-			SettableValue<ObservableValue<Double>> max = SettableValue
-				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
-				.withValue(SettableValue.build(double.class).withValue(1.0).build()).build();
+			SettableValue<ObservableValue<Double>> min = SettableValue.<ObservableValue<Double>> build()
+				.withValue(SettableValue.<Double> build().withValue(0.0).build()).build();
+			SettableValue<ObservableValue<Double>> max = SettableValue.<ObservableValue<Double>> build()
+				.withValue(SettableValue.<Double> build().withValue(1.0).build()).build();
 			return new SettableValue[] { min, max };
 		}
 
@@ -844,14 +842,13 @@ class PanelPopulationImpl {
 		private final JPanel thePanel;
 		private final ObservableCollection<? extends F> theValues;
 		private final SettableValue<F> theValue;
-		private final Class<TB> theButtonType;
 		private final Function<? super F, ? extends TB> theButtonCreator;
 		private ObservableCollection<TB> theButtons;
 
 		private BiConsumer<? super TB, ? super F> theRenderer;
 		private Function<? super F, String> theValueTooltip;
 
-		SimpleToggleButtonPanel(String fieldName, ObservableCollection<? extends F> values, SettableValue<F> value, Class<TB> buttonType,
+		SimpleToggleButtonPanel(String fieldName, ObservableCollection<? extends F> values, SettableValue<F> value,
 			Function<? super F, ? extends TB> buttonCreator, Observable<?> until) {
 			super(fieldName, new HashMap<>(), until);
 			thePanel = new ConformingPanel(
@@ -860,7 +857,6 @@ class PanelPopulationImpl {
 			theValue = value;
 			theValues = values;
 
-			theButtonType = buttonType;
 			theButtonCreator = buttonCreator;
 			theRenderer = (button, v) -> button.setText(String.valueOf(v));
 		}
@@ -889,8 +885,8 @@ class PanelPopulationImpl {
 		protected Component createComponent() {
 			ObservableCollection<? extends F> safeValues = theValues.safe(ThreadConstraint.EDT, getUntil());
 			ObservableCollection<TB>[] _buttons = new ObservableCollection[1];
-			Subscription valueSub = ObservableSwingUtils.togglesFor(safeValues, theValue, TypeTokens.get().of(theButtonType),
-				theButtonCreator, b -> _buttons[0] = b, this::render, this::getValueTooltip);
+			Subscription valueSub = ObservableSwingUtils.<F, TB> togglesFor(safeValues, theValue, theButtonCreator, b -> _buttons[0] = b,
+				this::render, this::getValueTooltip);
 			theButtons = _buttons[0];
 			for (JToggleButton button : theButtons) {
 				thePanel.add(button);
@@ -923,7 +919,7 @@ class PanelPopulationImpl {
 
 		static <F> ComboButton<F> createButton(ObservableCollection<F> values, BiConsumer<? super F, Object> action, String buttonText,
 			Observable<?> until) {
-			return new ComboButton<>(values, ComboButton.createDefaultComboBoxColumn(values.getType()), until)//
+			return new ComboButton<>(values, ComboButton.createDefaultComboBoxColumn((TypeToken<F>) TypeTokens.get().WILDCARD), until)//
 				.addListener(action)//
 				;
 		}
@@ -1046,7 +1042,7 @@ class PanelPopulationImpl {
 			super(null, new JTabbedPane(), until);
 			theTabs = new LinkedHashMap<>();
 			theTabsByComponent = new IdentityHashMap<>();
-			theSelectedTabId = SettableValue.build(Object.class).build();
+			theSelectedTabId = SettableValue.build().build();
 			thePostCreateActions = new LinkedList<>();
 		}
 
@@ -1348,7 +1344,7 @@ class PanelPopulationImpl {
 		@Override
 		public P onSelect(Consumer<ObservableValue<Boolean>> onSelect) {
 			if (theOnSelect == null)
-				theOnSelect = SettableValue.build(boolean.class).nullable(false).withValue(false).build();
+				theOnSelect = SettableValue.<Boolean> build().nullable(false).withValue(false).build();
 			onSelect.accept(theOnSelect);
 			return (P) this;
 		}
@@ -1708,7 +1704,7 @@ class PanelPopulationImpl {
 			theHeaderPanel = new SimpleHPanel<>(null, new ConformingPanel(new JustifiedBoxLayout(false).mainJustified().crossJustified()),
 				until);
 
-			theInternalCollapsed = SettableValue.build(boolean.class).withValue(theCollapsePane.isCollapsed()).build();
+			theInternalCollapsed = SettableValue.<Boolean> build().withValue(theCollapsePane.isCollapsed()).build();
 			theInternalCollapsed.set(theCollapsePane.isCollapsed(), null);
 			theCollapsePane.addPropertyChangeListener("collapsed", evt -> {
 				boolean collapsed = Boolean.TRUE.equals(evt.getNewValue());
@@ -1725,7 +1721,7 @@ class PanelPopulationImpl {
 			};
 			Icon collapsedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/up-chevron.png", 16, 16);
 			Icon expandedIcon = ObservableSwingUtils.getFixedIcon(PanelPopulation.class, "/icons/down-chevron.png", 16, 16);
-			theIcon = SettableValue.build((Class<ObservableValue<? extends Icon>>) (Class<?>) ObservableValue.class)//
+			theIcon = SettableValue.<ObservableValue<? extends Icon>> build()//
 				.withValue(theInternalCollapsed.map(collapsed -> collapsed ? collapsedIcon : expandedIcon))//
 				.build();
 			theHeaderPanel.fill()//
@@ -1898,7 +1894,7 @@ class PanelPopulationImpl {
 			theAction = action;
 			theSelectedValues = selectedValues;
 			theUntil = until;
-			theEnabledString = SettableValue.build(String.class).build();
+			theEnabledString = SettableValue.<String> build().build();
 			theObservableAction = new ObservableAction() {
 				@Override
 				public void act(Object cause) throws IllegalStateException {
@@ -2046,7 +2042,7 @@ class PanelPopulationImpl {
 		public A withTooltip(Function<? super List<? extends R>, String> tooltip) {
 			theTooltip = tooltip;
 			if (tooltip != null)
-				theTooltipString = SettableValue.build(String.class).build();
+				theTooltipString = SettableValue.<String> build().build();
 			return (A) this;
 		}
 
@@ -2227,8 +2223,8 @@ class PanelPopulationImpl {
 		private final SettableValue<T> theWrapped;
 		private Function<? super T, String> theFilter;
 
-		SwitchableFilterValue(TypeToken<T> type, Function<? super T, String> filter) {
-			theWrapped = SettableValue.build(type).build();
+		SwitchableFilterValue(Function<? super T, String> filter) {
+			theWrapped = SettableValue.<T> build().build();
 			theFilter = filter;
 		}
 
@@ -2270,11 +2266,6 @@ class PanelPopulationImpl {
 		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return theWrapped.getCurrentCauses();
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
 		}
 
 		@Override
@@ -2376,7 +2367,7 @@ class PanelPopulationImpl {
 		@Override
 		public <T> T input(TypeToken<T> type, Format<T> format, T initial, Consumer<ObservableTextField<T>> modify) {
 			SimpleObservable<Void> until = SimpleObservable.build().build();
-			SettableValue<T> value = SettableValue.build(type).withValue(initial).build();
+			SettableValue<T> value = SettableValue.<T> build().withValue(initial).build();
 			WindowBuilder<JDialog, ?> dialog = WindowPopulation.populateDialog(null, until, true)//
 				.modal(true).withTitle(theTitle);
 			if (theImage != null)
@@ -2435,9 +2426,9 @@ class PanelPopulationImpl {
 		@Override
 		public Color inputColor(boolean withAlpha, Color initial, Function<Color, String> filter) {
 			if (COLOR_EDITOR == null) {
-				SwitchableFilterValue<Color> selected = new SwitchableFilterValue<>(TypeTokens.get().of(Color.class), filter);
+				SwitchableFilterValue<Color> selected = new SwitchableFilterValue<>(filter);
 				selected.set(initial, null);
-				COLOR_EDITOR = new ObservableColorEditor(selected, true, SettableValue.build(boolean.class).withValue(withAlpha).build(),
+				COLOR_EDITOR = new ObservableColorEditor(selected, true, SettableValue.<Boolean> build().withValue(withAlpha).build(),
 					Observable.empty());
 				COLOR_EDITING_MESSAGE = new JLabel(theMessage, theImage == null ? null : theImage.getIcon().get(), JLabel.LEADING);
 				new FontAdjuster().withFontSize(16).adjust(COLOR_EDITING_MESSAGE);

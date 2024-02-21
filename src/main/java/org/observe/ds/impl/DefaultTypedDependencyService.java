@@ -28,8 +28,8 @@ public class DefaultTypedDependencyService<C> extends DefaultDependencyService<C
 
 	@Override
 	public ObservableCollection<? extends TypedDSComponent<C>> getComponents() {
-		return super.getComponents().flow().transform((Class<TypedDSComponent<C>>) (Class<?>) TypedDSComponent.class,
-			tx -> tx.cache(false).map(c -> (TypedDSComponent<C>) c)).collect();
+		return super.getComponents().flow().<TypedDSComponent<C>> transform(tx -> tx.cache(false).map(c -> (TypedDSComponent<C>) c))
+			.collect();
 	}
 
 	@Override

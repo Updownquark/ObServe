@@ -16,8 +16,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An ObservableCollection that simply delegates to another
  *
@@ -182,11 +180,6 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	@Override
 	public CoreId getCoreId() {
 		return getWrapped().getCoreId();
-	}
-
-	@Override
-	public TypeToken<E> getType() {
-		return getWrapped().getType();
 	}
 
 	@Override

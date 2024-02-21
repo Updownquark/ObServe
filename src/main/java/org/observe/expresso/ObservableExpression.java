@@ -469,7 +469,7 @@ public interface ObservableExpression {
 		}
 
 		SettableValue<?> createValue(TypeToken<?> type, Object value) {
-			return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) type, value), //
+			return SettableValue.asSettable(ObservableValue.of(value), //
 				__ -> "Literal value '" + theText + "'");
 		}
 

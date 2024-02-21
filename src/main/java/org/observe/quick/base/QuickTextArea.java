@@ -18,7 +18,6 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -193,7 +192,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 			/** Creates the context */
 			public Default() {
-				this(SettableValue.build(int.class).withDescription("mousePosition").withValue(0).build());
+				this(SettableValue.<Integer> build().withDescription("mousePosition").withValue(0).build());
 			}
 
 			@Override
@@ -213,10 +212,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	/** @param id The element ID for this widget */
 	protected QuickTextArea(Object id) {
 		super(id);
-		theRows = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class))
-			.build();
-		theMousePosition = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+		theRows = SettableValue.<SettableValue<Integer>> build().build();
+		theMousePosition = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	/** @return The styled document for the text area */
@@ -280,8 +277,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public QuickTextArea<T> copy(ExElement parent) {
 		QuickTextArea<T> copy = (QuickTextArea<T>) super.copy(parent);
 
-		copy.theRows = SettableValue.build(theRows.getType()).build();
-		copy.theMousePosition = SettableValue.build(theMousePosition.getType()).build();
+		copy.theRows = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theMousePosition = SettableValue.<SettableValue<Integer>> build().build();
 
 		if (theDocument != null)
 			copy.theDocument = theDocument.copy(copy);

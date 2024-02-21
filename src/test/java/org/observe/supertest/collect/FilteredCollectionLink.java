@@ -20,8 +20,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#filter(Class)}
  *
@@ -43,9 +41,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> im
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
-			SettableValue<Function<T, String>> filterValue = SettableValue
-				.build((TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {
-				}).build();
+			SettableValue<Function<T, String>> filterValue = SettableValue.<Function<T, String>> build().build();
 			filterValue.set(FilteredCollectionLink.filterFor(sourceCL.getDef().type, helper), null);
 			boolean variableFilter = helper.getBoolean();
 			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();

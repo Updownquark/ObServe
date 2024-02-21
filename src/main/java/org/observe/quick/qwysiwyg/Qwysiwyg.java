@@ -524,38 +524,38 @@ public class Qwysiwyg {
 	// private DocumentComponent theRoot;
 
 	public Qwysiwyg() {
-		title = SettableValue.build(String.class).withValue("QWYSIWYG").build();
-		document = SettableValue.build(StyledQuickDocument.class).build();
+		title = SettableValue.<String> build().withValue("QWYSIWYG").build();
+		document = SettableValue.<StyledQuickDocument> build().build();
 		theDocumentReplacement = new SimpleObservable<>();
 		theApplicationReplacement = new SimpleObservable<>();
-		selectedNode = SettableValue.build(DocumentComponent.class).build();
-		selectedEndNode = SettableValue.build(DocumentComponent.class).build();
-		selectedStartIndex = SettableValue.build(int.class).withValue(0).build();
-		selectedEndIndex = SettableValue.build(int.class).withValue(0).build();
+		selectedNode = SettableValue.<DocumentComponent> build().build();
+		selectedEndNode = SettableValue.<DocumentComponent> build().build();
+		selectedStartIndex = SettableValue.<Integer> build().withValue(0).build();
+		selectedEndIndex = SettableValue.<Integer> build().withValue(0).build();
 		theDocumentContent = new StringBuilder();
-		lineNumbers = SettableValue.build(String.class).build();
-		availableStyles = ObservableCollection.build((Class<QuickStyleAttribute<?>>) (Class<?>) QuickStyleAttribute.class).build();
-		selectedStyle = SettableValue.build(availableStyles.getType()).build();
-		watchExpressions = ObservableCollection.build((Class<WatchExpression<?>>) (Class<?>) WatchExpression.class).build();
+		lineNumbers = SettableValue.<String> build().build();
+		availableStyles = ObservableCollection.<QuickStyleAttribute<?>> build().build();
+		selectedStyle = SettableValue.<QuickStyleAttribute<?>> build().build();
+		watchExpressions = ObservableCollection.<WatchExpression<?>> build().build();
 		watchExpressions.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.add)
 				evt.getNewValue().setId(evt.getElementId());
 		});
-		watchActions = ObservableCollection.build(WatchAction.class).build();
+		watchActions = ObservableCollection.<WatchAction> build().build();
 		watchActions.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.add)
 				evt.getNewValue().setId(evt.getElementId());
 		});
-		styleDebugValues = ObservableCollection.build((Class<StyleDebugValue<?>>) (Class<?>) StyleDebugValue.class).build();
-		theDebuggingStyle = selectedNode.transform((Class<QuickElementStyleAttribute<?>>) (Class<?>) QuickElementStyleAttribute.class,
-			tx -> tx.cache(true).fireIfUnchanged(false).combineWith(selectedStyle).combine((node, style) -> {
-				if (theStyledNode == null || style == null)
-					return null;
-				return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
-			}));
-		theToolkits = ObservableMap.build(QonfigToolkit.class, StyledQonfigToolkit.class).buildMap();
+		styleDebugValues = ObservableCollection.<StyleDebugValue<?>> build().build();
+		theDebuggingStyle = selectedNode
+			.transform(tx -> tx.cache(true).fireIfUnchanged(false).combineWith(selectedStyle).combine((node, style) -> {
+			if (theStyledNode == null || style == null)
+				return null;
+			return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
+		}));
+		theToolkits = ObservableMap.<QonfigToolkit, StyledQonfigToolkit> build().buildMap();
 		toolkits = theToolkits.values().flow().unmodifiable(false).collect();
-		selectedToolkit = SettableValue.build(StyledQonfigToolkit.class).build();
+		selectedToolkit = SettableValue.<StyledQonfigToolkit> build().build();
 
 		selectedNode.changes().act(evt -> {
 			if (evt.getOldValue() == evt.getNewValue())
@@ -1258,7 +1258,7 @@ public class Qwysiwyg {
 		if (models != null && theQwysiwygEdAddOn != null && interpreted.getDefinition().getElement().isInstance(theQwysiwygEdAddOn)) {
 			try {
 				ExWithElementModel.Interpreted elModels = interpreted.getAddOn(ExWithElementModel.Interpreted.class);
-				elComponent.elementHovered = SettableValue.build(boolean.class).withValue(false).build();
+				elComponent.elementHovered = SettableValue.<Boolean> build().withValue(false).build();
 				elModels.satisfyElementValue(QWYSIWYG_HOVERED, models, elComponent.elementHovered);
 			} catch (ModelInstantiationException e) {
 				System.err.println("Could not install " + TOOLKIT_NAME + " toolkit values");
@@ -1363,15 +1363,15 @@ public class Qwysiwyg {
 				}
 				if (value instanceof Stamped)
 					component.instanceTooltip(
-						ObservableValue.of(String.class, () -> String.valueOf(value), ((Stamped) value)::getStamp, update));
+						ObservableValue.of(() -> String.valueOf(value), ((Stamped) value)::getStamp, update));
 				else {
 					long[] stamp = new long[1];
 					if (update != null) {
 						update.takeUntil(models.getUntil()).act(__ -> stamp[0]++);
-						component.instanceTooltip(ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0], update));
+						component.instanceTooltip(ObservableValue.of(() -> String.valueOf(value), () -> stamp[0], update));
 					} else {
 						component.instanceTooltip(
-							ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
+							ObservableValue.of(() -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
 					}
 				}
 			}

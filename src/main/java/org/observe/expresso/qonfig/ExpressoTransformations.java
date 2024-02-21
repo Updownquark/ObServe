@@ -849,14 +849,14 @@ public class ExpressoTransformations {
 			else {
 				test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 					.mapValue(ModelTypes.Value.forType(String.class),
-						bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
+						bv -> SettableValue.asSettable(bv.map(b -> b ? null : "Not allowed"), __ -> "Not settable"));
 			}
 		} catch (ExpressoInterpretationException e) {
 			try {
 				if (preferMessage) {
 					test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 						.mapValue(ModelTypes.Value.forType(String.class),
-							bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
+							bv -> SettableValue.asSettable(bv.map(b -> b ? null : "Not allowed"), __ -> "Not settable"));
 				} else
 					test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			} catch (ExpressoInterpretationException e2) {
@@ -1011,7 +1011,7 @@ public class ExpressoTransformations {
 			 * @return The transformation reverse
 			 * @throws ModelInstantiationException If the reverse operation could not be instantiated
 			 */
-			Transformation.TransformReverse<S, T> reverse(SettableValue<S> sourceValue, TypeToken<T> targetType,
+			Transformation.TransformReverse<S, T> reverse(SettableValue<S> sourceValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException;
 
@@ -1351,7 +1351,7 @@ public class ExpressoTransformations {
 			public Transformation<S, T> transform(Transformation.ReversibleTransformationPrecursor<S, T, ?> precursor,
 				ModelSetInstance models) throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
-				SettableValue<S> sourceV = SettableValue.build(theMapWith.getSourceType())//
+				SettableValue<S> sourceV = SettableValue.<S> build()//
 					.withValue(TypeTokens.get().getDefaultValue(theMapWith.getSourceType()))//
 					.build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
@@ -1374,7 +1374,7 @@ public class ExpressoTransformations {
 				Transformation<S, T> finalTransformation;
 				if (theReverse != null)
 					finalTransformation = transformation.withReverse(//
-						theReverse.reverse(sourceV, targetV.getType(), modifications, transformation, models));
+						theReverse.reverse(sourceV, modifications, transformation, models));
 				else
 					finalTransformation = transformation.withReverse(//
 						theMapWith.reverse(sourceV, targetV, modifications, transformation, models));
@@ -1850,8 +1850,7 @@ public class ExpressoTransformations {
 			public <S, T2> ReversibleTransformationBuilder<S, T2, ?> addTo(ReversibleTransformationBuilder<S, T2, ?> builder,
 				ModelSetInstance models, Consumer<? super TransformationModification<S, T2>> modify) throws ModelInstantiationException {
 				SettableValue<T> sourceV = theValue.get(models);
-				SettableValue<T> targetV = SettableValue.build(sourceV.getType())
-					.withValue(TypeTokens.get().getDefaultValue(sourceV.getType())).build();
+				SettableValue<T> targetV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theValueVariable, models,
 					targetV.disableWith(SettableValue.ALWAYS_DISABLED));
 				modify.accept(new DefaultTransformationModification<>(sourceV, targetV));
@@ -2192,12 +2191,12 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, TypeToken<T> targetType,
+			public TransformReverse<S, T> reverse(SettableValue<S> sourceV,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
 
-				SettableValue<T> targetV = SettableValue.build(targetType).withValue(TypeTokens.get().getDefaultValue(targetType)).build();
+				SettableValue<T> targetV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetVariable, models, targetV);
 				SettableValue<String> enabledEvld = theEnabled == null ? null : theEnabled.get(models);
 				SettableValue<String> acceptEvld = theAccept == null ? null : theAccept.get(models);
@@ -2880,14 +2879,12 @@ public class ExpressoTransformations {
 		 * @param <T> The target type of the operation
 		 */
 		protected static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
-			private final TypeToken<T> theTargetType;
 			private final ModelValueInstantiator<SettableValue<T>> theValue;
 			private final List<ModelValueInstantiator<SettableValue<Boolean>>> theIfConditions;
 			private final List<ScalarOp.Instantiator<S, T>> theIfs;
 
 			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theTargetType = interpreted.getTargetValueType();
 				theValue = interpreted.getValue().instantiate();
 				theIfConditions = new ArrayList<>(interpreted.getIfs().size());
 				theIfs = new ArrayList<>(interpreted.getIfs().size());
@@ -2917,11 +2914,9 @@ public class ExpressoTransformations {
 				SettableValue<T> value = theValue.get(models);
 				ifs.add(ObservableValue.of(new ConditionalValue<>(true, value)));
 				ObservableValue<ConditionalValue<T>> firstTrue = ObservableValue.<ConditionalValue<T>> firstValue(//
-					(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class),
 					LambdaUtils.printablePred(cv -> cv.condition, "condition", null), null, ifs.toArray(new ObservableValue[ifs.size()]));
 				return SettableValue
-					.flatten(firstTrue.map(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(theTargetType),
-						LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+					.flatten(firstTrue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
 			}
 
 			@Override
@@ -3129,14 +3124,12 @@ public class ExpressoTransformations {
 		}
 
 		static class Instantiator<S, T> extends ScalarOp.Instantiator<S, T> {
-			private final TypeToken<T> theTargetType;
 			private final ModelValueInstantiator<SettableValue<T>> theDefault;
 			private final List<ModelValueInstantiator<SettableValue<S>>> theCaseValues;
 			private final List<ScalarOp.Instantiator<S, T>> theCases;
 
 			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theTargetType = interpreted.getTargetValueType();
 				theDefault = interpreted.getDefault().instantiate();
 				theCaseValues = new ArrayList<>(interpreted.getCases().size());
 				theCases = new ArrayList<>(interpreted.getCases().size());
@@ -3162,23 +3155,18 @@ public class ExpressoTransformations {
 					SettableValue<T> value = theCases.get(i).get(source, models);
 					caseTuples.add(caseValue.<CaseValue<S, T>> map(cv -> new CaseValue<>(cv, value)));
 				}
-				TypeToken<CaseValue<S, T>> caseValueType = TypeTokens.get().keyFor(CaseValue.class)//
-					.<CaseValue<S, T>> parameterized((TypeToken<S>) (TypeToken<?>) TypeTokens.get().OBJECT, theTargetType);
-				TypeToken<SettableValue<T>> settableValueType = TypeTokens.get().keyFor(SettableValue.class)
-					.<SettableValue<T>> parameterized(theTargetType);
-				ObservableMap<S, SettableValue<T>> map = ObservableCollection.of(TypeTokens.get().keyFor(ObservableValue.class)//
-					.<ObservableValue<CaseValue<S, T>>> parameterized(caseValueType), caseTuples)//
+				ObservableMap<S, SettableValue<T>> map = ObservableCollection.of(caseTuples)//
 					.flow()//
-					.flattenValues(caseValueType, LambdaUtils.identity())//
-					.groupBy((TypeToken<S>) (TypeToken<?>) TypeTokens.get().OBJECT, cv -> cv.caseValue, null)//
-					.withValues(values -> values.map(settableValueType, cv -> cv.value))//
+					.flattenValues(LambdaUtils.identity())//
+					.<S> groupBy(cv -> cv.caseValue, null)//
+					.<SettableValue<T>> withValues(values -> values.map(cv -> cv.value))//
 					.gatherActive(models.getUntil())//
 					.singleMap(true);
 
 				ObservableValue<ObservableValue<SettableValue<T>>> mapValue = source.map(s -> map.observe(s));
 				SettableValue<T> def = theDefault.get(models);
-				ObservableValue<SettableValue<T>> caseOrDefault = ObservableValue.firstValue(settableValueType, sv -> sv != null, null,
-					ObservableValue.flatten(mapValue), ObservableValue.of(settableValueType, def));
+				ObservableValue<SettableValue<T>> caseOrDefault = ObservableValue.firstValue(sv -> sv != null, null,
+					ObservableValue.flatten(mapValue), ObservableValue.of(def));
 				return SettableValue.flatten(caseOrDefault);
 			}
 

@@ -10,7 +10,6 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -56,8 +55,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
-
-import com.google.common.reflect.TypeToken;
 
 class SimpleTableBuilder<R, T extends JTable, P extends SimpleTableBuilder<R, T, P>> extends AbstractSimpleTableBuilder<R, T, P>
 implements TableBuilder<R, T, P> {
@@ -364,8 +361,7 @@ implements TableBuilder<R, T, P> {
 				}
 			};
 			if (getSelectionValues() != null)
-				enabled = ObservableValue.of(TypeTokens.get().STRING, enabledGet, () -> getSelectionValues().getStamp(),
-					getSelectionValues().simpleChanges());
+				enabled = ObservableValue.of(enabledGet, () -> getSelectionValues().getStamp(), getSelectionValues().simpleChanges());
 			else
 				enabled = getSelectionValue().map(__ -> enabledGet.get());
 			action.allowForMultiple(true)
@@ -391,11 +387,6 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
-	protected TypeToken<R> getRowType() {
-		return theRows.getType();
-	}
-
-	@Override
 	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> createColumnSet() {
 		ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns;
 		if (theDynamicColumns.isEmpty()) {
@@ -405,20 +396,18 @@ implements TableBuilder<R, T, P> {
 			columnSets.add(getColumns());
 			for (DynamicColumnSet<R, ?> dc : theDynamicColumns) {
 				ObservableCollection.CollectionDataFlow<R, ?, Object> columnValueFlow = theRows.flow()//
-					.flatMap(Object.class, row -> ObservableCollection.of(Object.class, dc.columnValues.apply(row)).flow());
+					.flatMap(row -> ObservableCollection.of(Object.class, dc.columnValues.apply(row)).flow());
 				if (dc.columnSort != null)
 					columnValueFlow = columnValueFlow.distinctSorted((Comparator<Object>) dc.columnSort, false);
 				else
 					columnValueFlow = columnValueFlow.distinct();
-				ObservableCollection<CategoryRenderStrategy<R, ?>> dcc = columnValueFlow
-					.transform((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, tx -> tx//
-						.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)//
-						.map(columnValue -> ((DynamicColumnSet<R, Object>) dc).columnCreator.apply(columnValue)))
-					.collectActive(getUntil());
+				ObservableCollection<CategoryRenderStrategy<R, ?>> dcc = columnValueFlow.<CategoryRenderStrategy<R, ?>> transform(tx -> tx//
+					.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)//
+					.map(columnValue -> ((DynamicColumnSet<R, Object>) dc).columnCreator.apply(columnValue))).collectActive(getUntil());
 				columnSets.add(dcc);
 			}
-			columns = ObservableCollection.flattenCollections((TypeToken<CategoryRenderStrategy<R, ?>>) getColumns().getType(),
-				columnSets.toArray(new ObservableCollection[columnSets.size()])).collectActive(getUntil());
+			columns = ObservableCollection.flattenCollections(columnSets.toArray(new ObservableCollection[columnSets.size()]))
+				.collectActive(getUntil());
 		}
 		return columns;
 	}
@@ -428,7 +417,6 @@ implements TableBuilder<R, T, P> {
 		if (theFilter != null) {
 			if (theFilter instanceof SettableValue) {
 				Map<CategoryRenderStrategy<R, ?>, Runnable> headerListening = new HashMap<>();
-				boolean checkType = TypeTokens.getRawType(theFilter.getType()) != TableContentControl.class;
 				CollectionSubscription colClickSub = columns.subscribe(evt -> {
 					switch (evt.getType()) {
 					case add:
@@ -436,7 +424,7 @@ implements TableBuilder<R, T, P> {
 							@Override
 							public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
 								if (cell == null) // Looking for a mouse click on the column header
-									handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), checkType, e);
+									handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), e);
 							}
 						}));
 						break;
@@ -451,7 +439,7 @@ implements TableBuilder<R, T, P> {
 									@Override
 									public void mouseClicked(ModelCell<? extends R, ? extends Object> cell, MouseEvent e) {
 										if (cell == null) // Looking for a mouse click on the column header
-											handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), checkType, e);
+											handleColumnHeaderClick(theFilter, evt.getNewValue().getName(), e);
 									}
 								}));
 						}
@@ -467,8 +455,7 @@ implements TableBuilder<R, T, P> {
 				() -> fColumns, theFilter.refresh(columnChanges), getUntil());
 			theFilteredValueRows = rawFiltered.safe(ThreadConstraint.EDT, getUntil());
 			theFilteredRows = theFilteredValueRows.flow()
-				.transform(theRows.getType(),
-					tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
+				.<R> transform(tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
 				.collectActive(getUntil());
 		} else {
 			theFilteredValueRows = null;
@@ -607,18 +594,6 @@ implements TableBuilder<R, T, P> {
 		}
 	}
 
-	private static void handleColumnHeaderClick(ObservableValue<? extends TableContentControl> filter, String columnName, boolean checkType,
-		Object cause) {
-		TableContentControl filterV = filter.get();
-		TableContentControl sorted = filterV == null ? new TableContentControl.RowSorter(Arrays.asList(columnName))
-			: filterV.toggleSort(columnName, true);
-		if (checkType && TypeTokens.get().isInstance(filter.getType(), sorted))
-			return;
-		SettableValue<TableContentControl> settableFilter = (SettableValue<TableContentControl>) filter;
-		if (settableFilter.isAcceptable(sorted) == null)
-			settableFilter.set(sorted, cause);
-	}
-
 	@Override
 	protected Component createComponent() {
 		Component comp = super.createComponent();
@@ -630,8 +605,7 @@ implements TableBuilder<R, T, P> {
 			TitledBorder border = BorderFactory.createTitledBorder(singularItemName);
 			if (theFilteredValueRows != null) {
 				theRows.observeSize()
-				.transform(int[].class,
-					tx -> tx.combineWith(theFilteredValueRows.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
+				.<int[]> transform(tx -> tx.combineWith(theFilteredValueRows.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
 				.changes().takeUntil(getUntil()).act(evt -> {
 					int sz = evt.getNewValue()[0];
 					int f = evt.getNewValue()[1];
@@ -639,7 +613,7 @@ implements TableBuilder<R, T, P> {
 					if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
 						if (f != sz)
 							text = numberFormat.format(f) + " of ";
-						else if(sz > 1)
+						else if (sz > 1)
 							text = "All ";
 						else
 							text = "";

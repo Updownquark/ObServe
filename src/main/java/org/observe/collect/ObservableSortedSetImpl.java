@@ -26,7 +26,6 @@ import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredM
 import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
-import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.ReversedComparator;
@@ -42,8 +41,6 @@ import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
-
-import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableSortedSet} and {@link DistinctSortedDataFlow} methods */
 public class ObservableSortedSetImpl {
@@ -251,7 +248,7 @@ public class ObservableSortedSetImpl {
 		 */
 		protected DistinctSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Comparator<? super T> compare) {
-			super(source, parent, parent.equivalence().sorted(TypeTokens.getRawType(parent.getTargetType()), compare, true));
+			super(source, parent, parent.equivalence().sorted(compare, true));
 		}
 
 		@Override
@@ -285,18 +282,18 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def);
+			return new DistinctSortedTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
 				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
+			return new DistinctSortedTransformOp<>(getSource(), this, def, compare);
 		}
 
 		@Override
@@ -379,7 +376,7 @@ public class ObservableSortedSetImpl {
 	}
 
 	/**
-	 * Implements {@link DistinctSortedDataFlow#mapEquivalent(TypeToken, Function, Comparator)}
+	 * Implements {@link DistinctSortedDataFlow#mapEquivalent(Function, Comparator)}
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <I> The type of the parent flow
@@ -392,25 +389,23 @@ public class ObservableSortedSetImpl {
 		/**
 		 * @param source The source collection
 		 * @param parent The parent flow
-		 * @param target The type of this flow
 		 * @param def The transformation definition of this operation
 		 * @param compare The sorting to use
 		 */
-		public DistinctSortedTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Transformation<I, T> def, Comparator<? super T> compare) {
-			super(source, parent, target, def);
-			theSortedEquivalence = def.equivalence().sorted(TypeTokens.getRawType(target), compare, true);
+		public DistinctSortedTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, Transformation<I, T> def,
+			Comparator<? super T> compare) {
+			super(source, parent, def);
+			theSortedEquivalence = def.equivalence().sorted(compare, true);
 		}
 
 		/**
 		 * @param source The source collection
 		 * @param parent The parent flow
-		 * @param target The type of this flow
 		 * @param def The transformation definition of this operation
 		 */
-		public DistinctSortedTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
+		public DistinctSortedTransformOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent,
 			ReversibleTransformation<I, T> def) {
-			super(source, parent, target, def);
+			super(source, parent, def);
 			theSortedEquivalence = (SortedEquivalence<? super T>) super.equivalence();
 		}
 
@@ -440,18 +435,18 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ReversibleTransformation<T, X>> transform) {
 			ReversibleTransformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def);
+			return new DistinctSortedTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, T, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<T, X, ?>, ? extends Transformation<T, X>> transform,
 				Comparator<? super X> compare) {
 			Transformation<T, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
+			return new DistinctSortedTransformOp<>(getSource(), this, def, compare);
 		}
 
 		@Override
@@ -537,18 +532,18 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ReversibleTransformation<E, X>> transform) {
 			ReversibleTransformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def);
+			return new DistinctSortedTransformOp<>(getSource(), this, def);
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(TypeToken<X> target,
+		public <X> DistinctSortedDataFlow<E, E, X> transformEquivalent(
 			Function<? super ReversibleTransformationPrecursor<E, X, ?>, ? extends Transformation<E, X>> transform,
 				Comparator<? super X> compare) {
 			Transformation<E, X> def = transform.apply(new ReversibleTransformationPrecursor<>());
-			return new DistinctSortedTransformOp<>(getSource(), this, target, def, compare);
+			return new DistinctSortedTransformOp<>(getSource(), this, def, compare);
 		}
 
 		@Override
@@ -615,8 +610,7 @@ public class ObservableSortedSetImpl {
 			Comparator<? super T> compare) {
 			super(source, flow);
 			theEquivalence = flow.equivalence() instanceof Equivalence.SortedEquivalence
-				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence()
-					: flow.equivalence().sorted(TypeTokens.getRawType(flow.getTargetType()), compare, true);
+				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence() : flow.equivalence().sorted(compare, true);
 		}
 
 		@Override
@@ -683,8 +677,7 @@ public class ObservableSortedSetImpl {
 		public ActiveDerivedSortedSet(ActiveValueStoredManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
 			super(flow, until);
 			theEquivalence = flow.equivalence() instanceof Equivalence.SortedEquivalence
-				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence()
-					: flow.equivalence().sorted(TypeTokens.getRawType(flow.getTargetType()), compare, true);
+				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence() : flow.equivalence().sorted(compare, true);
 		}
 
 		@Override
@@ -724,13 +717,8 @@ public class ObservableSortedSetImpl {
 		 */
 		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable,
 			Comparator<? super E> compare) {
-			super(collectionObservable, Equivalence.DEFAULT.sorted(extractElementType(collectionObservable), compare, false));
-			theEquivalence = Equivalence.DEFAULT.sorted(TypeTokens.getRawType(getType()), compare, true);
-		}
-
-		private static <E> Class<E> extractElementType(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable) {
-			return (Class<E>) TypeTokens
-				.getRawType(collectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]));
+			super(collectionObservable, Equivalence.DEFAULT.sorted(compare, false));
+			theEquivalence = Equivalence.DEFAULT.sorted(compare, true);
 		}
 
 		@Override

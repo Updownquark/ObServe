@@ -17,7 +17,6 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -235,8 +234,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		/** @param id The element identifier for this widget */
 		protected Abstract(Object id) {
 			super(id);
-			theDisabled = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
+			theDisabled = SettableValue.<SettableValue<String>> build().build();
 		}
 
 		@Override
@@ -256,8 +254,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			theValueInstantiator = myInterpreted.getValue().instantiate();
 			theDisabledInstantiator = myInterpreted.getDisabled() == null ? null : myInterpreted.getDisabled().instantiate();
 			if (theValue == null)
-				theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
-					.<SettableValue<T>> parameterized((TypeToken<T>) myInterpreted.getValue().getType().getType(0))).build();
+				theValue = SettableValue.<SettableValue<T>> build().build();
 		}
 
 		@Override
@@ -279,8 +276,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		public QuickValueWidget.Abstract<T> copy(ExElement parent) {
 			QuickValueWidget.Abstract<T> copy = (QuickValueWidget.Abstract<T>) super.copy(parent);
 
-			copy.theValue = SettableValue.build(theValue.getType()).build();
-			copy.theDisabled = SettableValue.build(theDisabled.getType()).build();
+			copy.theValue = SettableValue.<SettableValue<T>> build().build();
+			copy.theDisabled = SettableValue.<SettableValue<String>> build().build();
 
 			return copy;
 		}

@@ -230,8 +230,7 @@ public class PanelPopulation {
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
 		default <F> P addStyledTextArea(String fieldName, SettableValue<F> root, Format<F> format,
-			Function<? super F, ? extends ObservableCollection<? extends F>> children,
-				BiConsumer<? super F, ? super BgFontAdjuster> style,
+			Function<? super F, ? extends ObservableCollection<? extends F>> children, BiConsumer<? super F, ? super BgFontAdjuster> style,
 				Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addStyledTextArea(fieldName, new ObservableStyledDocument<F>(root, format, ThreadConstraint.EDT, getUntil()) {
 				@Override
@@ -324,16 +323,16 @@ public class PanelPopulation {
 
 		default <F> P addRadioField(String fieldName, SettableValue<F> value, F[] values,
 			Consumer<ToggleEditor<F, JRadioButton, ?>> modify) {
-			return addToggleField(fieldName, value, Arrays.asList(values), JRadioButton.class, __ -> new JRadioButton(), modify);
+			return addToggleField(fieldName, value, Arrays.asList(values), __ -> new JRadioButton(), modify);
 		}
 
 		default <F> P addRadioField(String fieldName, SettableValue<F> value, List<? extends F> values,
 			Consumer<ToggleEditor<F, JRadioButton, ?>> modify) {
-			return addToggleField(fieldName, value, values, JRadioButton.class, __ -> new JRadioButton(), modify);
+			return addToggleField(fieldName, value, values, __ -> new JRadioButton(), modify);
 		}
 
 		<F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
-			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
+			Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
 
 		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			return addButton(buttonText, new ObservableAction() {
@@ -680,7 +679,7 @@ public class PanelPopulation {
 			if (availableValues instanceof ObservableCollection)
 				observableValues = (ObservableCollection<F>) availableValues;
 			else
-				observableValues = ObservableCollection.of(value.getType(), availableValues);
+				observableValues = ObservableCollection.of(availableValues);
 
 			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new PPComboBox<>(), value, getUntil());
 			if (modify != null)
@@ -698,14 +697,14 @@ public class PanelPopulation {
 
 		@Override
 		default <F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
-			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify) {
+			Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify) {
 			ObservableCollection<? extends F> observableValues;
 			if (values instanceof ObservableCollection)
 				observableValues = (ObservableCollection<F>) values;
 			else
-				observableValues = ObservableCollection.of(value.getType(), values);
+				observableValues = ObservableCollection.of(values);
 			SimpleToggleButtonPanel<F, TB, ?> radioPanel = new SimpleToggleButtonPanel<>(fieldName, observableValues, value, //
-				buttonType, buttonCreator, getUntil());
+				buttonCreator, getUntil());
 			if (modify != null)
 				modify.accept(radioPanel);
 			if (radioPanel.isDecorated())
@@ -1023,8 +1022,7 @@ public class PanelPopulation {
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
 			theEditor = editor;
 			theUntil = until == null ? Observable.empty() : until;
-			theSettableTooltip = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
+			theSettableTooltip = SettableValue.<ObservableValue<String>> build().build();
 			theTooltip = ObservableValue.flatten(theSettableTooltip);
 		}
 
@@ -1293,8 +1291,7 @@ public class PanelPopulation {
 					if (theDisablement == null)
 						theDisablement = disabled;
 					else
-						theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, null, theDisablement,
-						disabled);
+						theDisablement = ObservableValue.firstValue(e -> e != null, null, theDisablement, disabled);
 					return this;
 				}
 
@@ -2061,7 +2058,7 @@ public class PanelPopulation {
 		W getWindow();
 
 		default P withTitle(String title) {
-			return withTitle(ObservableValue.of(TypeTokens.get().STRING, title));
+			return withTitle(ObservableValue.of(title));
 		}
 
 		P withTitle(ObservableValue<String> title);
@@ -2076,7 +2073,7 @@ public class PanelPopulation {
 		}
 
 		default P withIcon(Image icon) {
-			return withIcon(ObservableValue.of(TypeTokens.get().of(Image.class), icon));
+			return withIcon(ObservableValue.of(icon));
 		}
 
 		P withIcon(ObservableValue<? extends Image> icon);
@@ -2107,8 +2104,8 @@ public class PanelPopulation {
 		}
 
 		default P withSize(int width, int height) {
-			withWidth(SettableValue.build(int.class).withValue(width).build());
-			withHeight(SettableValue.build(int.class).withValue(height).build());
+			withWidth(SettableValue.<Integer> build().withValue(width).build());
+			withHeight(SettableValue.<Integer> build().withValue(height).build());
 			return (P) this;
 		}
 

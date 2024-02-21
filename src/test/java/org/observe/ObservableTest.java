@@ -7,14 +7,12 @@ import org.junit.Test;
 import org.qommons.Causable;
 import org.qommons.TriFunction;
 
-import com.google.common.reflect.TypeToken;
-
 /** Tests observable classes in the org.observe package */
 public class ObservableTest {
 	/** Tests simple {@link SettableValue} functionality */
 	@Test
 	public void settableValue() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
+		SettableValue<Integer> obs = SettableValue.<Integer> build().withValue(0).build();
 		int [] received = new int[] {0};
 		obs.changes().act(value -> received[0] = value.getNewValue());
 		for(int i = 1; i < 10; i++) {
@@ -26,7 +24,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#map(java.util.function.Function)} */
 	@Test
 	public void valueMap() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
+		SettableValue<Integer> obs = SettableValue.<Integer> build().withValue(0).build();
 		int [] received = new int[] {0};
 		obs.map(//
 			value -> value * 10//
@@ -125,7 +123,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#takeUntil(Observable)} */
 	@Test
 	public void valueTakeUntil() {
-		SettableValue<Integer> obs = SettableValue.build(Integer.TYPE).withValue(0).build();
+		SettableValue<Integer> obs = SettableValue.<Integer> build().withValue(0).build();
 		SimpleObservable<Boolean> stop = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		int [] count = new int[1];
@@ -189,9 +187,9 @@ public class ObservableTest {
 	@Test
 	public void combine() {
 		int [] events = new int[1];
-		SettableValue<Integer> obs1 = SettableValue.build(int.class).withValue(0).build();
-		SettableValue<Integer> obs2 = SettableValue.build(int.class).withValue(1).build();
-		SettableValue<Integer> obs3 = SettableValue.build(int.class).withValue(0).build();
+		SettableValue<Integer> obs1 = SettableValue.<Integer> build().withValue(0).build();
+		SettableValue<Integer> obs2 = SettableValue.<Integer> build().withValue(1).build();
+		SettableValue<Integer> obs3 = SettableValue.<Integer> build().withValue(0).build();
 		int [] received = new int[] {0};
 		obs1.<Integer> transform(tx -> tx.combineWith(obs2).combineWith(obs3).build((o1, cv) -> {
 			Integer v2 = cv.get(obs2);
@@ -215,12 +213,10 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#flatten(ObservableValue)} */
 	@Test
 	public void observableValueFlatten() {
-		SettableValue<ObservableValue<Integer>> outer = SettableValue
-			.<ObservableValue<Integer>> build(new TypeToken<ObservableValue<Integer>>() {
-			}).build();
-		SettableValue<Integer> inner1 = SettableValue.build(Integer.TYPE).withValue(1).build();
+		SettableValue<ObservableValue<Integer>> outer = SettableValue.<ObservableValue<Integer>> build().build();
+		SettableValue<Integer> inner1 = SettableValue.<Integer> build().withValue(1).build();
 		outer.set(inner1, null);
-		SettableValue<Integer> inner2 = SettableValue.build(Integer.TYPE).withValue(2).build();
+		SettableValue<Integer> inner2 = SettableValue.<Integer> build().withValue(2).build();
 		int [] received = new int[1];
 		ObservableValue.flatten(outer).changes().act(value -> received[0] = value.getNewValue());
 
@@ -238,14 +234,14 @@ public class ObservableTest {
 	}
 
 	/**
-	 * Tests {@link ObservableValue#firstValue(TypeToken, java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
+	 * Tests {@link ObservableValue#firstValue(java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
 	 */
 	@Test
 	public void observableFirstValue() {
-		SettableValue<Integer> v1 = SettableValue.build(TypeToken.of(Integer.class)).build();
-		SettableValue<Integer> v2 = SettableValue.build(TypeToken.of(Integer.class)).build();
-		SettableValue<Integer> v3 = SettableValue.build(TypeToken.of(Integer.class)).build();
-		ObservableValue<Integer> first = ObservableValue.firstValue(TypeToken.of(Integer.class), null, null, v1, v2, v3);
+		SettableValue<Integer> v1 = SettableValue.<Integer> build().build();
+		SettableValue<Integer> v2 = SettableValue.<Integer> build().build();
+		SettableValue<Integer> v3 = SettableValue.<Integer> build().build();
+		ObservableValue<Integer> first = ObservableValue.firstValue(null, null, v1, v2, v3);
 
 		assertEquals(null, first.get());
 		v2.set(2, null);

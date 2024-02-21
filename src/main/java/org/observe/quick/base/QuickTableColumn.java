@@ -23,7 +23,6 @@ import org.observe.quick.QuickWidget;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyledElement;
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -97,9 +96,6 @@ public interface QuickTableColumn<R, C> {
 
 		@Override
 		ValueTyped<R> getParentElement();
-
-		/** @return The type of rows in the table */
-		TypeToken<R> getRowType();
 
 		/** @return The columns for the table */
 		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
@@ -189,15 +185,10 @@ public interface QuickTableColumn<R, C> {
 				theEditColumnValue = editColumnValue;
 			}
 
-			/**
-			 * @param rowType The type of rows in the table
-			 * @param columnType The value type of the column
-			 * @param descrip A description of the model context, for debugging
-			 */
-			public Default(TypeToken<R> rowType, TypeToken<C> columnType, String descrip) {
-				super(rowType, descrip);
-				theEditColumnValue = SettableValue.build(columnType).withValue(TypeTokens.get().getDefaultValue(columnType))
-					.withDescription(descrip + ".columnEditValue").build();
+			/** @param descrip A description of the model context, for debugging */
+			public Default(String descrip) {
+				super(descrip);
+				theEditColumnValue = SettableValue.<C> build().withDescription(descrip + ".columnEditValue").build();
 			}
 
 			@Override
@@ -408,7 +399,6 @@ public interface QuickTableColumn<R, C> {
 		private ModelValueInstantiator<SettableValue<String>> theEditableInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theAcceptInstantiator;
 
-		private TypeToken<R> theRowType;
 		private SettableValue<SettableValue<R>> theEditRowValue;
 		private SettableValue<SettableValue<C>> theEditColumnValue;
 		private SettableValue<SettableValue<Boolean>> isSelected;
@@ -425,15 +415,23 @@ public interface QuickTableColumn<R, C> {
 		/** @param id The element ID for the editing */
 		protected ColumnEditing(Object id) {
 			super(id);
-			isEditable = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			isAcceptable = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			isSelected = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			theRowIndex = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
-			theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+			isEditable = SettableValue.<SettableValue<String>> build().build();
+			isAcceptable = SettableValue.<SettableValue<String>> build().build();
+			isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+			theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+			theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
+			theEditRowValue = SettableValue.<SettableValue<R>> build().build();
+			theRawColumnEditValue = SettableValue.<C> build().build();
+			theFilteredColumnEditValue = SettableValue.<C> build().build()//
+				// .disableWith(SettableValue.flatten(isEditable))//
+				.filterAccept(v -> {
+					SettableValue<String> accept = isAcceptable.get();
+					if (accept == null)
+						return null;
+					theRawColumnEditValue.set(v, null);
+					return accept == null ? null : accept.get();
+				});
+			theEditColumnValue = SettableValue.<SettableValue<C>> build().build();
 		}
 
 		@Override
@@ -490,34 +488,6 @@ public interface QuickTableColumn<R, C> {
 			super.doUpdate(interpreted);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 
-			TypeToken<R> rowType;
-			try {
-				rowType = myInterpreted.getParentElement().getParentElement().getValueType();
-			} catch (ExpressoInterpretationException e) {
-				throw new IllegalStateException("Not initialized?", e);
-			}
-			if (theEditRowValue == null || !theRowType.equals(rowType)) {
-				theEditRowValue = SettableValue
-					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(rowType)).build();
-			}
-			if (theRawColumnEditValue == null || !theRawColumnEditValue.getType().equals(myInterpreted.getColumnType())) {
-				TypeToken<C> columnType = myInterpreted.getColumnType();
-				C defValue = TypeTokens.get().getDefaultValue(columnType);
-				theRawColumnEditValue = SettableValue.build(columnType).withValue(defValue).build();
-				theFilteredColumnEditValue = SettableValue.build(columnType).withValue(defValue).build()//
-					// .disableWith(SettableValue.flatten(isEditable))//
-					.filterAccept(v -> {
-						SettableValue<String> accept = isAcceptable.get();
-						if (accept == null)
-							return null;
-						theRawColumnEditValue.set(v, null);
-						return accept == null ? null : accept.get();
-					});
-				theEditColumnValue = SettableValue
-					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(myInterpreted.getColumnType()))
-					.build();
-			}
-
 			theColumnEditValueVariable = myInterpreted.getDefinition().getColumnEditValueVariable();
 			theClicks = myInterpreted.getDefinition().getClicks();
 			theEditableInstantiator = myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().instantiate();
@@ -570,11 +540,10 @@ public interface QuickTableColumn<R, C> {
 		public ColumnEditing<R, C> copy(ExElement parent) {
 			ColumnEditing<R, C> copy = (ColumnEditing<R, C>) super.copy(parent);
 
-			C defValue = TypeTokens.get().getDefaultValue(theRawColumnEditValue.getType());
-			copy.isEditable = SettableValue.build(isEditable.getType()).build();
-			copy.isAcceptable = SettableValue.build(isAcceptable.getType()).build();
-			copy.theRawColumnEditValue = SettableValue.build(theRawColumnEditValue.getType()).withValue(defValue).build();
-			copy.theFilteredColumnEditValue = SettableValue.build(theRawColumnEditValue.getType()).withValue(defValue).build()//
+			copy.isEditable = SettableValue.<SettableValue<String>> build().build();
+			copy.isAcceptable = SettableValue.<SettableValue<String>> build().build();
+			copy.theRawColumnEditValue = SettableValue.<C> build().build();
+			copy.theFilteredColumnEditValue = SettableValue.<C> build().build()//
 				// .disableWith(SettableValue.flatten(copy.isEditable))//
 				.filterAccept(v -> {
 					SettableValue<String> accept = copy.isAcceptable.get();
@@ -583,11 +552,11 @@ public interface QuickTableColumn<R, C> {
 					copy.theRawColumnEditValue.set(v, null);
 					return accept == null ? null : accept.get();
 				});
-			copy.theEditRowValue = SettableValue.build(theEditRowValue.getType()).build();
-			copy.theEditColumnValue = SettableValue.build(theEditColumnValue.getType()).build();
-			copy.isSelected = SettableValue.build(isSelected.getType()).build();
-			copy.theRowIndex = SettableValue.build(theRowIndex.getType()).build();
-			copy.theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
+			copy.theEditRowValue = SettableValue.<SettableValue<R>> build().build();
+			copy.theEditColumnValue = SettableValue.<SettableValue<C>> build().build();
+			copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
+			copy.theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
 
 			copy.theEditor = theEditor.copy(copy);
 
@@ -839,7 +808,7 @@ public interface QuickTableColumn<R, C> {
 			/** @param element The column editing to define */
 			protected RowModifyEditType(ColumnEditing<R, C> element) {
 				super(element);
-				theCommit = SettableValue.build(TypeTokens.get().of(ObservableAction.class)).build();
+				theCommit = SettableValue.<ObservableAction> build().build();
 			}
 
 			/** @return Whether to fire an update event on the edited row after an edit */
@@ -876,7 +845,7 @@ public interface QuickTableColumn<R, C> {
 			public RowModifyEditType<R, C> copy(ColumnEditing<R, C> element) {
 				RowModifyEditType<R, C> copy = (RowModifyEditType<R, C>) super.copy(element);
 
-				copy.theCommit = SettableValue.build(theCommit.getType()).build();
+				copy.theCommit = SettableValue.<ObservableAction> build().build();
 
 				return copy;
 			}
@@ -978,9 +947,7 @@ public interface QuickTableColumn<R, C> {
 			/** @param element The column editing to define */
 			protected RowReplaceEditType(ColumnEditing<R, C> element) {
 				super(element);
-				theReplacement = SettableValue.build(
-					TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(element.getParentElement().getRowType()))
-					.build();
+				theReplacement = SettableValue.<SettableValue<R>> build().build();
 			}
 
 			@Override
@@ -1011,7 +978,7 @@ public interface QuickTableColumn<R, C> {
 			public RowReplaceEditType<R, C> copy(ColumnEditing<R, C> element) {
 				RowReplaceEditType<R, C> copy = (RowReplaceEditType<R, C>) super.copy(element);
 
-				copy.theReplacement = SettableValue.build(theReplacement.getType()).build();
+				copy.theReplacement = SettableValue.<SettableValue<R>> build().build();
 
 				return copy;
 			}
@@ -1275,9 +1242,8 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
-		private TypeToken<R> theRowType;
-		private TypeToken<C> theColumnType;
 		private ObservableCollection<SingleColumn> theColumn;
+		private TypeToken<C> theColumnType;
 
 		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
 		private ModelValueInstantiator<SettableValue<C>> theValueInstantiator;
@@ -1300,9 +1266,10 @@ public interface QuickTableColumn<R, C> {
 		/** @param id The element ID for the column */
 		protected SingleColumnSet(Object id) {
 			super(id);
-			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
-				.build();
-			theHeaderTooltip = SettableValue.build(theName.getType()).build();
+			theName = SettableValue.<SettableValue<String>> build().build();
+			theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
+			theValue = SettableValue.<SettableValue<C>> build().build();
+			theColumn = ObservableCollection.of(new SingleColumn());
 		}
 
 		@Override
@@ -1318,11 +1285,6 @@ public interface QuickTableColumn<R, C> {
 		/** @return The model ID of the variable by which the active column value will be available to expressions */
 		public ModelComponentId getColumnValueVariable() {
 			return theColumnValueVariable;
-		}
-
-		@Override
-		public TypeToken<R> getRowType() {
-			return theRowType;
 		}
 
 		@Override
@@ -1354,20 +1316,7 @@ public interface QuickTableColumn<R, C> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
-			TypeToken<R> rowType;
-			try {
-				rowType = myInterpreted.getValueType();
-			} catch (ExpressoInterpretationException e) {
-				throw new IllegalStateException("Not initialized?", e);
-			}
-			if (theRowType == null || !theRowType.equals(rowType) || !theColumnType.equals(myInterpreted.getType())) {
-				theRowType = rowType;
-				theColumnType = myInterpreted.getType();
-				theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(theColumnType))
-					.build();
-				theColumn = ObservableCollection.of((Class<SingleColumnSet<R, C>.SingleColumn>) (Class<?>) SingleColumn.class,
-					new SingleColumn());
-			}
+			theColumnType = myInterpreted.getType();
 			theNameInstantiator = myInterpreted.getName().instantiate();
 			theColumnValueVariable = myInterpreted.getDefinition().getColumnValueVariable();
 			theValueInstantiator = myInterpreted.getValue().instantiate();
@@ -1459,9 +1408,9 @@ public interface QuickTableColumn<R, C> {
 		public SingleColumnSet<R, C> copy(ExElement parent) {
 			SingleColumnSet<R, C> copy = (SingleColumnSet<R, C>) super.copy(parent);
 
-			copy.theName = SettableValue.build(theName.getType()).build();
-			copy.theValue = SettableValue.build(theValue.getType()).build();
-			copy.theHeaderTooltip = SettableValue.build(theHeaderTooltip.getType()).build();
+			copy.theName = SettableValue.<SettableValue<String>> build().build();
+			copy.theValue = SettableValue.<SettableValue<C>> build().build();
+			copy.theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
 
 			copy.theColumn.clear();
 			copy.theColumn.add(copy.new SingleColumn());

@@ -46,8 +46,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
-import com.google.common.reflect.TypeToken;
-
 public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEditor {
 	public interface EditorSubscription {
 		boolean uninstall(boolean commit);
@@ -170,7 +168,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> renderer, JComboBox<C> combo,
 		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
 		Function<C, String>[] filter = new Function[1];
-		SettableValue<String> tooltip = SettableValue.build(String.class).build();
+		SettableValue<String> tooltip = SettableValue.<String> build().build();
 		Function<? super C, String>[] valueToolTip = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		combo.setRenderer(new DefaultListCellRenderer() {
@@ -183,8 +181,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		});
 		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
-		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue
-			.build((Class<ObservableCollection<? extends C>>) (Class<?>) ObservableCollection.class).build();
+		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue.<ObservableCollection<? extends C>> build()
+			.build();
 		ObservableComboBoxModel.comboFor(combo, tooltip, v -> {
 			return valueToolTip[0] == null ? null : valueToolTip[0].apply(v);
 		}, ObservableCollection.flattenValue(availableValues), value);
@@ -515,21 +513,13 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 			if (cell.getRowIndex() < model.size()) {
 				MutableCollectionElement<M> modelElement = model.mutableElement(model.getElement(cell.getRowIndex()).getElementId());
-				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(model.getType(), v))
-						return rendering.getMutator().isAcceptable(modelElement, v);
-					else
-						return "Unacceptable value";
-				};
+				valueFilter = v -> rendering.getMutator().isAcceptable(modelElement, v);
 			} else {
 				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(model.getType(), v)) {
-						String msg = rendering.getMutator().isAcceptable(null, v);
-						if (msg == null)
-							msg = model.canAdd((M) v);
-						return msg;
-					} else
-						return "Unacceptable value";
+					String msg = rendering.getMutator().isAcceptable(null, v);
+					if (msg == null)
+						msg = model.canAdd((M) v);
+					return msg;
 				};
 			}
 			if (rendering.getMutator().getEditorTooltip() != null || rendering.getTooltipFn() != null) {
@@ -781,7 +771,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		}
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
-			return createEditorValue((TypeToken<C>) TypeTokens.get().OBJECT, filter, null);
+			return createEditorValue(filter, null);
 		}
 
 		public static <C> SettableValue<C> modifyEditorValue(SettableValue<C> value, Function<C, String>[] filter) {
@@ -793,9 +783,9 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			});
 		}
 
-		public static <C> SettableValue<C> createEditorValue(TypeToken<C> type, Function<C, String>[] filter,
+		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter,
 			Consumer<SettableValue.Builder<C>> modify) {
-			SettableValue.Builder<C> builder = SettableValue.build(type).withListening(opts -> opts.forEachSafe(false));
+			SettableValue.Builder<C> builder = SettableValue.<C> build().withListening(opts -> opts.forEachSafe(false));
 			if (modify != null)
 				modify.accept(builder);
 			return builder.build()//

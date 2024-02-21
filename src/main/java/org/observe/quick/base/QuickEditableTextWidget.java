@@ -12,7 +12,6 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -195,9 +194,8 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		/** @param id The element ID for this widget */
 		protected Abstract(Object id) {
 			super(id);
-			theErrorStatus = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
-			theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
+			theErrorStatus = SettableValue.<SettableValue<String>> build().build();
+			theWarningStatus = SettableValue.<SettableValue<String>> build().build();
 		}
 
 		/**
@@ -235,8 +233,8 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		public QuickEditableTextWidget.Abstract<T> copy(ExElement parent) {
 			QuickEditableTextWidget.Abstract<T> copy = (QuickEditableTextWidget.Abstract<T>) super.copy(parent);
 
-			copy.theErrorStatus = SettableValue.build(theErrorStatus.getType()).build();
-			copy.theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
+			copy.theErrorStatus = SettableValue.<SettableValue<String>> build().build();
+			copy.theWarningStatus = SettableValue.<SettableValue<String>> build().build();
 
 			return copy;
 		}

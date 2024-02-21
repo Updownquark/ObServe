@@ -3,7 +3,6 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.function.Function;
 
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
@@ -245,33 +244,26 @@ public class ConditionalExpression implements ObservableExpression {
 
 		private MV createValue(SettableValue<Boolean> conditionX, Object primaryX, Object secondaryX) {
 			if (theType.getModelType() == ModelTypes.Value) {
-				return (MV) SettableValue.flattenAsSettable(
-					conditionX.map(TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(theType.getType(0)),
-						LambdaUtils.printableFn(c -> {
-							if (c != null && c)
-								return (SettableValue<Object>) primaryX;
-							else
-								return (SettableValue<Object>) secondaryX;
-						}, () -> "? " + primaryX + ": " + secondaryX, null)),
-					null);
+				return (MV) SettableValue.flattenAsSettable(conditionX.map(LambdaUtils.printableFn(c -> {
+					if (c != null && c)
+						return (SettableValue<Object>) primaryX;
+					else
+						return (SettableValue<Object>) secondaryX;
+				}, () -> "? " + primaryX + ": " + secondaryX, null)), null);
 			} else if (theType.getModelType() == ModelTypes.Collection) {
-				return (MV) ObservableCollection.flattenValue(conditionX.map(
-					TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<Object>> parameterized(theType.getType(0)),
-					LambdaUtils.printableFn(c -> {
-						if (c != null && c)
-							return (ObservableCollection<Object>) primaryX;
-						else
-							return (ObservableCollection<Object>) secondaryX;
-					}, () -> "? " + primaryX + ": " + secondaryX, null)));
+				return (MV) ObservableCollection.flattenValue(conditionX.map(LambdaUtils.printableFn(c -> {
+					if (c != null && c)
+						return (ObservableCollection<Object>) primaryX;
+					else
+						return (ObservableCollection<Object>) secondaryX;
+				}, () -> "? " + primaryX + ": " + secondaryX, null)));
 			} else if (theType.getModelType() == ModelTypes.Set) {
-				return (MV) ObservableSet.flattenValue(
-					conditionX.map(TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(theType.getType(0)),
-						LambdaUtils.printableFn(c -> {
-							if (c != null && c)
-								return (ObservableSet<Object>) primaryX;
-							else
-								return (ObservableSet<Object>) secondaryX;
-						}, () -> "? " + primaryX + ": " + secondaryX, null)));
+				return (MV) ObservableSet.flattenValue(conditionX.map(LambdaUtils.printableFn(c -> {
+					if (c != null && c)
+						return (ObservableSet<Object>) primaryX;
+					else
+						return (ObservableSet<Object>) secondaryX;
+				}, () -> "? " + primaryX + ": " + secondaryX, null)));
 			} else
 				throw new IllegalStateException("Conditional expressions not supported for model type " + theType.getModelType());
 		}

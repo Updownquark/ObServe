@@ -29,9 +29,6 @@ import javax.swing.tree.TreeCellRenderer;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.dbug.Dbug;
-import org.observe.dbug.DbugAnchor;
-import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
@@ -48,17 +45,10 @@ import com.google.common.reflect.TypeToken;
  * @param <R> The type of the row data for the table
  */
 public abstract class AbstractObservableTableModel<R> {
-	/** {@link Dbug} anchor type for this class */
-	@SuppressWarnings("rawtypes")
-	public static final DbugAnchorType<AbstractObservableTableModel> DBUG=Dbug.common().anchor(AbstractObservableTableModel.class, null);
-
 	private final ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
 	private final ObservableListModel<? extends CategoryRenderStrategy<R, ?>> theColumnModel;
 
 	private final ListenerList<RowMouseListener<? super R>> theRowMouseListeners;
-
-	@SuppressWarnings("rawtypes")
-	private final DbugAnchor<AbstractObservableTableModel> theAnchor = DBUG.instance(this);
 
 	/**
 	 * @param colNames The names for the columns
@@ -79,8 +69,7 @@ public abstract class AbstractObservableTableModel<R> {
 			columns[i] = new CategoryRenderStrategy<>(colNames[i], (TypeToken<Object>) detectColumnClass(columnAccessors[i]),
 				columnAccessors[i]);
 		}
-		return ObservableCollection.of(new TypeToken<CategoryRenderStrategy<R, ?>>() {
-		}, columns);
+		return ObservableCollection.of(columns);
 	}
 
 	private static TypeToken<?> detectColumnClass(Function<?, ?> accessor) {
@@ -95,10 +84,7 @@ public abstract class AbstractObservableTableModel<R> {
 	protected AbstractObservableTableModel(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
 		theColumns = columns;
 
-		try (Transaction t = theAnchor.instantiating()//
-			.watchFor(ObservableListModel.DBUG, "columnModel", tk -> tk.skip(1))) {
-			theColumnModel = new ObservableListModel<>(columns);
-		}
+		theColumnModel = new ObservableListModel<>(columns);
 
 		theRowMouseListeners = ListenerList.build().build();
 	}

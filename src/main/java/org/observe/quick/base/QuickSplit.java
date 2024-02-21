@@ -15,7 +15,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -131,8 +130,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	/** @param id The element ID for this widget */
 	protected QuickSplit(Object id) {
 		super(id);
-		theSplitPosition = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
+		theSplitPosition = SettableValue.<SettableValue<QuickSize>> build().build();
 	}
 
 	/** @return Whether the split pane arranges its content on top of each other or side-by-side */
@@ -169,8 +167,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 		theSplitPosition.set(
-			theSplitPositionInstantiator == null ? SettableValue.build(QuickSize.class).build()
-				: theSplitPositionInstantiator.get(myModels),
+			theSplitPositionInstantiator == null ? SettableValue.<QuickSize> build().build() : theSplitPositionInstantiator.get(myModels),
 				null);
 	}
 
@@ -178,7 +175,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	public QuickSplit copy(ExElement parent) {
 		QuickSplit copy = (QuickSplit) super.copy(parent);
 
-		theSplitPosition = SettableValue.build(theSplitPosition.getType()).build();
+		theSplitPosition = SettableValue.<SettableValue<QuickSize>> build().build();
 
 		return copy;
 	}

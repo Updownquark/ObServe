@@ -171,11 +171,6 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public TypeToken<ObservableConfig> getType() {
-			return ObservableConfig.TYPE;
-		}
-
-		@Override
 		public long getStamp() {
 			resolvePath(0, false);
 			return Stamped.compositeStamp(thePathElementStamps);
@@ -323,11 +318,6 @@ public class ObservableConfigContent {
 		 */
 		public ObservableConfigValue(ObservableConfig root, ObservableConfigPath path) {
 			theConfigChild = new ObservableConfigChild(root, path);
-		}
-
-		@Override
-		public TypeToken<String> getType() {
-			return TypeTokens.get().STRING;
 		}
 
 		@Override
@@ -510,11 +500,6 @@ public class ObservableConfigContent {
 		/** @return The root config */
 		public ObservableConfig getConfig() {
 			return theConfig;
-		}
-
-		@Override
-		public TypeToken<ObservableConfig> getType() {
-			return ObservableConfig.TYPE;
 		}
 
 		@Override
@@ -1082,7 +1067,7 @@ public class ObservableConfigContent {
 			return new ConfiguredValueType<ObservableConfig>() {
 				@Override
 				public TypeToken<ObservableConfig> getType() {
-					return theChildren.getType();
+					return TypeTokens.get().of(ObservableConfig.class);
 				}
 
 				@Override

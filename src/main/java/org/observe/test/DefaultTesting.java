@@ -23,8 +23,6 @@ import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
 import org.qommons.ex.ExConsumer;
 
-import com.google.common.reflect.TypeToken;
-
 class DefaultTesting implements InteractiveTesting {
 	private final WrappedEnv theEnv;
 	private final UserInteraction theUI;
@@ -290,10 +288,6 @@ class DefaultTesting implements InteractiveTesting {
 				return theWrappedValue.getIdentity();
 			}
 
-			@Override
-			public TypeToken<T> getType() {
-				return theWrappedValue.getType();
-			}
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {

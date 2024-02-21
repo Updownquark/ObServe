@@ -15,9 +15,6 @@ import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableGraph;
 
-import com.google.common.reflect.TypeParameter;
-import com.google.common.reflect.TypeToken;
-
 /**
  * A graph implementation based on observable collections
  *
@@ -53,11 +50,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Object getIdentity() {
 					return source.getIdentity();
-				}
-
-				@Override
-				public TypeToken<N> getType() {
-					return source.getType();
 				}
 
 				@Override
@@ -112,20 +104,20 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getEdges() {
-					return source.getEdges().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
-						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
+					return source.getEdges().flow().<Edge<N, E>> transform(tx -> tx.cache(false).map(Edge::unsettable)).unmodifiable()
+						.collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getOutward() {
-					return source.getOutward().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
+					return source.getOutward().flow().<Edge<N, E>> transform(tx -> tx.cache(false).map(Edge::unsettable)).unmodifiable()
+						.collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getInward() {
-					return source.getInward().flow().transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable)).unmodifiable().collectPassive();
+					return source.getInward().flow().<Edge<N, E>> transform(tx -> tx.cache(false).map(Edge::unsettable)).unmodifiable()
+						.collectPassive();
 				}
 
 				@Override
@@ -164,11 +156,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Object getIdentity() {
 					return source.getIdentity();
-				}
-
-				@Override
-				public TypeToken<E> getType() {
-					return source.getType();
 				}
 
 				@Override
@@ -288,10 +275,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 
 			@Override
 			public ObservableCollection<? extends ObservableGraph.Node<N, E>> getNodes() {
-				return source.getNodes().flow()
-					.transform((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), //
-						tx -> tx.cache(false).map(ObservableGraph.Node::unsettable))
-					.unmodifiable().collectPassive();
+				return source.getNodes().flow().<Node<N, E>> transform(tx -> tx.cache(false).map(Node::unsettable)).unmodifiable()
+					.collectPassive();
 			}
 
 			@Override
@@ -301,10 +286,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 
 			@Override
 			public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
-				return source.getEdges().flow()
-					.transform((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), //
-						tx -> tx.cache(false).map(ObservableGraph.Edge::unsettable))
-					.unmodifiable().collectPassive();
+				return source.getEdges().flow().<Edge<N, E>> transform(tx -> tx.cache(false).map(Edge::unsettable)).unmodifiable()
+					.collectPassive();
 			}
 
 			@Override
@@ -321,14 +304,10 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 	 * @param edgeType The edge type for the graph
 	 * @return An empty graph
 	 */
-	static <N, E> ObservableGraph<N, E> empty(TypeToken<N> nodeType, TypeToken<E> edgeType) {
-		TypeToken<Node<N, E>> nodeType2 = new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
-			.where(new TypeParameter<E>() {}, edgeType.wrap());
-		TypeToken<Edge<N, E>> edgeType2 = new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
-			.where(new TypeParameter<E>() {}, edgeType.wrap());
-		ObservableCollection<Node<N, E>> nodes = ObservableCollection.of(nodeType2);
-		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of(edgeType2);
-		ObservableCollection<N> nodeValues = ObservableCollection.of(nodeType);
+	static <N, E> ObservableGraph<N, E> empty() {
+		ObservableCollection<Node<N, E>> nodes = ObservableCollection.of();
+		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of();
+		ObservableCollection<N> nodeValues = ObservableCollection.of();
 		return new ObservableGraph<N, E>() {
 			@Override
 			public boolean isEventing() {

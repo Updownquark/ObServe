@@ -167,7 +167,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				SettableValue<T> value = getElementValue().get(models);
-				SettableValue<T> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
+				SettableValue<T> copy = SettableValue.<T> build().withValue(value.get()).build();
 				value.noInitChanges().takeUntil(models.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
 				return copy.disableWith(ObservableValue.of("A watched value cannot be modified"));
 			}

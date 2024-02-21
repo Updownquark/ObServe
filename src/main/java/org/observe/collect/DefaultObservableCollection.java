@@ -19,23 +19,17 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.ValueStoredCollection;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableCollection} built on a {@link BetterList}, which should never be modified from outside
  *
  * @param <E> The type for the collection
  */
 public class DefaultObservableCollection<E> implements ObservableCollection<E> {
-	/**
-	 * @param type The type for the new collection
-	 * @return A builder to build a new ObservableCollection
-	 */
-	public static <E> ObservableCollectionBuilder<E, ?> build(TypeToken<E> type) {
-		return new ObservableCollectionBuilder.CollectionBuilderImpl<>(type, "observable-collection");
+	/** @return A builder to build a new ObservableCollection */
+	public static <E> ObservableCollectionBuilder<E, ?> build() {
+		return new ObservableCollectionBuilder.CollectionBuilderImpl<>("observable-collection");
 	}
 
-	private final TypeToken<E> theType;
 	private final BetterList<E> theValues;
 	private final CausalLock theLock;
 	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
@@ -43,12 +37,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
 
-	/**
-	 * @param type The type for this collection
-	 * @param list The list to hold this collection's elements
-	 */
-	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list) {
-		this(type, list, null, null, null);
+	/** @param list The list to hold this collection's elements */
+	public DefaultObservableCollection(BetterList<E> list) {
+		this(list, null, null, null);
 	}
 
 	/**
@@ -60,11 +51,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	 * @see #getElementsBySource(ElementId, BetterCollection)
 	 * @see #getSourceElements(ElementId, BetterCollection)
 	 */
-	DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
+	DefaultObservableCollection(BetterList<E> list, //
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementsBySource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
 		Equivalence<? super E> equivalence) {
-		theType = type;
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
@@ -128,11 +118,6 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public boolean isContentControlled() {
 		return theValues.isContentControlled();
-	}
-
-	@Override
-	public TypeToken<E> getType() {
-		return theType;
 	}
 
 	@Override

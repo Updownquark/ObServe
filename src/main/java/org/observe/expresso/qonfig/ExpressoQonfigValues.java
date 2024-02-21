@@ -173,7 +173,7 @@ public class ExpressoQonfigValues {
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				SettableValue<T> initV = getElementValue().get(models);
-				return new ConstantValue<>(getModelPath(), initV.getType(), initV.get());
+				return new ConstantValue<>(getModelPath(), initV.get());
 			}
 
 			@Override
@@ -185,18 +185,11 @@ public class ExpressoQonfigValues {
 
 		static class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
 			private final String theModelPath;
-			private final TypeToken<T> theType;
 			private final T theValue;
 
-			public ConstantValue(String path, TypeToken<T> type, T value) {
+			public ConstantValue(String path, T value) {
 				theModelPath = path;
-				theType = type;
 				theValue = value;
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return theType;
 			}
 
 			@Override
@@ -336,7 +329,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
-				return new Instantiator<>(this, (TypeToken<T>) getType().getType(0), getInit() == null ? null : getInit().instantiate());
+				return new Instantiator<>(this, getInit() == null ? null : getInit().instantiate());
 			}
 		}
 
@@ -346,14 +339,14 @@ public class ExpressoQonfigValues {
 		 * @param <T> The type of the value
 		 */
 		public static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
-			private final TypeToken<T> theType;
 			private final ModelValueInstantiator<SettableValue<T>> theInit;
+			private final T theDefaultValue;
 
-			Instantiator(SimpleValueDef.Interpreted<T> parent, TypeToken<T> type, ModelValueInstantiator<SettableValue<T>> init)
+			Instantiator(SimpleValueDef.Interpreted<T> parent, ModelValueInstantiator<SettableValue<T>> init)
 				throws ModelInstantiationException {
 				super(parent);
 				theInit = parent.getInit() == null ? null : parent.getInit().instantiate();
-				theType = type;
+				theDefaultValue = (T) TypeTokens.get().getDefaultValue(parent.getType().getType(0));
 			}
 
 			@Override
@@ -373,14 +366,14 @@ public class ExpressoQonfigValues {
 				if (getElementValue() != null)
 					return getElementValue().get(models);
 				else {
-					SettableValue.Builder<T> builder = SettableValue.build(theType);
+					SettableValue.Builder<T> builder = SettableValue.build();
 					if (getModelPath() != null)
 						builder.withDescription(getModelPath());
 					if (theInit != null) {
 						SettableValue<T> initV = theInit.get(models);
 						builder.withValue(initV.get());
 					} else
-						builder.withValue(TypeTokens.get().getDefaultValue(theType));
+						builder.withValue(theDefaultValue);
 					return builder.build();
 				}
 			}
@@ -576,7 +569,7 @@ public class ExpressoQonfigValues {
 				models = theLocalModels.wrap(models);
 				SettableValue<T> source = theSource.get(models);
 				ObservableAction save = theSave.get(models);
-				SettableValue<T> targetAs = SettableValue.build(source.getType()).build();
+				SettableValue<T> targetAs = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, models, targetAs);
 				return new FieldValue<>(source, save, targetAs);
 			}
@@ -593,7 +586,7 @@ public class ExpressoQonfigValues {
 				if (sourceSource == newSource && sourceSave == newSave)
 					return value;
 				else {
-					SettableValue<T> targetAs = SettableValue.build(newSource.getType()).build();
+					SettableValue<T> targetAs = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, newModels, targetAs);
 					return new FieldValue<>(newSource, newSave, targetAs);
 				}
@@ -919,7 +912,6 @@ public class ExpressoQonfigValues {
 		 * @param <C> The type of the collection
 		 */
 		public static abstract class Instantiator<T, C extends ObservableCollection<T>> extends ModelValueElement.Abstract<C> {
-			private final TypeToken<T> theType;
 			private final List<CollectionElement.CollectionPopulator<T>> theElements;
 
 			/**
@@ -930,7 +922,6 @@ public class ExpressoQonfigValues {
 			protected Instantiator(AbstractCollectionDef.Interpreted<T, C> interpreted, List<CollectionPopulator<T>> elements)
 				throws ModelInstantiationException {
 				super(interpreted);
-				theType = interpreted.getValueType();
 				theElements = elements;
 			}
 
@@ -955,7 +946,7 @@ public class ExpressoQonfigValues {
 			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				if (getElementValue() != null)
 					return getElementValue().get(models);
-				ObservableCollectionBuilder<T, ?> builder = create(theType, models);
+				ObservableCollectionBuilder<T, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
 				C collection = (C) builder.build();
@@ -976,13 +967,11 @@ public class ExpressoQonfigValues {
 			/**
 			 * Creates the collection
 			 *
-			 * @param type The type for the collection
 			 * @param models The model instance
 			 * @return The collection builder
 			 * @throws ModelInstantiationException If the collection could not be instantiated
 			 */
-			protected abstract ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
-				throws ModelInstantiationException;
+			protected abstract ObservableCollectionBuilder<T, ?> create(ModelSetInstance models) throws ModelInstantiationException;
 		}
 	}
 
@@ -1029,9 +1018,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return ObservableCollection.build(type);
+			protected ObservableCollectionBuilder<T, ?> create(ModelSetInstance models) throws ModelInstantiationException {
+				return ObservableCollection.build();
 			}
 		}
 	}
@@ -1163,23 +1151,21 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableCollectionBuilder.SortedBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
-				throws ModelInstantiationException {
+			protected ObservableCollectionBuilder.SortedBuilder<T, ?> create(ModelSetInstance models) throws ModelInstantiationException {
 				Comparator<? super T> sort = theSort.get(models);
-				return create(type, sort, models);
+				return create(sort, models);
 			}
 
 			/**
 			 *
 			 * Creates the collection
 			 *
-			 * @param type The type for the collection
 			 * @param sort The sorting for the collection
 			 * @param models The model instance
 			 * @return The sorted collection builder
 			 * @throws ModelInstantiationException If the collection cannot be instantiated
 			 */
-			protected abstract SortedBuilder<T, ?> create(TypeToken<T> type, Comparator<? super T> sort, ModelSetInstance models)
+			protected abstract SortedBuilder<T, ?> create(Comparator<? super T> sort, ModelSetInstance models)
 				throws ModelInstantiationException;
 		}
 	}
@@ -1227,9 +1213,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableCollectionBuilder.SortedBuilder<T, ?> create(TypeToken<T> type, Comparator<? super T> sort,
-				ModelSetInstance models) {
-				return ObservableCollection.build(type).sortBy(sort);
+			protected ObservableCollectionBuilder.SortedBuilder<T, ?> create(Comparator<? super T> sort, ModelSetInstance models) {
+				return ObservableCollection.<T> build().sortBy(sort);
 			}
 		}
 	}
@@ -1276,9 +1261,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return ObservableSet.build(type);
+			protected ObservableCollectionBuilder<T, ?> create(ModelSetInstance models) throws ModelInstantiationException {
+				return ObservableSet.build();
 			}
 		}
 	}
@@ -1326,9 +1310,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableCollectionBuilder.DistinctSortedBuilder<T, ?> create(TypeToken<T> type, Comparator<? super T> sort,
-				ModelSetInstance models) {
-				return ObservableCollection.build(type).distinctSorted(sort);
+			protected ObservableCollectionBuilder.DistinctSortedBuilder<T, ?> create(Comparator<? super T> sort, ModelSetInstance models) {
+				return ObservableCollection.<T> build().distinctSorted(sort);
 			}
 		}
 	}
@@ -1688,8 +1671,6 @@ public class ExpressoQonfigValues {
 		 * @param <M> The sub-type of {@link ObservableMap} to create
 		 */
 		public static abstract class Instantiator<K, V, M extends ObservableMap<K, V>> extends ModelValueElement.Abstract<M> {
-			private final TypeToken<K> theKeyType;
-			private final TypeToken<V> theValueType;
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
 
 			/**
@@ -1700,20 +1681,9 @@ public class ExpressoQonfigValues {
 			protected Instantiator(AbstractMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> elements)
 				throws ModelInstantiationException {
 				super(interpreted);
-				theKeyType = interpreted.getKeyType();
-				theValueType = interpreted.getValueType();
 				theEntries = elements;
 			}
 
-			/** @return The key type of the map */
-			public TypeToken<K> getKeyType() {
-				return theKeyType;
-			}
-
-			/** @return The value type of the map */
-			public TypeToken<V> getValueType() {
-				return theValueType;
-			}
 
 			/** @return Entries defined to initialize this map */
 			public List<MapEntry.MapPopulator<K, V>> getEntries() {
@@ -1728,7 +1698,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				ObservableMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
+				ObservableMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
 				M map = (M) builder.build();
@@ -1747,13 +1717,11 @@ public class ExpressoQonfigValues {
 			/**
 			 * Creates a builder for the map
 			 *
-			 * @param keyType The key type for the map
-			 * @param valueType The value type for the map
 			 * @param models The model instances to use to instantiate the map
 			 * @return The map builder
 			 * @throws ModelInstantiationException If the map cannot be instantiated
 			 */
-			protected abstract ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
+			protected abstract ObservableMap.Builder<K, V, ?> create(ModelSetInstance models)
 				throws ModelInstantiationException;
 		}
 	}
@@ -1803,9 +1771,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return ObservableMap.build(keyType, valueType);
+			protected ObservableMap.Builder<K, V, ?> create(ModelSetInstance models) throws ModelInstantiationException {
+				return ObservableMap.build();
 			}
 		}
 	}
@@ -1930,10 +1897,9 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
-				throws ModelInstantiationException {
+			protected ObservableMap.Builder<K, V, ?> create(ModelSetInstance models) throws ModelInstantiationException {
 				Comparator<? super K> sort = theSort.get(models);
-				return ObservableSortedMap.build(keyType, valueType, sort);
+				return ObservableSortedMap.build(sort);
 			}
 		}
 	}
@@ -2062,8 +2028,6 @@ public class ExpressoQonfigValues {
 		 * @param <M> The sub-type of {@link ObservableMultiMap} to create
 		 */
 		public static abstract class Instantiator<K, V, M extends ObservableMultiMap<K, V>> extends ModelValueElement.Abstract<M> {
-			private final TypeToken<K> theKeyType;
-			private final TypeToken<V> theValueType;
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
 
 			/**
@@ -2074,8 +2038,6 @@ public class ExpressoQonfigValues {
 			protected Instantiator(AbstractMultiMapDef.Interpreted<K, V, M> interpreted, List<MapEntry.MapPopulator<K, V>> entries)
 				throws ModelInstantiationException {
 				super(interpreted);
-				theKeyType = interpreted.getKeyType();
-				theValueType = interpreted.getValueType();
 				theEntries = entries;
 			}
 
@@ -2092,7 +2054,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				ObservableMultiMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
+				ObservableMultiMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
 				M map = (M) builder.build(models.getUntil());
@@ -2111,14 +2073,11 @@ public class ExpressoQonfigValues {
 			/**
 			 * Creates the multi-map
 			 *
-			 * @param keyType The key type for the map
-			 * @param valueType The value type for the map
 			 * @param models The model instance to use to create the map
 			 * @return The builder for the new multi-map
 			 * @throws ModelInstantiationException If the map cannot be instantiated
 			 */
-			protected abstract ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
-				ModelSetInstance models) throws ModelInstantiationException;
+			protected abstract ObservableMultiMap.Builder<K, V, ?> create(ModelSetInstance models) throws ModelInstantiationException;
 		}
 	}
 
@@ -2167,9 +2126,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return ObservableMultiMap.build(keyType, valueType);
+			protected ObservableMultiMap.Builder<K, V, ?> create(ModelSetInstance models) throws ModelInstantiationException {
+				return ObservableMultiMap.build();
 			}
 		}
 	}
@@ -2293,10 +2251,9 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
-				throws ModelInstantiationException {
+			protected ObservableMultiMap.Builder<K, V, ?> create(ModelSetInstance models) throws ModelInstantiationException {
 				Comparator<? super K> sort = theSort.get(models);
-				return ObservableMultiMap.build(keyType, valueType).sortedBy(sort);
+				return ObservableMultiMap.<K, V> build().sortedBy(sort);
 			}
 		}
 	}
@@ -2470,17 +2427,17 @@ public class ExpressoQonfigValues {
 		 * @param <T> The type of the event
 		 */
 		public static class Instantiator<T> extends ModelValueElement.Abstract<Observable<T>> {
-			private final TypeToken<T> theType;
 			private final ModelInstantiator theLocalModels;
 			private final ModelValueInstantiator<Observable<T>> theEvent;
 			private final ModelValueInstantiator<ObservableAction> theAction;
+			private final T theDefaultEventValue;
 			private final ModelComponentId theEventValue;
 
 			Instantiator(Hook.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theType = interpreted.getEventType();
 				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
 				theEvent = interpreted.getEvent() == null ? null : interpreted.getEvent().instantiate();
+				theDefaultEventValue = TypeTokens.get().getDefaultValue(interpreted.getEventType());
 				theAction = interpreted.getAction().instantiate();
 				theEventValue = interpreted.getDefinition().getEventVariable();
 			}
@@ -2512,8 +2469,8 @@ public class ExpressoQonfigValues {
 			}
 
 			Observable<T> create(Observable<T> on, ObservableAction action, ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<T> event = SettableValue.build(theType)//
-					.withValue(TypeTokens.get().getDefaultValue(theType)).build();
+				SettableValue<T> event = SettableValue.<T> build()//
+					.withValue(theDefaultEventValue).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theEventValue, models, event);
 				if (on != null) {
 					on.takeUntil(models.getUntil()).act(v -> {
@@ -2860,7 +2817,7 @@ public class ExpressoQonfigValues {
 				ObservableValue<String>[] actionsEnabled = new ObservableValue[actions.length];
 				for (int i = 0; i < actions.length; i++)
 					actionsEnabled[i] = actions[i].isEnabled();
-				theEnabled = ObservableValue.firstValue(TypeTokens.get().STRING, v -> v != null, null, actionsEnabled);
+				theEnabled = ObservableValue.firstValue(v -> v != null, null, actionsEnabled);
 			}
 
 			ObservableAction[] getActions() {
@@ -3764,7 +3721,7 @@ public class ExpressoQonfigValues {
 				SettableValue<Integer> remainingExecutions, SettableValue<Instant> until, SettableValue<Duration> runNextIn,
 				SettableValue<Instant> nextExecution, SettableValue<Integer> executionCount, SettableValue<Boolean> executing,
 				ObservableAction action, ErrorReporting actionReporting) {
-				super(SettableValue.build(Instant.class).withDescription("timer").build());
+				super(SettableValue.<Instant> build().withDescription("timer").build());
 				isActive = active;
 				theFrequency = frequency;
 				isStrictTiming = strictTiming;

@@ -40,7 +40,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	@Override
-	default E[] toArray() {
+	default Object[] toArray() {
 		return ObservableCollection.super.toArray();
 	}
 
@@ -97,29 +97,27 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @param values The values to be in the immutable set
 	 * @return An immutable set with the given values
 	 */
-	static <E> ObservableSet<E> of(TypeToken<E> type, E... values) {
-		return of(type, Arrays.asList(values));
+	static <E> ObservableSet<E> of(E... values) {
+		return of(Arrays.asList(values));
 	}
 
 	/**
 	 * @param <E> The type for the set
-	 * @param type The type for the set
 	 * @param values The values to be in the immutable set
 	 * @return An immutable set with the given values
 	 */
-	static <E> ObservableSet<E> of(TypeToken<E> type, Collection<? extends E> values) {
-		return of(type, Equivalence.DEFAULT, values);
+	static <E> ObservableSet<E> of(Collection<? extends E> values) {
+		return of(Equivalence.DEFAULT, values);
 	}
 
 	/**
 	 * @param <E> The type for the set
-	 * @param type The type for the set
 	 * @param equivalence The equivalence set to distinguish the values
 	 * @param values The values to be in the immutable set
 	 * @return An immutable set with the given values
 	 */
-	static <E> ObservableSet<E> of(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<? extends E> values) {
-		return new ConstantObservableSet<>(type, equivalence, ObservableCollection.<E> createDefaultBacking().withAll(values));
+	static <E> ObservableSet<E> of(Equivalence<? super E> equivalence, Collection<? extends E> values) {
+		return new ConstantObservableSet<>(equivalence, ObservableCollection.<E> createDefaultBacking().withAll(values));
 	}
 
 	/**
@@ -127,8 +125,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @param type The type for the set
 	 * @return A new observable set with the given type
 	 */
-	static <E> ObservableSet<E> create(TypeToken<E> type) {
-		return create(type, Equivalence.DEFAULT);
+	static <E> ObservableSet<E> create() {
+		return create(Equivalence.DEFAULT);
 	}
 
 	/**
@@ -137,8 +135,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @param equivalence The equivalence set to distinguish the set's values
 	 * @return A new observable set with the given type and equivalence
 	 */
-	static <E> ObservableSet<E> create(TypeToken<E> type, Equivalence<? super E> equivalence) {
-		return ObservableCollection.create(type).flow().withEquivalence(equivalence).distinct().collect();
+	static <E> ObservableSet<E> create(Equivalence<? super E> equivalence) {
+		return ObservableCollection.<E> create().flow().withEquivalence(equivalence).distinct().collect();
 	}
 
 	/**
@@ -146,17 +144,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @param type The type for the set
 	 * @return The builder for the set
 	 */
-	static <E> ObservableCollectionBuilder.DistinctBuilder<E, ?> build(TypeToken<E> type) {
-		return ObservableCollection.build(type).distinct();
-	}
-
-	/**
-	 * @param <E> The type for the set
-	 * @param type The type for the set
-	 * @return The builder for the set
-	 */
-	static <E> ObservableCollectionBuilder.DistinctBuilder<E, ?> build(Class<E> type) {
-		return build(TypeTokens.get().of(type));
+	static <E> ObservableCollectionBuilder.DistinctBuilder<E, ?> build() {
+		return ObservableCollection.<E> build().distinct();
 	}
 
 	/**

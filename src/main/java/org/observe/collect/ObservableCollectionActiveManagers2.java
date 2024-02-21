@@ -1,16 +1,6 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -33,7 +23,6 @@ import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementL
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
-import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
@@ -61,8 +50,6 @@ import org.qommons.collect.OptimisticContext;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Contains more implementations of {@link ActiveCollectionManager} and its dependencies
@@ -155,7 +142,7 @@ public class ObservableCollectionActiveManagers2 {
 									oldPresent = intersection.isPresent();
 								if (intersection != null)
 									intersection.sourceRemoved(IntersectedCollectionElement.this);
-								intersection = theFilterEquivalence.isElement(newValue) ? intersection((X) newValue) : null;
+								intersection = intersection((X) newValue);
 								if (intersection != null)
 									intersection.sourceAdded(IntersectedCollectionElement.this);
 								boolean newPresent;
@@ -218,12 +205,10 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (!theFilterEquivalence.isElement(value))
-					return isExclude ? null : StdMsg.ILLEGAL_ELEMENT;
 				String msg = theParentEl.isAcceptable(value);
 				if (msg != null)
 					return msg;
-				if (theFilterEquivalence.isElement(theParentEl.get()) && theFilterEquivalence.elementEquals((X) theParentEl.get(), value))
+				if (theFilterEquivalence.elementEquals((X) theParentEl.get(), value))
 					return null;
 				IntersectionElement intersect = theValues.get(value);
 				boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
@@ -234,11 +219,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (!theFilterEquivalence.isElement(value)) {
-					if (!isExclude)
-						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				} else if (theFilterEquivalence.isElement(theParentEl.get())
-					&& !theFilterEquivalence.elementEquals((X) theParentEl.get(), value)) {
+				if (!theFilterEquivalence.elementEquals((X) theParentEl.get(), value)) {
 					IntersectionElement intersect = theValues.get(value);
 					boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 					if (filterHas == isExclude)
@@ -288,11 +269,6 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), isExclude ? "without" : "intersect", theFilter.getIdentity());
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theParent.getTargetType();
 		}
 
 		@Override
@@ -386,7 +362,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
-			IntersectionElement intersect = theFilterEquivalence.isElement(toAdd) ? theValues.get(toAdd) : null;
+			IntersectionElement intersect = theValues.get(toAdd);
 			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				return StdMsg.ILLEGAL_ELEMENT;
@@ -396,7 +372,7 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			IntersectionElement intersect = theFilterEquivalence.isElement(value) ? theValues.get(value) : null;
+			IntersectionElement intersect = theValues.get(value);
 			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
@@ -428,7 +404,7 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			IntersectionElement intersect = theFilterEquivalence.isElement(newValue) ? theValues.get(newValue) : null;
+			IntersectionElement intersect = theValues.get(newValue);
 			boolean filterHas = intersect == null ? false : !intersect.filterElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
@@ -503,7 +479,7 @@ public class ObservableCollectionActiveManagers2 {
 				}
 			}, action -> theFilter.subscribe(action, fromStart).removeAll());
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				IntersectionElement element = theFilterEquivalence.isElement(parentEl.get()) ? intersection((X) parentEl.get()) : null;
+				IntersectionElement element = intersection((X) parentEl.get());
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
 				element.sourceAdded(el);
 				if (element.isPresent())
@@ -1211,7 +1187,6 @@ public class ObservableCollectionActiveManagers2 {
 
 	static class FlattenedManager<E, I, V, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
-		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> theMap;
 		private final FlatMapDef<I, V, T> theOptions;
 
@@ -1220,10 +1195,9 @@ public class ObservableCollectionActiveManagers2 {
 		private final BetterTreeSet<FlattenedHolder> theOuterElements;
 		private final ReentrantReadWriteLock theLock;
 
-		FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+		FlattenedManager(ActiveCollectionManager<E, ?, I> parent,
 			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends V>> map, FlatMapDef<I, V, T> options) {
 			theParent = parent;
-			theTargetType = targetType;
 			theMap = map;
 			theOptions = options;
 
@@ -1234,11 +1208,6 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "flatten", theMap, theOptions);
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theTargetType;
 		}
 
 		@Override
@@ -1498,13 +1467,8 @@ public class ObservableCollectionActiveManagers2 {
 							firstMsg = result.getError();
 					} else if (result.replaceSecondary()) {
 						V reversed = result.getSecondary();
-						String msg;
-						if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
-							|| !holder.holder.manager.equivalence().isElement(reversed)) {
-							msg = StdMsg.ILLEGAL_ELEMENT;
-						} else
-							msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
-								holder.getBound(false));
+						String msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
+							holder.getBound(false));
 						if (msg == null)
 							return null;
 						else if (firstMsg == null)
@@ -1537,13 +1501,8 @@ public class ObservableCollectionActiveManagers2 {
 							firstMsg = result.getError();
 					} else if (result.replaceSecondary()) {
 						V reversed = result.getSecondary();
-						String msg;
-						if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), reversed)
-							|| !holder.holder.manager.equivalence().isElement(reversed)) {
-							msg = StdMsg.ILLEGAL_ELEMENT;
-						} else
-							msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
-								holder.getBound(false));
+						String msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(reversed, holder.getBound(true),
+							holder.getBound(false));
 						if (msg == null) {
 							DerivedCollectionElement<V> added = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager)
 								.addElement(reversed, holder.getBound(true), holder.getBound(false), first);
@@ -1577,9 +1536,6 @@ public class ObservableCollectionActiveManagers2 {
 					else if (holder.holder.manager.getIdentity().equals(flatV.theHolder.manager.getIdentity())) {
 						// Don't support moving an element from 2 uses of the same collection--super messy
 						msg = StdMsg.UNSUPPORTED_OPERATION;
-					} else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
-						|| !holder.holder.manager.equivalence().isElement(value)) {
-						msg = StdMsg.ILLEGAL_ELEMENT;
 					} else if (removable != null)
 						msg = removable;
 					else
@@ -1623,10 +1579,7 @@ public class ObservableCollectionActiveManagers2 {
 						msg = StdMsg.UNSUPPORTED_OPERATION;
 					} else if (removable != null)
 						msg = removable;
-					else if (!TypeTokens.get().isInstance(holder.holder.manager.getTargetType(), value)
-						|| !holder.holder.manager.equivalence().isElement(value)) {
-						msg = StdMsg.ILLEGAL_ELEMENT;
-					} else {
+					else {
 						msg = ((ActiveCollectionManager<?, ?, V>) holder.holder.manager).canAdd(value, holder.getBound(true),
 							holder.getBound(false));
 						if (msg == null) {
@@ -2056,8 +2009,6 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
-					return StdMsg.BAD_TYPE;
 				String msg = null;
 				FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
 				if (theOptions == null)
@@ -2075,9 +2026,6 @@ public class ObservableCollectionActiveManagers2 {
 					return result.getError();
 				if (result.replaceSecondary()) {
 					V reversed = result.getSecondary();
-					if (!TypeTokens.get().isInstance(theHolder.manager.getTargetType(), reversed)
-						|| !theHolder.manager.equivalence().isElement(reversed))
-						return StdMsg.ILLEGAL_ELEMENT;
 					if (theOptions != null) {
 						T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
 						if (!equivalence().elementEquals(reMapped, value))
@@ -2089,8 +2037,6 @@ public class ObservableCollectionActiveManagers2 {
 				}
 				if (msg == null && result.replaceSource()) {
 					I reversed = result.getSource();
-					if (!TypeTokens.get().isInstance(theParent.getTargetType(), reversed) || !theParent.equivalence().isElement(reversed))
-						return StdMsg.ILLEGAL_ELEMENT;
 					CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(reversed);
 					if (!theHolder.theFlow.equals(newFlow))
 						return StdMsg.ILLEGAL_ELEMENT;
@@ -2103,8 +2049,6 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				try (Transaction t = FlattenedManager.this.lock(true, null)) {
 					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
 					if (theOptions == null)
@@ -2124,9 +2068,6 @@ public class ObservableCollectionActiveManagers2 {
 						throw new IllegalArgumentException(result.getError());
 					if (result.replaceSecondary()) {
 						V reversed = result.getSecondary();
-						if (!TypeTokens.get().isInstance(theHolder.manager.getTargetType(), reversed)
-							|| !theHolder.manager.equivalence().isElement(reversed))
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 						if (theOptions != null) {
 							T reMapped = theOptions.map(theHolder.getValue(), reversed, value);
 							if (!equivalence().elementEquals(reMapped, value))
@@ -2150,9 +2091,6 @@ public class ObservableCollectionActiveManagers2 {
 					}
 					if (result.replaceSource()) {
 						I reversed = result.getSource();
-						if (!TypeTokens.get().isInstance(theParent.getTargetType(), reversed)
-							|| !theParent.equivalence().isElement(reversed))
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 						CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(reversed);
 						if (!theHolder.theFlow.equals(newFlow))
 							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);

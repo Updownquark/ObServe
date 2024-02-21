@@ -17,10 +17,6 @@ import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMultiMap;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MultiEntryValueHandle;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A partial {@link ObservableMultiMap} implementation covering some common method implementations
@@ -35,8 +31,6 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	private final CollectionDataFlow<S, ?, V> theActiveValueFlow;
 	private final AddKeyHolder<K> theAddKey;
 
-	private TypeToken<MultiEntryHandle<K, V>> theEntryType;
-	private TypeToken<MultiEntryValueHandle<K, V>> theValueEntryType;
 	private Object theIdentity;
 
 	/**
@@ -124,29 +118,6 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 			Lockable.lockable(getKeyLocker(), false, null), Lockable.lockable(getValueManager(), false, null));
 	}
 
-	@Override
-	public TypeToken<K> getKeyType() {
-		return theActiveKeyFlow.getTargetType();
-	}
-
-	@Override
-	public TypeToken<V> getValueType() {
-		return theActiveValueFlow.getTargetType();
-	}
-
-	@Override
-	public TypeToken<MultiEntryHandle<K, V>> getEntryType() {
-		if (theEntryType == null)
-			theEntryType = ObservableMultiMap.buildEntryType(getKeyType(), getValueType());
-		return theEntryType;
-	}
-
-	@Override
-	public TypeToken<MultiEntryValueHandle<K, V>> getEntryValueType() {
-		if (theValueEntryType == null)
-			theValueEntryType = ObservableMultiMap.buildValueEntryType(getKeyType(), getValueType());
-		return theValueEntryType;
-	}
 
 	@Override
 	public MultiMapFlow<K, V> flow() {

@@ -11,8 +11,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * A {@link SettableValue settable} {@link ObservableElement}
  *
@@ -35,8 +33,8 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 	 * @param type The type of the element
 	 * @return An element that is always empty
 	 */
-	static <E> SettableElement<E> empty(TypeToken<E> type) {
-		return new EmptyElement<>(type);
+	static <E> SettableElement<E> empty() {
+		return new EmptyElement<>();
 	}
 
 	/**
@@ -66,17 +64,11 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 	}
 
 	/**
-	 * Implements {@link SettableElement#empty(TypeToken)}
+	 * Implements {@link SettableElement#empty()}
 	 *
 	 * @param <E> The type of the element
 	 */
 	class EmptyElement<E> extends AbstractIdentifiable implements SettableElement<E> {
-		private final TypeToken<E> theType;
-
-		public EmptyElement(TypeToken<E> type) {
-			theType = type;
-		}
-
 		@Override
 		public boolean isLockSupported() {
 			return true;
@@ -123,11 +115,6 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		}
 
 		@Override
-		public TypeToken<E> getType() {
-			return theType;
-		}
-
-		@Override
 		public E get() {
 			return null;
 		}
@@ -139,7 +126,7 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 
 		@Override
 		protected Object createIdentity() {
-			return Identifiable.baseId("EmptyElement", theType);
+			return Identifiable.baseId("EmptyElement", this);
 		}
 	}
 }

@@ -28,9 +28,9 @@ class DefaultDependency<C, S> implements Dependency<C, S> {
 		theTarget = target;
 		theMinimum = minimum;
 		isDynamic = dynamic;
-		theProviders = ObservableSet.build((Class<DSComponent<C>>) (Class<?>) DSComponent.class).withLocking(new RRWLockingStrategy(lock))
+		theProviders = ObservableSet.<DSComponent<C>> build().withLocking(new RRWLockingStrategy(lock))
 			.build();
-		theProvided = theProviders.flow().transform(target.getServiceType(), tx -> tx.cache(false).map(p -> p.provide(target)))
+		theProvided = theProviders.flow().<S> transform(tx -> tx.cache(false).map(p -> p.provide(target)))
 			.unmodifiable(false).collectPassive();
 	}
 

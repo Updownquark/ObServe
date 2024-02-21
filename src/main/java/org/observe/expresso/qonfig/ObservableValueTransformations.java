@@ -273,7 +273,7 @@ public class ObservableValueTransformations {
 
 			@Override
 			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate(),
+				return new Instantiator<>(getDefinition().getSourceVariable(), theTest.instantiate(),
 					getExpressoEnv().getModels().instantiate());
 			}
 
@@ -284,14 +284,12 @@ public class ObservableValueTransformations {
 		}
 
 		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
-			private final TypeToken<T> theSourceType;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
 			private final ModelInstantiator theLocalModel;
 
-			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test,
+			Instantiator(ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test,
 				ModelInstantiator localModel) {
-				theSourceType = sourceType;
 				theSourceVariable = sourceVariable;
 				theTest = test;
 				theLocalModel = localModel;
@@ -311,7 +309,7 @@ public class ObservableValueTransformations {
 			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
-				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
+				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> test = theTest.get(models);
 				return new FilterEnabledValue<>(source.filterAccept(LambdaUtils.printableFn(v -> {
@@ -339,7 +337,7 @@ public class ObservableValueTransformations {
 				if (newSource == filtered.getWrapped() && newTest == filtered.getTest())
 					return prevValue;
 				else {
-					SettableValue<T> newSourceV = SettableValue.build(theSourceType).build();
+					SettableValue<T> newSourceV = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new FilterEnabledValue<>(newSource.filterAccept(LambdaUtils.printableFn(v -> {
 						newSourceV.set(v, null);
@@ -410,22 +408,20 @@ public class ObservableValueTransformations {
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
 						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
 						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType());
+						getEquivalence() == null ? null : getEquivalence().instantiate());
 			}
 		}
 
 		static class Instantiator<S, T>
 		extends AbstractCompiledTransformation.EfficientCopyingInstantiator<S, T, SettableValue<S>, SettableValue<T>> {
-			private final TypeToken<T> theTargetValueType;
 
 			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
 				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
 				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType) {
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
 				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
 					manyToOne, oneToMany, equivalence);
-				theTargetValueType = targetValueType;
 			}
 
 			@Override
@@ -437,10 +433,9 @@ public class ObservableValueTransformations {
 			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				Transformation<S, T> transformation = transform(models);
 				if (transformation instanceof Transformation.ReversibleTransformation)
-					return new TransformedSettableValue<>(theTargetValueType, source,
-						(Transformation.ReversibleTransformation<S, T>) transformation);
+					return new TransformedSettableValue<>(source, (Transformation.ReversibleTransformation<S, T>) transformation);
 				else
-					return new TransformedUnsettableValue<>(theTargetValueType, source, transformation);
+					return new TransformedUnsettableValue<>(source, transformation);
 			}
 
 			@Override
@@ -453,8 +448,8 @@ public class ObservableValueTransformations {
 		}
 
 		static class TransformedSettableValue<S, T> extends SettableValue.TransformedSettableValue<S, T> {
-			TransformedSettableValue(TypeToken<T> type, SettableValue<S> source, ReversibleTransformation<S, T> combination) {
-				super(type, source, combination);
+			TransformedSettableValue(SettableValue<S> source, ReversibleTransformation<S, T> combination) {
+				super(source, combination);
 			}
 
 			@Override
@@ -469,8 +464,8 @@ public class ObservableValueTransformations {
 		}
 
 		static class TransformedUnsettableValue<S, T> extends ObservableValue.TransformedObservableValue<S, T> implements SettableValue<T> {
-			TransformedUnsettableValue(TypeToken<T> type, SettableValue<S> source, Transformation<S, T> transformation) {
-				super(type, source, transformation);
+			TransformedUnsettableValue(SettableValue<S> source, Transformation<S, T> transformation) {
+				super(source, transformation);
 			}
 
 			@Override
@@ -1113,16 +1108,14 @@ public class ObservableValueTransformations {
 
 			@Override
 			public Operation.Instantiator<SettableValue<?>, SettableValue<T>> instantiate() {
-				return new FlattenedValueInstantiator<>(theValueType, isSettable);
+				return new FlattenedValueInstantiator<>(isSettable);
 			}
 		}
 
 		static class FlattenedValueInstantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<?>, SettableValue<T>> {
-			private final TypeToken<T> theValueType;
 			private final boolean isSettable;
 
-			FlattenedValueInstantiator(TypeToken<T> valueType, boolean settable) {
-				theValueType = valueType;
+			FlattenedValueInstantiator(boolean settable) {
 				isSettable = settable;
 			}
 
@@ -1139,11 +1132,11 @@ public class ObservableValueTransformations {
 			public SettableValue<T> transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
 				if (source == null)
 					return new WrappedSettableValue<>((SettableValue<? extends ObservableValue<? extends T>>) source,
-						SettableValue.of(theValueType, null, StdMsg.UNSUPPORTED_OPERATION));
+						SettableValue.of(null, StdMsg.UNSUPPORTED_OPERATION));
 				else if (source.getThreadConstraint() == ThreadConstraint.NONE) {
 					if (source.get() == null)
 						return new WrappedSettableValue<>((SettableValue<? extends ObservableValue<? extends T>>) source,
-							SettableValue.of(theValueType, null, StdMsg.UNSUPPORTED_OPERATION));
+							SettableValue.of(null, StdMsg.UNSUPPORTED_OPERATION));
 					else if (isSettable)
 						return new WrappedSettableValue<>((SettableValue<? extends ObservableValue<? extends T>>) source,
 							(SettableValue<T>) source.get());

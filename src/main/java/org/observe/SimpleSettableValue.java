@@ -4,15 +4,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.function.Function;
 
-import org.observe.util.TypeTokens;
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A simple holder for a value that can be retrieved, set, and listened to
@@ -23,24 +20,21 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	private final SimpleObservable<ObservableValueEvent<T>> theEventer;
 	private final CausalLock theLock;
 
-	private final TypeToken<T> theType;
 	private final boolean isNullable;
 	private final Object theIdentity;
 	private long theStamp;
 	private T theValue;
 
 	/**
-	 * @param type The type of the value
 	 * @param description An optional description for this value's identity
 	 * @param nullable Whether null can be assigned to the value
 	 * @param lock The lock for this value
 	 * @param listening Listening builder for this value's listener list (may be null)
 	 * @param initialValue The initial value for this value
 	 */
-	protected SimpleSettableValue(TypeToken<T> type, String description, boolean nullable, Function<Object, Transactable> lock,
+	protected SimpleSettableValue(String description, boolean nullable, Function<Object, Transactable> lock,
 		ListenerList.Builder listening, T initialValue) {
-		theType = type;
-		isNullable = nullable && !type.isPrimitive();
+		isNullable = nullable;
 		theIdentity = Identifiable.baseId(description, this);
 		if (lock == null)
 			theLock = null;
@@ -53,11 +47,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		}
 		theEventer = createEventer(theLock, listening);
 		theValue = initialValue;
-	}
-
-	@Override
-	public TypeToken<T> getType() {
-		return theType;
 	}
 
 	@Override
@@ -128,8 +117,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	public <V extends T> String isAcceptable(V value) {
 		if (value == null && !isNullable)
 			return "Null values not acceptable for this value";
-		if (value != null && !TypeTokens.get().isInstance(theType, value))
-			return "Value of type " + value.getClass().getName() + " cannot be assigned as " + theType;
 		return null;
 	}
 

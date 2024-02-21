@@ -189,7 +189,7 @@ public class CollectionSynchronizationTest {
 	public static class SimpleTest extends SyncTest {
 		@Override
 		protected ObservableCollection<Integer> createCollection(boolean left) {
-			return ObservableCollection.build(int.class).build();
+			return ObservableCollection.<Integer> build().build();
 		}
 
 		@Override

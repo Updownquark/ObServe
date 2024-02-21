@@ -13,12 +13,10 @@ import org.observe.supertest.collect.FilteredCollectionLink;
 import org.qommons.StringUtils;
 import org.qommons.testing.TestHelper;
 
-import com.google.common.reflect.TypeToken;
-
 /** Unit tests for {@link ObservableValue} */
 public class ObservableValueTest {
 	/**
-	 * Tests {@link ObservableValue#firstValue(TypeToken, java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
+	 * Tests {@link ObservableValue#firstValue(java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
 	 */
 	@Test
 	public void testFirstValue() {
@@ -33,8 +31,7 @@ public class ObservableValueTest {
 	}
 
 	/**
-	 * Testable for
-	 * {@link ObservableValue#firstValue(TypeToken, java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
+	 * Testable for {@link ObservableValue#firstValue(java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
 	 */
 	public static class FirstValueTester implements TestHelper.Testable {
 		@Override
@@ -44,13 +41,11 @@ public class ObservableValueTest {
 			int count = helper.getBoolean(.005) ? 0 : helper.getInt(1, 20);
 			SettableValue<Object>[] values = new SettableValue[count];
 			for (int i = 0; i < count; i++) {
-				values[i] = SettableValue.build((TypeToken<Object>) type.getType())//
-					.withValue(ObservableChainTester.SUPPLIERS.get(type).apply(helper)).build();
+				values[i] = SettableValue.build().withValue(ObservableChainTester.SUPPLIERS.get(type).apply(helper)).build();
 			}
 			Object defValue = helper.getBoolean() ? null : ObservableChainTester.SUPPLIERS.get(type).apply(helper);
 			Function<Object, String> test = FilteredCollectionLink.filterFor(type, helper);
-			ObservableValue<Object> first = ObservableValue.firstValue((TypeToken<Object>) type.getType(), v -> test.apply(v) == null,
-				() -> defValue, values);
+			ObservableValue<Object> first = ObservableValue.firstValue(v -> test.apply(v) == null, () -> defValue, values);
 
 			System.out.println("Testing " + count + " " + type + "s with " + test + ", default " + defValue);
 			helper.placemark();

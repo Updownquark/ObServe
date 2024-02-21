@@ -9,7 +9,7 @@ public class StatefulTestStructure {
 
 	/** @param derivedState The derived state value */
 	public StatefulTestStructure(SettableValue<Integer> derivedState) {
-		theInternalState = SettableValue.build(int.class).withValue(15).build();
+		theInternalState = SettableValue.<Integer> build().withValue(15).build();
 		theDerivedState = derivedState;
 	}
 

@@ -47,7 +47,6 @@ import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingEventListener;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentPropertyManager;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
@@ -384,12 +383,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickMouseButtonListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<QuickMouseListener.MouseButton> button = SettableValue.build(QuickMouseListener.MouseButton.class).build();
-				SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
-				SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<QuickMouseListener.MouseButton> button = SettableValue.<QuickMouseListener.MouseButton> build().build();
+				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
+				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
 
 				QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
 				QuickMouseListener.MouseButton listenerButton = mbl.getButton();
@@ -459,11 +458,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
-				SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
+				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
 
 				QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
 				mml.setListenerContext(new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
@@ -521,12 +520,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickScrollListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
-				SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
-				SettableValue<Integer> scrollAmount = SettableValue.build(int.class).withValue(0).build();
+				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
+				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
+				SettableValue<Integer> scrollAmount = SettableValue.<Integer> build().withValue(0).build();
 
 				QuickMouseListener.QuickScrollListener sl = (QuickMouseListener.QuickScrollListener) ql;
 				sl.setListenerContext(
@@ -549,10 +548,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickKeyListener.QuickKeyTypedListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Character> charTyped = SettableValue.build(char.class).withValue((char) 0).build();
+				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Character> charTyped = SettableValue.<Character> build().withValue((char) 0).build();
 				QuickKeyListener.QuickKeyTypedListener tl = (QuickKeyListener.QuickKeyTypedListener) ql;
 				tl.setListenerContext(new QuickKeyListener.KeyTypedContext.Default(altPressed, ctrlPressed, shiftPressed, charTyped));
 				component.addKeyListener(new KeyAdapter() {
@@ -573,10 +572,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickKeyListener.QuickKeyCodeListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
-				SettableValue<KeyCode> keyCode = SettableValue.build(KeyCode.class).build();
+				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
+				SettableValue<KeyCode> keyCode = SettableValue.<KeyCode> build().build();
 				QuickKeyListener.QuickKeyCodeListener kl = (QuickKeyListener.QuickKeyCodeListener) ql;
 				kl.setListenerContext(new QuickKeyListener.KeyCodeContext.Default(altPressed, ctrlPressed, shiftPressed, keyCode));
 				component.addKeyListener(new KeyAdapter() {
@@ -1194,7 +1193,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 		private boolean isListening;
 
 		public MouseValueSupport(Component parent, String name, Boolean button) {
-			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+			super(Transactable.noLock(ThreadConstraint.EDT));
 			theParent = parent;
 			theName = name;
 			theButton = button;
@@ -1401,7 +1400,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 		private boolean isListening;
 
 		FocusSupport(Component component) {
-			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+			super(Transactable.noLock(ThreadConstraint.EDT));
 			theComponent = component;
 		}
 

@@ -141,8 +141,8 @@ public class InstanceofExpression implements ObservableExpression {
 		}
 
 		private SettableValue<Boolean> test(SettableValue<?> value) {
-			return SettableValue.asSettable(value.map(TypeTokens.get().BOOLEAN, //
-				LambdaUtils.printableFn(v -> v != null && theTest.isInstance(v), "instanceof(" + theTest.getName() + ")", null)),
+			return SettableValue.asSettable(
+				value.map(LambdaUtils.printableFn(v -> v != null && theTest.isInstance(v), "instanceof(" + theTest.getName() + ")", null)),
 				__ -> "instanceof expressions are not reversible");
 		}
 

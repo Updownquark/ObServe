@@ -247,7 +247,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-					public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
+				public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
 					return new ActionInstantiator<>(left.instantiate(), right.instantiate(), op, reporting, operatorReporting);
 				}
 
@@ -280,18 +280,16 @@ public class BinaryOperator implements ObservableExpression {
 				public ModelValueInstantiator<SettableValue<V>> instantiate() throws ModelInstantiationException {
 					if (op == BinaryOperatorSet.OR)
 						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new OrValue(
-							(TypeToken<Boolean>) resultType, //
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
 							BinaryOperatorSet.OR, reporting);
 					else if (op == BinaryOperatorSet.AND)
 						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new AndValue(
-							(TypeToken<Boolean>) resultType, //
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
 							BinaryOperatorSet.AND, reporting);
 					else
-						return new ValueInstantiator<>(resultType, left.instantiate(), right.instantiate(), op, reporting);
+						return new ValueInstantiator<>(left.instantiate(), right.instantiate(), op, reporting);
 				}
 
 				@Override
@@ -341,7 +339,7 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		private ObservableAction createOpAction(SettableValue<S> leftV, SettableValue<T> rightV) {
-			ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
+			ObservableValue<String> enabled = leftV.isEnabled().transform(tx -> tx//
 				.combineWith(leftV).combineWith(rightV)//
 				.combine((en, lft, rgt) -> {
 					if (en != null)
@@ -381,15 +379,13 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	static class ValueInstantiator<S, T, V> implements ModelValueInstantiator<SettableValue<V>> {
-		private final TypeToken<V> theResultType;
 		private final ModelValueInstantiator<SettableValue<S>> theLeft;
 		private final ModelValueInstantiator<SettableValue<T>> theRight;
 		private final BinaryOp<S, T, V> theOperator;
 		private final ErrorReporting theReporting;
 
-		ValueInstantiator(TypeToken<V> resultType, ModelValueInstantiator<SettableValue<S>> left,
+		ValueInstantiator(ModelValueInstantiator<SettableValue<S>> left,
 			ModelValueInstantiator<SettableValue<T>> right, BinaryOp<S, T, V> operator, ErrorReporting reporting) {
-			theResultType = resultType;
 			theLeft = left;
 			theRight = right;
 			theOperator = operator;
@@ -411,7 +407,7 @@ public class BinaryOperator implements ObservableExpression {
 
 		SettableValue<V> createOpValue(SettableValue<S> leftV, SettableValue<T> rightV) {
 			BinaryOperatorReverseFn<S, T, V> reverse = new BinaryOperatorReverseFn<>(rightV, theOperator);
-			SettableValue<V> transformedV = leftV.transformReversible(theResultType, tx -> tx.combineWith(rightV)//
+			SettableValue<V> transformedV = leftV.transformReversible(tx -> tx.combineWith(rightV)//
 				.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
 					try {
 						return theOperator.apply(lft, rgt);
@@ -422,7 +418,7 @@ public class BinaryOperator implements ObservableExpression {
 				}, theOperator::toString, theOperator))//
 				.replaceSourceWith(reverse, rev -> rev.rejectWith(reverse::canReverse, true, true)));
 			if (theOperator instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
-				return new FirstArgDecisiveBinaryValue<>(theResultType, leftV, rightV, (FirstArgDecisiveBinaryOp<S, T, V>) theOperator,
+				return new FirstArgDecisiveBinaryValue<>(leftV, rightV, (FirstArgDecisiveBinaryOp<S, T, V>) theOperator,
 					transformedV);
 			else
 				return transformedV;
@@ -448,27 +444,27 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	static class OrValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
-		OrValue(TypeToken<Boolean> resultType, ModelValueInstantiator<SettableValue<Boolean>> left,
+		OrValue(ModelValueInstantiator<SettableValue<Boolean>> left,
 			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
-			super(resultType, left, right, operator, reporting);
+			super(left, right, operator, reporting);
 		}
 
 		@Override
 		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
-			return SettableValue.firstValue(TypeTokens.get().BOOLEAN, LambdaUtils.printablePred(Boolean.TRUE::equals, "true", null),
+			return SettableValue.firstValue(LambdaUtils.printablePred(Boolean.TRUE::equals, "true", null),
 				LambdaUtils.constantSupplier(false, "false", null), leftV, rightV);
 		}
 	}
 
 	static class AndValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
-		AndValue(TypeToken<Boolean> resultType, ModelValueInstantiator<SettableValue<Boolean>> left,
+		AndValue(ModelValueInstantiator<SettableValue<Boolean>> left,
 			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
-			super(resultType, left, right, operator, reporting);
+			super(left, right, operator, reporting);
 		}
 
 		@Override
 		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
-			return SettableValue.firstValue(TypeTokens.get().BOOLEAN,
+			return SettableValue.firstValue(
 				LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false?", null), LambdaUtils.constantSupplier(true, "true", null),
 				leftV, rightV);
 		}
@@ -585,15 +581,13 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	static class FirstArgDecisiveBinaryValue<S, T, V> implements SettableValue<V> {
-		private final TypeToken<V> theType;
 		private final SettableValue<S> theValue1;
 		private final SettableValue<T> theValue2;
 		private final BinaryOperatorSet.FirstArgDecisiveBinaryOp<S, T, V> theOp;
 		private final SettableValue<V> theTransformedValue;
 
-		public FirstArgDecisiveBinaryValue(TypeToken<V> type, SettableValue<S> value1, SettableValue<T> value2,
+		public FirstArgDecisiveBinaryValue(SettableValue<S> value1, SettableValue<T> value2,
 			FirstArgDecisiveBinaryOp<S, T, V> op, SettableValue<V> transformedValue) {
-			theType = type;
 			theValue1 = value1;
 			theValue2 = value2;
 			theOp = op;
@@ -603,11 +597,6 @@ public class BinaryOperator implements ObservableExpression {
 		@Override
 		public Object getIdentity() {
 			return theTransformedValue.getIdentity();
-		}
-
-		@Override
-		public TypeToken<V> getType() {
-			return theType;
 		}
 
 		@Override

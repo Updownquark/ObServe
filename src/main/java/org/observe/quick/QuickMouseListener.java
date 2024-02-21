@@ -12,7 +12,6 @@ import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -119,8 +118,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			Default() {
-				theX = SettableValue.build(int.class).withValue(0).build();
-				theY = SettableValue.build(int.class).withValue(0).build();
+				theX = SettableValue.<Integer> build().withValue(0).build();
+				theY = SettableValue.<Integer> build().withValue(0).build();
 			}
 
 			@Override
@@ -143,9 +142,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	/** @param id The element ID of this listener */
 	protected QuickMouseListener(Object id) {
 		super(id);
-		theEventX = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
+		theEventX = SettableValue.<SettableValue<Integer>> build()
 			.build();
-		theEventY = SettableValue.build(theEventX.getType()).build();
+		theEventY = SettableValue.<SettableValue<Integer>> build().build();
 	}
 
 	/** @param ctx The listener context from the Quick implementation */
@@ -174,8 +173,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	protected QuickMouseListener clone() {
 		QuickMouseListener copy = (QuickMouseListener) super.clone();
 
-		copy.theEventX = SettableValue.build(theEventX.getType()).build();
-		copy.theEventY = SettableValue.build(theEventX.getType()).build();
+		copy.theEventX = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theEventY = SettableValue.<SettableValue<Integer>> build().build();
 
 		return copy;
 	}
@@ -232,7 +231,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			/** Creates context with default value containers */
 			public Default() {
-				theMouseButton = SettableValue.build(MouseButton.class).build();
+				theMouseButton = SettableValue.<MouseButton> build().build();
 			}
 
 			@Override
@@ -449,8 +448,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		/** @param id The element ID for this listener */
 		protected QuickMouseButtonListener(Object id) {
 			super(id);
-			theEventButton = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<MouseButton>> parameterized(MouseButton.class)).build();
+			theEventButton = SettableValue.<SettableValue<MouseButton>> build().build();
 		}
 
 		/**
@@ -485,7 +483,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public QuickMouseButtonListener copy(ExElement parent) {
 			QuickMouseButtonListener copy = (QuickMouseButtonListener) super.copy(parent);
 
-			copy.theEventButton = SettableValue.build(theEventButton.getType()).build();
+			copy.theEventButton = SettableValue.<SettableValue<MouseButton>> build().build();
 
 			return copy;
 		}
@@ -749,8 +747,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		QuickScrollListener(Object id) {
 			super(id);
-			theScrollAmount = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class)).build();
+			theScrollAmount = SettableValue.<SettableValue<Integer>> build().build();
 		}
 
 		/** @param ctx The listener context from the Quick implementation */
@@ -778,7 +775,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		protected QuickScrollListener clone() {
 			QuickScrollListener copy = (QuickScrollListener) super.clone();
 
-			copy.theScrollAmount = SettableValue.build(theScrollAmount.getType()).build();
+			copy.theScrollAmount = SettableValue.<SettableValue<Integer>> build().build();
 
 			return copy;
 		}
