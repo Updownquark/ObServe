@@ -1284,6 +1284,22 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		return new Builder<>();
 	}
 
+	/**
+	 * @param <T> The type of the value
+	 * @return The new settable value
+	 */
+	static <T> SettableValue<T> create() {
+		return SettableValue.<T> build().build();
+	}
+
+	/**
+	 * @param <T> The type of the value
+	 * @param initialValue The initial value for the settable value
+	 * @return The new settable value
+	 */
+	static <T> SettableValue<T> create(T initialValue) {
+		return SettableValue.<T> build().withValue(initialValue).build();
+	}
 
 	/** @param <T> The type for the settable value */
 	class Builder<T> extends TransactableBuilder.Default<Builder<T>> {

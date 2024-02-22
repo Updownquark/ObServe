@@ -4,6 +4,7 @@ import java.awt.font.TextAttribute;
 import java.text.ParseException;
 import java.util.Map;
 
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -67,23 +68,23 @@ public class FontStyleParser extends NonStructuredParser.Simple<Double> {
 
 	/** Creates a FontStyleParser */
 	protected FontStyleParser() {
-		super(TypeTokens.get().DOUBLE);
+		super(TypeTokens.get().DOUBLE, TypeTokens.get().DOUBLE);
 	}
 
 	@Override
-	public boolean canParse(TypeToken<?> type, String text) {
+	public boolean canParse(TypeToken<?> type, String text, InterpretedExpressoEnv env) {
 		return TypeTokens.get().isAssignable(TypeTokens.get().DOUBLE, type)//
 			&& NAMED_WEIGHTS.containsKey(text) || NAMED_SLANTS.containsKey(text);
 	}
 
 	@Override
-	public boolean checkText(String text) {
+	public boolean checkText(String text, InterpretedExpressoEnv env) {
 		// Not used
 		return true;
 	}
 
 	@Override
-	protected <T2 extends Double> T2 parseValue(TypeToken<T2> type, String text) throws ParseException {
+	protected <T2 extends Double> T2 parseValue(TypeToken<T2> type, String text, InterpretedExpressoEnv env) throws ParseException {
 		Double value = NAMED_WEIGHTS.get(text);
 		if (value == null)
 			value = NAMED_SLANTS.get(text);

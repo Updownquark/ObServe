@@ -66,7 +66,7 @@ public class ExternalLiteral implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
+			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
 			throw new ExpressoInterpretationException("'" + theText + "' cannot be evaluated as a " + type, env.reporting().getPosition(),
 				getExpressionLength());
@@ -89,7 +89,7 @@ public class ExternalLiteral implements ObservableExpression {
 		}
 		NonStructuredParser parser = null;
 		for (NonStructuredParser p : parsers) {
-			if (p.canParse(asType, theText)) {
+			if (p.canParse(asType, theText, env)) {
 				parser = p;
 				break;
 			}
@@ -103,7 +103,7 @@ public class ExternalLiteral implements ObservableExpression {
 		parserUsed[0] = parser;
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> value;
 		try {
-			value = parser.parse(asType, theText);
+			value = parser.parse(asType, theText, env);
 		} catch (ParseException e) {
 			exHandler.handle1(
 				new ExpressoInterpretationException("Literal parsing failed for value `" + theText + "` as type " + rawType.getName(),

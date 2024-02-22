@@ -5,6 +5,7 @@ import java.awt.MediaTracker;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
+import java.text.ParseException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -146,5 +147,56 @@ public class QuickStyleUtils {
 			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Image.class), null, "Icon not provided");
 		} else
 			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Image.class), null, "None provided");
+	}
+
+	/**
+	 * @param loc The location text for the icon
+	 * @param env The expresso environment containing resources to help find the icon
+	 * @return The icon
+	 * @throws ParseException If the icon could not be found or parsed
+	 */
+	public static Image parseIcon(String loc, InterpretedExpressoEnv env) throws ParseException {
+		if (loc == null)
+			return null;
+		RuntimeCache cache = env.get(RuntimeCache.ENV_KEY, RuntimeCache.class);
+		if (cache == null)
+			cache = new RuntimeCache();
+		env.putGlobal(RuntimeCache.ENV_KEY, cache);
+
+		IconKey key = new IconKey(loc);
+		Object found = cache.getCacheItem(key);
+		if (found instanceof Image)
+			return (Image) found;
+		else if (found != null)
+			throw new ParseException((String) found, 0);
+		String sourceDocument = env.reporting().getFileLocation().getFileLocation();
+		String relLoc;
+		try {
+			relLoc = QommonsConfig.resolve(loc, QuickStyleUtils.class, sourceDocument);
+		} catch (IOException e) {
+			throw new ParseException("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument, 0);
+		}
+		Image img = null;
+		Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
+		if (icon == null)
+			icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
+		if (icon == null) {
+			cache.setCacheItem(key, "Icon file not found: '" + loc + "'");
+			throw new ParseException("Icon file not found: '" + loc + "'", 0);
+		} else if (icon instanceof ImageIcon) {
+			if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED) {
+				cache.setCacheItem(key, "Image load error");
+				throw new ParseException("Icon file could not be loaded: '" + loc, 0);
+			} else
+				img = ((ImageIcon) icon).getImage();
+		} else {
+			BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
+			// Hopefully the icon doesn't need the component argument
+			icon.paintIcon(null, image.getGraphics(), 0, 0);
+			img = image;
+		}
+		if (img != null)
+			cache.setCacheItem(key, img);
+		return img;
 	}
 }

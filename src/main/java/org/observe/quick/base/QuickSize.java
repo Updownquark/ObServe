@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import java.text.ParseException;
 import java.util.Objects;
 
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.util.TypeTokens;
 
@@ -155,12 +156,12 @@ public class QuickSize {
 
 		/** @param position Whether this parser should parse positions (potentially with "xp" unit) or sizes */
 		public Parser(boolean position) {
-			super(TypeTokens.get().of(QuickSize.class));
+			super(TypeTokens.get().of(QuickSize.class), TypeTokens.get().of(QuickSize.class));
 			this.isPosition = position;
 		}
 
 		@Override
-		public boolean checkText(String text) {
+		public boolean checkText(String text, InterpretedExpressoEnv env) {
 			int c = 0;
 			for (; c < text.length(); c++) {
 				if (!Character.isWhitespace(text.charAt(c)))
@@ -190,7 +191,7 @@ public class QuickSize {
 		}
 
 		@Override
-		protected <T2 extends QuickSize> T2 parseValue(TypeToken<T2> type, String text) throws ParseException {
+		protected <T2 extends QuickSize> T2 parseValue(TypeToken<T2> type, String text, InterpretedExpressoEnv env) throws ParseException {
 			boolean pct, xp;
 			int unit;
 			if (text.endsWith("%")) {

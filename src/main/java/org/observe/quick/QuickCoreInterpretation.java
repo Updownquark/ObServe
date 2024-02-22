@@ -1,26 +1,36 @@
 package org.observe.quick;
 
 import java.awt.Image;
+import java.text.ParseException;
 import java.util.Set;
 import java.util.function.BiFunction;
 
 import org.observe.SettableValue;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.QuickStyleUtils;
+import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
+import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.Builder;
+import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+
+import com.google.common.reflect.TypeToken;
 
 /** {@link QonfigInterpretation} for the Quick-Core toolkit */
 public class QuickCoreInterpretation implements QonfigInterpretation {
@@ -56,7 +66,26 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	}
 
 	@Override
-	public Builder configureInterpreter(Builder interpreter) {
+	public Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
+		// General setup
+		interpreter.modifyWith(QuickDocument.QUICK, QuickDocument.Def.class,
+			new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
+			@Override
+			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				CompiledExpressoEnv env = exS.getExpressoEnv();
+				env = env.withNonStructuredParser(Image.class, new ImageParser());
+				exS.setExpressoEnv(env);
+				return null;
+			}
+
+			@Override
+			public QuickDocument.Def modifyValue(QuickDocument.Def value, CoreSession session, Object prepared)
+				throws QonfigInterpretationException {
+				return value;
+			}
+		});
+
 		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, ExElement.creator(QuickDocument.Def::new));
 		interpreter.createWith(QuickAbstractWindow.ABSTRACT_WINDOW, QuickAbstractWindow.Def.Default.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickAbstractWindow.Def.Default<>(ao, p)));
@@ -101,6 +130,29 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith("renderer", QuickRenderer.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickRenderer.Def(ao, (QuickWidget.Def<?>) p)));
 		return interpreter;
+	}
+
+	static class ImageParser extends NonStructuredParser.Simple<Image> {
+		public ImageParser() {
+			super(TypeTokens.get().of(Image.class), TypeTokens.get().of(Image.class));
+		}
+
+		@Override
+		public String getDescription() {
+			return "Parses images for application icons";
+		}
+
+		@Override
+		public boolean checkText(String text, InterpretedExpressoEnv env) {
+			// The check here is to ensure there's a file extension that might be recognized. Allow up to 5 characters.
+			int dotIdx = text.lastIndexOf('.');
+			return dotIdx > 0 && dotIdx > text.length() - 5;
+		}
+
+		@Override
+		protected <T2 extends Image> T2 parseValue(TypeToken<T2> type, String text, InterpretedExpressoEnv env) throws ParseException {
+			return (T2) QuickStyleUtils.parseIcon(text, env);
+		}
 	}
 
 	/**

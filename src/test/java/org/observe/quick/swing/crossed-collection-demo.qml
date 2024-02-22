@@ -29,6 +29,7 @@
 				<value name="targetD" init="0" />
 				<transform name="esByD" source="ac">
 					<refresh on="targetD" />
+					<refresh on="b" />
 					<filter source-as="v" test="v.getValue1()+b == targetD" />
 					<map-to source-as="v">
 						<map-with>v.getValue1()*b/(v.getValue2()==0 ? 1 : v.getValue2())</map-with>
@@ -79,8 +80,11 @@
 				</tiled-pane>
 				<button icon="`/icons/add.png`" action="app.c.add(app.c.size())" />
 			</box>
-			<table fill="true" rows="app.ac" active-value-name="v">
+			<table fill="true" rows="rows" active-value-name="v">
 				<model>
+					<transform name="rows" source="app.ac">
+						<refresh on="app.b" />
+					</transform>
 					<value name="a">v==null ? 0 : v.getValue1()</value>
 					<value name="b">app.b</value>
 					<value name="c">v==null ? 0 : v.getValue2()</value>

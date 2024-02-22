@@ -55,7 +55,12 @@
 				</box>
 				<slider value="intValue" min="min" max="max" />
 			</box>
-			<toggle-button field-label="`Toggle Button`" value="boolValue" icon="`/icons/greenDot.png`">`A toggle button`</toggle-button>
+			<toggle-button field-label="`Toggle Button`" value="boolValue">`A toggle button`
+				<style attr="icon">
+					<style if="boolValue">`/icons/greenDot.png`</style>
+					<style>`/icons/redDot.png`</style>
+				</style>
+			</toggle-button>
 			<toggle-buttons field-label="`Toggle Buttons`" value="strValue" values="strValues" />
 			<table fill="true" rows="entities" active-value-name="row">
 				<column name="`Check`" value="row.getBoolean()" column-value-name="b">

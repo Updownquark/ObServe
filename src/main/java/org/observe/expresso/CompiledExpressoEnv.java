@@ -74,8 +74,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param properties The properties for this environment
 	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting, SessionValues properties) {
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
+		ErrorReporting reporting, SessionValues properties) {
 		theModels = models;
 		theAttributes = attributes;
 		theUnaryOperators = unaryOperators;
@@ -98,8 +98,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return A copy of this environment with the given information
 	 */
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting, SessionValues properties) {
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
+		ErrorReporting reporting, SessionValues properties) {
 		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, properties);
 	}
 
@@ -289,8 +289,8 @@ public class CompiledExpressoEnv implements SessionValues {
 		// To make it easier to specify strings in XML, the string literal need not be evaluated by type
 		return withNonStructuredParser(Object.class, new NonStructuredParser() {
 			@Override
-			public <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type, String text)
-				throws ParseException {
+			public <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type, String text,
+				InterpretedExpressoEnv env) throws ParseException {
 				return (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>>) InterpretedValueSynth
 					.literalValue(TypeTokens.get().STRING, text, text);
 			}
@@ -320,18 +320,17 @@ public class CompiledExpressoEnv implements SessionValues {
 					} catch (ParseException e) {
 						return false;
 					}
-				}, (t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now),
-				"Simple date/time literal"))//
+				}, (t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now), "Simple date/time literal"))//
 			.withNonStructuredParser(Enum.class, new NonStructuredParser() {
 				@Override
-				public boolean canParse(TypeToken<?> type, String text) {
+				public boolean canParse(TypeToken<?> type, String text, InterpretedExpressoEnv env) {
 					Class<?> raw = TypeTokens.getRawType(type);
 					return Enum.class.isAssignableFrom(raw) && !Modifier.isAbstract(raw.getModifiers());
 				}
 
 				@Override
 				public <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type,
-					String text) throws ParseException {
+					String text, InterpretedExpressoEnv env) throws ParseException {
 					return parseEnum(TypeTokens.getRawType(type), text);
 				}
 
