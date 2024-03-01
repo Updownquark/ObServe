@@ -14,6 +14,7 @@ import java.util.function.Function;
 
 import javax.swing.AbstractAction;
 import javax.swing.KeyStroke;
+import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.AbstractDocument;
@@ -233,7 +234,7 @@ public class ObservableTextEditor<E> {
 		reformatOnCommit = true;
 
 		normal_bg = component.getBackground();
-		disabled_bg = component.getDisabledTextColor();
+		disabled_bg = UIManager.getColor("TextField.inactiveBackground");
 		isExternallyEnabled = true;
 
 		selectAllOnFocus = true;

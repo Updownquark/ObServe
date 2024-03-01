@@ -4248,7 +4248,8 @@ public final class ObservableCollectionImpl {
 			long stamp = getBackingStamp();
 			if (stamp != theStampCopy) {
 				theStampCopy = stamp;
-				sync(null);
+				if (!isModifying)
+					sync(null);
 			}
 		}
 
@@ -4282,8 +4283,14 @@ public final class ObservableCollectionImpl {
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			if (0 == theSubscriptionCount.getAndIncrement()) {
 				theValueSubscription = theCollectionValue.noInitChanges().act(evt -> {
-					if (!isModifying)
-						sync(evt);
+					if (!isModifying) {
+						isModifying = true;
+						try {
+							sync(evt);
+						} finally {
+							isModifying = false;
+						}
+					}
 				});
 			}
 			Subscription sub = theCollection.onChange(observer);

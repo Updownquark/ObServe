@@ -449,14 +449,13 @@ class PanelPopulationImpl {
 
 		@Override
 		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify) {
-			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), null,
+			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), fieldName,
 				ObservableAction.DO_NOTHING, false, getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
 				modify.accept(fieldPanel);
-			fieldPanel.onFieldName(fieldPanel.getEditor(), name -> fieldPanel.getEditor().setText(name), getUntil());
 			Component postLabel = fieldPanel.createPostLabel(getUntil());
 			if (postLabel != null)
 				fieldPanel.modifyAssociatedComponent(postLabel);
