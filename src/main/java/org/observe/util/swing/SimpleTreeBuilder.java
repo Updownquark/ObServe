@@ -2,6 +2,7 @@ package org.observe.util.swing;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
@@ -319,10 +320,17 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 				TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
 				int row = getEditor().getRowForLocation(e.getX(), e.getY());
 				if (row != hoveredRow[0]) {
-					if (hoveredRow[0] >= 0)
-						getEditor().repaint(getEditor().getRowBounds(hoveredRow[0]));
-					if (row >= 0)
-						getEditor().repaint(getEditor().getRowBounds(row));
+					Rectangle bounds;
+					if (hoveredRow[0] >= 0) {
+						bounds = getEditor().getRowBounds(hoveredRow[0]);
+						if (bounds != null)
+							getEditor().repaint(bounds);
+					}
+					if (row >= 0) {
+						bounds = getEditor().getRowBounds(row);
+						if (bounds != null)
+							getEditor().repaint(bounds);
+					}
 					hoveredRow[0] = row;
 				}
 				if (path == null || theRenderer.getTooltipFn() == null) {

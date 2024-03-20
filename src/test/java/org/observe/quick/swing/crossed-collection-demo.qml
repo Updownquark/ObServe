@@ -28,10 +28,13 @@
 				<list name="f" type="int">CrossCollectionTestHelper.calculateFs(b)</list>
 				<transform name="ac" source="a">
 					<cross with="c" source-as="av" crossed-as="cv">new BiTuple&lt;>(av, cv)</cross>
+				</transform>
+				<transform name="acf" source="a">
+					<cross with="c" source-as="av" crossed-as="cv">new BiTuple&lt;>(av, cv)</cross>
 					<cross with="f" source-as="ac" crossed-as="fv">new TriTuple&lt;>(ac.getValue1(), ac.getValue2(), fv)</cross>
 				</transform>
 				<value name="targetD" init="0" />
-				<transform name="esByD" source="ac">
+				<transform name="esByD" source="acf">
 					<refresh on="targetD" />
 					<refresh on="b" />
 					<filter source-as="v" test="v.getValue1()+b == targetD" />
@@ -47,7 +50,7 @@
 				</transform>
 				
 				<value name="targetE" init="0" />
-				<transform name="gsByE" source="ac">
+				<transform name="gsByE" source="acf">
 					<refresh on="targetE" />
 					<refresh on="b" />
 					<filter source-as="v" test="v.getValue1()*b/(v.getValue2()==0 ? 1 : v.getValue2()) == targetE" />
@@ -100,8 +103,29 @@
 				<button icon="`/icons/add.png`" action="app.c.add(app.c.size())" />
 			</box>
 			<table fill="true" rows="rows" active-value-name="v">
+				<titled-border title="`A x C`" />
 				<model>
 					<transform name="rows" source="app.ac">
+						<refresh on="app.b" />
+					</transform>
+					<value name="a">v==null ? 0 : v.getValue1()</value>
+					<value name="b">app.b</value>
+					<value name="c">v==null ? 0 : v.getValue2()</value>
+					<value name="d">a+b</value>
+					<value name="e">a*b/(c==0 ? 1 : c)</value>
+				</model>
+				<column name="`#`" pref-width="30" value="rowIndex+1" />
+				<column name="`A`" pref-width="30" value="a" />
+				<column name="`B`" pref-width="30" value="b" />
+				<column name="`C`" pref-width="30" value="c" />
+				<column name="`D`" pref-width="30" value="d" />
+				<column name="`E`" pref-width="50" value="e" />
+				<column name="`|E| % 3`" pref-width="50" value="Math.abs(e)%3" />
+			</table>
+			<table fill="true" rows="rows" active-value-name="v">
+				<titled-border title="`A x C x F`" />
+				<model>
+					<transform name="rows" source="app.acf">
 						<refresh on="app.b" />
 					</transform>
 					<value name="a">v==null ? 0 : v.getValue1()</value>

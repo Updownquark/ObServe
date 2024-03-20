@@ -2638,7 +2638,8 @@ public final class ObservableCollectionImpl {
 				});
 			};
 			// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
-			theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
+			Observable<?> fUntil = flow.getThreadConstraint().supportsInvoke() ? until.safe(flow.getThreadConstraint()) : until;
+			theWeakListening = WeakListening.build().withUntil(r -> fUntil.act(v -> r.run()));
 			theFlow.begin(true, onElement, theWeakListening.getListening());
 		}
 
