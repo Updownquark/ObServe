@@ -29,6 +29,7 @@ import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickLayout;
+import org.observe.quick.base.QuickTable;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.ValueAction;
@@ -37,6 +38,7 @@ import org.observe.quick.ext.QuickComboButton;
 import org.observe.quick.ext.QuickMultiSlider;
 import org.observe.quick.ext.QuickMultiSlider.SliderBgRenderer;
 import org.observe.quick.ext.QuickMultiSlider.SliderHandleRenderer;
+import org.observe.quick.ext.QuickSearchTable;
 import org.observe.quick.ext.QuickShaded;
 import org.observe.quick.ext.QuickShading;
 import org.observe.quick.ext.QuickTiledPane;
@@ -54,7 +56,9 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.Shading;
+import org.observe.util.swing.TableContentControl;
 import org.observe.util.swing.TiledPane;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
@@ -92,6 +96,7 @@ public class QuickXSwing implements QuickInterpretation {
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
 		tx.with(QuickTiledPane.Interpreted.class, QuickSwingPopulator.class, SwingTiledPane::new);
+		tx.with(QuickSearchTable.Interpreted.class, QuickSwingPopulator.class, SwingSearchTable::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
@@ -706,6 +711,43 @@ public class QuickXSwing implements QuickInterpretation {
 				populator[0] = pop;
 				component.accept(pop);
 			});
+		}
+	}
+
+	static class SwingSearchTable<R> extends QuickBaseSwing.SwingTable<R> {
+		private SettableValue<TableContentControl> theContentControl;
+		private Component theSearchField;
+
+		SwingSearchTable(QuickSearchTable.Interpreted<R, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			super(interpreted, tx);
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			theContentControl = SettableValue.create(TableContentControl.DEFAULT);
+			panel.addVPanel(inner -> {
+				inner.addTextField(null, theContentControl, TableContentControl.FORMAT, field -> {
+					TableContentControl.configureSearchField(field, true);
+					field.modifyEditor(tf -> theSearchField = tf);
+				});
+				try {
+					super.doPopulate(inner, quick, component);
+				} catch (ModelInstantiationException e) {
+					throw new CheckedExceptionWrapper(e);
+				}
+			});
+		}
+
+		@Override
+		protected void modifyTable(TableBuilder<R, ?, ?> table, QuickTable<R> quick) {
+			super.modifyTable(table, quick);
+			table.fill().fillV();
+			table.withFiltering(theContentControl);
+			table.modifyAssociatedComponent(theSearchField);
+			theContentControl = null;
+			theSearchField = null;
 		}
 	}
 }

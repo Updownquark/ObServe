@@ -34,12 +34,16 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	/** The XML name of this element */
 	public static final String TABLE = "table";
 
-	/** {@link QuickTable} definition */
+	/**
+	 * {@link QuickTable} definition
+	 *
+	 * @param <T> The sub-type of table to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = TABLE,
 		interpretation = Interpreted.class,
 		instance = QuickTable.class)
-	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
+	public static class Def<T extends QuickTable<?>> extends TabularWidget.Def.Abstract<T> {
 		private CompiledExpression theRows;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
@@ -93,12 +97,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
 			throws ExpressoInterpretationException {
-			return ((Interpreted<?>) interpreted).getValueType();
+			return ((Interpreted<?, ?>) interpreted).getValueType();
 		}
 
 		@Override
-		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
+		public Interpreted<?, T> interpret(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, T>) new Interpreted<>((Def<QuickTable<Object>>) this, parent);
 		}
 	}
 
@@ -106,8 +110,9 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	 * {@link QuickTable} interpretation
 	 *
 	 * @param <R> The row type of the table
+	 * @param <T> The sub-type of table to create
 	 */
-	public static class Interpreted<R> extends TabularWidget.Interpreted.Abstract<R, QuickTable<R>> {
+	public static class Interpreted<R, T extends QuickTable<R>> extends TabularWidget.Interpreted.Abstract<R, T> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theRows;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theMultiSelection;
@@ -117,14 +122,14 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget
 		 */
-		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theActions = new ArrayList<>();
 		}
 
 		@Override
-		public Def getDefinition() {
-			return (Def) super.getDefinition();
+		public Def<T> getDefinition() {
+			return (Def<T>) super.getDefinition();
 		}
 
 		@Override
@@ -165,8 +170,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public QuickTable<R> create() {
-			return new QuickTable<>(getIdentity());
+		public T create() {
+			return (T) new QuickTable<>(getIdentity());
 		}
 	}
 
@@ -207,7 +212,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
-		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
+		QuickTable.Interpreted<R, ?> myInterpreted = (QuickTable.Interpreted<R, ?>) interpreted;
 
 		theRows = SettableValue.<ObservableCollection<R>> build().build();
 		theSelection = SettableValue.<SettableValue<R>> build().build();

@@ -163,6 +163,8 @@
 			<?DOC The layout that the tiled panel will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
+		<element-def name="search-table" extends="table">
+		</element-def>
 	</elements>
 
 	<auto-inheritance>

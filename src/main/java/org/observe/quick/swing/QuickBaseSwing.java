@@ -1151,7 +1151,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		private boolean tableInitialized;
 		private final List<QuickSwingTableAction<R, ?>> interpretedActions;
 
-		SwingTable(QuickTable.Interpreted<R> interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingTable(QuickTable.Interpreted<R, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			Subscription sub;
 			try {
@@ -1254,8 +1254,12 @@ public class QuickBaseSwing implements QuickInterpretation {
 				} catch (ModelInstantiationException e) {
 					throw new CheckedExceptionWrapper(e);
 				}
+				modifyTable(table, quick);
 			});
 			tableInitialized = true;
+		}
+
+		protected void modifyTable(TableBuilder<R, ?, ?> table, QuickTable<R> quick) {
 		}
 	}
 

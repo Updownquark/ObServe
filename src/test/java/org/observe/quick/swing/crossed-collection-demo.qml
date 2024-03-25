@@ -102,49 +102,51 @@
 				</tiled-pane>
 				<button icon="`/icons/add.png`" action="app.c.add(app.c.size())" />
 			</box>
-			<table fill="true" rows="rows" active-value-name="v">
-				<titled-border title="`A x C`" />
-				<model>
-					<transform name="rows" source="app.ac">
-						<refresh on="app.b" />
-					</transform>
-					<value name="a">v==null ? 0 : v.getValue1()</value>
-					<value name="b">app.b</value>
-					<value name="c">v==null ? 0 : v.getValue2()</value>
-					<value name="d">a+b</value>
-					<value name="e">a*b/(c==0 ? 1 : c)</value>
-				</model>
-				<column name="`#`" pref-width="30" value="rowIndex+1" />
-				<column name="`A`" pref-width="30" value="a" />
-				<column name="`B`" pref-width="30" value="b" />
-				<column name="`C`" pref-width="30" value="c" />
-				<column name="`D`" pref-width="30" value="d" />
-				<column name="`E`" pref-width="50" value="e" />
-				<column name="`|E| % 3`" pref-width="50" value="Math.abs(e)%3" />
-			</table>
-			<table fill="true" rows="rows" active-value-name="v">
-				<titled-border title="`A x C x F`" />
-				<model>
-					<transform name="rows" source="app.acf">
-						<refresh on="app.b" />
-					</transform>
-					<value name="a">v==null ? 0 : v.getValue1()</value>
-					<value name="b">app.b</value>
-					<value name="c">v==null ? 0 : v.getValue2()</value>
-					<value name="d">a+b</value>
-					<value name="e">a*b/(c==0 ? 1 : c)</value>
-					<value name="f">v==null ? 0 : v.getValue3()</value>
-					<value name="g">a*f-c</value>
-				</model>
-				<column name="`#`" pref-width="30" value="rowIndex+1" />
-				<column name="`A`" pref-width="30" value="a" />
-				<column name="`B`" pref-width="30" value="b" />
-				<column name="`C`" pref-width="30" value="c" />
-				<column name="`D`" pref-width="30" value="d" />
-				<column name="`E`" pref-width="50" value="e" />
-				<column name="`F`" pref-width="50" value="f" />
-				<column name="`G`" pref-width="50" value="g" />
-			</table>
+			<split fill="true" orientation="vertical">
+				<search-table rows="rows" active-value-name="v">
+					<titled-border title="`A x C`" />
+					<model>
+						<transform name="rows" source="app.ac">
+							<refresh on="app.b" />
+						</transform>
+						<value name="a">v==null ? 0 : v.getValue1()</value>
+						<value name="b">app.b</value>
+						<value name="c">v==null ? 0 : v.getValue2()</value>
+						<value name="d">a+b</value>
+						<value name="e">a*b/(c==0 ? 1 : c)</value>
+					</model>
+					<column name="`#`" pref-width="30" value="rowIndex+1" />
+					<column name="`A`" pref-width="30" value="a" />
+					<column name="`B`" pref-width="30" value="b" />
+					<column name="`C`" pref-width="30" value="c" />
+					<column name="`D`" pref-width="30" value="d" />
+					<column name="`E`" pref-width="50" value="e" />
+					<column name="`|E| % 3`" pref-width="50" value="Math.abs(e)%3" />
+				</search-table>
+				<search-table rows="rows" active-value-name="v">
+					<titled-border title="`A x C x F`" />
+					<model>
+						<transform name="rows" source="app.acf">
+							<refresh on="app.b" />
+						</transform>
+						<value name="a">v==null ? 0 : v.getValue1()</value>
+						<value name="b">app.b</value>
+						<value name="c">v==null ? 0 : v.getValue2()</value>
+						<value name="d">a+b</value>
+						<value name="e">a*b/(c==0 ? 1 : c)</value>
+						<value name="f">v==null ? 0 : v.getValue3()</value>
+						<value name="g">a*f-c</value>
+					</model>
+					<column name="`#`" pref-width="30" value="rowIndex+1" />
+					<column name="`A`" pref-width="30" value="a" />
+					<column name="`B`" pref-width="30" value="b" />
+					<column name="`C`" pref-width="30" value="c" />
+					<column name="`D`" pref-width="30" value="d" />
+					<column name="`E`" pref-width="50" value="e" />
+					<column name="`F`" pref-width="50" value="f" />
+					<column name="`G`" pref-width="50" value="g" />
+				</search-table>
+			</split>
 			
 			<label>For the following selected D value, the average value of E will be reported for all rows with the given D value</label>
 			<text-field field-label="`D:`" value="app.targetD" columns="5" />
