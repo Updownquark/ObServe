@@ -1110,6 +1110,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			theKeySet = theWrapped.keySet().flow().unmodifiable().collectPassive();
 		}
 
+		/** @return The modifiable map this map wraps */
+		protected ObservableMap<K, V> getWrapped() {
+			return theWrapped;
+		}
+
 		@Override
 		public boolean isEventing() {
 			return theWrapped.isEventing();

@@ -123,10 +123,8 @@ public class ObservableFileButton extends JButton {
 		theValue.isEnabled().changes().takeUntil(theUntil).act(evt -> {
 			if (evt.getOldValue() == evt.getNewValue())
 				return;
-			EventQueue.invokeLater(() -> {
-				checkEnabled();
-				updateTooltip();
-			});
+			checkEnabled(evt.getNewValue());
+			updateTooltip(evt.getNewValue());
 		});
 		theFileFilterDescrip = "Files";
 
@@ -289,7 +287,7 @@ public class ObservableFileButton extends JButton {
 	@Override
 	public void setEnabled(boolean enabled) {
 		isExternallyEnabled = enabled;
-		checkEnabled();
+		checkEnabled(theValue.isEnabled().get());
 		if (!enabled)
 			stopEditing();
 	}
@@ -356,19 +354,17 @@ public class ObservableFileButton extends JButton {
 		}
 	}
 
-	private void checkEnabled() {
-		boolean enabled = isExternallyEnabled && theValue.isEnabled().get() == null;
+	private void checkEnabled(String valueEnabled) {
+		boolean enabled = isExternallyEnabled && valueEnabled == null;
 		if (isEnabled() != enabled)
 			super.setEnabled(enabled);
 	}
 
-	private void updateTooltip() {
-		String disabled = theValue.isEnabled().get();
-
+	private void updateTooltip(String valueDisabled) {
 		String tooltip;
 		File value = theValue.get();
-		if (disabled != null)
-			tooltip = disabled;
+		if (valueDisabled != null)
+			tooltip = valueDisabled;
 		else if (theTooltip != null) {
 			if (value != null)
 				tooltip = prepend(theTooltip, value.toString());

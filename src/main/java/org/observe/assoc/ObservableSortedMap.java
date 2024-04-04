@@ -19,10 +19,12 @@ import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
 
@@ -129,6 +131,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 */
 	static <K, V> Builder<K, V, ?> build(Comparator<? super K> sorting) {
 		return new Builder<>(sorting, "ObservableMap");
+	}
+
+	/**
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to wrap
+	 * @return An unmodifiable map with the same content as the given map
+	 */
+	public static <K, V> ObservableSortedMap<K, V> unmodifiable(ObservableSortedMap<K, V> map) {
+		return new UnmodifiableSortedObservableMap<>(map);
 	}
 
 	/**
@@ -464,6 +476,38 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		public MapEntryHandle<K, V> searchEntries(Comparable<? super Map.Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<Map.Entry<K, V>> entry = entrySet().search(search, filter);
 			return entry == null ? null : getEntryById(entry.getElementId());
+		}
+	}
+
+	/**
+	 * An unmodifiable {@link ObservableSortedMap} wrapper
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class UnmodifiableSortedObservableMap<K, V> extends UnmodifiableObservableMap<K, V> implements ObservableSortedMap<K, V> {
+		public UnmodifiableSortedObservableMap(ObservableSortedMap<K, V> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected ObservableSortedMap<K, V> getWrapped() {
+			return (ObservableSortedMap<K, V>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return (ObservableSortedSet<K>) super.keySet();
+		}
+
+		@Override
+		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+			return getWrapped().searchEntries(search, filter);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 	}
 }
