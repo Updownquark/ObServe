@@ -691,7 +691,7 @@ public abstract class AbstractObservableTableModel<R> {
 			}
 
 			private void fireRowEvent(MouseEvent e, TriConsumer<RowMouseListener<? super R>, ModelRow<R>, MouseEvent> call) {
-				if (theRow == null || getRowListeners().isEmpty())
+				if (theRow == null || theCell == null || getRowListeners().isEmpty())
 					return;
 				Point offset = getCellOffset(theCell.getRowIndex(), theCell.getColumnIndex());
 				if (offset == null)
