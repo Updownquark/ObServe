@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.InvalidDnDOperationException;
 import java.io.IOException;
@@ -121,7 +122,8 @@ implements TreeTableEditor<F, P> {
 		}
 
 		@Override
-		public void valueForPathChanged(TreePath path, Object newValue) {}
+		public void valueForPathChanged(TreePath path, Object newValue) {
+		}
 
 		@Override
 		public boolean isLeaf(Object node) {
@@ -264,7 +266,7 @@ implements TreeTableEditor<F, P> {
 
 	@Override
 	protected TransferHandler setUpDnD(JXTreeTable table, SimpleTransferSource<BetterList<F>> dragSource,
-		SimpleTransferAccepter<BetterList<F>, BetterList<F>, BetterList<F>> dragAccepter) {
+		SimpleTransferAccepter<BetterList<F>, Object, BetterList<F>> dragAccepter) {
 		return new TreeTableBuilderTransferHandler(table);
 	}
 
@@ -596,14 +598,21 @@ implements TreeTableEditor<F, P> {
 				if (!column.getMutator().isEditable(parentPath, oldValue))
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
+				int colIndex = getColumns().indexOf(column) + 1;
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
-					rowIndex, getColumns().indexOf(column) + 1, selected, selected, false, false, theTable.isExpanded(rowIndex),
-					theLeafTest.test(rowEl.get()));
-				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
+					rowIndex, colIndex, selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(rowEl.get()));
+				boolean above;
+				if (support.isDrop()) {
+					Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
+					above = (support.getDropLocation().getDropPoint().y - bounds.y) >= bounds.height / 2;
+				} else
+					above = false;
+				if (!column.getMutator().getDragAccepter().canAccept(cell, false, above, support, false))
 					return false;
 				BetterList<C> newColValue;
 				try {
-					newColValue = column.getMutator().getDragAccepter().accept(cell, support.getTransferable(), false, !doImport);
+					newColValue = column.getMutator().getDragAccepter().accept(cell, false, above, support.getTransferable(), false,
+						!doImport);
 				} catch (IOException e) {
 					return false;
 				} catch (InvalidDnDOperationException e) {
@@ -642,13 +651,21 @@ implements TreeTableEditor<F, P> {
 				if (!column.getMutator().isEditable(root, oldValue))
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
-				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, getColumns().indexOf(column) + 1,
-					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
-				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
+				int colIndex = getColumns().indexOf(column) + 1;
+				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, colIndex, selected, selected,
+					false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
+				boolean above;
+				if (support.isDrop()) {
+					Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
+					above = (support.getDropLocation().getDropPoint().y - bounds.y) >= bounds.height / 2;
+				} else
+					above = false;
+				if (!column.getMutator().getDragAccepter().canAccept(cell, false, above, support, false))
 					return false;
 				BetterList<C> newColValue;
 				try {
-					newColValue = column.getMutator().getDragAccepter().accept(cell, support.getTransferable(), false, !doImport);
+					newColValue = column.getMutator().getDragAccepter().accept(cell, false, above, support.getTransferable(), false,
+						!doImport);
 				} catch (IOException e) {
 					return false;
 				}

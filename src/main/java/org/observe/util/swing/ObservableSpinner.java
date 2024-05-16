@@ -26,6 +26,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
+import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
 import org.qommons.io.Format;
 
@@ -305,6 +306,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			thePreviousMaker = previousMaker;
 			theNextMaker = nextMaker;
 			theChangeListeners = new ArrayList<>();
+			theCachedValueStamp = -1776; // Just some random value so we have to update the cache initially
 			until.take(1).act(__ -> {
 				if (theValueChangeSub != null) {
 					theValueChangeSub.unsubscribe();
@@ -325,7 +327,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 
 		@Override
 		public void setValue(Object value) {
-			theCachedValueStamp = -1;
+			theCachedValueStamp = -1776;
 			theCachedPrevious = null;
 			theCachedNext = null;
 			if (!Objects.equals(theValue.get(), value))
@@ -357,7 +359,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		}
 
 		private void updateCache() {
-			long stamp = theValue.getStamp();
+			long stamp = Stamped.compositeStamp(theValue.getStamp(), theValue.isEnabled().getStamp());
 			if (stamp == theCachedValueStamp)
 				return;
 
@@ -421,9 +423,11 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
 				.safe(ThreadConstraint.EDT, theUntil)//
 				.changes().takeUntil(theUntil).act(evt -> {
-					if (theModel.getPreviousValue() != null)
+					if (theModel.getPreviousValue() != null) {
+						jButton.setEnabled(true);
 						jButton.setToolTipText(null);
-					else {
+					} else {
+						jButton.setEnabled(false);
 						T previousValue = theModel.getWouldBePrevious();
 						if (previousValue == null)
 							jButton.setToolTipText(null);
@@ -444,9 +448,11 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
 				.safe(ThreadConstraint.EDT, theUntil)//
 				.changes().takeUntil(theUntil).act(evt -> {
-					if (theModel.getNextValue() != null)
+					if (theModel.getNextValue() != null) {
+						jButton.setEnabled(true);
 						jButton.setToolTipText(null);
-					else {
+					} else {
+						jButton.setEnabled(false);
 						T nextValue = theModel.getWouldBeNext();
 						if (nextValue == null)
 							jButton.setToolTipText(null);

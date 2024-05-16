@@ -123,18 +123,23 @@ public class Dragging {
 
 		TransferAccepter<R, C, E> fromObject();
 
+		TransferAccepter<R, C, E> fromObject(DataAccepterTransform<R, C, ? extends E> action);
+
 		TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString);
 
-		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti);
+		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			TransferSupport transfer, boolean withMulti);
 
-		BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti, boolean testOnly)
-			throws IOException;
+		BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			Transferable transferable, boolean withMulti, boolean testOnly) throws IOException;
 	}
 
 	public interface DataAccepterTransform<R, C, E> {
-		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor);
+		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, Object value,
+			DataFlavor flavor);
 
-		E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly) throws IOException;
+		E transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, Object value,
+			DataFlavor flavor, boolean testOnly) throws IOException;
 	}
 
 	public interface DataConsumer<R, C, E> {
@@ -463,31 +468,38 @@ public class Dragging {
 		public TransferAccepter<R, C, E> fromObject() {
 			return fromFlavor(new DataFlavor(TypeTokens.getRawType(theType), theType.toString()), new DataAccepterTransform<R, C, E>() {
 				@Override
-				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor) {
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+					Object value, DataFlavor flavor) {
 					if (value == null)
 						return !theType.isPrimitive();
 					return TypeTokens.get().isInstance(theType, value);
 				}
 
 				@Override
-				public E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly)
-					throws IOException {
+				public E transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, Object value,
+					DataFlavor flavor, boolean testOnly) throws IOException {
 					return (E) value;
 				}
 			});
 		}
 
 		@Override
+		public TransferAccepter<R, C, E> fromObject(DataAccepterTransform<R, C, ? extends E> data) {
+			return fromFlavor(new DataFlavor(TypeTokens.getRawType(theType), theType.toString()), data);
+		}
+
+		@Override
 		public TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString) {
 			return fromFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataAccepterTransform<R, C, E>() {
 				@Override
-				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor) {
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+					Object value, DataFlavor flavor) {
 					return true;
 				}
 
 				@Override
-				public E transform(ModelCell<? extends R, ? extends C> targetCell, Object value, DataFlavor flavor, boolean testOnly)
-					throws IOException {
+				public E transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, Object value,
+					DataFlavor flavor, boolean testOnly) throws IOException {
 					StringWriter writer = new StringWriter();
 					char[] buffer = new char[1028];
 					int read = ((Reader) value).read(buffer);
@@ -501,7 +513,8 @@ public class Dragging {
 		}
 
 		@Override
-		public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti) {
+		public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			TransferSupport transfer, boolean withMulti) {
 			if (transfer.isDrop()) {
 				if (!isDraggable)
 					return false;
@@ -509,7 +522,7 @@ public class Dragging {
 				return false;
 			if (theFiltered != null) {
 				for (Filtered<R, C, E, ?> filtered : theFiltered) {
-					if (filtered.canAccept(targetCell, transfer, withMulti))
+					if (filtered.canAccept(targetCell, leftOfCenter, aboveCenter, transfer, withMulti))
 						return true;
 				}
 			}
@@ -530,11 +543,11 @@ public class Dragging {
 		}
 
 		@Override
-		public BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti,
-			boolean testOnly) throws IOException {
+		public BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			Transferable transferable, boolean withMulti, boolean testOnly) throws IOException {
 			if (theFiltered != null) {
 				for (Filtered<R, C, E, ?> filtered : theFiltered) {
-					BetterList<E> data = filtered.accept(targetCell, transferable, withMulti, testOnly);
+					BetterList<E> data = filtered.accept(targetCell, leftOfCenter, aboveCenter, transferable, withMulti, testOnly);
 					if (data != null)
 						return data;
 				}
@@ -561,12 +574,14 @@ public class Dragging {
 					}
 					if (multi) {
 						BetterList<E> list = QommonsUtils.filterMapE((Collection<E>) data, //
-							d -> flavor.getValue2().canAccept(targetCell, d, ((MultiFlavor) f2).single), //
-							d -> flavor.getValue2().transform(targetCell, d, ((MultiFlavor) f2).single, testOnly));
+							d -> flavor.getValue2().canAccept(targetCell, leftOfCenter, aboveCenter, d, ((MultiFlavor) f2).single), //
+							d -> flavor.getValue2().transform(targetCell, leftOfCenter, aboveCenter, d, ((MultiFlavor) f2).single,
+								testOnly));
 						if (!list.isEmpty())
-							return list;
-					} else if (flavor.getValue2().canAccept(targetCell, data, f2)) {
-						return BetterList.of(flavor.getValue2().transform(targetCell, data, f2, testOnly));
+							return QommonsUtils.filterMap(list, d -> d != null, null);
+					} else if (flavor.getValue2().canAccept(targetCell, leftOfCenter, aboveCenter, data, f2)) {
+						E value = flavor.getValue2().transform(targetCell, leftOfCenter, aboveCenter, data, f2, testOnly);
+						return value == null ? BetterList.empty() : BetterList.of(value);
 					}
 				}
 			}
@@ -584,12 +599,13 @@ public class Dragging {
 				theValue = value;
 			}
 
-			boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, TransferSupport transfer, boolean withMulti) {
-				if (!theValue.canAccept(targetCell, transfer, withMulti))
+			boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+				TransferSupport transfer, boolean withMulti) {
+				if (!theValue.canAccept(targetCell, leftOfCenter, aboveCenter, transfer, withMulti))
 					return false;
 				List<E2> data;
 				try {
-					data = theValue.accept(targetCell, transfer.getTransferable(), withMulti, true);
+					data = theValue.accept(targetCell, leftOfCenter, aboveCenter, transfer.getTransferable(), withMulti, true);
 				} catch (IOException e) {
 					throw new IllegalStateException("Badly advertised support", e);
 				}
@@ -609,9 +625,9 @@ public class Dragging {
 				return true;
 			}
 
-			BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, Transferable transferable, boolean withMulti,
-				boolean testOnly) throws IOException {
-				BetterList<E2> data = theValue.accept(targetCell, transferable, withMulti, testOnly);
+			BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+				Transferable transferable, boolean withMulti, boolean testOnly) throws IOException {
+				BetterList<E2> data = theValue.accept(targetCell, leftOfCenter, aboveCenter, transferable, withMulti, testOnly);
 				if (data == null)
 					return null;
 				return QommonsUtils.filterMap(data, theFilter, theMap);

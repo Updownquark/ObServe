@@ -58,8 +58,7 @@ import org.qommons.ThreadConstraint;
 import com.google.common.reflect.TypeToken;
 
 public abstract class AbstractSimpleTableBuilder<R, T extends JTable, P extends AbstractSimpleTableBuilder<R, T, P>>
-extends AbstractComponentEditor<T, P>
-implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
+extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	static class DynamicColumnSet<R, C> {
 		final Function<? super R, ? extends Collection<? extends C>> columnValues;
 		final Comparator<? super C> columnSort;
@@ -87,7 +86,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
 	private Dragging.SimpleTransferSource<R> theDragSource;
-	private Dragging.SimpleTransferAccepter<R, R, R> theDragAccepter;
+	private Dragging.SimpleTransferAccepter<R, Object, R> theDragAccepter;
 	private List<AbstractObservableTableModel.RowMouseListener<? super R>> theMouseListeners;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
@@ -101,6 +100,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	protected AbstractSimpleTableBuilder(ObservableCollection<R> rows, T table, Observable<?> until) {
 		super(null, table, until);
+		getEditor().setFillsViewportHeight(true);
 		theActions = new LinkedList<>();
 		theActionsOnTop = true;
 		withColumnHeader = true;
@@ -122,6 +122,8 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	}
 
 	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> getColumns() {
+		if (theColumns == null)
+			theColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> create();
 		return theColumns;
 	}
 
@@ -245,7 +247,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	}
 
 	@Override
-	public P dragAcceptRow(Consumer<? super TransferAccepter<R, R, R>> accept) {
+	public P dragAcceptRow(Consumer<? super TransferAccepter<R, Object, R>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>((TypeToken<R>) TypeTokens.get().OBJECT);
 		// if (accept == null)
@@ -299,7 +301,8 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	protected abstract void syncMultiSelection(T table, AbstractObservableTableModel<R> model, ObservableCollection<R> selection);
 
-	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource, SimpleTransferAccepter<R, R, R> dragAccepter);
+	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource,
+		SimpleTransferAccepter<R, Object, R> dragAccepter);
 
 	protected abstract void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange);
 

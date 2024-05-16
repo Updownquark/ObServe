@@ -421,6 +421,8 @@ public class ObservableSwingUtils {
 				callbackLock[0] = true;
 				try {
 					T newValue = purify.apply((T) spinner.getValue());
+					if (newValue == safeValue.get())
+						return;
 					String accept = safeValue.isAcceptable(newValue);
 					if (accept != null) {
 						JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);

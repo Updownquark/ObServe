@@ -63,6 +63,7 @@ import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
@@ -281,15 +282,18 @@ public class PanelPopulation {
 
 		default P addIntSpinnerField(String fieldName, SettableValue<Integer> value,
 			Consumer<SteppedFieldEditor<JSpinner, Integer, ?>> modify) {
-			return addSpinnerField(fieldName, new JSpinner(new SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1)), value,
-				Number::intValue, modify);
+			ObservableSpinner<Integer> spinner = new ObservableSpinner<>(value, SpinnerFormat.INT, //
+				v -> v == null ? 0 : v - 1, //
+				v -> v == null ? 1 : v + 1, getUntil());
+			return addSpinnerField(fieldName, spinner, value, Number::intValue, modify);
 		}
 
 		default P addDoubleSpinnerField(String fieldName, SettableValue<Double> value,
 			Consumer<SteppedFieldEditor<JSpinner, Double, ?>> modify) {
-			return addSpinnerField(fieldName,
-				new JSpinner(new SpinnerNumberModel(0.0, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0)), value,
-				Number::doubleValue, modify);
+			ObservableSpinner<Double> spinner = new ObservableSpinner<>(value, SpinnerFormat.doubleFormat("0.00", 1.0), //
+				v -> v == null ? 0.0 : v - 1.0, //
+				v -> v == null ? 1.0 : v + 1.0, getUntil());
+			return addSpinnerField(fieldName, spinner, value, Number::doubleValue, modify);
 		}
 
 		<F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
@@ -592,7 +596,8 @@ public class PanelPopulation {
 		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
 			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
-				((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+				if (spinner.getModel() instanceof SpinnerNumberModel)
+					((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
 			}, getUntil());
 			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
 			if (modify != null)
@@ -1784,7 +1789,7 @@ public class PanelPopulation {
 
 		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
 
-		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, R, R>> accept);
+		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, Object, R>> accept);
 
 		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
 	}

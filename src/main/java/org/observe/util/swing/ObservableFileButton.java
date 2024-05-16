@@ -21,6 +21,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileFilter;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -82,6 +83,7 @@ public class ObservableFileButton extends JButton {
 	private boolean isExternallyEnabled;
 	private String theApproveText;
 	private File theInitDirectory;
+	private FileFilter theFileFilter;
 	private String theFileFilterDescrip;
 
 	/**
@@ -197,6 +199,30 @@ public class ObservableFileButton extends JButton {
 	 */
 	public ObservableFileButton openOrSave(boolean openOrSave) {
 		return withApproveText(openOrSave ? "Open" : "Save");
+	}
+
+	/**
+	 * @param filter The file filter for the chooser
+	 * @return This button
+	 */
+	public ObservableFileButton withFileFilter(FileFilter filter) {
+		theFileFilter = filter;
+		if (filter != null)
+			theFileFilterDescrip = filter.getDescription();
+		if (theFileChooser != null)
+			theFileChooser.setFileFilter(new ValueAcceptableFileFilter());
+		return this;
+	}
+
+	/**
+	 * @param descrip A description of the file filter
+	 * @param extensions The acceptable file extensions
+	 * @return This button
+	 */
+	public ObservableFileButton forFileExtension(String descrip, String... extensions) {
+		theFileFilterDescrip = descrip;
+		withFileFilter(new FileNameExtensionFilter(descrip, extensions));
+		return this;
 	}
 
 	/**
@@ -329,7 +355,7 @@ public class ObservableFileButton extends JButton {
 		chooser.setMultiSelectionEnabled(false);
 		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 		chooser.setApproveButtonToolTipText(theTooltip);
-		chooser.setFileFilter(new ValueAcceptableFileFilter(theValue, theFileFilterDescrip));
+		chooser.setFileFilter(new ValueAcceptableFileFilter());
 		File value = getValue().get();
 		while (value != null && !value.exists())
 			value = value.getParentFile();
@@ -460,29 +486,20 @@ public class ObservableFileButton extends JButton {
 	}
 
 	/** A file filter that rejects files (not directories, so the user can navigate) that are not acceptable by a value */
-	public static class ValueAcceptableFileFilter extends FileFilter {
-		private final SettableValue<File> theValue;
-		private String theDescription;
-
-		/**
-		 * @param value The value
-		 * @param descrip The description for this file filter
-		 */
-		public ValueAcceptableFileFilter(SettableValue<File> value, String descrip) {
-			theValue = value;
-			theDescription = descrip;
-		}
-
+	public class ValueAcceptableFileFilter extends FileFilter {
 		@Override
 		public boolean accept(File f) {
-			if (f.isDirectory())
+			if (theFileFilter != null && !theFileFilter.accept(f))
+				return false;
+			else if (f.isDirectory())
 				return true;
-			return theValue.isAcceptable(f) == null;
+			else
+				return theValue.isAcceptable(f) == null;
 		}
 
 		@Override
 		public String getDescription() {
-			return theDescription;
+			return theFileFilterDescrip;
 		}
 	}
 }
