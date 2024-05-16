@@ -275,6 +275,11 @@ public class UnaryOperator implements ObservableExpression {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return value.isEventing();
+				}
+
+				@Override
 				public ObservableValue<String> isEnabled() {
 					return enabled;
 				}

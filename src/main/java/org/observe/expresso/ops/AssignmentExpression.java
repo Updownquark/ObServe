@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
+import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -157,7 +158,7 @@ public class AssignmentExpression implements ObservableExpression {
 
 			@Override
 			public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
-					return new Instantiator<>(target.instantiate(), value.instantiate(), reporting, listAction);
+				return new Instantiator<>(target.instantiate(), value.instantiate(), reporting, listAction);
 			}
 
 			@Override
@@ -300,6 +301,14 @@ public class AssignmentExpression implements ObservableExpression {
 					}
 				}
 			}
+		}
+
+		@Override
+		public boolean isEventing() {
+			if (theTarget.isEventing())
+				return true;
+			C target = theTarget.get();
+			return target != null && target instanceof Eventable && ((Eventable) target).isEventing();
 		}
 
 		@Override

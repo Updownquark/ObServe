@@ -9,6 +9,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.swing.JComboBox;
+
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
@@ -104,9 +106,9 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer,
 			BiFunction<? super ModelCell<? extends R, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
-			withEditor(ObservableCellEditor.createComboEditor(renderer, options));
 			if (isRenderDefault)
 				formatText(renderer);
+			withEditor(ObservableCellEditor.createComboEditor(renderer, new JComboBox<>(), options, theRenderer));
 			return this;
 		}
 
@@ -187,7 +189,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			} else if (theAttributeMutator != null)
 				theAttributeMutator.apply(oldRow, categoryValue);
 
-			if (newRow != oldRow || updateRowIfUnchanged //
+			if ((newRow != oldRow || updateRowIfUnchanged) //
 				&& rowElement.isAcceptable(newRow) == null) // Don't break if update is not supported
 				rowElement.set(newRow);
 		}
@@ -544,8 +546,11 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			theDecorator = decorator;
 		else
 			theDecorator = theDecorator.modify(decorator);
-		if (theRenderer != null && theDecorator != null)
+		if (theDecorator != null) {
+			if (theRenderer == null)
+				theRenderer = ObservableCellRenderer.formatted((mv, cv) -> print(() -> mv, cv));
 			theRenderer.decorate(theDecorator);
+		}
 		return this;
 	}
 

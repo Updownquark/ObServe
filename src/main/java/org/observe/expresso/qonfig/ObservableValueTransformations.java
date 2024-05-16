@@ -987,8 +987,9 @@ public class ObservableValueTransformations {
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
 
-			QonfigValue pTP = session.attributes().get("propagate-to-parent").get(); // Defaulted to true, but warn if they specify it
-			if (pTP.position != null) // Not defaulted, but specified
+			QonfigValue pTP = session.attributes().get("propagate-update-to-parent").get();
+			// Defaulted to true, but warn if they specify it
+			if (pTP != null && pTP.position != null) // Not defaulted, but specified
 				reporting().at(pTP.position).warn("'propagate-update-to-parent' attribute not usable for value flattening");
 			ExpressoQIS reverse = session.forChildren("reverse").peekFirst();
 			if (reverse != null)
@@ -1013,7 +1014,7 @@ public class ObservableValueTransformations {
 			case "list":
 				if (theSorting != null)
 					theSorting.reporting().warn("Sorting specified, but not usable for value->list flattening");
-				return ModelTypes.SortedCollection;
+				return ModelTypes.Collection;
 			case "sorted-list":
 				if (theEquivalence != null)
 					reporting().at(getEquivalencePosition())
@@ -1022,7 +1023,7 @@ public class ObservableValueTransformations {
 			case "set":
 				if (theSorting != null)
 					theSorting.reporting().warn("Sorting specified, but not usable for value->set flattening");
-				return ModelTypes.SortedSet;
+				return ModelTypes.Set;
 			case "sorted-set":
 				if (theEquivalence != null)
 					reporting().at(getEquivalencePosition()).warn("Equivalence specified, but not usable for value->sorted-set flattening");

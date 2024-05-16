@@ -314,6 +314,12 @@ public class ModelTypes {
 			}
 
 			@Override
+			public boolean isEventing() {
+				ObservableAction satisfied = theSatisfied;
+				return satisfied != null && satisfied.isEventing();
+			}
+
+			@Override
 			public ObservableValue<String> isEnabled() {
 				if (theSatisfied != null)
 					return theSatisfied.isEnabled();

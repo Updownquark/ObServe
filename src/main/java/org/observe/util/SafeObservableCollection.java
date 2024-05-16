@@ -25,7 +25,6 @@ import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -37,6 +36,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.ReentrantNotificationException;
+import org.qommons.collect.ThreadConstrainedLockingStrategy;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.threading.QommonsTimer;
@@ -129,7 +129,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	private final ThreadConstraint theThreadConstraint;
 	private Object theIdentity;
-	private final AtomicBoolean isLocked;
 
 	private final Set<ElementId> theAddedElements;
 	private final List<ElementRef<E>> theRemovedElements;
@@ -151,10 +150,12 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public SafeObservableCollection(ObservableCollection<E> collection, ThreadConstraint threading, Observable<?> until) {
 		if (!threading.supportsInvoke())
 			throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
+		else if (threading == ThreadConstraint.ANY)
+			throw new IllegalArgumentException("Safe collection unsupported for thread constraint ANY");
 		theCollection = collection;
-		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build().withThreadConstraint(threading).build();
+		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build()
+			.withLocking(new ThreadConstrainedLockingStrategy(threading, this::doFlush)).build();
 		theThreadConstraint = threading;
-		isLocked = new AtomicBoolean();
 
 		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection.<ElementRef<E>> build()//
 			.withBacking(theSyntheticBacking);
@@ -184,10 +185,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theFlushKey = Causable.key((cause, values) -> {
 			theMidMoveCount = 0;
 			if (threading.isEventThread()) {
-				try (Transaction t = theSyntheticCollection.lock(true, cause)) { // For causality
-					if (!isLocked.get())
-						doFlush();
-				}
+				Transaction t = theSyntheticCollection.tryLock(true, cause);
+				if (t != null)
+					doFlush();
 			} else
 				threading.invoke(this::doFlush);
 		});
@@ -546,30 +546,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public Transaction lock(boolean write, Object cause) {
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).lock(write, cause);
-		boolean initialLock = t != null && isLocked.compareAndSet(false, true);
-		if (initialLock)
-			t = t.combine(() -> isLocked.set(false));
-		// In the case of a read lock on the event thread, this would not be safe if theSyntheticCollection actually performed locking,
-		// because we obtained a read lock on it which is not generally upgradable to a write lock that is needed by the flush.
-		// As it is, the collection's only constraint is that it is modified on the event thread, which is met.
-		// We can't flush if we're already locked
-		if (initialLock && (write || theThreadConstraint.isEventThread()))
-			doFlush();
-		return t;
+		return theSyntheticCollection.lock(write, cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		Transaction t = Transactable.combine(theCollection, theSyntheticCollection).tryLock(write, cause);
-		boolean initialLock = t != null && isLocked.compareAndSet(false, true);
-		if (initialLock)
-			t = t.combine(() -> isLocked.set(false));
-		if (initialLock && (write || theThreadConstraint.isEventThread()))
-			doFlush();
-		return t;
+		return theSyntheticCollection.tryLock(write, cause);
 	}
 
 	/**

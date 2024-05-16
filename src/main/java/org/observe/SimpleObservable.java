@@ -103,20 +103,31 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	}
 
 	/**
-	 * @param internalState Whether this observable is firing changes for some valued state
-	 * @param safe Whether this observable is externally thread-safed
-	 */
-	protected SimpleObservable(boolean internalState, boolean safe) {
-		this(null, internalState, safe);
-	}
-
-	/**
 	 * @param onSubscribe The function to notify when a subscription is added to this observable
 	 * @param internalState Whether this observable is firing changes for some valued state
 	 * @param safe Whether this observable is externally thread-safed
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, boolean safe) {
 		this(onSubscribe, null, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
+	}
+
+	/**
+	 * @param onSubscribe The function to notify when a subscription is added to this observable
+	 * @param description A description of this observable's purpose
+	 * @param internalState Whether this observable is firing changes for some valued state
+	 * @param lock The lock for this observable
+	 */
+	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, String description, boolean internalState,
+		Function<Object, Transactable> lock) {
+		this(onSubscribe, null, description, internalState, lock, null);
+	}
+
+	/**
+	 * @param internalState Whether this observable is firing changes for some valued state
+	 * @param safe Whether this observable is externally thread-safed
+	 */
+	protected SimpleObservable(boolean internalState, boolean safe) {
+		this(null, internalState, safe);
 	}
 
 	/**

@@ -22,7 +22,17 @@ import java.util.function.Supplier;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
-import org.qommons.*;
+import org.qommons.BiTuple;
+import org.qommons.Causable;
+import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
+import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 
 /**
@@ -59,11 +69,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	@Override
 	default ThreadConstraint getThreadConstraint() {
 		return noInitChanges().getThreadConstraint();
-	}
-
-	@Override
-	default boolean isEventing() {
-		return noInitChanges().isEventing();
 	}
 
 	@Override
@@ -204,6 +209,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			public T get() {
 				return getWrapped().get();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return getWrapped().isEventing();
 			}
 
 			@Override
@@ -882,6 +892,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theSource.isEventing() || theEngine.isEventing();
+		}
+
+		@Override
 		public T get() {
 			BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
 			TransformedElement<S, T> el = state.getValue1();
@@ -966,6 +981,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return theChanges;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
 		}
 	}
 
@@ -1081,6 +1101,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing() || theRefresh.isEventing();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -1096,6 +1121,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private T theLastEventedValue;
 		private ObservableValueEvent<T> theLastEvent;
 		private final ListenerList<Consumer<ObservableValueEvent<T>>> theListeners;
+		private volatile boolean isEventing;
 
 		public SafeObservableValue(ObservableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
 			super(wrapped);
@@ -1124,10 +1150,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			else if (theLastEventedValue != evt.getOldValue())
 				evt = createChangeEvent(theLastEventedValue, evt.getNewValue(), evt);
 			theLastEventedValue = evt.getNewValue();
+			isEventing = true;
 			try (Transaction t = evt == theLastEvent ? Transaction.NONE : evt.use()) {
 				ObservableValueEvent<T> fEvt = evt;
 				theListeners.forEach(//
 					listener -> listener.accept(fEvt));
+			} finally {
+				isEventing = false;
 			}
 		}
 
@@ -1186,6 +1215,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 			}
 			return new SafeChanges();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return isEventing;
 		}
 	}
 
@@ -1278,6 +1312,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public boolean isEventing() {
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return "" + theValue;
 		}
@@ -1327,6 +1366,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return changes(false, -1, null);
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theChanges.isEventing();
 		}
 
 		Observable<ObservableValueEvent<T>> changes(boolean withInit, long stamp, T initialValue) {
@@ -1475,6 +1519,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
+			public boolean isEventing() {
+				return theValue.isEventing();
+			}
+
+			@Override
 			public int hashCode() {
 				return theValue.hashCode();
 			}
@@ -1555,6 +1604,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new FlattenedValueChanges(false);
+		}
+
+		@Override
+		public boolean isEventing() {
+			if (theValue.isEventing())
+				return true;
+			ObservableValue<? extends T> value = theValue.get();
+			return value != null && value.isEventing();
 		}
 
 		@Override
@@ -1811,6 +1868,17 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return changes().noInit();
+		}
+
+		@Override
+		public boolean isEventing() {
+			for (ObservableValue<? extends T> value : theValues) {
+				if (value.isEventing())
+					return true;
+				else if (theTest.test(value.get()))
+					return false;
+			}
+			return false;
 		}
 
 		class FirstValueChanges implements Observable<ObservableValueEvent<T>> {

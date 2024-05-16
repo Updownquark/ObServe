@@ -17,6 +17,7 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
+import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.JTree;
 import javax.swing.ListModel;
@@ -229,7 +230,9 @@ public abstract class AbstractObservableTableModel<R> {
 
 			@Override
 			protected <C> void setToolTip(String tooltip, boolean header) {
-				(header ? table.getTableHeader() : table).setToolTipText(tooltip);
+				JComponent comp = header ? table.getTableHeader() : table;
+				if (comp != null)
+					comp.setToolTipText(tooltip);
 			}
 
 			@Override

@@ -339,17 +339,7 @@ public class PanelPopulation {
 			Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
 
 		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
-			return addButton(buttonText, new ObservableAction() {
-				@Override
-				public void act(Object cause) throws IllegalStateException {
-					action.accept(cause);
-				}
-
-				@Override
-				public ObservableValue<String> isEnabled() {
-					return SettableValue.ALWAYS_ENABLED;
-				}
-			}, modify);
+			return addButton(buttonText, ObservableAction.of(action), modify);
 		}
 
 		P addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify);
@@ -1455,17 +1445,7 @@ public class PanelPopulation {
 		P withPostLabel(ObservableValue<String> postLabel);
 
 		default P withPostButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
-			return withPostButton(buttonText, new ObservableAction() {
-				@Override
-				public void act(Object cause) throws IllegalStateException {
-					action.accept(cause);
-				}
-
-				@Override
-				public ObservableValue<String> isEnabled() {
-					return SettableValue.ALWAYS_ENABLED;
-				}
-			}, modify);
+			return withPostButton(buttonText, ObservableAction.of(action), modify);
 		}
 
 		P withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify);

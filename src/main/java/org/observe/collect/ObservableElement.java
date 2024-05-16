@@ -172,6 +172,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 				}
 				return new ElementChanges();
 			}
+
+			@Override
+			public boolean isEventing() {
+				return false;
+			}
 		}
 		return new EmptyElement();
 	}

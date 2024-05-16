@@ -25,6 +25,7 @@ import javax.swing.JList;
 import javax.swing.JSlider;
 import javax.swing.JTable;
 import javax.swing.JTree;
+import javax.swing.ListCellRenderer;
 import javax.swing.SwingConstants;
 import javax.swing.event.CellEditorListener;
 import javax.swing.event.ChangeEvent;
@@ -40,6 +41,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
@@ -51,8 +53,9 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		boolean uninstall(boolean commit);
 	}
 
-	public interface EditorInstallation<C> {
-		EditorSubscription install(ObservableCellEditor<?, C> editor, Component component, Function<C, String> valueFilter, String tooltip,
+	public interface EditorInstallation<M, C> {
+		EditorSubscription install(ObservableCellEditor<?, C> editor, Component component, M modelValue, Function<C, String> valueFilter,
+			String tooltip,
 			Function<? super C, String> valueToolTip);
 	}
 
@@ -123,7 +126,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		// Default margins for the text field don't fit into the rendered cell
 		Insets defMargin = field.getMargin();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(field, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(field, value, (e, c, mv, f, tt, vtt) -> {
 			if (c instanceof JTable) {
 				Insets margin = field.getMargin();
 				if (margin.top != 0 || margin.bottom != 0) {
@@ -167,26 +170,49 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> renderer, JComboBox<C> combo,
 		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
+		return createComboEditor(renderer, combo, options, null);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> print, JComboBox<C> combo,
+		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options,
+		ObservableCellRenderer<M, C> renderer) {
 		Function<C, String>[] filter = new Function[1];
+		Object[] modelValue = new Object[1];
 		SettableValue<String> tooltip = SettableValue.<String> build().build();
 		Function<? super C, String>[] valueToolTip = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
-		combo.setRenderer(new DefaultListCellRenderer() {
-			@Override
-			public Component getListCellRendererComponent(JList<?> list, Object option, int index, boolean isSelected,
-				boolean cellHasFocus) {
-				String text = renderer == null ? String.valueOf(option) : renderer.apply((C) option);
-				return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
-			}
-		});
-		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
+		if (renderer != null) {
+			combo.setRenderer(new ListCellRenderer<C>() {
+				@Override
+				public Component getListCellRendererComponent(JList<? extends C> list, C editValue, int index, boolean isSelected,
+					boolean cellHasFocus) {
+					Component rendered = renderer.getCellRendererComponent(list,
+						new ModelCell.Default<>(() -> (M) modelValue[0], editValue, index, 0, isSelected, cellHasFocus, isSelected,
+							isSelected, true, true) //
+								.setEnabled(filter[0] == null ? null : filter[0].apply(editValue)),
+						CellRenderContext.DEFAULT);
+					return rendered;
+				}
+			});
+		} else {
+			combo.setRenderer(new DefaultListCellRenderer() {
+				@Override
+				public Component getListCellRendererComponent(JList<?> list, Object option, int index, boolean isSelected,
+					boolean cellHasFocus) {
+					String text = print == null ? String.valueOf(option) : print.apply((C) option);
+					return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+				}
+			});
+		}
+		SimpleObservable<Void> until = SimpleObservable.build().build();
 		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue.<ObservableCollection<? extends C>> build()
 			.build();
 		ObservableComboBoxModel.comboFor(combo, tooltip, v -> {
 			return valueToolTip[0] == null ? null : valueToolTip[0].apply(v);
 		}, ObservableCollection.flattenValue(availableValues), value);
-		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
+		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, mv, f, tt, vtt) -> {
+			modelValue[0] = mv;
 			filter[0] = f;
 			tooltip.set(tt, null);
 			valueToolTip[0] = vtt;
@@ -218,7 +244,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
 		Subscription[] editSub = new Subscription[1];
 		check.setHorizontalAlignment(SwingConstants.CENTER);
-		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, mv, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
 			if (render != null)
@@ -244,7 +270,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		SettableValue<Integer> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JSlider slider = new JSlider(minValue, maxValue);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Integer> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, Integer> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, mv, f, tt, vtt) -> {
 			filter[0] = f;
 			editSub[0] = ObservableSwingUtils.sliderFor(slider, tt, value);
 			return commit -> {
@@ -271,7 +297,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		SettableValue<Double> value = sliderValue.map(tick -> minValue + tick * tickSize, v -> (int) Math.round((v - minValue) / tickSize));
 		JSlider slider = new JSlider(0, ticks);
 		Subscription[] editSub = new Subscription[1];
-		ObservableCellEditor<M, Double> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, Double> editor = new DefaultObservableCellEditor<>(slider, value, (e, c, mv, f, tt, vtt) -> {
 			filter[0] = iv -> {
 				if (f == null)
 					return null;
@@ -301,7 +327,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		JButton button = new JButton();
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, mv, f, tt, vtt) -> {
 			filter[0] = f;
 			button.setText(renderer.apply(value.get()));
 			button.setToolTipText(tt);
@@ -331,7 +357,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		boolean[] editing = new boolean[1];
-		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, mv, f, tt, vtt) -> {
 			filter[0] = f;
 			if (render != null)
 				render.accept((ModelCell<? extends M, ? extends C>) e.getEditingCell());
@@ -360,7 +386,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	public static class DefaultObservableCellEditor<M, C> implements ObservableCellEditor<M, C> {
 		private final Component theEditorComponent;
 		private final SettableValue<C> theEditorValue;
-		private final EditorInstallation<C> theInstallation;
+		private final EditorInstallation<M, C> theInstallation;
 		private Predicate<EventObject> theEditTest;
 		private CellDecorator<M, C> theDecorator;
 		private Function<Component, Runnable> theModifier;
@@ -374,7 +400,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private final List<CellEditorListener> theListeners;
 		private EditorSubscription theEditorSubscription;
 
-		public DefaultObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation<C> installation,
+		public DefaultObservableCellEditor(Component editorComponent, SettableValue<C> editorValue, EditorInstallation<M, C> installation,
 			Predicate<EventObject> editTest) {
 			theEditorComponent = editorComponent;
 			theEditorValue = editorValue;
@@ -554,7 +580,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theRevert = revert;
 
-			theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
+			theEditorSubscription = theInstallation.install(this, list, cell.getModelValue(), valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
 
@@ -721,7 +747,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theRevert = revert;
 
-			theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
+			theEditorSubscription = theInstallation.install(this, table, modelValue, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
 
@@ -762,7 +788,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theRevert = revert;
 
-			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
+			theEditorSubscription = theInstallation.install(this, tree, (M) value, null, null, null);
 			return theEditorComponent;
 		}
 

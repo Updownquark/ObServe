@@ -2633,12 +2633,21 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public void act(Object cause) throws IllegalStateException {
-				QommonsTimer.getCommonInstance().offload(() -> {
-					if (cause instanceof Causable)
+				Runnable[] task = new Runnable[1];
+				task[0] = () -> {
+					if (theWrapped.isEventing())
+						QommonsTimer.getCommonInstance().offload(task[0]);
+					else if (cause instanceof Causable)
 						theWrapped.act(Causable.broken(cause));
 					else
 						theWrapped.act(cause);
-				});
+				};
+				QommonsTimer.getCommonInstance().offload(task[0]);
+			}
+
+			@Override
+			public boolean isEventing() {
+				return theWrapped.isEventing();
 			}
 
 			@Override
@@ -2832,6 +2841,15 @@ public class ExpressoQonfigValues {
 					throw new IllegalStateException(msg);
 				for (ObservableAction action : theActions)
 					action.act(cause);
+			}
+
+			@Override
+			public boolean isEventing() {
+				for (ObservableAction action : theActions) {
+					if (action.isEventing())
+						return true;
+				}
+				return false;
 			}
 
 			@Override
@@ -3170,6 +3188,19 @@ public class ExpressoQonfigValues {
 							theFinally.act(cause2);
 					}
 				}
+			}
+
+			@Override
+			public boolean isEventing() {
+				if (theInit != null && theInit.isEventing())
+					return true;
+				else if (theBeforeCondition != null && theBeforeCondition.isEventing())
+					return true;
+				for (ObservableAction body : theBody) {
+					if (body.isEventing())
+						return true;
+				}
+				return theFinally != null && theFinally.isEventing();
 			}
 		}
 	}
@@ -3869,12 +3900,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public <V extends Instant> Instant set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			public Instant set(Instant value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override
-			public <V extends Instant> String isAcceptable(V value) {
+			public String isAcceptable(Instant value) {
 				return StdMsg.UNSUPPORTED_OPERATION;
 			}
 

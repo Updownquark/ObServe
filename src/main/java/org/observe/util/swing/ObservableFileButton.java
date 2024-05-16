@@ -270,6 +270,11 @@ public class ObservableFileButton extends JButton {
 				}
 
 				@Override
+				public boolean isEventing() {
+					return theValue.isEventing();
+				}
+
+				@Override
 				public ObservableValue<String> isEnabled() {
 					return theValue.map(v -> v == null ? "No file selected" : null);
 				}

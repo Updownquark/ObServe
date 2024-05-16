@@ -7,7 +7,9 @@ import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 
 import org.observe.expresso.ModelInstantiationException;
@@ -23,12 +25,15 @@ import org.qommons.ThreadConstraint;
 public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 	private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("HH:mm:ss");
 
+	private final JScrollPane theScroll;
 	private final JPanel thePanel;
 	private JTextPane theErrorDisplay;
 
 	protected QuickOsgiSwingComponent(boolean dynamicRefresh) {
 		super(ThreadConstraint.EDT, dynamicRefresh);
 		thePanel = new JPanel(new JustifiedBoxLayout(true).mainJustified().crossJustified());
+		theScroll = new JScrollPane(theErrorDisplay);
+		theScroll.getVerticalScrollBar().setUnitIncrement(10);
 		getUntil().act(__ -> {
 			while (thePanel.getComponentCount() > 0)
 				thePanel.remove(thePanel.getComponentCount() - 1);
@@ -46,8 +51,7 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 		writer.append(message).append('\n');
 		x.printStackTrace(new PrintWriter(writer));
 		theErrorDisplay.setText(writer.toString());
-		thePanel.add(theErrorDisplay);
-		installComponent(thePanel);
+		installComponent(theScroll);
 	}
 
 	@Override
@@ -75,5 +79,5 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 		installComponent(thePanel);
 	}
 
-	protected abstract void installComponent(JPanel component);
+	protected abstract void installComponent(JComponent component);
 }

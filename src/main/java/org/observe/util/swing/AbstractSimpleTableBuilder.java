@@ -13,6 +13,7 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedList;
@@ -79,7 +80,9 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	}
 
 	private String theItemName;
-	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theColumns;
+	private ObservableCollection<CategoryRenderStrategy<R, ?>> theSimpleColumns;
+	private ObservableCollection<ObservableCollection<? extends CategoryRenderStrategy<R, ?>>> theComplexColumns;
+	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theFlatColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
 	private ObservableValue<String> theDisablement;
@@ -122,9 +125,11 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	}
 
 	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> getColumns() {
-		if (theColumns == null)
-			theColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> create();
-		return theColumns;
+		if (theFlatColumns != null)
+			return theFlatColumns;
+		else if (theSimpleColumns == null)
+			theSimpleColumns = ObservableCollection.create();
+		return theSimpleColumns;
 	}
 
 	protected SettableValue<R> getSelectionValue() {
@@ -137,15 +142,27 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 
 	@Override
 	public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
-		theColumns = columns;
+		if (theComplexColumns == null) {
+			theComplexColumns = ObservableCollection.create();
+			theFlatColumns = theComplexColumns.flow()//
+				.flatMap(c -> c.flow())//
+				.collect();
+			if (theSimpleColumns != null)
+				theComplexColumns.add(theSimpleColumns);
+		}
+		theSimpleColumns = null;
+		theComplexColumns.add(columns);
 		return (P) this;
 	}
 
 	@Override
 	public P withColumn(CategoryRenderStrategy<R, ?> column) {
-		if (theColumns == null)
-			theColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> create();
-		((ObservableCollection<CategoryRenderStrategy<R, ?>>) theColumns).add(column);
+		if (theSimpleColumns == null) {
+			theSimpleColumns = ObservableCollection.create();
+			if (theComplexColumns != null)
+				theComplexColumns.add(theSimpleColumns);
+		}
+		theSimpleColumns.add(column);
 		return (P) this;
 	}
 
@@ -193,8 +210,8 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 
 	@Override
 	public P withMouseListener(AbstractObservableTableModel.RowMouseListener<? super R> listener) {
-		if(theMouseListeners==null)
-			theMouseListeners=new ArrayList<>();
+		if (theMouseListeners == null)
+			theMouseListeners = new ArrayList<>();
 		theMouseListeners.add(listener);
 		return (P) this;
 	}
@@ -288,7 +305,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	}
 
 	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> createColumnSet() {
-		return theColumns;
+		return getColumns();
 	}
 
 	protected abstract AbstractObservableTableModel<R> createTableModel(
@@ -323,8 +340,8 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		}
 		if (!withColumnHeader)
 			table.setTableHeader(null);
-		if(theMouseListeners!=null) {
-			for(ObservableTableModel.RowMouseListener<? super R> listener : theMouseListeners)
+		if (theMouseListeners != null) {
+			for (ObservableTableModel.RowMouseListener<? super R> listener : theMouseListeners)
 				model.addMouseListener(listener);
 		}
 		Subscription sub = model.hookUp(table, createTableRenderContext());
@@ -423,7 +440,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 
 		// Set up transfer handling (DnD, copy/paste)
 		boolean draggable = theDragSource != null || theDragAccepter != null;
-		for (CategoryRenderStrategy<? super R, ?> column : theColumns) {
+		for (CategoryRenderStrategy<? super R, ?> column : getColumns()) {
 			// TODO check the draggable flag
 			if (column.getDragSource() != null || column.getMutator().getDragAccepter() != null) {
 				draggable = true;
@@ -468,14 +485,14 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 			for (int c = 0; c < columns.size(); c++) {
 				int[] widths = new int[4]; // min, pref, max, and actual
 				theColumnWidths.add(widths);
-				getColumnWidths(model, columns.get(c), c, widths, null);
+				getColumnWidths(model, columns.get(c), c, widths, columns.size(), null);
 				TableColumn column = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
 				column.setMinWidth(widths[0]);
 				column.setMaxWidth(widths[2]);
 				widths[3] = widths[1];
 			}
 			adjustScrollWidths();
-			onVisibleData(model, evt -> {
+			onVisibleData(model, evt -> EventQueue.invokeLater(()-> {
 				if (theAdaptivePrefRowHeight > 0)
 					adjustHeight();
 				boolean adjusted = false;
@@ -487,7 +504,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 						boolean colAdjust = false;
 						switch (evt.type) {
 						case add:
-							getColumnWidths(model, column, c, newWidths, evt);
+							getColumnWidths(model, column, c, newWidths, columns.size(), evt);
 							if (newWidths[0] > cw[0]) {
 								colAdjust = true;
 								cw[0] = newWidths[0];
@@ -503,7 +520,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 							break;
 						case remove:
 						case set:
-							getColumnWidths(model, column, c, newWidths, null);
+							getColumnWidths(model, column, c, newWidths, columns.size(), null);
 							if (newWidths[0] != cw[0]) {
 								colAdjust = true;
 								cw[0] = newWidths[0];
@@ -537,7 +554,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 				if (adjusted) {
 					adjustScrollWidths();
 				}
-			});
+			}));
 			columns.changes().act(evt -> {
 				theResizingColumn = -1;
 				boolean adjust = false;
@@ -546,7 +563,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 					case add:
 						int[] widths = new int[4];
 						theColumnWidths.add(change.index, widths);
-						getColumnWidths(model, change.newValue, change.index, widths, null);
+						getColumnWidths(model, change.newValue, change.index, widths, columns.size(), null);
 						widths[3] = widths[1];
 						adjust = true;
 						break;
@@ -885,10 +902,22 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 					}
 				}
 				// Now everything is equally squished. Distribute any extra space equally.
-				for (boolean changed = true; size > 0 && changed; changed = false) {
+				BitSet expandableColumns = new BitSet(theColumnWidths.size());
+				expandableColumns.set(0, theColumnWidths.size());
+				for (boolean changed = true; size > 0 && !expandableColumns.isEmpty() && changed;) {
+					changed = false;
 					for (int c = 0; c < theColumnWidths.size(); c++) {
+						if (!expandableColumns.get(c))
+							continue;
 						int[] cw = theColumnWidths.get(c);
-						int extra = (int) Math.ceil(size * 1.0 / (theColumnWidths.size() - c));
+						if (cw[2] <= cw[3]) {
+							expandableColumns.clear(c);
+							if (expandableColumns.isEmpty())
+								break;
+							else
+								continue;
+						}
+						int extra = (int) Math.ceil(size * 1.0 / (expandableColumns.cardinality() - c));
 						if (extra <= cw[2] - cw[3])
 							cw[3] += extra;
 						else {
@@ -926,10 +955,22 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 					}
 				}
 				// Now everything is equally squished. Compress the rest equally.
-				for (boolean changed = true; size < 0 && changed; changed = false) {
+				BitSet expandableColumns = new BitSet(theColumnWidths.size());
+				expandableColumns.set(0, theColumnWidths.size());
+				for (boolean changed = true; size > 0 && !expandableColumns.isEmpty() && changed;) {
+					changed = false;
 					for (int c = 0; c < theColumnWidths.size(); c++) {
+						if (!expandableColumns.get(c))
+							continue;
 						int[] cw = theColumnWidths.get(c);
-						int diff = -(int) Math.ceil(size * 1.0 / (theColumnWidths.size() - c));
+						if (cw[0] >= cw[3]) {
+							expandableColumns.clear(c);
+							if (expandableColumns.isEmpty())
+								break;
+							else
+								continue;
+						}
+						int diff = -(int) Math.ceil(size * 1.0 / (expandableColumns.cardinality() - c));
 						if (diff <= cw[3] - cw[0])
 							cw[3] -= diff;
 						else {
@@ -1029,7 +1070,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	}
 
 	void getColumnWidths(AbstractObservableTableModel<R> model, CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths,
-		CollectionChangeEvent<R> rowEvent) {
+		int columnCount, CollectionChangeEvent<R> rowEvent) {
 		if (column.isUsingRenderingForSize()) {
 			ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
 			if (renderer == null) {
@@ -1037,7 +1078,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 				((CategoryRenderStrategy<R, Object>) column).withRenderer((ObservableCellRenderer<R, Object>) renderer);
 			}
 			ColumnConstraints cc = new ColumnConstraints();
-			if (withColumnHeader) {
+			if (withColumnHeader && getEditor().getTableHeader().getComponentCount() == columnCount) {
 				Component render = getEditor().getTableHeader().getComponent(getEditor().convertColumnIndexToView(columnIndex));
 				int min = render.getMinimumSize().width;
 				int pref = render.getPreferredSize().width;

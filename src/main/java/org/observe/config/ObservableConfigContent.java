@@ -305,6 +305,11 @@ public class ObservableConfigContent {
 				}
 			};
 		}
+
+		@Override
+		public boolean isEventing() {
+			return theRoot.isEventing();
+		}
 	}
 
 	/** Observes the value of a config's path descendant */

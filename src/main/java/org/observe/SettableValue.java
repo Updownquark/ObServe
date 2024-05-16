@@ -85,6 +85,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		return ObservableValue.super.getCoreId();
 	}
 
+	@Override
+	default boolean isEventing() {
+		return !getCurrentCauses().isEmpty();
+	}
+
 	/**
 	 * @param value The value to assign this settable to
 	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
@@ -112,6 +117,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 						onError.accept(e);
 					throw new IllegalStateException(e.getMessage(), e);
 				}
+			}
+
+			@Override
+			public boolean isEventing() {
+				return SettableValue.this.isEventing();
 			}
 
 			@Override
@@ -523,6 +533,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return theSource.noInitChanges();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theSource.isEventing();
 		}
 
 		@Override

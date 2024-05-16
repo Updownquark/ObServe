@@ -387,7 +387,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 	private List<AbstractLayout.LayoutChild> layoutChildren() {
 		if (theValues.isEmpty())
-			Collections.emptyList();
+			return Collections.emptyList();
 		T value = theValues.getFirst();
 		ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, 0, 0, false,
 			false, false, false, false, false);

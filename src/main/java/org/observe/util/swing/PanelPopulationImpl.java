@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -1895,13 +1896,25 @@ class PanelPopulationImpl {
 			theUntil = until;
 			theEnabledString = SettableValue.<String> build().build();
 			theObservableAction = new ObservableAction() {
+				private final AtomicInteger isEventing = new AtomicInteger();
+
 				@Override
 				public void act(Object cause) throws IllegalStateException {
-					List<R> selected = theSelectedValues.get();
-					if (theEnablement != null)
-						selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
-					theAction.accept(selected);
-					updateSelection(getActionItems(), cause);
+					isEventing.getAndIncrement();
+					try {
+						List<R> selected = theSelectedValues.get();
+						if (theEnablement != null)
+							selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
+						theAction.accept(selected);
+						updateSelection(getActionItems(), cause);
+					} finally {
+						isEventing.getAndDecrement();
+					}
+				}
+
+				@Override
+				public boolean isEventing() {
+					return isEventing.get() > 0;
 				}
 
 				@Override
@@ -2064,6 +2077,11 @@ class PanelPopulationImpl {
 					}
 
 					@Override
+					public boolean isEventing() {
+						return action.isEventing();
+					}
+
+					@Override
 					public ObservableValue<String> isEnabled() {
 						return action.isEnabled();
 					}
@@ -2096,6 +2114,11 @@ class PanelPopulationImpl {
 							text.append(alertPostText);
 						if (theWidget.alert(alertTitle, text.toString()).confirm(confirmType))
 							action.act(cause);
+					}
+
+					@Override
+					public boolean isEventing() {
+						return action.isEventing();
 					}
 
 					@Override

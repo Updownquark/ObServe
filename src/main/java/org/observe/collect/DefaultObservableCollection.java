@@ -258,6 +258,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public void clear() {
+		if (isEmpty())
+			return;
 		try (Transaction t = lock(true, null)) {
 			CollectionElement<E> el = getTerminalElement(true);
 			while (el != null) {

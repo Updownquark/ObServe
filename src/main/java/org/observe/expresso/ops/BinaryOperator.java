@@ -570,6 +570,11 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theLeft.isEventing();
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
 			return isEnabled;
 		}

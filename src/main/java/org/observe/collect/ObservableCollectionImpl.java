@@ -262,6 +262,11 @@ public final class ObservableCollectionImpl {
 					}
 					return new OnlyEnabledChanges();
 				}
+
+				@Override
+				public boolean isEventing() {
+					return theCollection.isEventing();
+				}
 			}
 			return new OnlyEnabled();
 		}
@@ -504,6 +509,11 @@ public final class ObservableCollectionImpl {
 					return theDefault.get();
 				}
 			}
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theCollection.isEventing();
 		}
 
 		/**
@@ -996,6 +1006,11 @@ public final class ObservableCollectionImpl {
 				protected Object createIdentity() {
 					return Identifiable.wrap(ObservableCollectionFinder.this.getIdentity(), "enabled");
 				}
+
+				@Override
+				public boolean isEventing() {
+					return getCollection().isEventing();
+				}
 			}
 			return new Enabled();
 		}
@@ -1311,6 +1326,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public T get() {
 			return getValue(getCurrent());
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theCollection.isEventing();
 		}
 
 		/** @return The initial computation value */
@@ -1692,6 +1712,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Observable<ObservableValueEvent<Boolean>> noInitChanges() {
 			return changes().noInit();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theLeft.isEventing() || theRight.isEventing();
 		}
 	}
 
@@ -3420,15 +3445,17 @@ public final class ObservableCollectionImpl {
 								CollectionChangesObservable<? extends E> changes;
 								if (clearAndAdd) {
 									try (Transaction t = collection.lock(false, null)) {
-										List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
-										int index = 0;
-										for (E v : collection)
-											elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++, null));
-										CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
-											elements, collEvt);
-										debug(s -> s.append("populate: ").append(populateEvt));
-										try (Transaction evtT = populateEvt.use()) {
-											observer.onNext(populateEvt);
+										if (!collection.isEmpty()) {
+											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
+											int index = 0;
+											for (E v : collection)
+												elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++, null));
+											CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
+												elements, collEvt);
+											debug(s -> s.append("populate: ").append(populateEvt));
+											try (Transaction evtT = populateEvt.use()) {
+												observer.onNext(populateEvt);
+											}
 										}
 										changes = new CollectionChangesObservable<>(collection);
 										collectionSub = changes.subscribe((Observer<CollectionChangeEvent<? extends E>>) observer,

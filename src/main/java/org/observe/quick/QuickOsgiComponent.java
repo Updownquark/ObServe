@@ -52,6 +52,11 @@ public abstract class QuickOsgiComponent {
 	private QuickApp theQuickApp;
 	private final Map<BetterFile, Long> theRefreshFiles;
 
+	/**
+	 * @param threading The thread constraint for creating and modifying UI components
+	 * @param dynamicRefresh Whether this component should watch the Quick source documents and reload itself when they change. This feature
+	 *        has not been well-tested
+	 */
 	protected QuickOsgiComponent(ThreadConstraint threading, boolean dynamicRefresh) {
 		theThreading = threading;
 		theUntil = new SimpleObservable<>();
@@ -74,32 +79,43 @@ public abstract class QuickOsgiComponent {
 			theRefreshFiles = null;
 	}
 
+	/** @param appFile The quick-app file defining the Quick UI to load */
 	@Configure("app")
 	protected void forAppFile(URL appFile) {
 		theQuickAppFile = appFile;
 	}
 
+	/** @return The dependency service loading this component */
 	public DependencyService<?> getDS() {
 		return theDS;
 	}
 
+	/** @return The thread constraint for creating and modifying UI components */
 	public ThreadConstraint getThreading() {
 		return theThreading;
 	}
 
+	/** @return The loaded Quick application */
 	public QuickApp getQuickApp() {
 		return theQuickApp;
 	}
 
+	/** @return An observable that will fire when the Quick source documents have changed and need to be reloaded */
 	public SimpleObservable<Void> getUntil() {
 		return theUntil;
 	}
 
+	/** @param file A file to watch. When the file changes this component will refresh itself (if so configured). */
 	protected void addRefreshFile(BetterFile file) {
 		if (theRefreshFiles != null)
 			theRefreshFiles.put(file, file.getLastModified());
 	}
 
+	/**
+	 * Activates this component
+	 *
+	 * @param controller The DS controller for this component
+	 */
 	@Activate
 	protected void activate(ComponentController<?> controller) {
 		theDS = controller.getDependencyService();
@@ -107,6 +123,7 @@ public abstract class QuickOsgiComponent {
 		refresh();
 	}
 
+	/** @return Whether any of the Quick source documents for this component have changed */
 	protected boolean checkForRefresh() {
 		for (Map.Entry<BetterFile, Long> file : theRefreshFiles.entrySet()) {
 			if (file.getKey().getLastModified() != file.getValue().longValue())
@@ -115,6 +132,7 @@ public abstract class QuickOsgiComponent {
 		return false;
 	}
 
+	/** Reloads the Quick UI for this component */
 	protected void refresh() {
 		try {
 			theUntil.onNext(null);
@@ -206,6 +224,10 @@ public abstract class QuickOsgiComponent {
 		}
 	}
 
+	/**
+	 * @param message The error message to display
+	 * @param x The exception (may be null)
+	 */
 	protected abstract void error(String message, Throwable x);
 
 	private void createQuickUI(QuickDocument.Interpreted interpretedDoc, QuickApplication app) {
@@ -229,6 +251,10 @@ public abstract class QuickOsgiComponent {
 		installQuickUI(app, doc);
 	}
 
+	/**
+	 * @param app The Quick application
+	 * @param doc The Quick document
+	 */
 	protected abstract void installQuickUI(QuickApplication app, QuickDocument doc);
 
 	/**
@@ -261,6 +287,18 @@ public abstract class QuickOsgiComponent {
 		}
 	}
 
+	/**
+	 * Loads a custom model value into the Quick application's models
+	 *
+	 * @param <M> The model type of the value to load
+	 * @param <MV> The instance type of the value to load
+	 * @param modelEl The expresso element defining the model to load the value into
+	 * @param valueEl The expresso element defining the model value to load
+	 * @param type The instance type of the value to load
+	 * @param env The expresso environment to use to interpret types and expressions
+	 * @return The satisfied model value
+	 * @throws ExpressoInterpretationException If the value could not be loaded
+	 */
 	protected abstract <M, MV extends M> MV satisfyExtModelValue(ObservableModelElement.ExtModelElement.Def<?> modelEl,
 		ExtModelValueElement.Def<?> valueEl, ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 			throws ExpressoInterpretationException;

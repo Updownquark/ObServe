@@ -47,7 +47,56 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWindow;
-import org.observe.quick.base.*;
+import org.observe.quick.base.DynamicStyledDocument;
+import org.observe.quick.base.GeneralDialog;
+import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.Positionable;
+import org.observe.quick.base.QuickAbstractMenuItem;
+import org.observe.quick.base.QuickBorderLayout;
+import org.observe.quick.base.QuickBox;
+import org.observe.quick.base.QuickButton;
+import org.observe.quick.base.QuickCheckBox;
+import org.observe.quick.base.QuickCheckBoxMenuItem;
+import org.observe.quick.base.QuickColorChooser;
+import org.observe.quick.base.QuickComboBox;
+import org.observe.quick.base.QuickConfirm;
+import org.observe.quick.base.QuickCustomComponent;
+import org.observe.quick.base.QuickEditableTextWidget;
+import org.observe.quick.base.QuickField;
+import org.observe.quick.base.QuickFieldPanel;
+import org.observe.quick.base.QuickFileButton;
+import org.observe.quick.base.QuickFileChooser;
+import org.observe.quick.base.QuickGridFlowLayout;
+import org.observe.quick.base.QuickInfoDialog;
+import org.observe.quick.base.QuickInlineLayout;
+import org.observe.quick.base.QuickLabel;
+import org.observe.quick.base.QuickLayout;
+import org.observe.quick.base.QuickMenu;
+import org.observe.quick.base.QuickMenuBar;
+import org.observe.quick.base.QuickMenuContainer;
+import org.observe.quick.base.QuickMenuItem;
+import org.observe.quick.base.QuickProgressBar;
+import org.observe.quick.base.QuickRadioButton;
+import org.observe.quick.base.QuickRadioButtons;
+import org.observe.quick.base.QuickScrollPane;
+import org.observe.quick.base.QuickSimpleLayout;
+import org.observe.quick.base.QuickSize;
+import org.observe.quick.base.QuickSlider;
+import org.observe.quick.base.QuickSpacer;
+import org.observe.quick.base.QuickSpinner;
+import org.observe.quick.base.QuickSplit;
+import org.observe.quick.base.QuickTable;
+import org.observe.quick.base.QuickTableColumn;
+import org.observe.quick.base.QuickTabs;
+import org.observe.quick.base.QuickTextArea;
+import org.observe.quick.base.QuickTextField;
+import org.observe.quick.base.QuickToggleButton;
+import org.observe.quick.base.QuickToggleButtons;
+import org.observe.quick.base.QuickTree;
+import org.observe.quick.base.Sizeable;
+import org.observe.quick.base.StyledDocument;
+import org.observe.quick.base.TabularWidget;
+import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDocument;
@@ -134,6 +183,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
 		tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
 			(qd, tx2) -> QuickBaseSwing.interpretDynamicStyledDoc(qd, tx2));
+		tx.with(QuickCustomComponent.Interpreted.class, QuickSwingPopulator.class, (quick, tx2) -> new SwingCustomComponentPopulator());
 
 		// Containers
 		tx.with(QuickBox.Interpreted.class, QuickSwingContainerPopulator.class, SwingBox::new);
@@ -1141,6 +1191,21 @@ public class QuickBaseSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickToggleButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			panel.addToggleField(null, quick.getValue(), quick.getValues(), __ -> new JToggleButton(), rf -> component.accept(rf));
+		}
+	}
+
+	static class SwingCustomComponentPopulator extends QuickSwingPopulator.Abstract<QuickCustomComponent> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickCustomComponent quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			Object componentV = quick.getComponent().get();
+			if (componentV instanceof Component) {
+				panel.addComponent(null, componentV, comp -> {
+					component.accept(comp);
+				});
+			} else
+				throw new ModelInstantiationException("Expected an instance of " + Component.class.getName() + ", not "
+					+ (componentV == null ? "null" : componentV.getClass().getName()), quick.reporting().getPosition(), 0);
 		}
 	}
 

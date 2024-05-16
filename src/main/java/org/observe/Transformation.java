@@ -2350,6 +2350,15 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
+		public boolean isEventing() {
+			for (ObservableValue<?> arg : theTransformation.getArgs()) {
+				if (arg.isEventing())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public TransformedElement<S, T> createElement(Supplier<S> source) {
 			if (theTransformation.isCached())
 				return new CachedTransformedElement(source, this::get);

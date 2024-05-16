@@ -1,11 +1,12 @@
 package org.observe;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import org.observe.collect.ObservableCollection;
 
 /** An action with an observable enabled property */
-public interface ObservableAction {
+public interface ObservableAction extends Eventable {
 	/** An ObservableAction that is always enabled and does nothing */
 	public static final ObservableAction DO_NOTHING = new ObservableAction() {
 		@Override
@@ -15,6 +16,11 @@ public interface ObservableAction {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return SettableValue.ALWAYS_ENABLED;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
 		}
 
 		@Override
@@ -80,6 +86,11 @@ public interface ObservableAction {
 			}
 
 			@Override
+			public boolean isEventing() {
+				return false;
+			}
+
+			@Override
 			public ObservableValue<String> isEnabled() {
 				return ObservableValue.of(message);
 			}
@@ -109,14 +120,26 @@ public interface ObservableAction {
 	/** Implements {@link ObservableAction#of(Consumer)} */
 	class SimpleObservableAction implements ObservableAction {
 		private final Consumer<Object> theAction;
+		private final AtomicInteger isEventing;
 
 		public SimpleObservableAction(Consumer<Object> action) {
 			theAction = action;
+			isEventing = new AtomicInteger();
 		}
 
 		@Override
 		public void act(Object cause) throws IllegalStateException {
-			theAction.accept(cause);
+			isEventing.getAndIncrement();
+			try {
+				theAction.accept(cause);
+			} finally {
+				isEventing.getAndDecrement();
+			}
+		}
+
+		@Override
+		public boolean isEventing() {
+			return isEventing.get() > 0;
 		}
 
 		@Override
@@ -154,6 +177,11 @@ public interface ObservableAction {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theParentAction.isEventing();
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.firstValue(null, null, theDisablement, theParentAction.isEnabled());
 		}
@@ -184,6 +212,12 @@ public interface ObservableAction {
 		}
 
 		@Override
+		public boolean isEventing() {
+			ObservableAction wrapped = theWrapper.get();
+			return wrapped != null && wrapped.isEventing();
+		}
+
+		@Override
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.flatten(theWrapper//
 				.map(action -> action == null ? ObservableValue.of("Empty Action") : action.isEnabled()), //
@@ -209,6 +243,15 @@ public interface ObservableAction {
 			}
 			for (int i = 0; i < actions.length; i++)
 				actions[i].act(cause);
+		}
+
+		@Override
+		public boolean isEventing() {
+			for (ObservableAction action : theActions) {
+				if (action.isEventing())
+					return true;
+			}
+			return false;
 		}
 
 		@Override

@@ -858,6 +858,10 @@ public abstract class Invocation implements ObservableExpression {
 			return theMethod;
 		}
 
+		protected SettableValue<Object> getContext() {
+			return theContext;
+		}
+
 		public ErrorReporting getReporting() {
 			return theReporting;
 		}
@@ -945,6 +949,12 @@ public abstract class Invocation implements ObservableExpression {
 						throw e;
 					getReporting().error(e.getMessage(), e);
 				}
+			}
+
+			@Override
+			public boolean isEventing() {
+				SettableValue<Object> ctx = getContext();
+				return ctx != null && ctx.isEventing();
 			}
 
 			@Override

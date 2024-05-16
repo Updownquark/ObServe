@@ -600,6 +600,10 @@
 			<?DOC A model representing the structure of a child node of this tree node?>
 			<child-def name="child" type="tree-model" min="0" max="inf" />
 		</element-def>
+		<?DOC Allows custom components to be inserted into a Quick user interface?>
+		<element-def name="custom-component" extends="widget">
+			<value type="expression" specify="required" />
+		</element-def>
 
 		<!-- Containers -->
 		<?DOC A simple container with a layout for arranging its contents?>

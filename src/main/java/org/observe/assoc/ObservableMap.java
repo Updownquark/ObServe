@@ -344,6 +344,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 						}
 						return new NoInitChanges();
 					}
+
+					@Override
+					public boolean isEventing() {
+						return ObservableMap.this.isEventing();
+					}
 				}
 				return new Enabled();
 			}
