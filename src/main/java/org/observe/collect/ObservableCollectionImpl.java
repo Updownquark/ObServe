@@ -3369,6 +3369,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Observable<? extends CollectionChangeEvent<E>> changes() {
+			// We can be more efficient here than the default implementation.
+			// Since this feature does not publish element IDs but only positioned values,
+			// we can swallow changes to the contained collection when the content of the old and new collections is identical.
+			// If the contents are different but have commonalities, we can only report the differences.
 			class Changes extends AbstractIdentifiable implements Observable<CollectionChangeEvent<E>> {
 				@Override
 				public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
@@ -3514,8 +3518,24 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Observable<Causable> simpleChanges() {
-			return ObservableValue
-				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty()));
+			// We can be more efficient here than the default implementation.
+			// Listen to the changes observable of the content collection, as well as changes to the container.
+			return Observable.or(//
+				theCollectionObservable.noInitChanges().filter(evt -> {
+					if (evt.getOldValue() == evt.getNewValue())
+						return false;
+					else if (evt.getOldValue() != null && evt.getNewValue() != null) {
+						if (evt.getOldValue().size() != evt.getNewValue().size())
+							return true;
+						else if (evt.getOldValue().isEmpty())
+							return false;
+						else if (evt.getOldValue().getTerminalElement(true).getElementId()
+							.equals(evt.getNewValue().getTerminalElement(true).getElementId()))
+							return false;
+					}
+					return true;
+				}), ObservableValue
+				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty())));
 		}
 
 		@Override

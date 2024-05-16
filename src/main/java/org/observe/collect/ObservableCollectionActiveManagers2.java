@@ -1801,13 +1801,13 @@ public class ObservableCollectionActiveManagers2 {
 					return;
 				Transaction t;
 				if (causes.length == 0)
-					t = manager.lock(true, null);
+					t = manager.lock(false, null);
 				else if (causes.length == 1)
-					t = manager.lock(true, causes[0]);
+					t = manager.lock(false, causes[0]);
 				else {
 					Transaction[] ts = new Transaction[causes.length];
 					for (int i = 0; i < ts.length; i++)
-						ts[i] = manager.lock(true, causes[i]);
+						ts[i] = manager.lock(false, causes[i]);
 					t = Transaction.and(ts);
 				}
 				try {
