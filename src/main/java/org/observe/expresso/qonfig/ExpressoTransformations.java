@@ -817,8 +817,8 @@ public class ExpressoTransformations {
 
 			@Override
 			public void update(ModelInstanceType<M, MV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(env);
 				theType = sourceType;
+				super.update(env);
 			}
 
 			@Override

@@ -23,6 +23,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
@@ -39,6 +40,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.ArgumentParsing;
 import org.qommons.ArgumentParsing.Arguments;
 import org.qommons.ArgumentParsing.ParserBuilder;
+import org.qommons.BiTuple;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transformer;
@@ -167,10 +169,50 @@ public class QuickApp extends QonfigApp {
 	}
 
 	/**
+	 * A shortcut to parse, interpret, and instantiate this configured Quick application
+	 *
+	 * @return A tuple containing the {@link QuickApplication} ready to run and the {@link QuickDocument} instance to run it with
+	 * @throws IllegalArgumentException If the {@link #getAppFile()} cannot be resolved
+	 * @throws IOException If the application file or the quick file cannot be read
+	 * @throws TextParseException If the application file or the quick file cannot be parsed as XML
+	 * @throws QonfigParseException If the application file or the quick file cannot be validated
+	 * @throws QonfigInterpretationException If the quick file cannot be interpreted
+	 * @throws ExpressoInterpretationException If model configuration or references in the quick file contain errors
+	 * @throws ModelInstantiationException If the quick document could not be loaded
+	 */
+	public BiTuple<QuickApplication, QuickDocument> prepareQuick()
+		throws QonfigInterpretationException, IllegalArgumentException, TextParseException, IOException, QonfigParseException {
+		QuickDocument.Def quickDocDef = parseQuick(null);
+
+		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
+		env = env.with(quickDocDef.getHead().getClassViewElement().configureClassView(ClassView.build()).build());
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
+			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), getCommandLineArgs(),
+			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
+
+		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
+		quickDocDef = null; // Free up memory
+		interpretedDoc.updateDocument(env.withExt(extModels));
+
+		QuickApplication app = interpretQuickApplication(interpretedDoc);
+
+		QuickDocument doc = interpretedDoc.create();
+		doc.update(interpretedDoc);
+		doc.instantiated();
+
+		// Clean up to free memory
+		interpretedDoc.destroy();
+		interpretedDoc = null;
+
+		return new BiTuple<>(app, doc);
+	}
+
+	/**
 	 * @param clArgs Command-line arguments. --quick-app=? may be used to specify the application setup file. The rest will be passed to the
 	 *        quick document's external models (not yet implemented)
 	 */
 	public static void main(String... clArgs) {
+		// TODO Status (replace Splash Screen a la OSGi)
 		try {
 			startQuick(clArgs);
 		} catch (TextParseException e) {
@@ -199,33 +241,12 @@ public class QuickApp extends QonfigApp {
 	 */
 	public static void startQuick(String... clArgs) throws IllegalArgumentException, IOException, TextParseException, QonfigParseException,
 	QonfigInterpretationException, ExpressoInterpretationException, ModelInstantiationException, IllegalStateException {
-		// TODO Status (replace Splash Screen a la OSGi)
-
 		QuickApp quickApp = parseQuickApp(clArgs);
 
-		QuickDocument.Def quickDocDef = quickApp.parseQuick(null);
+		BiTuple<QuickApplication, QuickDocument> prepared = quickApp.prepareQuick();
 
-		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
-			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
-			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
-
-		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
-		quickDocDef = null; // Free up memory
-		interpretedDoc.updateDocument(env.withExt(extModels));
-
-		QuickApplication app = quickApp.interpretQuickApplication(interpretedDoc);
-
-		QuickDocument doc = interpretedDoc.create();
-		doc.update(interpretedDoc);
-		doc.instantiated();
-
-		// Clean up to free memory
-		interpretedDoc.destroy();
-		interpretedDoc = null;
-
-		doc.instantiate(Observable.empty());
-		app.runApplication(doc, Observable.empty());
+		prepared.getValue2().instantiate(Observable.empty());
+		prepared.getValue1().runApplication(prepared.getValue2(), Observable.empty());
 	}
 
 	/**

@@ -37,6 +37,7 @@ import org.observe.expresso.qonfig.ExpressoTransformations.Return;
 import org.observe.expresso.qonfig.ExpressoTransformations.Switch;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.ValueTransform;
+import org.observe.expresso.qonfig.ObservableActionTransformations.DisabledActionTransform;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
@@ -76,14 +77,17 @@ public class ObservableValueTransformations {
 		interpreter.createWith("flatten", ValueTransform.class, ExElement.creator(FlattenValueTransform::new));
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "disable", interpretation = DisabledActionTransform.Interpreted.class)
 	static class DisabledValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
 		private CompiledExpression theDisablement;
+		private ModelComponentId theSourceVariable;
 
 		DisabledValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
+		@QonfigAttributeGetter("with")
 		public CompiledExpression getDisablement() {
 			return theDisablement;
 		}
@@ -91,7 +95,13 @@ public class ObservableValueTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = sourceAs == null ? null : elModels.getElementValueModelId(sourceAs);
 			theDisablement = getAttributeExpression("with", session);
+			if (theSourceVariable != null)
+				elModels.satisfyElementValueType(theSourceVariable, ModelTypes.Value,
+					(interp, env) -> (ModelInstanceType<SettableValue<?>, SettableValue<?>>) ((Interpreted<?>) interp).getTargetType());
 		}
 
 		@Override

@@ -204,6 +204,13 @@ public class ClassView implements TypeParser {
 			} catch (ClassNotFoundException | NoClassDefFoundError e) { // We don't throw exceptions, just return null
 			}
 		}
+		ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+		if (ccl != null && !theClassLoaders.contains(ccl)) {
+			try {
+				return ccl.loadClass(name);
+			} catch (ClassNotFoundException | NoClassDefFoundError e) {
+			}
+		}
 		return null;
 	}
 

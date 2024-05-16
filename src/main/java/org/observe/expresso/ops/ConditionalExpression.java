@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.function.Function;
 
+import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
@@ -264,6 +265,13 @@ public class ConditionalExpression implements ObservableExpression {
 					else
 						return (ObservableSet<Object>) secondaryX;
 				}, () -> "? " + primaryX + ": " + secondaryX, null)));
+			} else if (theType.getModelType() == ModelTypes.Action) {
+				return (MV) ObservableAction.of(LambdaUtils.printableConsumer(evt -> {
+					if (Boolean.TRUE.equals(conditionX.get()))
+						((ObservableAction) primaryX).act(evt);
+					else
+						((ObservableAction) secondaryX).act(evt);
+				}, () -> conditionX + " ? " + primaryX + " : " + secondaryX, null));
 			} else
 				throw new IllegalStateException("Conditional expressions not supported for model type " + theType.getModelType());
 		}

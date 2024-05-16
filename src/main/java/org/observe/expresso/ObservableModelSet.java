@@ -17,7 +17,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
-import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
@@ -1814,8 +1813,6 @@ public interface ObservableModelSet extends Identifiable {
 		protected final NameChecker theNameChecker;
 
 		DefaultExternalModelSet(DefaultExternalModelSet root, String path, Map<String, Placeholder> things, NameChecker nameChecker) {
-			if (!path.isEmpty() && path.charAt(0) == '.')
-				BreakpointHere.breakpoint();
 			theRoot = root == null ? this : root;
 			thePath = path;
 			theComponents = things;

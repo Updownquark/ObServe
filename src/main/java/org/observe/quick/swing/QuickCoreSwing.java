@@ -103,53 +103,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 					modifiers.put(addOn.getInstanceType(), tx2.transform(addOn, QuickSwingPopulator.WindowModifier.class));
 			}
 			QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
-			return new QuickApplication() {
-				@Override
-				public void runApplication(QuickDocument doc, Observable<?> until) throws ModelInstantiationException {
-					try {
-						EventQueue.invokeAndWait(() -> {
-							WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), until, true, true);
-							for (Map.Entry<Class<? extends ExAddOn<?>>, QuickSwingPopulator.WindowModifier<?>> modifier : modifiers
-								.entrySet()) {
-								ExAddOn<?> addOn = doc.getAddOn(modifier.getKey());
-								if (addOn != null) {
-									try {
-										((QuickSwingPopulator.WindowModifier<ExAddOn<?>>) modifier.getValue()).modifyWindow(w, addOn);
-									} catch (ModelInstantiationException e) {
-										throw new CheckedExceptionWrapper(e);
-									}
-								} else
-									doc.reporting().warn("Interpretation of window modifier " + modifier.getKey().getName()
-										+ " found, but add-on not found");
-							}
-							w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
-								try {
-									interpretedBody.populate(content, doc.getBody());
-								} catch (ModelInstantiationException e) {
-									throw new CheckedExceptionWrapper(e);
-								}
-							});
-							w.run(null);
-						});
-					} catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-					} catch (InvocationTargetException e) {
-						if (e.getTargetException() instanceof CheckedExceptionWrapper
-							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
-							throw (ModelInstantiationException) e.getTargetException().getCause();
-						doc.reporting().error("Unhandled error", e);
-					} catch (CheckedExceptionWrapper e) {
-						throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
-					} catch (RuntimeException | Error e) {
-						doc.reporting().error("Unhandled error", e);
-					}
-				}
-
-				@Override
-				public void update(QuickDocument doc) throws ModelInstantiationException {
-					// TODO Auto-generated method stub
-				}
-			};
+			return new QuickSwingApplication(interpretedDoc, interpretedBody, modifiers);
 		});
 		tx.with(QuickWindow.Interpreted.class, QuickSwingPopulator.WindowModifier.class, (interp, tx2) -> new QuickWindowModifier());
 		QuickSwingPopulator.modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
