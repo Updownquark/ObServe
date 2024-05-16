@@ -266,10 +266,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		}, true));
 
 		String pluralItemName = StringUtils.pluralize(theItemName);
-		theIncludeAllButton = new JButton(">>");
-		theIncludeButton = new JButton(">");
-		theExcludeButton = new JButton("<");
-		theExcludeAllButton = new JButton("<<");
+		theIncludeAllButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-right-double.png", 16, 16));
+		theIncludeButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-right.png", 16, 16));
+		theExcludeButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-left.png", 16, 16));
+		theExcludeAllButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-left-double.png", 16, 16));
 		theIncludeAllButton.setToolTipText("Include all displayed " + pluralItemName);
 		theIncludeButton.setToolTipText("Include selected " + pluralItemName);
 		theExcludeButton.setToolTipText("Exclude selected " + pluralItemName);
