@@ -225,7 +225,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 		}
 
 		@Override
-		public Map<Object, Object> onFinish(CausableKey key) {
+		public Effect onFinish(CausableKey key) {
 			if (!isStarted)
 				throw new IllegalStateException("Not started!  Use Causable.use(Causable)");
 			else if (isTerminated)
