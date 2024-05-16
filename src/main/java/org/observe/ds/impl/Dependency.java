@@ -1,5 +1,6 @@
 package org.observe.ds.impl;
 
+import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
@@ -8,7 +9,7 @@ import java.lang.annotation.Target;
 
 /** A tag for a method with a parameter that is a dependency for the dependency service */
 @Retention(RUNTIME)
-@Target(METHOD)
+@Target({ METHOD, FIELD })
 public @interface Dependency {
 	/** @return The minimum number of instances of the dependency that must be available to load the component. Default is 1. */
 	int min() default 1;

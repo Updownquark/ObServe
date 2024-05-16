@@ -21,4 +21,7 @@ public @interface Component {
 	 *         implements should be used.
 	 */
 	Class<?>[] provides() default {};
+
+	/** @return The name of a static method on the class to call in place of a constructor to instantiate the component */
+	String creator() default "";
 }

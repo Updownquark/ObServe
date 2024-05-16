@@ -11,8 +11,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.ds.ComponentController;
@@ -40,10 +42,9 @@ import org.qommons.collect.RRWLockingStrategy;
  */
 public class DefaultDependencyService<C> implements DependencyService<C> {
 	private final ObservableCollection<DefaultComponent<C>> theComponents;
-	private final ObservableSet<Service<?>> theServices;
 
-	/** A list of all satisfied, active components providing each service available from this dependency service */
-	private final Map<Service<?>, List<DefaultComponent<C>>> theServiceProviders;
+	/** All satisfied, active components providing each service available from this dependency service */
+	private final ObservableMultiMap<Service<?>, DefaultComponent<C>> theServiceProviders;
 	/** A list of all active components depending on each service depended on in this dependency service */
 	private final Map<Service<?>, List<DefaultDependency<C, ?>>> theDependents;
 
@@ -54,9 +55,10 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	/** @param lock The lock to facilitate thread safety */
 	public DefaultDependencyService(Transactable lock) {
 		theComponents = ObservableCollection.<DefaultComponent<C>> build().withLocking(new RRWLockingStrategy(lock)).build();
-		theServices = ObservableSet.<Service<?>> build().withLocking(new RRWLockingStrategy(lock)).build();
+		theServiceProviders = ObservableMultiMap.<Service<?>, DefaultComponent<C>> build()//
+			.withLocking(new RRWLockingStrategy(lock))//
+			.build(Observable.empty());
 
-		theServiceProviders = new LinkedHashMap<>();
 		theDependents = new LinkedHashMap<>();
 		theScheduledTasks = ListenerList.build().build();
 		theStage = SettableValue.<DependencyServiceStage> build().withLocking(new RRWLockingStrategy(lock))
@@ -81,7 +83,13 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 	@Override
 	public ObservableSet<Service<?>> getServices() {
-		return theServices.flow().unmodifiable(false).collect();
+		return theServiceProviders.keySet().flow().unmodifiable(false).collect();
+	}
+
+	@Override
+	public ObservableCollection<DSComponent<C>> getProviders(Service<?> service) {
+		return ((ObservableCollection<DSComponent<C>>) (ObservableCollection<?>) theServiceProviders.get(service)).flow()
+			.unmodifiable(false).collectPassive();
 	}
 
 	@Override
@@ -193,7 +201,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 				throw new IllegalStateException("Cannot inject components during initialization or activation");
 			theComponents.add(component);
 			for (Service<?> svc : component.getProvided())
-				theServiceProviders.computeIfAbsent(svc, __ -> new ArrayList<>(3)).add(component);
+				theServiceProviders.add(svc, component);
 			for (DefaultDependency<C, ?> dep : (Collection<DefaultDependency<C, ?>>) component.getDependencies().values())
 				theDependents.computeIfAbsent(dep.getTarget(), __ -> new ArrayList<>()).add(dep);
 			if (getStage().get() != DependencyServiceStage.Uninitialized)
@@ -253,7 +261,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 		try {
 			for (Dependency<C, ?> dep : component.getDependencies().values()) {
 				int depSatisfied = dep.getProviders().size(), depDynamicLocalSatisfied = 0, depDynamicAboveSatisfied = 0;
-				for (DefaultComponent<C> provider : theServiceProviders.getOrDefault(dep.getTarget(), Collections.emptyList())) {
+				for (DefaultComponent<C> provider : theServiceProviders.get(dep.getTarget())) {
 					if (provider.equals(component))
 						continue; // A component cannot satisfy its own dependencies
 					else if (!provider.isAvailable().get())
@@ -575,11 +583,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 		}
 		if (stage == ComponentStage.Removed) {
 			for (Service<?> provided : component.getProvided()) {
-				theServiceProviders.compute(provided, (s, old) -> {
-					if (old == null || !old.remove(component))
-						return old;
-					return old.isEmpty() ? null : old;
-				});
+				theServiceProviders.remove(provided, component);
 			}
 			for (Dependency<C, ?> dep : component.getDependencies().values()) {
 				theDependents.compute(dep.getTarget(), (d, old) -> {

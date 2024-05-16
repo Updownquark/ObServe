@@ -32,6 +32,12 @@ public interface DependencyService<C> extends AutoCloseable {
 	 */
 	ObservableSet<Service<?>> getServices();
 
+	/**
+	 * @param service The service to get providers for
+	 * @return All components installed in this dependency service that provide the given service
+	 */
+	ObservableCollection<DSComponent<C>> getProviders(Service<?> service);
+
 	/** @return Whether this service has been initialized, meaning the initial set of components has completed loading */
 	ObservableValue<DependencyServiceStage> getStage();
 
