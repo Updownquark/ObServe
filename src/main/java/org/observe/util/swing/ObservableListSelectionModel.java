@@ -32,7 +32,13 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 /**
- * A copy of {@link DefaultListSelectionModel} that is also presents the selection as an {@link ObservableCollection}.
+ * <p>
+ * A {@link ListSelectionModel} that presents the selection as an {@link ObservableCollection} which is a subset of the selected values in
+ * another {@link ObservableCollection}.
+ * </p>
+ * <p>
+ * This class is based on a copy of {@link DefaultListSelectionModel}, but with better performance and the addition of the observable
+ * functionality.
  *
  * @param <E> The type of elements in the list model that this selection model manages the selection of
  */
@@ -246,22 +252,22 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 								if (selMove2 != null)
 									selMove2.moveFinished();
 							}), selMove);
-							try (Transaction moveT = wrapped.lock(true, selMove)) {
-								int selectionIndex = value.countBitsSetBetween(0, i);
-								wrapped.remove(selectionIndex);
-							}
+							// try (Transaction moveT = wrapped.lock(true, selMove)) {
+							// int selectionIndex = value.countBitsSetBetween(0, i);
+							// wrapped.remove(selectionIndex);
+							// }
 						} else {
-							int selectionIndex = value.countBitsSetBetween(0, i);
-							wrapped.remove(selectionIndex);
+							// int selectionIndex = value.countBitsSetBetween(0, i);
+							// wrapped.remove(selectionIndex);
 						}
-						value.clear(i);
+						// value.clear(i);
 					}
-					minIndex = value.nextSetBit(0);
-					if (minIndex < 0) {
-						minIndex = MAX;
-						maxIndex = MIN;
-					} else
-						maxIndex = value.length();
+					// minIndex = value.nextSetBit(0);
+					// if (minIndex < 0) {
+					// minIndex = MAX;
+					// maxIndex = MIN;
+					// } else
+					// maxIndex = value.length();
 				} finally {
 					if (selectionLock != null)
 						selectionLock.close();

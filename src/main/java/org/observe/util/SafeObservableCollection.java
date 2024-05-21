@@ -655,6 +655,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
+		if (!theThreadConstraint.isEventThread())
+			return ThreadConstraint.MOD_ON_WRONG_THREAD;
 		try (Transaction t = lock(false, null)) {
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
 			if (srcAfter != null && !srcAfter.isPresent())
@@ -689,8 +691,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+		if (!theThreadConstraint.isEventThread())
+			return ThreadConstraint.MOD_ON_WRONG_THREAD;
 		try (Transaction t = lock(false, null)) {
-			flush();
 			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
 			if (!srcValue.isPresent())
 				return StdMsg.ELEMENT_REMOVED;
