@@ -23,7 +23,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
@@ -185,7 +184,7 @@ public class QuickApp extends QonfigApp {
 		QuickDocument.Def quickDocDef = parseQuick(null);
 
 		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
-		env = env.with(quickDocDef.getHead().getClassViewElement().configureClassView(ClassView.build()).build());
+		env = env.with(quickDocDef.getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
 		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
 			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), getCommandLineArgs(),
 			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);

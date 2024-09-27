@@ -90,6 +90,11 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		return theEditor.getFormat();
 	}
 
+	/** @return The text field for this spinner */
+	public JFormattedTextField getTextField() {
+		return theTextField;
+	}
+
 	@Override
 	public ObservableSpinner<T> withWarning(Function<? super T, String> warning) {
 		if (theEditor != null)
@@ -276,14 +281,62 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 	}
 
 	/**
+	 * Sets the step size for a number-typed spinner model
+	 *
+	 * @param <N> The type of the spinner model
+	 * @param model The spinner model to set the step size for
+	 * @param stepSize The step size for the spinner model
+	 */
+	public static <N extends Number> void setStepSize(ObservableSpinnerModel<N> model, Number stepSize) {
+		model.setPreviousMaker(new StepSizeAdjustment<>(stepSize, false));
+		model.setNextMaker(new StepSizeAdjustment<>(stepSize, true));
+	}
+
+	private static class StepSizeAdjustment<N extends Number> implements Function<N, N> {
+		private final Number theStepSize;
+		private final boolean isAdd;
+
+		StepSizeAdjustment(Number stepSize, boolean add) {
+			theStepSize = stepSize;
+			isAdd = add;
+		}
+
+		@Override
+		public N apply(N value) {
+			if (value instanceof Double) {
+				if (isAdd)
+					return (N) Double.valueOf(value.doubleValue() + theStepSize.doubleValue());
+				else
+					return (N) Double.valueOf(value.doubleValue() - theStepSize.doubleValue());
+			} else if (value instanceof Float) {
+				if (isAdd)
+					return (N) Float.valueOf(value.floatValue() + theStepSize.floatValue());
+				else
+					return (N) Float.valueOf(value.floatValue() - theStepSize.floatValue());
+			} else if (value instanceof Long) {
+				if (isAdd)
+					return (N) Long.valueOf(value.longValue() + theStepSize.longValue());
+				else
+					return (N) Long.valueOf(value.longValue() - theStepSize.longValue());
+			} else if (value instanceof Integer) {
+				if (isAdd)
+					return (N) Integer.valueOf(value.intValue() + theStepSize.intValue());
+				else
+					return (N) Integer.valueOf(value.intValue() - theStepSize.intValue());
+			} else
+				return value;
+		}
+	}
+
+	/**
 	 * Simple spinner model backed by a {@link SettableValue} and functions to produce next and previous values based on the current value
 	 *
 	 * @param <T> The type of the value
 	 */
 	public static class ObservableSpinnerModel<T> implements SpinnerModel {
 		private final SettableValue<T> theValue;
-		private final Function<? super T, ? extends T> thePreviousMaker;
-		private final Function<? super T, ? extends T> theNextMaker;
+		private Function<? super T, ? extends T> thePreviousMaker;
+		private Function<? super T, ? extends T> theNextMaker;
 
 		private final List<ChangeListener> theChangeListeners;
 		private Subscription theValueChangeSub;
@@ -306,7 +359,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			thePreviousMaker = previousMaker;
 			theNextMaker = nextMaker;
 			theChangeListeners = new ArrayList<>();
-			theCachedValueStamp = -1776; // Just some random value so we have to update the cache initially
+			markCacheDirty();
 			until.take(1).act(__ -> {
 				if (theValueChangeSub != null) {
 					theValueChangeSub.unsubscribe();
@@ -320,6 +373,18 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 			return theValue;
 		}
 
+		/** @param previousMaker The function to control what the down button does on the spinner */
+		public void setPreviousMaker(Function<? super T, ? extends T> previousMaker) {
+			thePreviousMaker = previousMaker;
+			markCacheDirty();
+		}
+
+		/** @param nextMaker The function to control what the up button does on the spinner */
+		public void setNextMaker(Function<? super T, ? extends T> nextMaker) {
+			theNextMaker = nextMaker;
+			markCacheDirty();
+		}
+
 		@Override
 		public T getValue() {
 			return theValue.get();
@@ -327,11 +392,15 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 
 		@Override
 		public void setValue(Object value) {
-			theCachedValueStamp = -1776;
-			theCachedPrevious = null;
-			theCachedNext = null;
+			markCacheDirty();
 			if (!Objects.equals(theValue.get(), value))
 				theValue.set((T) value, null);
+		}
+
+		private void markCacheDirty() {
+			theCachedValueStamp = -1776;// Just some random value so we have to update the cache
+			theCachedPrevious = null;
+			theCachedNext = null;
 		}
 
 		@Override

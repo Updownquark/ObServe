@@ -15,7 +15,19 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import javax.swing.*;
+import javax.swing.AbstractButton;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPopupMenu;
+import javax.swing.ListCellRenderer;
+import javax.swing.UIDefaults;
+import javax.swing.UIManager;
 import javax.swing.text.StyledDocument;
 
 import org.observe.Observable;
@@ -40,11 +52,22 @@ import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.*;
+import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
+import org.observe.util.swing.ComponentDecorator;
+import org.observe.util.swing.ComponentPropertyManager;
+import org.observe.util.swing.FontAdjuster;
+import org.observe.util.swing.ModelCell;
+import org.observe.util.swing.MultiRangeSlider;
+import org.observe.util.swing.ObservableCellEditor;
+import org.observe.util.swing.ObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.AbstractObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
+import org.observe.util.swing.ObservableStyledDocument;
+import org.observe.util.swing.ObservableTextArea;
+import org.observe.util.swing.ObservableTextField;
+import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
@@ -55,6 +78,7 @@ import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
+import org.observe.util.swing.Shading;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
@@ -160,7 +184,6 @@ class QuickSwingTablePopulation {
 		private Runnable thePreRender;
 		private final Supplier<C> theValue;
 
-		protected JComponent theOwner;
 		private ObservableValue<String> theTooltip;
 		private Function<ModelCell<? extends R, ? extends C>, String> isEnabled;
 
@@ -179,13 +202,6 @@ class QuickSwingTablePopulation {
 			SwingCellPopulator<R, C> renderPopulator;
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
-				// This is in the modifier because we don't have the component yet
-				swingRenderer.addModifier((comp, w) -> {
-					comp.modifyComponent(c -> {
-						theOwner = getOwner(parent.get());
-					});
-				});
-
 				theRendererContext = new QuickWithBackground.BackgroundContext.Default();
 				theRenderer.setContext(theRendererContext);
 			} else {
@@ -197,13 +213,22 @@ class QuickSwingTablePopulation {
 				swingRenderer.populate(renderPopulator, theRenderer);
 		}
 
-		protected JComponent getOwner(ComponentEditor<?, ?> parentEditor) {
-			if (parentEditor.getEditor() instanceof JComponent)
+		protected JComponent getOwner() {
+			ComponentEditor<?, ?> parentEditor = theParent.get();
+			if (parentEditor == null)
+				return null;
+			else if (parentEditor.getEditor() instanceof JComponent)
 				return (JComponent) parentEditor.getEditor();
 			else if (parentEditor.getComponent() instanceof JComponent)
 				return (JComponent) parentEditor.getComponent();
 			else
 				return null;
+		}
+
+		protected void onOwner(Consumer<JComponent> action) {
+			JComponent owner = getOwner();
+			if (owner != null)
+				action.accept(owner);
 		}
 
 		public QuickWidget getRenderer() {
@@ -382,8 +407,7 @@ class QuickSwingTablePopulation {
 		@Override
 		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
 			Component rendered = super.renderCell(parent, cell, ctx);
-			if (theOwner != null && cell.isCellHovered())
-				theOwner.setCursor(rendered.getCursor());
+			onOwner(o -> o.setCursor(rendered.getCursor()));
 			return rendered;
 		}
 
@@ -494,7 +518,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -521,7 +545,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -546,7 +570,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -586,7 +610,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -615,7 +639,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -644,7 +668,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -669,7 +693,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -694,7 +718,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 
@@ -719,7 +743,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
-					theOwner.setToolTipText(newTT);
+					onOwner(o -> o.setToolTipText(newTT));
 			}
 		}
 	}
@@ -805,6 +829,11 @@ class QuickSwingTablePopulation {
 		@Override
 		public Container getEditor() {
 			throw new IllegalStateException("Container retrieval unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
+		}
+
+		@Override
+		public SwingCellPopulator<R, C> disableWith(ObservableValue<String> disabled) {
+			return unsupported("Visibility");
 		}
 
 		@Override
@@ -1200,7 +1229,8 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public E withTooltip(ObservableValue<String> tooltip) {
-				theRenderer.setTooltip(tooltip);
+				if (theCellRenderer != null)
+					theRenderer.setTooltip(tooltip);
 				return (E) this;
 			}
 
@@ -1228,13 +1258,20 @@ class QuickSwingTablePopulation {
 			public E withFont(Consumer<FontAdjuster> font) {
 				if (theCellRenderer != null)
 					theCellRenderer.decorate((cell, deco) -> font.accept(deco));
-				theCellEditor.decorate((cell, deco) -> font.accept(deco));
+				else
+					theCellEditor.decorate((cell, deco) -> font.accept(deco));
 				return (E) this;
 			}
 
 			@Override
 			public COMP getEditor() {
 				return theEditorComponent;
+			}
+
+			@Override
+			public E disableWith(ObservableValue<String> disabled) {
+				// Disablement is unsupported, but don't throw a fit
+				return (E) this;
 			}
 
 			@Override

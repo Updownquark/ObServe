@@ -16,4 +16,12 @@ public interface ValueChangeEvent<T> {
 
 	/** @return The new value */
 	T getNewValue();
+
+	/** @return Whether this event represents an update, i.e. an event that's fired even though the value reference hasn't changed */
+	default boolean isUpdate() {
+		if (isInitial())
+			return false;
+		else
+			return getOldValue() == getNewValue();
+	}
 }

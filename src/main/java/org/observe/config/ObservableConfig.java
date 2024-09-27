@@ -11,6 +11,7 @@ import java.io.Writer;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,6 +60,8 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.config.MutableConfig;
+import org.qommons.config.QommonsConfig;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
 import org.qommons.io.Format;
@@ -276,9 +279,9 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			ObservableConfigPath last = path.getLast();
 			ObservableValue<? extends ObservableConfig> descendant = observeDescendant(path.getParent());
 			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of();
-			children = ObservableCollection.flattenValue(descendant.map(
-				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last).getValues()), //
-				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
+			children = ObservableCollection.flattenValue(
+				descendant.map(p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last).getValues()), //
+					opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
 		return new ObservableChildSet(this, path, children);
 	}
@@ -538,8 +541,10 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		protected String getChildName() {
 			if (thePath == null)
 				return StringUtils.singularize(theConfig.getName());
-			else
+			else if (thePath.getParent() != null)
 				return thePath.getLastElement().getName();
+			else
+				return StringUtils.singularize(thePath.getLastElement().getName());
 		}
 
 		/** @return The until value configured for this builder */
@@ -635,9 +640,10 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		 * @return The built value
 		 */
 		public ObservableCollection<T> buildCollection(Consumer<ObservableCollection<T>> preReturnGet) {
+			boolean deepPath = thePath != null && thePath.getParent() != null;
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValues<>(theConfig, getSession(), //
-				getDescendant(thePath != null), createDescendant(thePath != null)::apply, getFormat(), getChildName(), getUntil(),
-				true, findRefs), preReturnGet);
+				getDescendant(deepPath), createDescendant(deepPath)::apply, getFormat(), getChildName(), getUntil(), true, findRefs),
+				preReturnGet);
 		}
 
 		/**
@@ -650,9 +656,10 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
+			boolean deepPath = thePath != null && thePath.getParent() != null;
 			return build(findRefs -> new ObservableConfigTransform.ObservableConfigEntityValues<>(theConfig, getSession(), //
-				getDescendant(thePath != null), createDescendant(thePath != null)::apply,
-				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getChildName(), getUntil(), true, findRefs), preReturnGet);
+				getDescendant(deepPath), createDescendant(deepPath)::apply, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
+				getChildName(), getUntil(), true, findRefs), preReturnGet);
 		}
 
 		/**
@@ -1116,12 +1123,12 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			private long theLastStamp = getStamp();
 
 			@Override
-			public <V> void onNext(V value) {
+			public void onNext(Object value) {
 				tryPersist(false);
 			}
 
 			@Override
-			public void onCompleted(Causable cause) {
+			public void onCompleted(Supplier<Causable> cause) {
 				tryPersist(true);
 			}
 
@@ -1139,6 +1146,174 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 				} finally {
 					lock.close();
 				}
+			}
+		});
+	}
+
+	/**
+	 * Replaces all of this config's data with the given data
+	 *
+	 * @param data The data to replace this config's data with
+	 * @return This config
+	 */
+	default ObservableConfig replaceContent(QommonsConfig data) {
+		if (!getName().equals(data.getName()))
+			setName(data.getName());
+		if (!Objects.equals(getValue(), data.getValue()))
+			setValue(data.getValue());
+		CollectionUtils
+		.synchronize(new ArrayList<>(getContent()), Arrays.asList(data.subConfigs()), (o, q) -> o.getName().equals(q.getName()))
+		.adjust(new CollectionUtils.CollectionSynchronizer<ObservableConfig, QommonsConfig>() {
+			@Override
+			public boolean getOrder(ElementSyncInput<ObservableConfig, QommonsConfig> element) {
+				return true;
+			}
+
+			@Override
+			public ElementSyncAction leftOnly(ElementSyncInput<ObservableConfig, QommonsConfig> element) {
+				return element.remove();
+			}
+
+			@Override
+			public ElementSyncAction rightOnly(ElementSyncInput<ObservableConfig, QommonsConfig> element) {
+				ObservableConfig after, before;
+				if (element.getTargetIndex() == getContent().size()) {
+					after = getContent().peekLast();
+					before = null;
+				} else {
+					CollectionElement<ObservableConfig> beforeEl = getContent().getElement(element.getTargetIndex());
+					before = beforeEl.get();
+					after = CollectionElement.get(getContent().getAdjacentElement(beforeEl.getElementId(), false));
+				}
+				return element.useValue(addChild(after, before, false, element.getRightValue().getName(),
+					child -> child.replaceContent(element.getRightValue())));
+			}
+
+			@Override
+			public ElementSyncAction common(ElementSyncInput<ObservableConfig, QommonsConfig> element) {
+				element.getLeftValue().replaceContent(element.getRightValue());
+				return element.preserve();
+			}
+		}, CollectionUtils.AdjustmentOrder.RightOrder);
+		return this;
+	}
+
+	/**
+	 * Replaces all of the given config's data with the data from this config
+	 *
+	 * @param config The config to replace all the data in
+	 */
+	default void pushTo(MutableConfig config) {
+		if (!getName().equals(config.getName()))
+			config.setName(getName());
+		if (!Objects.equals(getValue(), config.getValue()))
+			config.setValue(getValue());
+		pushContentTo(config, true);
+	}
+
+	/**
+	 * Pushes this config's content to the given config
+	 *
+	 * @param config The config to replace all the data in
+	 * @param deep Whether to {@link #pushTo(MutableConfig) push} each of this config's children to the config's children
+	 */
+	default void pushContentTo(MutableConfig config, boolean deep) {
+		MutableConfig[] childArray = config.subConfigs();
+		ArrayList<MutableConfig> children = new ArrayList<>(childArray.length);
+		children.addAll(Arrays.asList(childArray));
+		boolean[] childrenChanged = new boolean[1];
+		CollectionUtils.synchronize(children, getContent(), (o, q) -> o.getName().equals(q.getName()))//
+		.adjust(new CollectionUtils.CollectionSynchronizer<MutableConfig, ObservableConfig>() {
+			@Override
+			public boolean getOrder(ElementSyncInput<MutableConfig, ObservableConfig> element) {
+				return true;
+			}
+
+			@Override
+			public ElementSyncAction leftOnly(ElementSyncInput<MutableConfig, ObservableConfig> element) {
+				childrenChanged[0] = true;
+				return element.remove();
+			}
+
+			@Override
+			public ElementSyncAction rightOnly(ElementSyncInput<MutableConfig, ObservableConfig> element) {
+				if (element.getRightValue().isTrivial())
+					return element.remove();
+				childrenChanged[0] = true;
+				MutableConfig newConfig = config.addChild(element.getRightValue().getName());
+				if (deep)
+					element.getRightValue().pushTo(newConfig);
+				else
+					newConfig.setValue(element.getRightValue().getValue());
+				return element.useValue(newConfig);
+			}
+
+			@Override
+			public ElementSyncAction common(ElementSyncInput<MutableConfig, ObservableConfig> element) {
+				if (deep)
+					element.getRightValue().pushTo(element.getLeftValue());
+				else
+					element.getLeftValue().setValue(element.getRightValue().getValue());
+				return element.preserve();
+			}
+		}, CollectionUtils.AdjustmentOrder.RightOrder);
+		if (childrenChanged[0])
+			config.setSubConfigs(children.toArray(Arrays.copyOf(childArray, children.size())));
+	}
+
+	/**
+	 * Pushes all changes to data in this config to the given config, keeping them in sync. This method will fail gracefully if the given
+	 * config is not synchronized initially with this config, or if external changes are made to the given config outside of this method.
+	 *
+	 * @param root The config to persist to
+	 * @param onSyncError Handler for errors resulting from external modification to the given config
+	 * @return A subscription to close to cease persistence
+	 */
+	default Subscription persistTo(MutableConfig root, Consumer<String> onSyncError) {
+		return watch(ObservableConfigPath.buildPath("").multi(true).build()).act(evt -> {
+			ObservableConfig target = evt.relativePath.getLast();
+			if (target.isTrivial())
+				return; // Don't persist trivial data
+			MutableConfig config = root;
+			pushContentTo(config, false);
+			for (int i = 0; i < evt.relativePath.size() - 1; i++) {
+				// Need to find the non-trivial index of the config in its parent
+				int index = 0;
+				for (ObservableConfig child : evt.relativePath.get(i).getParent().getContent()) {
+					if (child == evt.relativePath.get(i))
+						break;
+					else if (!child.isTrivial())
+						index++;
+				}
+				config = config.subConfigs()[index];
+				if (i < evt.relativePath.size() - 2)
+					evt.relativePath.get(i).pushContentTo(config, false);
+			}
+			int index = target.getIndexInParent();
+			switch (evt.changeType) {
+			case add:
+				config = config.addChild(target.getName());
+				if (index < config.getParent().subConfigs().length)
+					config.moveInParent(index);
+				target.pushTo(config);
+				break;
+			case remove:
+				MutableConfig[] children = config.subConfigs();
+				if (index < children.length)
+					config.removeSubConfig(children[index]);
+				else if (onSyncError != null)
+					onSyncError.accept("Config path " + evt.getRelativePathString() + " does not exist in persistence");
+				break;
+			case set:
+				children = config.subConfigs();
+				if (index < children.length) {
+					if (evt.oldName != null && !evt.oldName.equals(target.getName()))
+						children[index].setName(target.getName());
+					if (evt.oldValue != target.getValue())
+						children[index].setValue(target.getValue());
+				} else if (onSyncError != null)
+					onSyncError.accept("Config path " + evt.getRelativePathString() + " does not exist in persistence");
+				break;
 			}
 		});
 	}

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -71,6 +72,10 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@QonfigAttributeGetter("visible")
 		CompiledExpression isVisible();
 
+		/** @return An event that causes this widget to repaint itself */
+		@QonfigAttributeGetter("repaint")
+		CompiledExpression getRepaint();
+
 		/** @return This widget's border */
 		@QonfigChildGetter("border")
 		QuickBorder.Def<?> getBorder();
@@ -98,6 +103,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			private CompiledExpression theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
+			private CompiledExpression theRepaint;
 
 			private ModelComponentId theHoveredValue;
 			private ModelComponentId theFocusedValue;
@@ -145,6 +151,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
+			public CompiledExpression getRepaint() {
+				return theRepaint;
+			}
+
+			@Override
 			public ModelComponentId getHoveredValue() {
 				return theHoveredValue;
 			}
@@ -185,6 +196,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				theName = getAttributeExpression("name", session);
 				theTooltip = getAttributeExpression("tooltip", session);
 				isVisible = getAttributeExpression("visible", session);
+				theRepaint = getAttributeExpression("repaint", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theHoveredValue = elModels.getElementValueModelId("hovered");
 				theFocusedValue = elModels.getElementValueModelId("focused");
@@ -230,6 +242,9 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		/** @return The value determining when this widget is to be visible */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
 
+		/** @return An event that causes this widget to repaint itself */
+		InterpretedValueSynth<Observable<?>, Observable<?>> getRepaint();
+
 		/** @return All event listeners configured for this widget */
 		List<QuickEventListener.Interpreted<?>> getEventListeners();
 
@@ -253,6 +268,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			private QuickBorder.Interpreted<?> theBorder;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
+			private InterpretedValueSynth<Observable<?>, Observable<?>> theRepaint;
 			private final List<QuickEventListener.Interpreted<?>> theEventListeners;
 			private final List<QuickDialog.Interpreted<?>> theDialogs;
 
@@ -303,6 +319,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
+			public InterpretedValueSynth<Observable<?>, Observable<?>> getRepaint() {
+				return theRepaint;
+			}
+
+			@Override
 			public List<QuickEventListener.Interpreted<?>> getEventListeners() {
 				return Collections.unmodifiableList(theEventListeners);
 			}
@@ -318,6 +339,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 				isVisible = interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
+				theRepaint = interpret(getDefinition().getRepaint(), ModelTypes.Event.any());
 
 				theBorder = syncChild(getDefinition().getBorder(), theBorder, def -> def.interpret(this),
 					(b, bEnv) -> b.updateBorder(bEnv));
@@ -359,6 +381,9 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
+	/** @return An event that causes this widget to repaint itself */
+	Observable<?> getRepaint();
+
 	/** @return All event listeners for this widget */
 	ObservableCollection<QuickEventListener> getEventListeners();
 
@@ -379,6 +404,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
 		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
+		private ModelValueInstantiator<Observable<?>> theRepaintInstantiator;
 		private ModelComponentId theHoveredValue;
 		private ModelComponentId theFocusedValue;
 		private ModelComponentId thePressedValue;
@@ -386,6 +412,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 		private SettableValue<SettableValue<String>> theTooltip;
 		private SettableValue<SettableValue<Boolean>> isVisible;
+		private SettableValue<Observable<?>> theRepaint;
 
 		private QuickBorder theBorder;
 		private ObservableCollection<QuickEventListener> theEventListeners;
@@ -397,6 +424,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			theName = SettableValue.<SettableValue<String>> build().build();
 			theTooltip = SettableValue.<SettableValue<String>> build().build();
 			isVisible = SettableValue.<SettableValue<Boolean>> build().build();
+			theRepaint = SettableValue.<Observable<?>> build().build();
 			theEventListeners = ObservableCollection.<QuickEventListener> build().build();
 			theDialogs = ObservableCollection.<QuickDialog> build().build();
 
@@ -435,6 +463,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@Override
 		public SettableValue<Boolean> isVisible() {
 			return SettableValue.flatten(isVisible, () -> true);
+		}
+
+		@Override
+		public Observable<?> getRepaint() {
+			return ObservableValue.flattenObservableValue(theRepaint);
 		}
 
 		@Override
@@ -489,6 +522,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			theNameInstantiator = myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate();
 			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
 			theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();
+			theRepaintInstantiator = myInterpreted.getRepaint() == null ? null : myInterpreted.getRepaint().instantiate();
 
 			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create();
 			if (theBorder != null)
@@ -526,6 +560,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				theTooltipInstantiator.instantiate();
 			if (theVisibleInstantiator != null)
 				theVisibleInstantiator.instantiate();
+			if (theRepaintInstantiator != null)
+				theRepaintInstantiator.instantiate();
 
 			if (theBorder != null)
 				theBorder.instantiated();
@@ -547,6 +583,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			theName.set(theNameInstantiator == null ? null : theNameInstantiator.get(myModels), null);
 			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
 			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(myModels), null);
+			theRepaint.set(theRepaintInstantiator == null ? null : theRepaintInstantiator.get(myModels), null);
 
 			if (theBorder != null)
 				theBorder.instantiate(myModels);
@@ -565,6 +602,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			copy.theName = SettableValue.<SettableValue<String>> build().build();
 			copy.theTooltip = SettableValue.<SettableValue<String>> build().build();
 			copy.isVisible = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.theRepaint = SettableValue.<Observable<?>> build().build();
 			copy.theEventListeners = ObservableCollection.<QuickEventListener> build().build();
 
 			copy.isHovered = SettableValue.<SettableValue<Boolean>> build().build();

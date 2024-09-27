@@ -211,6 +211,8 @@ public class ObservableFileButton extends JButton {
 			theFileFilterDescrip = filter.getDescription();
 		if (theFileChooser != null)
 			theFileChooser.setFileFilter(new ValueAcceptableFileFilter());
+		if (theFileChooser != null && filter instanceof FileNameExtensionFilter)
+			theFileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
 		return this;
 	}
 
@@ -358,7 +360,10 @@ public class ObservableFileButton extends JButton {
 	/** @param chooser The file chooser to configure before displaying in response to the user's click on this button */
 	protected void configureFileChooser(JFileChooser chooser) {
 		chooser.setMultiSelectionEnabled(false);
-		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+		if (theFileFilter instanceof FileNameExtensionFilter)
+			chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		else
+			chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 		chooser.setApproveButtonToolTipText(theTooltip);
 		chooser.setFileFilter(new ValueAcceptableFileFilter());
 		File value = getValue().get();

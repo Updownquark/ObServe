@@ -41,8 +41,18 @@ import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
-import org.qommons.collect.*;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
@@ -108,7 +118,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
 					initConfig(evt.getNewValue(), evt, initialized[0] ? Observable.constant(null) : findRefs);
 					if (listen && newParent != null)
-						newParent.watch("").takeUntil(theUntil).act(LambdaUtils.printableConsumer(this::onChange, //
+						newParent.watch("").takeUntil(theUntil).act(Observer.printableObserver(this::onChange, //
 							() -> ObservableConfigTransform.this.getClass().getSimpleName() + "(" + newParent + ").onChange()", null));
 				}
 			});
@@ -248,9 +258,8 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		private Object theIdentity;
 		private Object theChangesIdentity;
 
-		ObservableConfigValue(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until,
-			ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
+		ObservableConfigValue(CausalLock lock, ObservableConfigParseSession session, ObservableValue<? extends ObservableConfig> parent,
+			Consumer<Boolean> ceCreate, Observable<?> until, ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
 			super(lock, session, parent, ceCreate, until);
 			theFormat = format;
 
@@ -271,7 +280,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 				theIdentity = Identifiable.wrap(getParent().getIdentity(), "value", theFormat);
 			return theIdentity;
 		}
-
 
 		@Override
 		public E get() {
@@ -443,8 +451,8 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		E theMovingValue;
 
 		ObservableConfigBackedCollection(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
-			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, ObservableConfigFormat<E> format,
+			String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			super(lock, session, collectionElement, ceCreate, until);
 			theFormat = format;
 			theChildName = childName;
@@ -465,16 +473,16 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 					ConfigElement cve = cveIter.next();
 					cveIter.remove();
 					cve.dispose();
-					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size(), CollectionChangeType.remove,
-						cve.get(), cve.get(), cause));
+					fire(ObservableCollectionEvent.createCollectionEvent(cve.getElementId(), theElements.size(),
+						CollectionChangeType.remove, cve.get(), cve.get(), cause));
 				}
 			}
 			if (collectionElement != null) {
 				for (ObservableConfig child : collectionElement.getContent(theChildName).getValues()) {
 					ConfigElement cve = createElement(child, null, findRefs);
 					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
-					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size() - 1, CollectionChangeType.add,
-						null, cve.get(), cause));
+					fire(ObservableCollectionEvent.createCollectionEvent(cve.getElementId(), theElements.size() - 1,
+						CollectionChangeType.add, null, cve.get(), cause));
 				}
 			}
 		}
@@ -515,8 +523,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
-					fire(new ObservableCollectionEvent<>(el.getElementId(), theElements.keySet().getElementsBefore(el.getElementId()),
-						CollectionChangeType.remove, el.get().get(), el.get().get(), collectionChange, collectionChange.movement));
+					fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
+						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, el.get().get(),
+						el.get().get(), collectionChange, collectionChange.movement));
 				} else {
 					try {
 						E newValue;
@@ -528,15 +537,15 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 							try (Transaction ct = childChange.use()) {
 								newValue = theFormat.parse(ObservableConfigFormat.ctxFor(getLock(), getSession(), //
 									ObservableValue.of(el.get().getConfig()),
-									trivial -> collectionChange.eventTarget.addChild(theChildName),
-									childChange, getUntil(), el.get().get(), Observable.constant(null), null));
+									trivial -> collectionChange.eventTarget.addChild(theChildName), childChange, getUntil(), el.get().get(),
+									Observable.constant(null), null));
 							}
 						}
 						E oldValue = el.get().get();
 						incrementStamp();
 						if (newValue != oldValue)
 							el.get()._set(newValue);
-						fire(new ObservableCollectionEvent<>(el.getElementId(),
+						fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
 							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, oldValue, newValue,
 							collectionChange));
 					} catch (ParseException e) {
@@ -564,7 +573,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			newEl.theElement = newElId;
 			incrementStamp();
 			CollectionElementMove move = cause instanceof ObservableConfigEvent ? ((ObservableConfigEvent) cause).movement : null;
-			fire(new ObservableCollectionEvent<>(newElId, theElements.keySet().getElementsBefore(newElId),
+			fire(ObservableCollectionEvent.createCollectionEvent(newElId, theElements.keySet().getElementsBefore(newElId),
 				CollectionChangeType.add, null, newEl.get(), cause, move));
 		}
 
@@ -983,8 +992,8 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		private final Backing<E> theBacking;
 
 		ObservableConfigValues(CausalLock lock, ObservableConfigParseSession session,
-			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
-			ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
+			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, ObservableConfigFormat<E> format,
+			String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
 			theBacking = new Backing<>(lock, session, collectionElement, ceCreate, format, childName, until, listen, findRefs);
 
 			init(theBacking.getCollection());
@@ -999,9 +1008,9 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		static class Backing<E> extends ObservableConfigBackedCollection<E> {
-			Backing(CausalLock lock, ObservableConfigParseSession session,
-				ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate,
-				ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen, Observable<?> findRefs) {
+			Backing(CausalLock lock, ObservableConfigParseSession session, ObservableValue<? extends ObservableConfig> collectionElement,
+				Consumer<Boolean> ceCreate, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen,
+				Observable<?> findRefs) {
 				super(lock, session, collectionElement, ceCreate, format, childName, until, listen, findRefs);
 			}
 
@@ -1223,17 +1232,14 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		ObservableConfigMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
-				entryFormat, entryFormat.getValueField().childName,
-				until, listen, findRefs);
+			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate, entryFormat,
+				entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
-				theWrapped = theCollection.flow()
-					.<K> groupBy(
-						LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-						LambdaUtils.printableBiFn((key, entry) -> {
-							entry.key = key;
-							return entry;
-						}, "setKey", null))//
+				theWrapped = theCollection.flow().<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+					LambdaUtils.printableBiFn((key, entry) -> {
+						entry.key = key;
+						return entry;
+					}, "setKey", null))//
 					.withValues(values -> values.<V> transform(tx -> {
 						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
 							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
@@ -1345,15 +1351,14 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		ObservableConfigMultiMap(CausalLock lock, ObservableConfigParseSession session,
 			ObservableValue<? extends ObservableConfig> collectionElement, Consumer<Boolean> ceCreate, Impl.EntryFormat<K, V> entryFormat,
 			Observable<?> until, boolean listen, Observable<?> findRefs) {
-			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate,
-				entryFormat, entryFormat.getValueField().childName, until, listen, findRefs);
+			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate, entryFormat,
+				entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
-				theWrapped = theCollection.flow()
-					.<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-						LambdaUtils.printableBiFn((key, entry) -> {
-							entry.key = key;
-							return entry;
-						}, "setKey", null))//
+				theWrapped = theCollection.flow().<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
+					LambdaUtils.printableBiFn((key, entry) -> {
+						entry.key = key;
+						return entry;
+					}, "setKey", null))//
 					.withValues(values -> values.<V> transform(tx -> {
 						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
 							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //

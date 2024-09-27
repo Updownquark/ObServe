@@ -33,12 +33,14 @@ import org.observe.quick.base.QuickTable;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.ValueAction;
+import org.observe.quick.ext.QuickBarChart;
 import org.observe.quick.ext.QuickCollapsePane;
 import org.observe.quick.ext.QuickComboButton;
 import org.observe.quick.ext.QuickMultiSlider;
 import org.observe.quick.ext.QuickMultiSlider.SliderBgRenderer;
 import org.observe.quick.ext.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.ext.QuickSearchTable;
+import org.observe.quick.ext.QuickSettingsMenu;
 import org.observe.quick.ext.QuickShaded;
 import org.observe.quick.ext.QuickShading;
 import org.observe.quick.ext.QuickTiledPane;
@@ -95,8 +97,10 @@ public class QuickXSwing implements QuickInterpretation {
 		tx.with(QuickComboButton.Interpreted.class, QuickSwingPopulator.class, SwingComboButton::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
+		tx.with(QuickSettingsMenu.Interpreted.class, QuickSwingPopulator.class, SwingSettingsMenu::new);
 		tx.with(QuickTiledPane.Interpreted.class, QuickSwingPopulator.class, SwingTiledPane::new);
 		tx.with(QuickSearchTable.Interpreted.class, QuickSwingPopulator.class, SwingSearchTable::new);
+		tx.with(QuickBarChart.Interpreted.class, QuickSwingPopulator.class, SwingBarChart::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
@@ -608,6 +612,32 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
+	static class SwingSettingsMenu extends QuickSwingPopulator.Abstract<QuickSettingsMenu> {
+		private final List<QuickSwingPopulator<?>> theChildren;
+
+		SwingSettingsMenu(QuickSettingsMenu.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theChildren = new ArrayList<>(interpreted.getContents().size());
+			for (QuickWidget.Interpreted<?> child : interpreted.getContents())
+				theChildren.add(tx.transform(child, QuickSwingPopulator.class));
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSettingsMenu quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addSettingsMenu(menu -> {
+				component.accept(menu);
+				for (int c = 0; c < theChildren.size(); c++) {
+					try {
+						((QuickSwingPopulator<QuickWidget>) theChildren.get(c)).populate(menu, quick.getContents().get(c));
+					} catch (ModelInstantiationException e) {
+						throw new CheckedExceptionWrapper(e);
+					}
+				}
+			});
+		}
+	}
+
 	static class SwingTiledPane<T> extends QuickSwingPopulator.Abstract<QuickTiledPane<T>> {
 		private final QuickSwingLayout<QuickLayout> theLayout;
 		private final QuickSwingPopulator<QuickWidget> theRenderer;
@@ -748,6 +778,18 @@ public class QuickXSwing implements QuickInterpretation {
 			table.modifyAssociatedComponent(theSearchField);
 			theContentControl = null;
 			theSearchField = null;
+		}
+	}
+
+	static class SwingBarChart<T> extends QuickSwingPopulator.Abstract<QuickBarChart<T>> {
+		SwingBarChart(QuickBarChart.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx) {
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickBarChart<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			QuickSwingBarChart<T> chart = new QuickSwingBarChart<>(quick);
+			panel.addComponent(null, chart, c -> component.accept(c));
 		}
 	}
 }

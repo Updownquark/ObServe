@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.HierarchyEvent;
@@ -281,18 +282,11 @@ public abstract class AbstractObservableTableModel<R> {
 				}
 			}
 		};
+		TableHookup hookup = TableHookup.of(//
+			Subscription.forAll(subs.toArray(new Subscription[subs.size()])), //
+			ml::getHoveredRow, ml::getHoveredColumn);
 		try (Transaction rowT = lockRows(false, null); Transaction colT = getColumns().lock(false, null)) {
-			for (int c = 0; c < getColumnCount(); c++) {
-				CategoryRenderStrategy<R, ?> column = getColumn(c);
-				TableColumn tblColumn;
-				if (c < table.getColumnModel().getColumnCount())
-					tblColumn = table.getColumnModel().getColumn(c);
-				else {
-					tblColumn = new TableColumn(c);
-					table.getColumnModel().addColumn(tblColumn);
-				}
-				hookUpColumn(table, tblColumn, column, ctx, ml::getHoveredRow, ml::getHoveredColumn);
-			}
+			hookupCurrentColumns(table, ctx, hookup);
 			ListDataListener columnListener = new ListDataListener() {
 				@Override
 				public void intervalAdded(ListDataEvent e) {
@@ -346,6 +340,8 @@ public abstract class AbstractObservableTableModel<R> {
 						if (table.getRowCount() > 0) {
 							Rectangle bounds = table.getCellRect(0, table.convertColumnIndexToModel(i), false);
 							table.repaint(bounds.x, 0, bounds.width, table.getHeight());
+							if (table.getTableHeader() != null)
+								table.getTableHeader().repaint(bounds.x, 0, bounds.width, table.getTableHeader().getHeight());
 						}
 					}
 				}
@@ -447,9 +443,21 @@ public abstract class AbstractObservableTableModel<R> {
 			table.addKeyListener(tableKL);
 			subs.add(() -> table.removeKeyListener(tableKL));
 		}
-		return TableHookup.of(//
-			Subscription.forAll(subs.toArray(new Subscription[subs.size()])), //
-			ml::getHoveredRow, ml::getHoveredColumn);
+		return hookup;
+	}
+
+	protected void hookupCurrentColumns(JTable table, TableRenderContext ctx, TableHookup hookup) {
+		for (int c = 0; c < getColumnCount(); c++) {
+			CategoryRenderStrategy<R, ?> column = getColumn(c);
+			TableColumn tblColumn;
+			if (c < table.getColumnModel().getColumnCount())
+				tblColumn = table.getColumnModel().getColumn(c);
+			else {
+				tblColumn = new TableColumn(c);
+				table.getColumnModel().addColumn(tblColumn);
+			}
+			hookUpColumn(table, tblColumn, column, ctx, hookup::getHoveredRow, hookup::getHoveredColumn);
+		}
 	}
 
 	protected <C> void hookUpColumn(JTable table, TableColumn tblColumn, CategoryRenderStrategy<R, C> column, TableRenderContext ctx,
@@ -544,6 +552,11 @@ public abstract class AbstractObservableTableModel<R> {
 					theDecorator.reset();
 				theColumn.getDecorator().decorate(cell, theDecorator);
 				theRevert = theDecorator.decorate(c);
+				if(component==null) {//
+				} else if (c.isCursorSet())
+					component.setCursor(c.getCursor());
+				else
+					component.setCursor(Cursor.getDefaultCursor());
 				theDecorator.reset();
 			}
 			return c;
@@ -841,19 +854,6 @@ public abstract class AbstractObservableTableModel<R> {
 			}
 
 			C colValue = category.getCategoryValue(rowValue);
-			boolean enabled;
-			if (category.getMutator().getEditability() != null) {
-				enabled = category.getMutator().isEditable(rowValue, colValue);
-			} else {
-				enabled = true;
-			}
-			if (!enabled) {
-				if (getRowListeners().isEmpty())
-					return new MouseClickStruct<>(null, null, null);
-				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
-					null);
-			}
 			boolean selected = isCellSelected(row, column);
 			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true, true,
 				true);

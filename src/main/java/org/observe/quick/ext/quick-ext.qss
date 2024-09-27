@@ -39,4 +39,7 @@
 			<style attr="corner-radius">`50%`</style>
 		</style>
 	</style>
+
+	<!-- Default icon for settings-menu -->
+	<style element="settings-menu" attr="icon">`/icons/gear.png`</style>
 </style-sheet>

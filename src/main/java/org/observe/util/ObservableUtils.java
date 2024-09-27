@@ -50,7 +50,7 @@ public class ObservableUtils {
 		try (Transaction ct = subCause.use()) {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index,
+				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(), index,
 					CollectionChangeType.add, null, el.get(), subCause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
@@ -81,7 +81,7 @@ public class ObservableUtils {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				E value = el.get();
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index,
+				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(), index,
 					CollectionChangeType.remove, value, value, subCause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);

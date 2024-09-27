@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.function.Supplier;
+
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -86,7 +88,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
-	public <V extends T> void onNext(V value) {
+	public void onNext(T value) {
 		if (!isAlive)
 			throw new IllegalStateException("Firing a value on a completed observable");
 		theListeners.forEach(//
@@ -94,7 +96,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
-	public void onCompleted(Causable cause) {
+	public void onCompleted(Supplier<Causable> cause) {
 		if (!isAlive)
 			return;
 		isAlive = false;
@@ -103,7 +105,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		theListeners.clear();
 	}
 
-	/** Resets this observable so that it can be used again after {@link #onCompleted(Causable)} is called */
+	/** Resets this observable so that it can be used again after {@link #onCompleted(Supplier)} is called */
 	public void reUse() {
 		isAlive = true;
 	}
@@ -111,6 +113,11 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 	@Override
 	public boolean isSafe() {
 		return false;
+	}
+
+	/** @return Whether anyone is listening to this observable */
+	public boolean isAnyoneListening() {
+		return !theListeners.isEmpty();
 	}
 
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */

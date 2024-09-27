@@ -46,6 +46,27 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 					return component.getMaximumSize();
 			}
 		}
+
+		public static class ExtractedLayoutChild implements LayoutChild {
+			private final Dimension[] theSizes;
+
+			public ExtractedLayoutChild(ComponentLayoutChild toExtract) {
+				theSizes = new Dimension[] { //
+					toExtract.getSize(-1), //
+					toExtract.getSize(0), //
+					toExtract.getSize(1) };
+			}
+
+			@Override
+			public Dimension getSize(int type) {
+				if (type < 0)
+					return theSizes[0];
+				else if (type == 0)
+					return theSizes[1];
+				else
+					return theSizes[2];
+			}
+		}
 	}
 
 	/** @return Whether this layout allocates space to invisible components */

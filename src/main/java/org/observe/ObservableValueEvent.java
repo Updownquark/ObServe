@@ -9,62 +9,7 @@ import org.qommons.Causable;
  *
  * @param <T> The compile-time type of the observable's value
  */
-public class ObservableValueEvent<T> extends Causable.AbstractCausable implements ValueChangeEvent<T> {
-	private final boolean isInitial;
-	private final T theOldValue;
-	private final T theNewValue;
-
-	/**
-	 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
-	 * @param oldValue The old value of the observable
-	 * @param newValue The new value in the observable
-	 * @param causes The causes of this event--typically other events
-	 */
-	protected ObservableValueEvent(boolean initial, T oldValue, T newValue, Object... causes) {
-		super(causes);
-		isInitial = initial;
-		theOldValue = oldValue;
-		theNewValue = newValue;
-	}
-
-	/**
-	 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
-	 * @param oldValue The old value of the observable
-	 * @param newValue The new value in the observable
-	 * @param causes The causes of this event--typically other events
-	 */
-	protected ObservableValueEvent(boolean initial, T oldValue, T newValue, Collection<?> causes) {
-		this(initial, oldValue, newValue, causes.toArray());
-	}
-
-	@Override
-	public boolean isInitial() {
-		return isInitial;
-	}
-
-	@Override
-	public T getOldValue() {
-		return theOldValue;
-	}
-
-	@Override
-	public T getNewValue() {
-		return theNewValue;
-	}
-
-	/** @return Whether this event represents an update, i.e. an event that's fired even though the value reference hasn't changed */
-	public boolean isUpdate() {
-		if (isInitial)
-			return false;
-		else
-			return theOldValue == theNewValue;
-	}
-
-	@Override
-	public String toString(){
-		return theOldValue + "->" + theNewValue;
-	}
-
+public interface ObservableValueEvent<T> extends Causable, ValueChangeEvent<T> {
 	/**
 	 * Creates an event to populate the initial value of an observable to a subscriber
 	 *
@@ -75,7 +20,7 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 	 * @return The event to fire
 	 */
 	public static <T> ObservableValueEvent<T> createInitialEvent(ObservableValue<T> observable, T value, Object... causes) {
-		return new ObservableValueEvent<>(true, null, value, causes);
+		return new DefaultObservableValueEvent<>(true, null, value, causes);
 	}
 
 	/**
@@ -89,6 +34,60 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 	 * @return The event to fire
 	 */
 	public static <T> ObservableValueEvent<T> createChangeEvent(ObservableValue<T> observable, T oldValue, T newValue, Object... causes) {
-		return new ObservableValueEvent<>(false, oldValue, newValue, causes);
+		return new DefaultObservableValueEvent<>(false, oldValue, newValue, causes);
+	}
+
+	/**
+	 * Default {@link ObservableValueEvent} implementation
+	 *
+	 * @param <T> The type of the value this event is for
+	 */
+	public class DefaultObservableValueEvent<T> extends Causable.AbstractCausable implements ObservableValueEvent<T> {
+		private final boolean isInitial;
+		private final T theOldValue;
+		private final T theNewValue;
+
+		/**
+		 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
+		 * @param oldValue The old value of the observable
+		 * @param newValue The new value in the observable
+		 * @param causes The causes of this event--typically other events
+		 */
+		protected DefaultObservableValueEvent(boolean initial, T oldValue, T newValue, Object... causes) {
+			super(causes);
+			isInitial = initial;
+			theOldValue = oldValue;
+			theNewValue = newValue;
+		}
+
+		/**
+		 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
+		 * @param oldValue The old value of the observable
+		 * @param newValue The new value in the observable
+		 * @param causes The causes of this event--typically other events
+		 */
+		protected DefaultObservableValueEvent(boolean initial, T oldValue, T newValue, Collection<?> causes) {
+			this(initial, oldValue, newValue, causes.toArray());
+		}
+
+		@Override
+		public boolean isInitial() {
+			return isInitial;
+		}
+
+		@Override
+		public T getOldValue() {
+			return theOldValue;
+		}
+
+		@Override
+		public T getNewValue() {
+			return theNewValue;
+		}
+
+		@Override
+		public String toString() {
+			return theOldValue + "->" + theNewValue;
+		}
 	}
 }

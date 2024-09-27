@@ -1,6 +1,19 @@
 package org.observe.quick.swing;
 
-import java.awt.*;
+import java.awt.AWTEvent;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.IllegalComponentStateException;
+import java.awt.Image;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
@@ -11,7 +24,6 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,18 +54,29 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.quick.*;
+import org.observe.quick.Iconized;
+import org.observe.quick.KeyCode;
+import org.observe.quick.MouseCursor;
+import org.observe.quick.QuickApplication;
+import org.observe.quick.QuickBorder;
+import org.observe.quick.QuickDialog;
+import org.observe.quick.QuickDocument;
+import org.observe.quick.QuickEventListener;
+import org.observe.quick.QuickInterpretation;
+import org.observe.quick.QuickKeyListener;
+import org.observe.quick.QuickMouseListener;
+import org.observe.quick.QuickRenderer;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
+import org.observe.quick.QuickWidget;
+import org.observe.quick.QuickWindow;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingEventListener;
 import org.observe.util.swing.ComponentPropertyManager;
 import org.observe.util.swing.FontAdjuster;
-import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
-import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
@@ -179,6 +202,9 @@ public class QuickCoreSwing implements QuickInterpretation {
 								pm.setOpaque(bg == null ? null : true);
 							}
 						} else {
+							w.getRepaint().takeUntil(comp.getUntil()).act(__ -> {
+								c.repaint();
+							});
 							scd.propertyMgr.setFont(pmDecorator::adjust);
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							scd.propertyMgr.setBackground(color.get());
@@ -212,7 +238,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 						pm.setBackground(bg);
 						pm.setOpaque(bg == null ? null : true);
 					});
-					if (!renderer && w.getTooltip() != null)
+					if (w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
 					if (!renderer)
 						comp.visibleWhen(w.isVisible());

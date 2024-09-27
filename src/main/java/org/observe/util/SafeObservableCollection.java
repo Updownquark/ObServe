@@ -24,6 +24,7 @@ import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Identifiable;
+import org.qommons.Lockable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -186,8 +187,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			theMidMoveCount = 0;
 			if (threading.isEventThread()) {
 				Transaction t = theSyntheticCollection.tryLock(true, cause);
-				if (t != null)
-					doFlush();
+				if (t != null) {
+					try {
+						doFlush();
+					} finally {
+						t.close();
+					}
+				}
 			} else
 				threading.invoke(this::doFlush);
 		});
@@ -197,45 +203,60 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theRemovedElements = new ArrayList<>();
 		theChangedElements = new ArrayList<>();
 		theAddMoves = new HashMap<>();
-		try (Transaction t = collection.lock(false, null)) {
-			theStamp = theCollection.getStamp();
-			init(until);
-		}
+
+		init(theSyntheticCollection.flow()//
+			.<E> transform(tx -> tx.cache(false).map(ref -> ref.value)).withEquivalence(theCollection.equivalence())//
+			.collectPassive());
+
+		// Use as light a touch as possible.
+		// It doesn't really matter that we have all the correct data as soon as the constructor exits, though we will if we can.
+		// Try to get a lock on the collection, but if we can't, just try again later
+		Subscription[] collSub = new Subscription[1];
+		if (until != null)
+			until.take(1).act(__ -> {
+				isFinished = true;
+				Subscription sub = collSub[0];
+				if (sub != null)
+					sub.unsubscribe();
+			});
+
+		tryInit(collSub);
 	}
 
-	/**
-	 * Initializes this collection's synchronization
-	 *
-	 * @param until An observable to cease synchronization
-	 */
-	protected void init(Observable<?> until) {
-		try (Transaction t = theCollection.lock(false, null)) {
-			init(theSyntheticCollection.flow()//
-				.<E> transform(tx -> tx.cache(false).map(ref -> ref.value))
-				.withEquivalence(theCollection.equivalence())//
-				.collectPassive());
-
-			boolean[] init = new boolean[] { true };
-			Subscription collSub = theCollection.subscribe(//
-				evt -> handleEvent(evt, init[0]), true);
-			init[0] = false;
-			if (until != null)
-				until.take(1).act(__ -> {
-					isFinished = true;
-					collSub.unsubscribe();
-				});
-			if (hasQueuedEvents()) {
-				if (theThreadConstraint.isEventThread())
-					doFlush();
-				else {
-					do {
-						try {
-							Thread.sleep(20);
-						} catch (InterruptedException e) {
-							Thread.currentThread().interrupt();
-						}
-					} while (hasQueuedEvents());
+	private void tryInit(Subscription[] collSub) {
+		if (isFinished)
+			return;
+		// Use as light a touch as possible.
+		// It doesn't really matter that we have all the correct data as soon as the constructor exits, though we will if we can.
+		// Try to get a lock on the collection, but if we can't, just try again later
+		Transaction lock = theCollection.tryLock(false, null);
+		if (lock == null) {
+			theStamp = -1;
+			// Put an extra sleep in here to avoid thrashing the CPU
+			QommonsTimer.getCommonInstance().offload(() -> {
+				try {
+					Thread.sleep(10);
+				} catch (InterruptedException e) {
 				}
+				if (!isFinished)
+					theThreadConstraint.invokeLater(() -> tryInit(collSub));
+			});
+		} else if (!isFinished) {
+			try {
+				theStamp = theCollection.getStamp();
+
+				boolean[] init = new boolean[] { true };
+				collSub[0] = theCollection.subscribe(//
+					evt -> handleEvent(evt, init[0]), true);
+				init[0] = false;
+				if (hasQueuedEvents()) {
+					if (theThreadConstraint.isEventThread())
+						doFlush();
+					else
+						scheduleFlush();
+				}
+			} finally {
+				lock.close();
 			}
 		}
 	}
@@ -345,14 +366,19 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		if (isFinished || theMidMoveCount > 0)
 			return false;
 		ObservableSwingUtils.flushEQCache();
-		while (!theFlushLock.compareAndSet(false, true)) {
+		if (!theFlushLock.compareAndSet(false, true)) {
 			if (isFlushing)
 				return false;
-			try {
-				Thread.sleep(5);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
+			else
+				return true;
+		}
+		// We need to obtain a read lock on the main collection to prevent it from mucking with the state collections we use
+		// to synchronize the state of the safe collection.
+		// But we can afford to wait if it's not immediately available
+		Transaction sourceLock = theCollection.tryLock(false, null);
+		if (sourceLock == null) {
+			theFlushLock.set(false);
+			return true;
 		}
 		isFlushing = true;
 		boolean flushed = false;
@@ -433,58 +459,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		} finally {
 			isFlushing = false;
 			theFlushLock.set(false);
+			sourceLock.close();
 		}
 		return flushed;
 	}
 
 	private ElementRef<E> findRef(ElementId sourceId) {
 		return theElementsBySource.get(sourceId);
-		/* This code was (I thought) a pretty slick way of navigating a tree whose elements might not actually be in the source
-		 * It's a binary search, and it turns out quite slow for large collections, so I replaced it with a simple hash map.
-		ElementId begin = theSyntheticBacking.getTerminalElement(true).getElementId();
-		ElementId end = theSyntheticBacking.getTerminalElement(false).getElementId();
-		CollectionElement<ElementRef<E>> node = theSyntheticBacking.getRoot();
-		while (node != null) {
-			ElementRef<E> el = node.get();
-			int comp;
-			if (el.isRemoved) {
-				if (el.thePreviousPresentElement != null) {
-					comp = sourceId.compareTo(el.thePreviousPresentElement.sourceId);
-					if (comp == 0)
-						return el.thePreviousPresentElement;
-					else if (comp < 0)
-						end = el.thePreviousPresentElement.getSynthId();
-					else
-						begin = el.getSynthId();
-				} else if (el.theNextPresentElement != null) {
-					comp = sourceId.compareTo(el.theNextPresentElement.sourceId);
-					if (comp == 0)
-						return el.theNextPresentElement;
-					else if (comp > 0)
-						begin = el.theNextPresentElement.getSynthId();
-					else
-						end = el.getSynthId();
-				} else
-					return null;
-			} else {
-				comp = sourceId.compareTo(el.sourceId);
-				if (comp == 0)
-					return el;
-				else if (comp < 0)
-					end = el.getSynthId();
-				else
-					begin = el.getSynthId();
-			}
-			node = theSyntheticBacking.splitBetween(begin, end);
-			if (node == null) {
-				node = theSyntheticBacking.getElement(comp < 0 ? begin : end);
-				if (sourceId.equals(node.get().sourceId))
-					return node.get();
-				else
-					return null;
-			}
-		}
-		return null;*/
 	}
 
 	@Override
@@ -511,12 +492,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		// This is only called when no removed elements are present
 		theElementsBySource.put(element.sourceId, element);
 		element.setSynthId(synthId);
-		// element.thePreviousPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, false));
-		// if (element.thePreviousPresentElement != null)
-		// element.thePreviousPresentElement.theNextPresentElement = element;
-		// element.theNextPresentElement = CollectionElement.get(theSyntheticBacking.getAdjacentElement(synthId, true));
-		// if (element.theNextPresentElement != null)
-		// element.theNextPresentElement.thePreviousPresentElement = element;
 	}
 
 	/**
@@ -546,14 +521,33 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public Transaction lock(boolean write, Object cause) {
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		return theSyntheticCollection.lock(write, cause);
+		if (!write)
+			return theSyntheticCollection.lock(write, cause);
+		else if (!theThreadConstraint.isEventThread())
+			throw new IllegalArgumentException(ThreadConstraint.MOD_ON_WRONG_THREAD);
+		// For a write lock, we also need to lock on the source collection, since any modifications will immediately propagate to it
+		Transaction lock = Lockable.lockAll(//
+			Lockable.lockable(theSyntheticCollection, true, cause), //
+			Lockable.lockable(theCollection, true, cause));
+		doFlush();
+		return lock;
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, Object cause) {
 		if (write && isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		return theSyntheticCollection.tryLock(write, cause);
+		if (!write)
+			return theSyntheticCollection.tryLock(write, cause);
+		else if (!theThreadConstraint.isEventThread())
+			return null; // Can't obtain a write lock except on the safe thread
+		// For a write lock, we also need to lock on the source collection, since any modifications will immediately propagate to it
+		Transaction lock = Lockable.tryLockAll(//
+			Lockable.lockable(theSyntheticCollection, true, cause), //
+			Lockable.lockable(theCollection, true, cause));
+		if (lock != null)
+			doFlush();
+		return lock;
 	}
 
 	/**
@@ -566,7 +560,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 */
 	protected void flush() {
 		if (!isOnEventThread())
-			throw new IllegalStateException("Operations on this collection may only occur on "+theThreadConstraint);
+			throw new IllegalStateException("Operations on this collection may only occur on " + theThreadConstraint);
 		doFlush();
 	}
 
@@ -593,7 +587,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public MutableCollectionElement<E> mutableElement(ElementId id) {
-		try (Transaction t = theCollection.lock(false, null)) {
+		try (Transaction t = lock(false, null)) {
 			ElementRef<E> ref = theSyntheticBacking.getElement(id).get();
 			MutableCollectionElement<E> srcEl = ref.sourceId.isPresent() ? theCollection.mutableElement(ref.sourceId) : null;
 			return new MutableCollectionElement<E>() {
@@ -655,8 +649,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
-		if (!theThreadConstraint.isEventThread())
-			return ThreadConstraint.MOD_ON_WRONG_THREAD;
 		try (Transaction t = lock(false, null)) {
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
 			if (srcAfter != null && !srcAfter.isPresent())
@@ -672,7 +664,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
-			doFlush();
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
 			if (srcAfter != null && !srcAfter.isPresent())
 				throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
@@ -691,8 +682,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-		if (!theThreadConstraint.isEventThread())
-			return ThreadConstraint.MOD_ON_WRONG_THREAD;
 		try (Transaction t = lock(false, null)) {
 			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
 			if (!srcValue.isPresent())

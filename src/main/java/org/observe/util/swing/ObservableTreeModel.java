@@ -45,6 +45,8 @@ import org.qommons.collect.MutableCollectionElement;
  * @param <T> The type of values in the tree
  */
 public abstract class ObservableTreeModel<T> implements TreeModel {
+	private static final Object NULL_SUB = new Object();
+
 	private final ObservableValue<? extends T> theRoot;
 	private TreeNode theRootNode;
 
@@ -82,6 +84,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	TreeNode getNode(T value, boolean searchDeeply) {
 		if (value == null)
 			return null;
+		else if (value == NULL_SUB)
+			return theRootNode;
 		TreeNode found = theNodes.get(new IdentityKey<>(value));
 		if (found != null || !searchDeeply || !ThreadConstraint.EDT.isEventThread()) // Can't do the search off the EDT
 			return found;
@@ -104,6 +108,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	 * @return The path to the given node, or null if the node could not be found
 	 */
 	public BetterList<T> getBetterPath(T value, boolean searchDeeply) {
+		if (value == NULL_SUB)
+			return BetterList.of(value);
 		TreeNode node = getNode(value, searchDeeply);
 		return node == null ? null : node.getBetterPath();
 	}
@@ -118,9 +124,10 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	}
 
 	private void doRootChanged(T newRoot) {
+		Object rootEventObj = newRoot == null ? NULL_SUB : newRoot;
 		if (newRoot == theRootNode.get()) {
 			theRootNode.changed();
-			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
+			TreeModelEvent event = new TreeModelEvent(this, new Object[] { rootEventObj }, null, null);
 
 			for (TreeModelListener listener : theListeners) {
 				try {
@@ -135,7 +142,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				System.err.println("Discard missed nodes: " + theNodes.keySet());
 			theRootNode = new TreeNode(null, newRoot);
 			theNodes.put(new IdentityKey<>(newRoot), theRootNode);
-			TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRoot.get() }, null, null);
+			TreeModelEvent event = new TreeModelEvent(this, new Object[] { rootEventObj }, null, null);
 
 			for (TreeModelListener listener : theListeners) {
 				try {
@@ -149,6 +156,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	@Override
 	public Object getChild(Object parent, int index) {
+		if (parent == NULL_SUB)
+			return null;
 		TreeNode node = getNode((T) parent, false);
 		if (node == null)
 			System.err.println("Asking for child of node " + parent + ", which does not exist");
@@ -157,12 +166,16 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	@Override
 	public int getChildCount(Object parent) {
+		if (parent == NULL_SUB)
+			return 0;
 		TreeNode node = getNode((T) parent, false);
 		return node == null ? 0 : node.getChildCount();
 	}
 
 	@Override
 	public int getIndexOfChild(Object parent, Object child) {
+		if (parent == NULL_SUB)
+			return -1;
 		TreeNode node = getNode((T) parent, false);
 		return node == null ? -1 : node.indexOfChild(child);
 	}
@@ -251,7 +264,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			}
 			areChildrenInitialized = true;
 
-			unsubscribe = SimpleObservable.build().build();
+			unsubscribe = SimpleObservable.build().withThreadConstraint(ThreadConstraint.EDT).build();
 			theUnsafeChildren = ObservableTreeModel.this.getChildren(getBetterPath(), unsubscribe.readOnly());
 			theChildren = theUnsafeChildren == null ? null : theUnsafeChildren.safe(ThreadConstraint.EDT, unsubscribe);
 			init(false);
@@ -285,7 +298,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				}
 
 				boolean[] unsubscribed = new boolean[1];
-				unsubscribe.act(__ -> unsubscribed[0] = true);
+				unsubscribe.take(1).act(__ -> unsubscribed[0] = true);
 				theChildren.changes().takeUntil(unsubscribe).act(event -> { // theChildren is already safe
 					if (unsubscribed[0])
 						return;

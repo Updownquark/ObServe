@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
-import org.qommons.Causable;
 import org.qommons.TriFunction;
 
 /** Tests observable classes in the org.observe package */
@@ -104,8 +103,8 @@ public class ObservableTest {
 
 		complete[0] = false;
 
-		try (Causable.CausableInUse cause = Causable.cause()) {
-			obs.onCompleted(cause);
+		try (Observer.CompletedCause completion = Observer.completion()) {
+			obs.onCompleted(completion);
 		}
 		assertEquals(false, complete[0]);
 
@@ -114,8 +113,8 @@ public class ObservableTest {
 		take = obs.takeUntil(stop);
 		take.completed().act(value -> complete[0] = true);
 
-		try (Causable.CausableInUse cause = Causable.cause()) {
-			obs.onCompleted(cause);
+		try (Observer.CompletedCause completion = Observer.completion()) {
+			obs.onCompleted(completion);
 		}
 		assertEquals(true, complete[0]);
 	}
@@ -177,8 +176,8 @@ public class ObservableTest {
 			obs.onNext(i);
 			assertEquals(0, received[0]);
 		}
-		try (Causable.CausableInUse cause = Causable.cause()) {
-			obs.onCompleted(cause);
+		try (Observer.CompletedCause completion = Observer.completion()) {
+			obs.onCompleted(completion);
 		}
 		assertTrue(finished[0]);
 	}

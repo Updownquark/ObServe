@@ -27,6 +27,7 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -36,7 +37,32 @@ import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import javax.swing.*;
+import javax.swing.Box;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
+import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JToggleButton;
+import javax.swing.JTree;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.StyleConstants;
@@ -57,7 +83,24 @@ import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.PanelPopulationImpl.*;
+import org.observe.util.swing.PanelPopulationImpl.MigFieldPanel;
+import org.observe.util.swing.PanelPopulationImpl.PPComboBox;
+import org.observe.util.swing.PanelPopulationImpl.SettingsMenuImpl;
+import org.observe.util.swing.PanelPopulationImpl.SimpleAlert;
+import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleCollapsePane;
+import org.observe.util.swing.PanelPopulationImpl.SimpleComboButtonEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleComboEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleFieldEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
+import org.observe.util.swing.PanelPopulationImpl.SimpleLabelEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleMultiSliderEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleProgressEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleScrollEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleSplitEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleSteppedFieldEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleTabPaneEditor;
+import org.observe.util.swing.PanelPopulationImpl.SimpleToggleButtonPanel;
 import org.qommons.BreakpointHere;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
@@ -281,23 +324,23 @@ public class PanelPopulation {
 		 */
 
 		default P addIntSpinnerField(String fieldName, SettableValue<Integer> value,
-			Consumer<SteppedFieldEditor<JSpinner, Integer, ?>> modify) {
+			Consumer<SteppedFieldEditor<ObservableSpinner, Integer, ?>> modify) {
 			ObservableSpinner<Integer> spinner = new ObservableSpinner<>(value, SpinnerFormat.INT, //
 				v -> v == null ? 0 : v - 1, //
-				v -> v == null ? 1 : v + 1, getUntil());
+					v -> v == null ? 1 : v + 1, getUntil());
 			return addSpinnerField(fieldName, spinner, value, Number::intValue, modify);
 		}
 
 		default P addDoubleSpinnerField(String fieldName, SettableValue<Double> value,
-			Consumer<SteppedFieldEditor<JSpinner, Double, ?>> modify) {
+			Consumer<SteppedFieldEditor<ObservableSpinner, Double, ?>> modify) {
 			ObservableSpinner<Double> spinner = new ObservableSpinner<>(value, SpinnerFormat.doubleFormat("0.00", 1.0), //
 				v -> v == null ? 0.0 : v - 1.0, //
-				v -> v == null ? 1.0 : v + 1.0, getUntil());
+					v -> v == null ? 1.0 : v + 1.0, getUntil());
 			return addSpinnerField(fieldName, spinner, value, Number::doubleValue, modify);
 		}
 
-		<F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
-			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify);
+		<S extends JSpinner, F> P addSpinnerField(String fieldName, S spinner, SettableValue<F> value,
+			Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<S, F, ?>> modify);
 
 		<F> P addSpinnerField(String fieldName, SettableValue<F> value, Format<F> format, Function<? super F, ? extends F> previousValue,
 			Function<? super F, ? extends F> nextValue, Consumer<FieldEditor<ObservableSpinner<F>, ?>> modify);
@@ -583,11 +626,13 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
-			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
-			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
-				if (spinner.getModel() instanceof SpinnerNumberModel)
-					((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+		default <S extends JSpinner, F> P addSpinnerField(String fieldName, S spinner, SettableValue<F> value,
+				Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<S, F, ?>> modify) {
+				SimpleSteppedFieldEditor<S, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
+					if (spinner.getModel() instanceof SpinnerNumberModel)
+						((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+					else if (spinner.getModel() instanceof ObservableSpinner.ObservableSpinnerModel)
+						ObservableSpinner.setStepSize((ObservableSpinner.ObservableSpinnerModel<Number>) spinner.getModel(), (Number) stepSize);
 			}, getUntil());
 			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
 			if (modify != null)
@@ -900,6 +945,8 @@ public class PanelPopulation {
 
 		E getEditor();
 
+		P disableWith(ObservableValue<String> disabled);
+
 		P visibleWhen(ObservableValue<Boolean> visible);
 
 		/**
@@ -1010,6 +1057,7 @@ public class PanelPopulation {
 		private Component theBuiltComponent;
 
 		protected Consumer<FontAdjuster> theFont;
+		private ObservableValue<String> theDisablement;
 		private ObservableValue<Boolean> isVisible;
 		private Consumer<MenuBuilder<JPopupMenu, ?>> thePopupMenu;
 
@@ -1061,6 +1109,17 @@ public class PanelPopulation {
 					prev.accept(f);
 					font.accept(f);
 				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P disableWith(ObservableValue<String> disabled) {
+			if (theDisablement == null || disabled == null)
+				theDisablement = disabled;
+			else {
+				ObservableValue<String> old = theDisablement;
+				theDisablement = ObservableValue.firstValue(Objects::nonNull, () -> null, old, disabled);
 			}
 			return (P) this;
 		}
@@ -1244,15 +1303,34 @@ public class PanelPopulation {
 		}
 
 		private boolean decorated = false;
+		private boolean tooltipControl = true;
+
+		protected P withTooltipControl(boolean tooltipControl) {
+			this.tooltipControl = tooltipControl;
+			return (P) this;
+		}
 
 		@Override
 		public Component decorate(Component c) {
-			if (!isTooltipHandled && theEditor instanceof JComponent)
-				theTooltip.changes().takeUntil(getUntil()).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
+			ObservableValue<String> enabled;
+			if (theDisablement != null)
+				enabled = theDisablement;
+			else
+				enabled = ObservableValue.of(null);
+			Component fc = c;
+			if (theEditor instanceof Component)
+				enabled.takeUntil(getUntil()).changes().act(evt -> ((Component) theEditor).setEnabled(evt.getNewValue() == null));
+			if (tooltipControl && !isTooltipHandled && theEditor instanceof JComponent) {
+				ObservableValue<String> tooltip;
+				if (getTooltip() != null)
+					tooltip = enabled.combine((e, tt) -> e == null ? tt : e, getTooltip());
+				else
+					tooltip = enabled;
+				tooltip.changes().takeUntil(getUntil()).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
+			}
 			if (theDecorator != null)
 				theDecorator.decorate(c);
 			if (theRepaint != null) {
-				Component fc = c;
 				theRepaint.takeUntil(theUntil).act(__ -> {
 					if (theDecorator != null) {
 						for (Consumer<ComponentDecorator> deco : theDecorators)
@@ -1437,7 +1515,7 @@ public class PanelPopulation {
 		ObservableValue<String> getTooltip();
 	}
 
-	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P>, Tooltipped<P> {
+	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P> {
 		default P withPostLabel(String postLabel) {
 			return withPostLabel(postLabel == null ? null : ObservableValue.of(postLabel));
 		}
@@ -1472,8 +1550,6 @@ public class PanelPopulation {
 		}
 
 		P withText(ObservableValue<String> text);
-
-		P disableWith(ObservableValue<String> disabled);
 	}
 
 	public interface ImageControl {
@@ -1685,6 +1761,15 @@ public class PanelPopulation {
 		P withHColumnHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
 
 		P withColumnHeader(Component component);
+
+		/**
+		 * @param vertical Whether the scroll pane should show a vertical scroll bar (as needed) or just always display all of its vertical
+		 *        content
+		 * @param horizontal Whether the scroll pane should show a vertical scroll bar (as needed) or just always display all of its
+		 *        horizontal content
+		 * @return This scroll pane
+		 */
+		P scrollable(boolean vertical, boolean horizontal);
 	}
 
 	public interface CollapsePanel<CP extends Container, C extends Container, P extends CollapsePanel<CP, C, P>>
@@ -1705,8 +1790,6 @@ public class PanelPopulation {
 		P withSelection(ObservableCollection<R> selection);
 
 		List<R> getSelection();
-
-		P disableWith(ObservableValue<String> disabled);
 
 		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod);
 
@@ -1882,8 +1965,6 @@ public class PanelPopulation {
 		A allowWhenMulti(Function<? super List<? extends R>, String> filter, Consumer<ActionEnablement<List<? extends R>>> operation);
 
 		A withTooltip(Function<? super List<? extends R>, String> tooltip);
-
-		// A disableWith(Function<? super List<? extends R>, String> disabled);
 
 		A modifyAction(Function<? super ObservableAction, ? extends ObservableAction> actionMod);
 

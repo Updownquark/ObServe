@@ -1,6 +1,16 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -900,7 +910,7 @@ public class ObservableCollectionActiveManagers2 {
 					onElement.accept(new RefreshingElement(parentEl, false), cause);
 				}
 			}, listening);
-			listening.withConsumer((Object r) -> {
+			listening.withObserver((Object r) -> {
 				// Make sure the parent doesn't fire while we're firing notifications from the refresh
 				// Wrapping the event with a causable here allows listeners down the line to take actions after the entire refresh
 				Transaction extraT = null;
@@ -974,7 +984,7 @@ public class ObservableCollectionActiveManagers2 {
 			RefreshHolder(Observable<?> refresh) {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = BetterTreeSet.<RefreshingElement> buildTreeSet(RefreshingElement::compareTo).build();
-				theSub = theListening.withConsumer(r -> {
+				theSub = theListening.withObserver(r -> {
 					try (Transaction t = Lockable.lockAll(
 						Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, ThreadConstraint.ANY),
 						Lockable.lockable(getParent(), false, null))) {

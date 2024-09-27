@@ -85,7 +85,6 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theFlatColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
-	private ObservableValue<String> theDisablement;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
 	private Dragging.SimpleTransferSource<R> theDragSource;
@@ -177,15 +176,6 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	@Override
 	public P withSelection(ObservableCollection<R> selection) {
 		theSelectionValues = selection;
-		return (P) this;
-	}
-
-	@Override
-	public P disableWith(ObservableValue<String> disabled) {
-		if (theDisablement == null)
-			theDisablement = disabled;
-		else
-			theDisablement = ObservableValue.firstValue(msg -> msg != null, () -> null, theDisablement, disabled);
 		return (P) this;
 	}
 
@@ -332,12 +322,8 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		AbstractObservableTableModel<R> model = createTableModel(columns);
 
 		T table = getEditor();
-		if (theDisablement != null) {
-			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
-				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
-				table.setEnabled(evt.getNewValue() == null);
-			});
-		}
+		// Tooltip control could mess up cell tooltips and stuff
+		withTooltipControl(false);
 		if (!withColumnHeader)
 			table.setTableHeader(null);
 		if (theMouseListeners != null) {
@@ -427,7 +413,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 						if (((SimpleDataAction<?, ?>) action).isButton())
 							((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
 					} else if (action instanceof Consumer)
-						buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
+						((Consumer<PanelPopulator<JPanel, ?>>) action).accept(buttonPanel);
 				}
 				JPanel tablePanel = new JPanel(new BorderLayout());
 				tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);

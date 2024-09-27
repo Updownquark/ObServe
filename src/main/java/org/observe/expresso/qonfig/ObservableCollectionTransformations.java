@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
@@ -466,13 +467,13 @@ public class ObservableCollectionTransformations {
 			public Subscription subscribe(Observer<? super T> observer) {
 				return getWrapped().subscribe(new Observer<T>() {
 					@Override
-					public <V extends T> void onNext(V value) {
+					public void onNext(T value) {
 						if (theFilterType.isInstance(value))
 							observer.onNext(value);
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});

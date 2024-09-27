@@ -1,8 +1,10 @@
 package org.observe.quick.ext;
 
+import java.awt.Color;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
@@ -71,6 +73,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickShaded.SHADED, QuickShaded.Def.class, ExAddOn.creator(QuickShaded.Def::new));
 		interpreter.createWith(QuickCustomShadingElement.CUSTOM_SHADING, QuickCustomShadingElement.class,
 			ExElement.creator(QuickCustomShadingElement::new));
+		interpreter.createWith(QuickCustomPaintingElement.CUSTOM_PAINTING, QuickCustomPaintingElement.class,
+			ExElement.creator(QuickCustomPaintingElement::new));
 		interpreter.createWith(QuickRaisedShadingElement.RAISED_SHADING, QuickRaisedShadingElement.class,
 			ExElement.creator(QuickRaisedShadingElement::new));
 
@@ -83,25 +87,27 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickMultiSlider.SLIDER_BG_RENDERER, QuickMultiSlider.SliderBgRenderer.Def.class,
 			ExElement.creator(QuickMultiSlider.SliderBgRenderer.Def::new));
 
+		interpreter.createWith(QuickSettingsMenu.SETTINGS_MENU, QuickSettingsMenu.Def.class, ExElement.creator(QuickSettingsMenu.Def::new));
 		interpreter.createWith(QuickTiledPane.TILED_PANE, QuickTiledPane.Def.class, ExElement.creator(QuickTiledPane.Def::new));
 		interpreter.createWith(QuickSearchTable.SEARCH_TABLE, QuickSearchTable.Def.class, ExElement.creator(QuickSearchTable.Def::new));
+
+		interpreter.createWith(QuickBarChart.BAR_CHART, QuickBarChart.Def.class, ExElement.creator(QuickBarChart.Def::new));
 
 		return interpreter;
 	}
 
 	@ExElementTraceable(toolkit = X,
-		qonfigType = QuickCustomShadingElement.CUSTOM_SHADING,
-		interpretation = QuickCustomShadingElement.Interpreted.class)
-	static class QuickCustomShadingElement
+		qonfigType = QuickAbstractCustomShadingElement.ABST_CUSTOM_SHADING,
+		interpretation = QuickAbstractCustomShadingElement.Interpreted.class)
+	static abstract class QuickAbstractCustomShadingElement
 	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>>
 	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<QuickShading>>> {
-		public static final String CUSTOM_SHADING = "custom-shading";
+		public static final String ABST_CUSTOM_SHADING = "abst-custom-shading";
 
 		private CompiledExpression theUnitWidth;
 		private CompiledExpression theUnitHeight;
 		private boolean isStretchX;
 		private boolean isStretchY;
-		private CompiledExpression theLit;
 		private CompiledExpression theOpacity;
 		private CompiledExpression theRefresh;
 
@@ -112,7 +118,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		private ModelComponentId thePXVariable;
 		private ModelComponentId thePYVariable;
 
-		public QuickCustomShadingElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		public QuickAbstractCustomShadingElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
 		}
 
@@ -134,11 +140,6 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		@QonfigAttributeGetter("stretch-y")
 		public boolean isStretchY() {
 			return isStretchY;
-		}
-
-		@QonfigAttributeGetter("lit")
-		public CompiledExpression getLit() {
-			return theLit;
 		}
 
 		@QonfigAttributeGetter("opacity")
@@ -181,7 +182,6 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			theUnitHeight = getAttributeExpression("unit-height", session);
 			isStretchX = session.getAttribute("stretch-x", boolean.class);
 			isStretchY = session.getAttribute("stretch-y", boolean.class);
-			theLit = getAttributeExpression("lit", session);
 			theOpacity = getAttributeExpression("opacity", session);
 			theRefresh = getAttributeExpression("refresh", session);
 
@@ -195,27 +195,24 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		@Override
-		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
-			return new Interpreted(this, parent);
-		}
+		public abstract Interpreted interpretValue(ExElement.Interpreted<?> parent);
 
-		static class Interpreted extends
+		static abstract class Interpreted extends
 		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>>
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<QuickShading>, ModelValueElement<SettableValue<QuickShading>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitWidth;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theUnitHeight;
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theLit;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theOpacity;
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theRefresh;
 
-			Interpreted(QuickCustomShadingElement definition, ExElement.Interpreted<?> parent) {
+			protected Interpreted(QuickAbstractCustomShadingElement definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
 			@Override
-			public QuickCustomShadingElement getDefinition() {
-				return (QuickCustomShadingElement) super.getDefinition();
+			public QuickAbstractCustomShadingElement getDefinition() {
+				return (QuickAbstractCustomShadingElement) super.getDefinition();
 			}
 
 			@Override
@@ -232,10 +229,6 @@ public class QuickXInterpretation implements QonfigInterpretation {
 				return theUnitHeight;
 			}
 
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> getLit() {
-				return theLit;
-			}
-
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> getOpaque() {
 				return theOpacity;
 			}
@@ -250,29 +243,25 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 				theUnitWidth = interpret(getDefinition().getUnitWidth(), ModelTypes.Value.INT);
 				theUnitHeight = interpret(getDefinition().getUnitHeight(), ModelTypes.Value.INT);
-				theLit = interpret(getDefinition().getLit(), ModelTypes.Value.forType(float.class));
 				theOpacity = interpret(getDefinition().getOpacity(), ModelTypes.Value.forType(float.class));
 				theRefresh = interpret(getDefinition().getRefresh(), ModelTypes.Event.any());
 			}
 
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(theUnitWidth, theUnitHeight, theLit, theOpacity, theRefresh).quickFilter(v -> v != null);
+				return BetterList.of(theUnitWidth, theUnitHeight, theOpacity, theRefresh).quickFilter(v -> v != null);
 			}
 
 			@Override
-			public ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException {
-				return new Instantiator(this);
-			}
+			public abstract ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException;
 		}
 
-		static class Instantiator extends ModelValueElement.Abstract<SettableValue<QuickShading>> {
+		static abstract class Instantiator extends ModelValueElement.Abstract<SettableValue<QuickShading>> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitWidth;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitHeight;
 			private final boolean isStretchX;
 			private final boolean isStretchY;
-			private final ModelValueInstantiator<SettableValue<Float>> theLit;
 			private final ModelValueInstantiator<SettableValue<Float>> theOpacity;
 			private final ModelValueInstantiator<Observable<?>> theRefresh;
 
@@ -283,14 +272,13 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			private final ModelComponentId thePXVariable;
 			private final ModelComponentId thePYVariable;
 
-			Instantiator(QuickCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
+			protected Instantiator(QuickAbstractCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theLocalModel = interpreted.getModels().instantiate();
 				theUnitWidth = interpreted.getUnitWidth() == null ? null : interpreted.getUnitWidth().instantiate();
 				theUnitHeight = interpreted.getUnitHeight() == null ? null : interpreted.getUnitHeight().instantiate();
 				isStretchX = interpreted.getDefinition().isStretchX();
 				isStretchY = interpreted.getDefinition().isStretchY();
-				theLit = interpreted.getLit().instantiate();
 				theOpacity = interpreted.getOpaque() == null ? null : interpreted.getOpaque().instantiate();
 				theRefresh = interpreted.getRefresh() == null ? null : interpreted.getRefresh().instantiate();
 				theWidthVariable = interpreted.getDefinition().getWidthVariable();
@@ -308,8 +296,6 @@ public class QuickXInterpretation implements QonfigInterpretation {
 					theUnitWidth.instantiate();
 				if (theUnitHeight != null)
 					theUnitHeight.instantiate();
-				if (theLit != null)
-					theLit.instantiate();
 				if (theOpacity != null)
 					theOpacity.instantiate();
 				if (theRefresh != null)
@@ -336,12 +322,217 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 				SettableValue<Integer> unitWidth = theUnitWidth == null ? null : theUnitWidth.get(models);
 				SettableValue<Integer> unitHeight = theUnitHeight == null ? null : theUnitHeight.get(models);
-				SettableValue<Float> lit = theLit.get(models);
 				SettableValue<Float> opacity = theOpacity == null ? null : theOpacity.get(models);
 				Observable<?> refresh = theRefresh == null ? null : theRefresh.get(models);
 				return SettableValue.of(
-					new QuickCustomShading(width, height, x, y, unitWidth, unitHeight, isStretchX, isStretchY, lit, opacity, refresh),
+					createShading(models, width, height, x, y, unitWidth, unitHeight, isStretchX, isStretchY, opacity, refresh),
 					"Not Settable");
+			}
+
+			protected abstract QuickShading createShading(ModelSetInstance models, SettableValue<Integer> width,
+				SettableValue<Integer> height, SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<Integer> unitWidth,
+				SettableValue<Integer> unitHeight, boolean stretchX, boolean stretchY, SettableValue<Float> opacity, Observable<?> refresh)
+					throws ModelInstantiationException;
+
+			@Override
+			public SettableValue<QuickShading> forModelCopy(SettableValue<QuickShading> value, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				return get(newModels);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = X,
+		qonfigType = QuickCustomShadingElement.CUSTOM_SHADING,
+		interpretation = QuickCustomShadingElement.Interpreted.class)
+	static class QuickCustomShadingElement extends QuickAbstractCustomShadingElement {
+		public static final String CUSTOM_SHADING = "custom-shading";
+
+		private CompiledExpression theLit;
+
+		public QuickCustomShadingElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter("lit")
+		public CompiledExpression getLit() {
+			return theLit;
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doPrepare(session);
+			theLit = getAttributeExpression("lit", session);
+		}
+
+		@Override
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
+		}
+
+		static class Interpreted extends QuickAbstractCustomShadingElement.Interpreted {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theLit;
+
+			Interpreted(QuickCustomShadingElement definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public QuickCustomShadingElement getDefinition() {
+				return (QuickCustomShadingElement) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> getLit() {
+				return theLit;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+
+				theLit = interpret(getDefinition().getLit(), ModelTypes.Value.forType(float.class));
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(Stream.concat(super.getComponents().stream(), theLit == null ? Stream.empty() : Stream.of(theLit)));
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator extends QuickAbstractCustomShadingElement.Instantiator {
+			private final ModelValueInstantiator<SettableValue<Float>> theLit;
+
+			Instantiator(QuickCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theLit = interpreted.getLit().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				super.instantiate();
+				if (theLit != null)
+					theLit.instantiate();
+			}
+
+			@Override
+			protected QuickShading createShading(ModelSetInstance models, SettableValue<Integer> width, SettableValue<Integer> height,
+				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<Integer> unitWidth, SettableValue<Integer> unitHeight,
+				boolean stretchX, boolean stretchY, SettableValue<Float> opacity, Observable<?> refresh)
+					throws ModelInstantiationException {
+				SettableValue<Float> lit = theLit.get(models);
+				return new QuickCustomShading(width, height, x, y, unitWidth, unitHeight, stretchX, stretchY, lit, opacity, refresh);
+			}
+
+			@Override
+			public SettableValue<QuickShading> forModelCopy(SettableValue<QuickShading> value, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				return get(newModels);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = X,
+		qonfigType = QuickCustomPaintingElement.CUSTOM_PAINTING,
+		interpretation = QuickCustomPaintingElement.Interpreted.class)
+	static class QuickCustomPaintingElement extends QuickAbstractCustomShadingElement {
+		public static final String CUSTOM_PAINTING = "custom-painting";
+
+		private CompiledExpression theColor;
+
+		public QuickCustomPaintingElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter("color")
+		public CompiledExpression getColor() {
+			return theColor;
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doPrepare(session);
+			theColor = getAttributeExpression("color", session);
+		}
+
+		@Override
+		public Interpreted interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
+		}
+
+		static class Interpreted extends QuickAbstractCustomShadingElement.Interpreted {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Color>> theColor;
+
+			Interpreted(QuickCustomPaintingElement definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public QuickCustomPaintingElement getDefinition() {
+				return (QuickCustomPaintingElement) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Color>> getColor() {
+				return theColor;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+
+				theColor = interpret(getDefinition().getColor(), ModelTypes.Value.forType(Color.class));
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList
+					.of(Stream.concat(super.getComponents().stream(), theColor == null ? Stream.empty() : Stream.of(theColor)));
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<QuickShading>> create() throws ModelInstantiationException {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator extends QuickAbstractCustomShadingElement.Instantiator {
+			private final ModelValueInstantiator<SettableValue<Color>> theColor;
+
+			Instantiator(QuickCustomPaintingElement.Interpreted interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theColor = interpreted.getColor().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				super.instantiate();
+				if (theColor != null)
+					theColor.instantiate();
+			}
+
+			@Override
+			protected QuickShading createShading(ModelSetInstance models, SettableValue<Integer> width, SettableValue<Integer> height,
+				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<Integer> unitWidth, SettableValue<Integer> unitHeight,
+				boolean stretchX, boolean stretchY, SettableValue<Float> opacity, Observable<?> refresh)
+					throws ModelInstantiationException {
+				SettableValue<Color> color = theColor.get(models);
+				return new QuickCustomPainting(width, height, x, y, unitWidth, unitHeight, stretchX, stretchY, color, opacity, refresh);
 			}
 
 			@Override

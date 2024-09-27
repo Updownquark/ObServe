@@ -1148,7 +1148,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					public Subscription subscribe(Observer<? super ObservableValueEvent<Format<T>>> observer) {
 						return sourceChanges.subscribe(new Observer<ObservableValueEvent<Format<T>>>() {
 							@Override
-							public <V extends ObservableValueEvent<Format<T>>> void onNext(V value) {
+							public void onNext(ObservableValueEvent<Format<T>> value) {
 								ValidatedFormat<T> newFormat = get();
 								ValidatedFormat<T> old = value.isInitial() ? newFormat : thePreviousFormat;
 								ObservableValueEvent<Format<T>> evt;
@@ -1162,7 +1162,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							}
 
 							@Override
-							public void onCompleted(Causable cause) {
+							public void onCompleted(Supplier<Causable> cause) {
 								observer.onCompleted(cause);
 							}
 						});

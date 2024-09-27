@@ -15,24 +15,35 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.*;
+import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoParseException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.JavaExpressoParser;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
@@ -56,7 +67,6 @@ import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
-import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Colors;
 import org.qommons.LambdaUtils;
@@ -109,10 +119,10 @@ public class Qwysiwyg {
 		private SettableValue<T> theValue;
 		private String theErrorText;
 		private final Runnable theUpdateAction;
-		private final Consumer<ObservableValueEvent<T>> theValueUpdate;
+		private final Observer.SimpleObserver<ObservableValueEvent<T>> theValueUpdate;
 		private final SimpleObservable<Void> theRelease;
 
-		DebugExpression(TypeToken<T> type, Runnable updateAction, Consumer<ObservableValueEvent<T>> valueUpdate) {
+		DebugExpression(TypeToken<T> type, Runnable updateAction, Observer.SimpleObserver<ObservableValueEvent<T>> valueUpdate) {
 			theType = type;
 			theUpdateAction = updateAction;
 			theValueUpdate = valueUpdate;
@@ -311,7 +321,6 @@ public class Qwysiwyg {
 		protected void doWatchAction() {
 			switch (theActionType) {
 			case Break:
-				BreakpointHere.breakpoint();
 				break;
 			case Log:
 				if (theActionConfiguration.getValue() != null)
@@ -549,10 +558,10 @@ public class Qwysiwyg {
 		styleDebugValues = ObservableCollection.<StyleDebugValue<?>> build().build();
 		theDebuggingStyle = selectedNode
 			.transform(tx -> tx.cache(true).fireIfUnchanged(false).combineWith(selectedStyle).combine((node, style) -> {
-			if (theStyledNode == null || style == null)
-				return null;
-			return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
-		}));
+				if (theStyledNode == null || style == null)
+					return null;
+				return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
+			}));
 		theToolkits = ObservableMap.<QonfigToolkit, StyledQonfigToolkit> build().buildMap();
 		toolkits = theToolkits.values().flow().unmodifiable(false).collect();
 		selectedToolkit = SettableValue.<StyledQonfigToolkit> build().build();

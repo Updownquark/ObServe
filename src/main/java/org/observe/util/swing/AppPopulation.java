@@ -6,7 +6,18 @@ import java.awt.Desktop;
 import java.awt.EventQueue;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintStream;
+import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -30,6 +41,7 @@ import javax.swing.JOptionPane;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.CollectionChangeType;
@@ -38,7 +50,6 @@ import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigPersistence;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
-import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.QommonsUtils.TimePrecision;
 import org.qommons.ThreadConstraint;
@@ -342,7 +353,7 @@ public class AppPopulation {
 			} else {
 				boolean[] printed = new boolean[1];
 				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
-				.act(LambdaUtils.printableConsumer(__ -> {
+					.act(Observer.printableObserver(__ -> {
 					if (!printed[0]) {
 						System.out.println("WARNING: This application has not configured config persistence");
 						printed[0] = true;
@@ -445,7 +456,7 @@ public class AppPopulation {
 					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
 						.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
 					content.addLabel(null, "Please choose a backup to restore", null)//
-						.addTable(ObservableCollection.of(backupTimes.reverse()), table -> {
+					.addTable(ObservableCollection.of(backupTimes.reverse()), table -> {
 						table.fill()
 						.withColumn("Date", Instant.class, t -> t,
 							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//

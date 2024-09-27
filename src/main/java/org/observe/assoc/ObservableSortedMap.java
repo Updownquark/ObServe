@@ -3,6 +3,7 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -131,6 +132,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 */
 	static <K, V> Builder<K, V, ?> build(Comparator<? super K> sorting) {
 		return new Builder<>(sorting, "ObservableMap");
+	}
+
+	/**
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param sorting The sorting for the map's key set
+	 * @return The empty sorted map
+	 */
+	static <K, V> ObservableSortedMap<K, V> empty(Comparator<? super K> sorting) {
+		return new EmptyOSM<>(sorting);
 	}
 
 	/**
@@ -508,6 +519,101 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+	}
+
+	/**
+	 * An empty {@link ObservableSortedMap}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class EmptyOSM<K, V> implements ObservableSortedMap<K, V> {
+		private final ObservableSortedSet<K> theKeySet;
+
+		public EmptyOSM(Comparator<? super K> sorting) {
+			theKeySet = ObservableSortedSet.of(sorting);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
+
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return Subscription.NONE;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return false;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+			return null;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			return null;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			throw new NoSuchElementException("No such entry: " + entryId);
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			throw new NoSuchElementException("No such entry: " + entryId);
+		}
+
+		@Override
+		public String canPut(K key, V value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.baseId("EmptySortedMap", this);
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof Map && ((Map<?, ?>) obj).isEmpty();
+		}
+
+		@Override
+		public String toString() {
+			return "{}";
 		}
 	}
 }

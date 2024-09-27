@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -40,6 +41,7 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecificationType;
+import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -268,11 +270,25 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		 */
 		protected AttributeValueSatisfier populateAttributeValue(QonfigAttributeDef attr, QonfigElement element, QonfigValue value,
 			ExpressoQIS session) throws QonfigInterpretationException {
+			ErrorReporting reporting;
+			String prefix;
+			if (Objects.equals(element.getType().getLocatedPosition().getFileLocation(),
+				attr.getDeclared().getLocatedPosition().getFileLocation())) {
+				reporting = reporting().at(attr.getDeclared().getLocatedPosition());
+				prefix = "";
+			} else {
+				reporting = reporting().at(element.getType().getLocatedPosition());
+				prefix = attr.getOwner().getDeclarer().getName() + ":" + attr.getOwner().getName() + "." + attr.getName() + ": ";
+			}
 			if (attr.getType() instanceof QonfigValueType.Custom) {
-				if (value == null)
-					reporting().error(attr.getType().getName() + "-typed attributes must be required to be supported model values");
-				else if (attr.getSpecification() != SpecificationType.Required)
-					reporting().warn(attr.getType().getName() + "-typed attributes must be required to be supported model values");
+				if (value == null) {
+					if (attr.getSpecification() == SpecificationType.Forbidden)
+						return null;
+					reporting.error(
+						prefix + attr.getType().getName() + "-typed attributes must be required or defaulted to be supported model values");
+				} else if (attr.getSpecification() != SpecificationType.Required && attr.getDefaultValue() == null)
+					reporting.warn(
+						prefix + attr.getType().getName() + "-typed attributes must be required or defaulted to be supported model values");
 				else {
 					QonfigValueType.Custom custom = (QonfigValueType.Custom) attr.getType();
 					if (custom.getCustomType() instanceof ExpressionValueType) {
@@ -313,7 +329,8 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 			else if (attr.getType() == QonfigValueType.BOOLEAN)
 				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(), TypeTokens.get().BOOLEAN, false, null);
 			else
-				reporting().error(attr.getType().getName() + "-typed attributes must be required to be supported model values");
+				reporting.error(
+					prefix + attr.getType().getName() + "-typed attributes must be required or defaulted to be supported model values");
 			return null;
 		}
 

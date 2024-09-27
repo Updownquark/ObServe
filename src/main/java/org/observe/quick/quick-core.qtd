@@ -134,6 +134,8 @@
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<?DOC Determines when the widget is displayed to the user or hidden?>
 			<attribute name="visible" type="expression" specify="optional" />
+			<?DOC An event that will cause this widget to repaint itself?>
+			<attribute name="repaint" type="expression" specify="optional" />
 			<?DOC The border to draw around the widget?>
 			<child-def name="border" type="border" min="0" />
 			<?DOC Listeners to events like mouse clicks or key presses?>

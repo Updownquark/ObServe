@@ -9,7 +9,19 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.text.ParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -745,6 +757,14 @@ public class TypeTokens implements TypeParser {
 		else
 			throw new IllegalArgumentException(
 				"Primitive type " + ((PrimitiveTypeData<N>) key).primitiveClass.getName() + " is not a number type");
+	}
+
+	/**
+	 * @param type The type to check
+	 * @return Whether the given type is a primitive number type or a wrapper for a primitive number type
+	 */
+	public boolean isNumber(Class<?> type) {
+		return keyFor(type) instanceof NumberTypeData;
 	}
 
 	/**
@@ -2613,6 +2633,8 @@ public class TypeTokens implements TypeParser {
 
 		private Type parseClass(String typeName, int offset) throws ParseException {
 			switch (typeName) {
+			case "void":
+				return void.class;
 			case "boolean":
 				return boolean.class;
 			case "char":

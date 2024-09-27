@@ -76,7 +76,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 				postAdd.run();
 		});
 		if (addedCheck.get()) {
-			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
+			ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
 				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCauses());
 			fire(event);
 		}
@@ -121,7 +121,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 			RepairEvent<X> repair = new RepairEvent<>(getCurrentCauses());
 			boolean success = false;
 			try {
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
+				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(), element.get(),
 					repair, repair.move);
 				fire(event);
@@ -149,7 +149,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 		public void transferred(CollectionElement<E> element, RepairEvent<X> data) {
 			try {
 				data.move.moved();
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
+				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, null, element.get(), data, data.move);
 				fire(event);
 				if (theWrapped != null) {

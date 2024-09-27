@@ -2668,7 +2668,12 @@ public class ExpressoTransformations {
 			protected void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType) throws ExpressoInterpretationException {
 				theSourceValueType = sourceType;
 				update(env);
-				theTargetValueType = evaluateTargetType();
+				theTargetValueType = null;
+				ExTyped.Interpreted<?> typed = getAddOn(ExTyped.Interpreted.class);
+				if (typed != null)
+					theTargetValueType = (TypeToken<T>) typed.getValueType();
+				if (theTargetValueType == null)
+					theTargetValueType = evaluateTargetType();
 			}
 
 			@Override
@@ -2916,7 +2921,7 @@ public class ExpressoTransformations {
 				ObservableValue<ConditionalValue<T>> firstTrue = ObservableValue.<ConditionalValue<T>> firstValue(//
 					LambdaUtils.printablePred(cv -> cv.condition, "condition", null), null, ifs.toArray(new ObservableValue[ifs.size()]));
 				return SettableValue
-					.flatten(firstTrue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+					.flatten(firstTrue.map(LambdaUtils.printableFn(cv -> cv == null ? null : cv.value, "value", null)));
 			}
 
 			@Override

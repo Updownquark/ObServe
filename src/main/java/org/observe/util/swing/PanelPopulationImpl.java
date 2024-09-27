@@ -1,6 +1,16 @@
 package org.observe.util.swing;
 
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.EventQueue;
+import java.awt.Image;
+import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.LayoutManager2;
+import java.awt.Point;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
@@ -29,7 +39,28 @@ import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import javax.swing.*;
+import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JToggleButton;
+import javax.swing.ListCellRenderer;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -37,6 +68,7 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
@@ -44,7 +76,28 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.PanelPopulation.*;
+import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulation.ActionEnablement;
+import org.observe.util.swing.PanelPopulation.Alert;
+import org.observe.util.swing.PanelPopulation.ButtonEditor;
+import org.observe.util.swing.PanelPopulation.CollapsePanel;
+import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
+import org.observe.util.swing.PanelPopulation.ComboEditor;
+import org.observe.util.swing.PanelPopulation.DataAction;
+import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.ImageControl;
+import org.observe.util.swing.PanelPopulation.LabelEditor;
+import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.PartialPanelPopulatorImpl;
+import org.observe.util.swing.PanelPopulation.ProgressEditor;
+import org.observe.util.swing.PanelPopulation.SettingsMenu;
+import org.observe.util.swing.PanelPopulation.SliderEditor;
+import org.observe.util.swing.PanelPopulation.SplitPane;
+import org.observe.util.swing.PanelPopulation.SteppedFieldEditor;
+import org.observe.util.swing.PanelPopulation.TabEditor;
+import org.observe.util.swing.PanelPopulation.TabPaneEditor;
+import org.observe.util.swing.PanelPopulation.ToggleEditor;
+import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
@@ -62,7 +115,7 @@ class PanelPopulationImpl {
 	private PanelPopulationImpl() {
 	}
 
-	static class VizChanger implements Consumer<ObservableValueEvent<Boolean>> {
+	static class VizChanger implements Observer.SimpleObserver<ObservableValueEvent<Boolean>> {
 		private final Component[] theComponents;
 		private boolean shouldBeVisible;
 
@@ -71,7 +124,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void accept(ObservableValueEvent<Boolean> evt) {
+		public void onNext(ObservableValueEvent<Boolean> evt) {
 			boolean visible = evt.getNewValue();
 			shouldBeVisible = visible;
 			if (EventQueue.isDispatchThread())
@@ -382,6 +435,7 @@ class PanelPopulationImpl {
 
 		@Override
 		public C getContainer() {
+			getComponent(); // Initialize and build
 			return getEditor();
 		}
 
@@ -563,7 +617,6 @@ class PanelPopulationImpl {
 		private final ObservableAction theAction;
 		private ObservableValue<String> theText;
 		private ObservableValue<? extends Icon> theIcon;
-		private ObservableValue<String> theDisablement;
 		private final boolean isPostButton;
 
 		SimpleButtonEditor(String fieldName, B button, String buttonText, ObservableAction action, boolean postButton,
@@ -571,7 +624,8 @@ class PanelPopulationImpl {
 			super(fieldName, button, until);
 			theAction = action;
 			theText = ObservableValue.of(buttonText);
-			theDisablement = action == null ? null : action.isEnabled();
+			if (action != null)
+				disableWith(action.isEnabled());
 			isPostButton = postButton;
 		}
 
@@ -598,28 +652,9 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P disableWith(ObservableValue<String> disabled) {
-			if (theDisablement == null || disabled == null)
-				theDisablement = disabled;
-			else {
-				ObservableValue<String> old = theDisablement;
-				theDisablement = ObservableValue.firstValue(Objects::nonNull, () -> null, old, disabled);
-			}
-			return (P) this;
-		}
-
-		@Override
 		protected Component createComponent() {
 			if (theAction != null)
 				getEditor().addActionListener(theAction::act);
-			ObservableValue<String> enabled;
-			if (theDisablement != null)
-				enabled = theDisablement;
-			else
-				enabled = ObservableValue.of(null);
-			enabled.combine((e, tt) -> e == null ? tt : e, getTooltip()).changes().takeUntil(getUntil())
-			.act(evt -> getEditor().setToolTipText(evt.getNewValue()));
-			enabled.takeUntil(getUntil()).changes().act(evt -> getEditor().setEnabled(evt.getNewValue() == null));
 			if (theText != null)
 				theText.changes().takeUntil(getUntil()).act(evt -> getEditor().setText(evt.getNewValue()));
 			if (theIcon != null)
@@ -1645,6 +1680,12 @@ class PanelPopulationImpl {
 		@Override
 		public P withColumnHeader(Component component) {
 			getEditor().setColumnHeaderView(component);
+			return (P) this;
+		}
+
+		@Override
+		public P scrollable(boolean vertical, boolean horizontal) {
+			theFixedScroll.scrollable(vertical, horizontal);
 			return (P) this;
 		}
 	}

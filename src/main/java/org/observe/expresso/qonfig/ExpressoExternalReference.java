@@ -90,7 +90,8 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			QonfigDocument extContentDoc = theFulfilledContent.getElement().getExternalContent().getDocument();
-			QonfigElement.Builder extContentBuilder = QonfigElement.buildRoot(false, session.reporting(), extContentDoc,
+			QonfigElement.Builder extContentBuilder = QonfigElement.buildRoot(false, //
+				session.reporting().at(extContentDoc.getPartialRoot().getFilePosition()), extContentDoc,
 				(QonfigElementDef) extContentDoc.getPartialRoot().getType(), extContentDoc.getPartialRoot().getDescription());
 			buildExtContent(extContentBuilder, extContentDoc.getPartialRoot(),
 				session.getType(ExpressoSessionImplV0_1.CORE, ExpressoExternalDocument.EXPRESSO_EXTERNAL_DOCUMENT).getChild("fulfillment"));
@@ -114,7 +115,7 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 				for (PartialQonfigElement child : element.getChildren()) {
 					builder.withChild2(child.getParentRoles(), child.getType(), cb -> {
 						buildExtContent(cb, child, fulfillmentRole);
-					}, element.getFilePosition(), element.getDescription());
+					}, child.getFilePosition(), child.getDescription());
 				}
 			}
 		}

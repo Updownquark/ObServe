@@ -22,7 +22,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 *
 	 * @param <T> The type of value in the element
 	 */
-	class ObservableElementEvent<T> extends ObservableValueEvent<T> {
+	class ObservableElementEvent<T> extends ObservableValueEvent.DefaultObservableValueEvent<T> {
 		private final ElementId theOldElement;
 		private final ElementId theNewElement;
 

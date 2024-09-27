@@ -6,11 +6,8 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
-/**
- * Tag an entity's default getter method with this annotation, and the entity's default method will be lazily called once and the value
- * cached by {@link EntityReflector} for future calls.
- */
 @Retention(RUNTIME)
 @Target(METHOD)
-public @interface Cached {
+public @interface EntityField {
+	String name() default "";
 }

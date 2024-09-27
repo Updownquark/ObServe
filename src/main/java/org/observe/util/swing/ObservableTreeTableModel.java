@@ -193,7 +193,47 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	public TableHookup hookUp(JTable table, TableRenderContext ctx) {
 		if (((JXTreeTable) table).getTreeTableModel() != this)
 			((JXTreeTable) table).setTreeTableModel(this);
-		return super.hookUp(table, ctx);
+		TableHookup hookup = super.hookUp(table, ctx);
+		// JXTreeTable has this horrible feature where all the columns are re-loaded when the root changes.
+		// The column model listener installed by the hookUp call is somehow not notified of these reloaded columns.
+		// So after such an event, the columns are rendered by a default cell renderer.
+		// I don't understand what's happening, but this seems to fix it.
+		TreeModelListener reloadListener = new TreeModelListener() {
+			@Override
+			public void treeStructureChanged(TreeModelEvent e) {
+				EventQueue.invokeLater(() -> hookupCurrentColumns(table, ctx, hookup));
+			}
+
+			@Override
+			public void treeNodesRemoved(TreeModelEvent e) {
+			}
+
+			@Override
+			public void treeNodesInserted(TreeModelEvent e) {
+			}
+
+			@Override
+			public void treeNodesChanged(TreeModelEvent e) {
+			}
+		};
+		theTreeModel.addTreeModelListener(reloadListener);
+		return new TableHookup() {
+			@Override
+			public void unsubscribe() {
+				hookup.unsubscribe();
+				theTreeModel.removeTreeModelListener(reloadListener);
+			}
+
+			@Override
+			public int getHoveredRow() {
+				return hookup.getHoveredRow();
+			}
+
+			@Override
+			public int getHoveredColumn() {
+				return hookup.getHoveredColumn();
+			}
+		};
 	}
 
 	@Override

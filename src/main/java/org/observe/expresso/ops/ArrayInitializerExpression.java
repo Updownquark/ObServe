@@ -517,7 +517,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			for (CollectionElement<SettableValue<T>> value : theValues.elements()) {
 				int index = i;
 				subs.add(value.get().noInitChanges().act(evt -> {
-					ObservableCollectionEvent<T> cce = new ObservableCollectionEvent<>(value.getElementId(), index,
+					ObservableCollectionEvent<T> cce = ObservableCollectionEvent.createCollectionEvent(value.getElementId(), index,
 						CollectionChangeType.set, evt.getOldValue(), evt.getNewValue(), evt);
 					try (Transaction t = cce.use()) {
 						observer.accept(cce);

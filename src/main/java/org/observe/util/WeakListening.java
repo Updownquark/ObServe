@@ -9,9 +9,11 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.Observer;
+import org.observe.Observer.SimpleObserver;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.qommons.Causable;
@@ -61,6 +63,17 @@ public class WeakListening {
 	 */
 	public <T> Subscription withConsumer(Consumer<T> action, Function<? super Consumer<T>, ? extends Subscription> subscribe) {
 		return with(action, WeakConsumer::new, subscribe);
+	}
+
+	/**
+	 * Adds an observer subscription to this listening
+	 *
+	 * @param action The observer action to invoke when the event source fires
+	 * @param subscribe A function to subscribe to the event source
+	 * @return A subscription that will terminate the subscription to the event source
+	 */
+	public <T> Subscription withObserver(SimpleObserver<T> action, Function<? super SimpleObserver<T>, ? extends Subscription> subscribe) {
+		return with(action, WeakObserver::new, subscribe);
 	}
 
 	/**
@@ -233,6 +246,24 @@ public class WeakListening {
 		}
 	}
 
+	private static class WeakObserver<E> extends WeakAction implements SimpleObserver<E> {
+		WeakObserver(WeakListening listening, Long actionId) {
+			super(listening, actionId);
+		}
+
+		@Override
+		public void onNext(E value) {
+			SimpleObserver<E> action = getAction();
+			if (action != null)
+				action.onNext(value);
+		}
+
+		@Override
+		public String toString() {
+			return getAction().toString();
+		}
+	}
+
 	private static class WeakBiConsumer<E, F> extends WeakAction implements BiConsumer<E, F> {
 		WeakBiConsumer(WeakListening listening, Long actionId) {
 			super(listening, actionId);
@@ -357,7 +388,7 @@ public class WeakListening {
 		}
 
 		@Override
-		public <V extends T> void onNext(V t) {
+		public void onNext(T t) {
 			Observer<? super T> listener = theListenerRef.get();
 			if (listener != null)
 				listener.onNext(t);
@@ -366,7 +397,7 @@ public class WeakListening {
 		}
 
 		@Override
-		public void onCompleted(Causable cause) {
+		public void onCompleted(Supplier<Causable> cause) {
 			Observer<? super T> listener = theListenerRef.get();
 			if (listener != null)
 				listener.onCompleted(cause);

@@ -10,7 +10,7 @@ import org.qommons.collect.ElementId;
  * @param <K> The key-type of the map
  * @param <V> The value-type of the map
  */
-public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
+public class ObservableMapEvent<K, V> extends ObservableCollectionEvent.DefaultObservableCollectionEvent<V> {
 	private final K theOldKey;
 	private final K theKey;
 

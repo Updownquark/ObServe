@@ -122,6 +122,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
 			ExElement.creator(StyledDocument.Def.class, StyledDocument.TextStyleElement.Def::new));
 		interpreter.createWith(QuickSpacer.SPACER, QuickSpacer.Def.class, ExElement.creator(QuickSpacer.Def::new));
+		interpreter.createWith(QuickSeparator.SEPARATOR, QuickSeparator.Def.class, ExElement.creator(QuickSeparator.Def::new));
 		interpreter.createWith(QuickCustomComponent.CUSTOM_COMPONENT, QuickCustomComponent.Def.class,
 			ExElement.creator(QuickCustomComponent.Def::new));
 
@@ -146,6 +147,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExAddOn.creator(QuickWidget.Def.class, QuickBorderLayout.Child.Def::new));
 		interpreter.createWith(QuickGridFlowLayout.GRID_FLOW_LAYOUT, QuickGridFlowLayout.Def.class,
 			ExAddOn.creator(QuickWidget.Def.class, QuickGridFlowLayout.Def::new));
+		interpreter.createWith(QuickLayerLayout.LAYER_LAYOUT, QuickLayerLayout.Def.class,
+			ExAddOn.creator(QuickWidget.Def.class, QuickLayerLayout.Def::new));
 		interpreter.createWith(Positionable.H_POSITIONABLE, Positionable.Def.Horizontal.class,
 			ExAddOn.creator(Positionable.Def.Horizontal::new));
 		interpreter.createWith(Positionable.V_POSITIONABLE, Positionable.Def.Vertical.class,

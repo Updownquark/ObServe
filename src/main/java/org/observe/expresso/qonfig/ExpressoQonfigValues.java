@@ -401,6 +401,7 @@ public class ExpressoQonfigValues {
 		private ModelComponentId theTargetAs;
 		private CompiledExpression theSource;
 		private CompiledExpression theSave;
+		private final List<ModelValueElement.CompiledSynth<?, ?>> thePostActions;
 
 		/**
 		 * @param parent The parent element of this value element
@@ -408,6 +409,7 @@ public class ExpressoQonfigValues {
 		 */
 		public FieldValueDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
+			thePostActions = new ArrayList<>();
 		}
 
 		/** @return The model ID of the model value in which this value will store the value being set when the save action is called */
@@ -431,6 +433,12 @@ public class ExpressoQonfigValues {
 			return theSave;
 		}
 
+		/** @return Actions to occur after a save */
+		@QonfigChildGetter("post-action")
+		public List<ModelValueElement.CompiledSynth<?, ?>> getPostActions() {
+			return Collections.unmodifiableList(thePostActions);
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
@@ -443,6 +451,7 @@ public class ExpressoQonfigValues {
 			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theTargetAs, ModelTypes.Value, (interp, env) -> {
 				return ModelTypes.Value.forType(interp.getOrEvalSourceType(env));
 			});
+			syncChildren(ModelValueElement.CompiledSynth.class, thePostActions, session.forChildren("post-action"));
 		}
 
 		@Override
@@ -462,9 +471,11 @@ public class ExpressoQonfigValues {
 		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSource;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theSave;
+			private final List<Action.Interpreted> thePostActions;
 
 			Interpreted(FieldValueDef definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
+				thePostActions = new ArrayList<>();
 			}
 
 			@Override
@@ -483,6 +494,11 @@ public class ExpressoQonfigValues {
 			 */
 			public InterpretedValueSynth<ObservableAction, ObservableAction> getSave() {
 				return theSave;
+			}
+
+			/** @return Actions to occur after a save */
+			public List<Action.Interpreted> getPostActions() {
+				return Collections.unmodifiableList(thePostActions);
 			}
 
 			@Override
@@ -512,11 +528,15 @@ public class ExpressoQonfigValues {
 
 				getOrEvalSourceType(env);
 				theSave = getDefinition().getSave().interpret(ModelTypes.Action.instance(), env);
+				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
+					syncChildren(getDefinition().getPostActions(), thePostActions, (d, elEnv) -> (Action.Interpreted) d.interpret(elEnv),
+						Action.Interpreted::update);
+				}
 			}
 
 			@Override
 			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
-				return new Instantiator<>(this);
+				return new Instantiator<>(this, BetterList.of2(thePostActions.stream(), Action.Interpreted::create));
 			}
 		}
 
@@ -530,13 +550,16 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<SettableValue<T>> theSource;
 			private final ModelValueInstantiator<ObservableAction> theSave;
 			private final ModelComponentId theTargetAs;
+			private final List<Action.Instantiator> thePostActions;
 
-			Instantiator(FieldValueDef.Interpreted<T> interpreted) throws ModelInstantiationException {
+			Instantiator(FieldValueDef.Interpreted<T> interpreted, List<Action.Instantiator> postActions)
+				throws ModelInstantiationException {
 				super(interpreted);
 				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
 				theSource = interpreted.getSource().instantiate();
 				theSave = interpreted.getSave().instantiate();
 				theTargetAs = interpreted.getDefinition().getTargetAs();
+				thePostActions = postActions;
 			}
 
 			/** @return The expression to get this value from */
@@ -552,6 +575,11 @@ public class ExpressoQonfigValues {
 				return theSave;
 			}
 
+			/** @return Actions to occur after a save */
+			public List<Action.Instantiator> getPostActions() {
+				return thePostActions;
+			}
+
 			/** @return The model ID of the model value in which this value will store the value being set when the save action is called */
 			public ModelComponentId getTargetAs() {
 				return theTargetAs;
@@ -562,6 +590,8 @@ public class ExpressoQonfigValues {
 				theLocalModels.instantiate();
 				theSource.instantiate();
 				theSave.instantiate();
+				for (Action.Instantiator postAction : thePostActions)
+					postAction.instantiate();
 			}
 
 			@Override
@@ -571,7 +601,9 @@ public class ExpressoQonfigValues {
 				ObservableAction save = theSave.get(models);
 				SettableValue<T> targetAs = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, models, targetAs);
-				return new FieldValue<>(source, save, targetAs);
+				ModelSetInstance fModels = models;
+				List<ObservableAction> postActions = QommonsUtils.filterMapE(thePostActions, null, a -> a.get(fModels));
+				return new FieldValue<>(source, save, targetAs, postActions);
 			}
 
 			@Override
@@ -583,12 +615,16 @@ public class ExpressoQonfigValues {
 				ObservableAction sourceSave = ((FieldValue<T>) value).getSave();
 				SettableValue<T> newSource = theSource.forModelCopy(sourceSource, sourceModels, newModels);
 				ObservableAction newSave = theSave.forModelCopy(sourceSave, sourceModels, newModels);
-				if (sourceSource == newSource && sourceSave == newSave)
+				List<ObservableAction> sourcePostActions = ((FieldValue<T>) value).getPostActions();
+				List<ObservableAction> postActions = new ArrayList<>(thePostActions.size());
+				for (int i = 0; i < thePostActions.size(); i++)
+					postActions.add(thePostActions.get(i).forModelCopy(sourcePostActions.get(i), sourceModels, newModels));
+				if (sourceSource == newSource && sourceSave == newSave && sourcePostActions.equals(postActions))
 					return value;
 				else {
 					SettableValue<T> targetAs = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, newModels, targetAs);
-					return new FieldValue<>(newSource, newSave, targetAs);
+					return new FieldValue<>(newSource, newSave, targetAs, Collections.unmodifiableList(postActions));
 				}
 			}
 		}
@@ -597,12 +633,14 @@ public class ExpressoQonfigValues {
 			private final SettableValue<T> theSource;
 			private final ObservableAction theSave;
 			private final SettableValue<T> theSourceAs;
+			private final List<ObservableAction> thePostActions;
 
-			FieldValue(SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs) {
+			FieldValue(SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs, List<ObservableAction> postActions) {
 				super(source, new SimpleObservable<>());
 				theSource = source;
 				theSave = save;
 				theSourceAs = sourceAs;
+				thePostActions = postActions;
 			}
 
 			SettableValue<T> getSource() {
@@ -611,6 +649,10 @@ public class ExpressoQonfigValues {
 
 			ObservableAction getSave() {
 				return theSave;
+			}
+
+			List<ObservableAction> getPostActions() {
+				return thePostActions;
 			}
 
 			@Override
@@ -630,6 +672,10 @@ public class ExpressoQonfigValues {
 				T old = theSource.get();
 				theSourceAs.set(value, cause);
 				theSave.act(cause);
+				for (ObservableAction postAction : thePostActions) {
+					if (postAction.isEnabled().get() == null)
+						postAction.act(cause);
+				}
 				((SimpleObservable<Void>) getRefresh()).onNext(null);
 				return old;
 			}

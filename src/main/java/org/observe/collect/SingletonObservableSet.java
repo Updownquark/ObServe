@@ -277,8 +277,8 @@ public class SingletonObservableSet<T> implements ObservableSet<T> {
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 		return theValue.noInitChanges().act(evt -> {
-			ObservableCollectionEvent<T> oce = new ObservableCollectionEvent<>(theId, 0, CollectionChangeType.set, evt.getOldValue(),
-				evt.getNewValue(), evt);
+			ObservableCollectionEvent<T> oce = ObservableCollectionEvent.createCollectionEvent(theId, 0, CollectionChangeType.set,
+				evt.getOldValue(), evt.getNewValue(), evt);
 			try (Transaction t = oce.use()) {
 				observer.accept(oce);
 			}

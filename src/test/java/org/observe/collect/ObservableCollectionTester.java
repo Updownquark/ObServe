@@ -8,10 +8,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
 import org.observe.Observable;
+import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.testing.QommonsTestUtils;
 
@@ -248,9 +248,9 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		Observable<? extends CollectionChangeEvent<? extends E>> batchChanges = theCollection.changes();
 		// if (theName.startsWith("root "))
 		// Debug.d().debug(batchChanges, true).setField("debug", true).setField("name", theName);
-		Subscription batchSub = batchChanges.act(new Consumer<CollectionChangeEvent<? extends E>>() {
+		Subscription batchSub = batchChanges.act(new Observer.SimpleObserver<CollectionChangeEvent<? extends E>>() {
 			@Override
-			public void accept(CollectionChangeEvent<? extends E> evt) {
+			public void onNext(CollectionChangeEvent<? extends E> evt) {
 				// if (theName.startsWith("root "))
 				// System.out.println(theBatchSyncedCopy + " " + evt);
 				op();

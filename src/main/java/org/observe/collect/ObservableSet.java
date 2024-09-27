@@ -7,8 +7,10 @@ import java.util.Spliterator;
 
 import org.observe.Equivalence;
 import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterSet;
 
 import com.google.common.reflect.TypeToken;
@@ -89,6 +91,33 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	@Override
 	default <T> DistinctDataFlow<E, E, E> flow() {
 		return new ObservableSetImpl.DistinctBaseFlow<>(this);
+	}
+
+	/**
+	 * @param value The value to test
+	 * @return A settable observable boolean whose value is whether this set contains the given value, according to
+	 *         {@link #equivalence()}.{@link Equivalence#elementEquals(Object, Object) elementEquals()}. The
+	 *         {@link SettableValue#set(Object, Object)}, when called with the opposite value of the result, will remove the element if it
+	 *         is present in the set or add it if it is missing.
+	 */
+	default SettableValue<Boolean> observeContainsElement(ObservableValue<? extends E> value) {
+		ObservableValue<ObservableElement<E>> element = value.map(v -> observeElement(v, true));
+		ObservableValue<Boolean> found = ObservableValue.flatten(element.map(el -> el.map(__ -> el.getElementId() != null)));
+		ObservableValue<String> enabled = ObservableValue.flatten(element.map(el -> el.map(__ -> {
+			if (el.getElementId() != null)
+				return mutableElement(el.getElementId()).canRemove();
+			else
+				return canAdd(value.get());
+		})));
+		return SettableValue.settable(found, this, LambdaUtils.printableConsumer(v -> {
+			if (v.equals(found.get()))
+				return;
+			else if (v)
+				add(value.get());
+			else
+				mutableElement(element.get().getElementId()).remove();
+		}, "modifyContainment", null))//
+			.disableWith(enabled);
 	}
 
 	/**

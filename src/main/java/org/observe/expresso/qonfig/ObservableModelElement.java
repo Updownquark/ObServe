@@ -39,6 +39,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
+import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.QommonsUtils;
@@ -52,6 +53,8 @@ import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.ExBiConsumer;
+import org.qommons.ex.ExRunnable;
 import org.qommons.io.BetterFile;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.FileBackups;
@@ -857,6 +860,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			private CompiledExpression theConfigDir;
 			private final List<OldConfigName> theOldConfigNames;
 			private boolean isBackup;
+			private ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> theModelInitializer;
 
 			/**
 			 * @param parent The parent element for this model element
@@ -894,6 +898,17 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return isBackup;
 			}
 
+			/** @param modelInitializer A function to be called each time this config model is instantiated */
+			public void setModelInitializer(
+				ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> modelInitializer) {
+				theModelInitializer = modelInitializer;
+			}
+
+			/** @return This definition's {@link #setModelInitializer(ExBiConsumer) model initializer} */
+			public ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> getModelInitializer() {
+				return theModelInitializer;
+			}
+
 			@Override
 			protected Class<ConfigModelValue.Def<M>> getValueType() {
 				return (Class<ConfigModelValue.Def<M>>) (Class<?>) ConfigModelValue.Def.class;
@@ -908,7 +923,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 				isBackup = session.getAttribute("backup", boolean.class);
 
-				ConfigValueMaker configValueMaker = new ConfigValueMaker(theConfigDir, theConfigName, isBackup(), //
+				ConfigValueMaker configValueMaker = new ConfigValueMaker(this, theConfigDir, theConfigName, isBackup(), //
 					QommonsUtils.map(getOldConfigNames(), ocn -> ocn.getOldConfigName(), true), reporting());
 				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
 					configValueMaker, session.getElement().getPositionInFile());
@@ -922,14 +937,16 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			private static class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
+				private final Def<?> theConfigModel;
 				private final CompiledExpression theConfigDir;
 				private final String theConfigName;
 				private final boolean isBackup;
 				private final List<String> theOldConfigNames;
 				private final ErrorReporting theReporting;
 
-				ConfigValueMaker(CompiledExpression configDir, String configName, boolean backup, List<String> oldConfigNames,
-					ErrorReporting reporting) {
+				ConfigValueMaker(Def<?> configModel, CompiledExpression configDir, String configName, boolean backup,
+					List<String> oldConfigNames, ErrorReporting reporting) {
+					theConfigModel = configModel;
 					theConfigDir = configDir;
 					isBackup = backup;
 					theConfigName = configName;
@@ -951,6 +968,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					else {
 						configDir = InterpretedValueSynth.simple(ModelTypes.Value.forType(BetterFile.class),
 							ModelValueInstantiator.of(msi -> {
+								if (theConfigName.isEmpty())
+									return ObservableModelSet.literal(TypeTokens.get().of(BetterFile.class), null, "(no config file)");
 								String prop = System.getProperty(theConfigName + ".config");
 								if (prop != null)
 									return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
@@ -959,14 +978,17 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 										"./" + theConfigName);
 							}));
 					}
-					return new Interpreted(configDir);
+					return new Interpreted(configDir, theConfigModel.getModelInitializer());
 				}
 
 				class Interpreted implements InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> {
 					private final InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> theInterpretedConfigDir;
+					private final ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> theModelInitializer;
 
-					Interpreted(InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir) {
+					Interpreted(InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir,
+						ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> modelInitializer) {
 						theInterpretedConfigDir = configDir;
+						theModelInitializer = modelInitializer;
 					}
 
 					@Override
@@ -982,7 +1004,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					@Override
 					public ModelValueInstantiator<SettableValue<ObservableConfig>> instantiate() throws ModelInstantiationException {
 						return new Instantiator(theInterpretedConfigDir == null ? null : theInterpretedConfigDir.instantiate(), //
-							theConfigName, isBackup, theOldConfigNames, theReporting);
+							theConfigName, isBackup, theOldConfigNames, theReporting, theModelInitializer);
 					}
 				}
 
@@ -993,15 +1015,18 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					private final boolean isBackup;
 					private final List<String> theOldConfigNames;
 					private final ErrorReporting theReporting;
+					private final ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> theModelInitializer;
 					private AppEnvironment theAppEnv;
 
 					public Instantiator(ModelValueInstantiator<SettableValue<BetterFile>> interpretedConfigDir, String configName,
-						boolean backup, List<String> oldConfigNames, ErrorReporting reporting) {
+						boolean backup, List<String> oldConfigNames, ErrorReporting reporting,
+						ExBiConsumer<ObservableConfig, ModelSetInstance, ModelInstantiationException> modelInitializer) {
 						theInterpretedConfigDir = interpretedConfigDir;
 						theConfigName = configName;
 						isBackup = backup;
 						theOldConfigNames = oldConfigNames;
 						theReporting = reporting;
+						theModelInitializer = modelInitializer;
 					}
 
 					@Override
@@ -1021,14 +1046,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					public SettableValue<ObservableConfig> get(ModelSetInstance models)
 						throws ModelInstantiationException, IllegalStateException {
 						BetterFile configDirFile = theInterpretedConfigDir == null ? null : theInterpretedConfigDir.get(models).get();
-						if (configDirFile == null) {
+						if (configDirFile == null && !theConfigName.isEmpty()) {
 							String configProp = System.getProperty(theConfigName + ".config");
 							if (configProp != null)
 								configDirFile = BetterFile.at(new NativeFileSource(), configProp);
 							else
 								configDirFile = BetterFile.at(new NativeFileSource(), "./" + theConfigName);
 						}
-						if (!configDirFile.exists()) {
+						if (configDirFile == null) {//
+						} else if (!configDirFile.exists()) {
 							try {
 								configDirFile.create(true);
 							} catch (IOException e) {
@@ -1037,8 +1063,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						} else if (!configDirFile.isDirectory())
 							throw new IllegalStateException("Not a directory: " + configDirFile.getPath());
 
-						BetterFile configFile = configDirFile.at(theConfigName + ".xml");
-						if (!configFile.exists()) {
+						BetterFile configFile = configDirFile == null ? null : configDirFile.at(theConfigName + ".xml");
+						if (configFile != null && !configFile.exists()) {
 							BetterFile oldConfigFile = configDirFile.getParent().at(theConfigName + ".config");
 							if (oldConfigFile.exists()) {
 								try {
@@ -1051,9 +1077,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							}
 						}
 
-						FileBackups backups = isBackup ? new FileBackups(configFile) : null;
+						FileBackups backups = (isBackup && configFile != null) ? new FileBackups(configFile) : null;
 
-						if (!configFile.exists() && theOldConfigNames != null) {
+						if (configFile != null && !configFile.exists() && theOldConfigNames != null) {
 							boolean found = false;
 							for (String oldConfigName : theOldConfigNames) {
 								BetterFile oldConfigFile = configDirFile.at(oldConfigName);
@@ -1087,11 +1113,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 								}
 							}
 						}
-						ObservableConfig config = ObservableConfig.createRoot(theConfigName, null,
+						String rootName = theConfigName.isEmpty() ? "config" : theConfigName;
+						ObservableConfig config = ObservableConfig.createRoot(rootName, null,
 							owner -> new StampedLockingStrategy(owner, ThreadConstraint.ANY));
 						ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
 						boolean loaded = false;
-						if (configFile.exists()) {
+						if (configFile != null && configFile.exists()) {
 							try {
 								try (InputStream configStream = new BufferedInputStream(configFile.read());
 									Transaction t = config.lock(true, null)) {
@@ -1105,18 +1132,27 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							}
 						}
 						boolean[] closingWithoutSave = new boolean[1];
-						if (loaded)
+						if (loaded) {
+							if (theModelInitializer != null)
+								theModelInitializer.accept(config, models);
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
-						else if (backups != null && !backups.getBackups().isEmpty()) {
+						} else if (configFile == null) {//
+							if (theModelInitializer != null)
+								theModelInitializer.accept(config, models);
+						} else if (backups != null && !backups.getBackups().isEmpty()) {
 							restoreBackup(true, config, backups, () -> {
 								config.setName(theConfigName);
+								if (theModelInitializer != null)
+									theModelInitializer.accept(config, models);
 								installConfigPersistence(config, configFile, backups, closingWithoutSave);
 							}, () -> {
 								config.setName(theConfigName);
 								installConfigPersistence(config, configFile, backups, closingWithoutSave);
 							}, theAppEnv, closingWithoutSave, models, theReporting);
 						} else {
-							config.setName(theConfigName);
+							config.setName(rootName);
+							if (theModelInitializer != null)
+								theModelInitializer.accept(config, models);
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
 						}
 						return SettableValue.of(config, "Not Settable");
@@ -1178,9 +1214,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				}
 			}
 
-			static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
-				Runnable onNoBackup, AppEnvironment appEnv, boolean[] closingWithoutSave, ModelSetInstance msi, ErrorReporting reporting)
-					throws ModelInstantiationException {
+			static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups,
+				ExRunnable<ModelInstantiationException> onBackup, ExRunnable<ModelInstantiationException> onNoBackup, AppEnvironment appEnv,
+				boolean[] closingWithoutSave, ModelSetInstance msi, ErrorReporting reporting) throws ModelInstantiationException {
 				BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 				if (backupTimes == null || backupTimes.isEmpty()) {
 					if (onNoBackup != null)

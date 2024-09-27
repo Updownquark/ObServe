@@ -951,6 +951,10 @@ public class ObservableValueTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "flatten",
+		interpretation = FlattenValueTransform.FlattenedValueInterpretation.class,
+		instance = FlattenValueTransform.FlattenedValueInstantiator.class)
 	static class FlattenValueTransform<M> extends ExElement.Def.Abstract<ExElement> implements ValueTransform<M, ExElement> {
 		private ModelType<M> theTargetType;
 		private ExSort.ExRootSort theSorting;
@@ -967,10 +971,12 @@ public class ObservableValueTransformations {
 			return theTargetType;
 		}
 
+		@QonfigChildGetter("sort")
 		public ExSort.ExRootSort getSorting() {
 			return theSorting;
 		}
 
+		@QonfigAttributeGetter("equivalence")
 		public CompiledExpression getEquivalence() {
 			return theEquivalence;
 		}

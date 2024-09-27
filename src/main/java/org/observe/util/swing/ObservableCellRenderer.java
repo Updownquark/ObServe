@@ -2,6 +2,7 @@ package org.observe.util.swing;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
@@ -138,6 +139,10 @@ public interface ObservableCellRenderer<M, C> {
 					theComponentDecorator.reset();
 				theDecorator.decorate(cell, theComponentDecorator);
 				revert = theComponentDecorator.decorate(c);
+				if (parent != null && c.isCursorSet())
+					parent.setCursor(c.getCursor());
+				else
+					parent.setCursor(Cursor.getDefaultCursor());
 			}
 			if (theModifier != null) {
 				Runnable modRevert = theModifier.apply(c);
@@ -250,6 +255,8 @@ public interface ObservableCellRenderer<M, C> {
 			if (parent instanceof JTable) {
 				if (theTableRenderer == null)
 					theTableRenderer = new DefaultTableCellRenderer();
+				// Need to reset the unselected foreground color to default
+				theTableRenderer.setForeground(Color.black);
 				c = theTableRenderer.getTableCellRendererComponent((JTable) parent, rendered, cell.isSelected(), cell.hasFocus(),
 					cell.getRowIndex(), cell.getColumnIndex());
 				if (theIcon != null)
@@ -257,6 +264,8 @@ public interface ObservableCellRenderer<M, C> {
 			} else if (parent instanceof JTree) {
 				if (theTreeRenderer == null)
 					theTreeRenderer = new DefaultTreeCellRenderer();
+				// Need to reset the unselected foreground color to default
+				theTreeRenderer.setForeground(Color.black);
 				c = theTreeRenderer.getTreeCellRendererComponent((JTree) parent, rendered, cell.isSelected(), cell.isExpanded(),
 					cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
 				if (theIcon != null)
@@ -264,6 +273,8 @@ public interface ObservableCellRenderer<M, C> {
 			} else if (parent instanceof JList) {
 				if (theListRenderer == null)
 					theListRenderer = new DefaultListCellRenderer();
+				// Need to reset the unselected foreground color to default
+				theListRenderer.setForeground(Color.black);
 				c = theListRenderer.getListCellRendererComponent((JList<? extends C>) parent, rendered, cell.getRowIndex(),
 					cell.isSelected(), cell.hasFocus());
 				if (theIcon != null)
@@ -385,8 +396,8 @@ public interface ObservableCellRenderer<M, C> {
 	}
 
 	public static <M, C> DefaultObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
-		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
-			public BiFormattedCellRenderer() {
+		class FormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
+			public FormattedCellRenderer() {
 				super((m, c) -> format.apply(c));
 			}
 
@@ -400,7 +411,7 @@ public interface ObservableCellRenderer<M, C> {
 				return format.toString();
 			}
 		}
-		return new BiFormattedCellRenderer();
+		return new FormattedCellRenderer();
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> checkRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> value) {

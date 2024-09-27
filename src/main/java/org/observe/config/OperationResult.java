@@ -14,7 +14,6 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
-import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -176,9 +175,9 @@ public interface OperationResult<T> {
 	 */
 	default Subscription whenDone(boolean onlyFulfilled, Consumer<? super OperationResult<T>> listener) {
 		if (onlyFulfilled)
-			return watchStatus().filter(r -> r.getStatus().isAvailable()).act(listener);
+			return watchStatus().filter(r -> r.getStatus().isAvailable()).act(evt -> listener.accept(evt));
 		else
-			return watchStatus().filter(r -> r.getStatus().isDone()).act(listener);
+			return watchStatus().filter(r -> r.getStatus().isDone()).act(evt -> listener.accept(evt));
 	}
 
 	/**
@@ -323,8 +322,8 @@ public interface OperationResult<T> {
 			theStatus = newStatus;
 			theStatusChanges.onNext(this);
 			if (newStatus.isDone()) {
-				try (Causable.CausableInUse cause = Causable.cause(newStatus)) {
-					theStatusChanges.onCompleted(cause);
+				try (Observer.CompletedCause completion = Observer.completion(() -> newStatus)) {
+					theStatusChanges.onCompleted(completion);
 				}
 			}
 			return true;

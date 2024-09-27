@@ -254,8 +254,7 @@ public class ObservableSortedCollectionImpl {
 
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, CollectionElementMove move, int index,
 						E oldValue, E newValue) {
-						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()), index, type,
-							oldValue, newValue, evt, move);
+						ObservableCollectionEvent<? extends E> evt2 = evt.derive(wrap(evt.getElementId()), index);
 						try (Transaction evtT = evt2.use()) {
 							observer.accept(evt2);
 						}

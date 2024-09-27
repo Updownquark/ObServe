@@ -15,7 +15,17 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.*;
+import org.qommons.BiTuple;
+import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
+import org.qommons.Stamped;
+import org.qommons.StringUtils;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
+import org.qommons.TriConsumer;
+import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -2181,7 +2191,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 									}
 									if (cached == null || stamp != cached.stamp) {
 										boolean[] initialized = new boolean[1];
-										arg.changes().act(LambdaUtils.printableConsumer(evt -> {
+										arg.changes().act(Observer.printableObserver(evt -> {
 											if (evt.isInitial()) {
 												if (initialized[0])
 													throw new IllegalStateException("Multiple initialization events from " + arg);

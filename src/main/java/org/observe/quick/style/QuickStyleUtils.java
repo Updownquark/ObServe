@@ -92,6 +92,19 @@ public class QuickStyleUtils {
 			if (urlV != null)
 				return urlV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(
 					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url).getImage()), __ -> "unsettable")));
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = expression.interpret(ModelTypes.Value.forType(Icon.class),
+				env, tce);
+			if (iconV != null) {
+				return iconV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(icon -> {
+					if (icon == null)
+						return null;
+					else if (icon instanceof ImageIcon)
+						return ((ImageIcon) icon).getImage();
+					BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
+					icon.paintIcon(null, image.getGraphics(), 0, 0);
+					return image;
+				}), __ -> "unsettable")));
+			}
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = expression
 				.interpret(ModelTypes.Value.forType(String.class), env, tce.clear());
 			ErrorReporting reporting = env.reporting().at(expression.getFilePosition());

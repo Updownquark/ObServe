@@ -171,6 +171,8 @@
 			<?DOC How much space to put between components in a row and between rows?>
 			<attribute name="padding" type="int" default="2" />
 		</add-on>
+		<?DOC A simple layout that sizes all components of a container identially, occupying the full area of the container?>
+		<add-on name="layer-layout" inherits="layout" />
 
 		<?DOC A widget that renders multiple values?>
 		<add-on name="multi-value-renderable" requires="widget">
@@ -224,6 +226,7 @@
 			<attribute name="fill" type="boolean" specify="optional" />
 			<?DOC Whether this widget should be stretched vertically to fill the available height of the container?>
 			<attribute name="v-fill" type="boolean" specify="optional" />
+			<child-def name="post" type="post-field" min="0" />
 		</add-on>
 
 		<?DOC A tab in a &lt;tabs> pane?>
@@ -268,6 +271,11 @@
 			<?DOC The width or height of the spacer, in pixels?>
 			<attribute name="length" type="int" />
 		</element-def>
+		<?DOC A bar to visually separate components in a container?>
+		<element-def name="separator" extends="widget">
+			<?DOC The width or height of the spacer, in pixels?>
+			<attribute name="orientation" type="orientation" />
+		</element-def>
 		<?DOC A button that does something when the user clicks it?>
 		<element-def name="button" extends="widget" inherits="iconized">
 			<?DOC The text to display for the button?>
@@ -292,6 +300,7 @@
 		<?DOC A button that opens a file browser?>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
+			<attribute name="default-dir" type="expression" specify="optional" />
 		</element-def>
 		<?DOC Allows the user to choose a color?>
 		<element-def name="color-chooser" extends="value-widget">
@@ -434,9 +443,13 @@
 			<label role="default-renderer" value="{active-value-name}" />
 		</element-def>
 		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
-		<element-def name="radio-buttons" extends="collection-selector-widget" />
+		<element-def name="radio-buttons" extends="collection-selector-widget">
+			<attribute name="value-tooltip" type="expression" specify="optional" />
+		</element-def>
 		<?DOC A set of toggle buttons, one for each available value, only one of which may be selected?>
-		<element-def name="toggle-buttons" extends="collection-selector-widget" />
+		<element-def name="toggle-buttons" extends="collection-selector-widget">
+			<attribute name="value-tooltip" type="expression" specify="optional" />
+		</element-def>
 
 		<?DOC A widget that renders multiple values and allows them to be selected?>
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
@@ -494,8 +507,8 @@
 		</element-def>
 		<?DOC A reference to a &lt;abstract-column-set> specified in a model?>
 		<element-def name="columns-ref" inherits="column-set">
-			<?DOC The model path to the &lt;abstract-column-set>?>
-			<value type="string" />
+			<?DOC An expression for a list of columns?>
+			<value type="expression" />
 		</element-def>
 		
 		<?DOC Abtract element for a set of columns.  The columns may be static or dynamic.
@@ -504,7 +517,7 @@
 		<?DOC A static set of columns for use in a &lt;tabular-widget>?>
 		<element-def name="columns" extends="abstract-column-set">
 			<?DOC A column in the column set?>
-			<child-def name="column" type="column" min="0" max="inf" />
+			<child-def name="columns" type="column-set" min="0" max="inf" />
 		</element-def>
 		<?DOC A column set that causes a &lt;tabular-widget> to display a column for each value in a list?>
 		<element-def name="variable-columns" extends="abstract-column-set" inherits="column-set">
@@ -614,6 +627,9 @@
 		<?DOC A panel for vertically listing various related fields, each with an optional field description for the user?>
 		<element-def name="field-panel" extends="container">
 			<child-mod child="content" inherits="field" />
+		</element-def>
+		<element-def name="post-field">
+			<child-def name="content" type="widget" />
 		</element-def>
 		<?DOC Abstract element for a container with a single widget for content?>
 		<element-def name="singleton-container" extends="container" abstract="true">

@@ -13,12 +13,16 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 	/** The XML name of this element */
 	public static final String FIELD_PANEL = "field-panel";
 
-	/** {@link QuickFieldPanel} definition */
+	/**
+	 * {@link QuickFieldPanel} definition
+	 *
+	 * @param <P> The sub-type of field panel to create
+	 */
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = FIELD_PANEL,
 		interpretation = Interpreted.class,
 		instance = QuickFieldPanel.class)
-	public static class Def extends QuickContainer.Def.Abstract<QuickFieldPanel, QuickWidget> {
+	public static class Def<P extends QuickFieldPanel> extends QuickContainer.Def.Abstract<P, QuickWidget> {
 		/**
 		 * @param parent The parent element of the widget
 		 * @param type The Qonfig type of the widget
@@ -33,24 +37,28 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted(this, parent);
+		public Interpreted<P> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 	}
 
-	/** {@link QuickFieldPanel} interpretation */
-	public static class Interpreted extends QuickContainer.Interpreted.Abstract<QuickFieldPanel, QuickWidget> {
+	/**
+	 * {@link QuickFieldPanel} interpretation
+	 *
+	 * @param <P> The sub-type of field panel to create
+	 */
+	public static class Interpreted<P extends QuickFieldPanel> extends QuickContainer.Interpreted.Abstract<P, QuickWidget> {
 		/**
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget
 		 */
-		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(Def<P> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public QuickFieldPanel create() {
-			return new QuickFieldPanel(getIdentity());
+		public P create() {
+			return (P) new QuickFieldPanel(getIdentity());
 		}
 	}
 

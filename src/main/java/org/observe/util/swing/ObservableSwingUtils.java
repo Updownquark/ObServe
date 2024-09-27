@@ -36,7 +36,24 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import javax.swing.*;
+import javax.swing.ButtonGroup;
+import javax.swing.ImageIcon;
+import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JSpinner;
+import javax.swing.JTable;
+import javax.swing.JToggleButton;
+import javax.swing.ListModel;
+import javax.swing.ListSelectionModel;
+import javax.swing.ToolTipManager;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
@@ -51,6 +68,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
+import org.observe.util.swing.ObservableSpinner.ObservableSpinnerModel;
 import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -427,7 +445,7 @@ public class ObservableSwingUtils {
 					if (accept != null) {
 						JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
 						spinner.setValue(safeValue.get());
-					} else {
+					} else if (!Objects.equals(safeValue.get(), newValue)) {
 						safeValue.set(newValue, evt);
 					}
 				} finally {
@@ -435,19 +453,23 @@ public class ObservableSwingUtils {
 				}
 			}
 		};
-		spinner.addChangeListener(changeListener);
+		Subscription valueSub;
+		if (!(spinner.getModel() instanceof ObservableSpinnerModel)) {
+			spinner.addChangeListener(changeListener);
 
-		Subscription valueSub = safeValue.changes().act(evt -> {
-			if (!callbackLock[0]) {
-				callbackLock[0] = true;
-				try {
-					T newValue = purify == null ? evt.getNewValue() : purify.apply(evt.getNewValue());
-					spinner.setValue(newValue);
-				} finally {
-					callbackLock[0] = false;
+			valueSub = safeValue.changes().act(evt -> {
+				if (!callbackLock[0]) {
+					callbackLock[0] = true;
+					try {
+						T newValue = purify == null ? evt.getNewValue() : purify.apply(evt.getNewValue());
+						spinner.setValue(newValue);
+					} finally {
+						callbackLock[0] = false;
+					}
 				}
-			}
-		});
+			});
+		} else
+			valueSub = Subscription.NONE;
 		Subscription enabledSub = safeValue.isEnabled().changes().act(evt -> {
 			String enabled = evt.getNewValue();
 			spinner.setEnabled(enabled == null);

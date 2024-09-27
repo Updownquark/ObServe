@@ -5,7 +5,6 @@ import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,6 +29,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -102,7 +102,6 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
-	private ObservableValue<String> theDisablement;
 	private boolean isRootVisible;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 	private boolean theActionsOnTop;
@@ -187,15 +186,6 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			return BetterList.empty();
 		return BetterList.of(Arrays.stream(selection)//
 			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
-	}
-
-	@Override
-	public P disableWith(ObservableValue<String> disabled) {
-		if (theDisablement == null)
-			theDisablement = disabled;
-		else
-			theDisablement = ObservableValue.firstValue(msg -> msg != null, () -> null, theDisablement, disabled);
-		return (P) this;
 	}
 
 	@Override
@@ -304,19 +294,66 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		int[] hoveredRow = new int[] { -1 };
 		if (theRenderer.getRenderer() != null)
 			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer(), hoveredRow));
-		MouseMotionListener motion = new MouseAdapter() {
+		CategoryMouseListener<? super BetterList<F>, ? super F> mouseListener = theRenderer.getMouseListener();
+		MouseAdapter mouse = new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mouseClicked(cell, e);
+				}
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mousePressed(cell, e);
+				}
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mouseReleased(cell, e);
+				}
+			}
+
 			@Override
 			public void mouseEntered(MouseEvent e) {
-				mouseMoved(e);
+				updateTooltip(e);
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mouseEntered(cell, e);
+				}
 			}
 
 			@Override
 			public void mouseExited(MouseEvent e) {
 				hoveredRow[0] = -1;
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mouseExited(cell, e);
+				}
 			}
 
 			@Override
 			public void mouseMoved(MouseEvent e) {
+				updateTooltip(e);
+				if (mouseListener != null) {
+					ModelCell<BetterList<F>, F> cell = cellAt(e);
+					if (cell != null)
+						mouseListener.mouseMoved(cell, e);
+				}
+			}
+
+			private void updateTooltip(MouseEvent e) {
 				TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
 				int row = getEditor().getRowForLocation(e.getX(), e.getY());
 				if (row != hoveredRow[0]) {
@@ -344,10 +381,23 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 					getEditor().setToolTipText(tooltip);
 				}
 			}
+
+			private ModelCell<BetterList<F>, F> cellAt(MouseEvent e) {
+				TreePath path = getEditor().getPathForLocation(e.getX(), e.getY());
+				if (path == null)
+					return null;
+				int row = getEditor().getRowForLocation(e.getX(), e.getY());
+				F value = (F) path.getLastPathComponent();
+				return new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
+					getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
+					getEditor().getModel().isLeaf(value));
+			}
 		};
-		getEditor().addMouseMotionListener(motion);
+		getEditor().addMouseListener(mouse);
+		getEditor().addMouseMotionListener(mouse);
 		getUntil().take(1).act(__ -> {
-			getEditor().removeMouseMotionListener(motion);
+			getEditor().removeMouseListener(mouse);
+			getEditor().removeMouseMotionListener(mouse);
 		});
 		// Create our own multi-selection collection free of constraints.
 		// We don't support preventing the user from selecting things.
@@ -385,12 +435,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
-		if (theDisablement != null) {
-			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
-				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
-				getEditor().setEnabled(evt.getNewValue() == null);
-			});
-		}
+		// Tooltip control could mess up cell tooltips and stuff
+		withTooltipControl(false);
+
 		getEditor().setExpandsSelectedPaths(true);
 		getEditor().setRootVisible(isRootVisible);
 		JScrollPane scroll = new JScrollPane(getEditor());

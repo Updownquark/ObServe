@@ -25,8 +25,7 @@
 
 	<elements>
 		<!-- Shading -->
-		<?DOC A shader that allows custom specification of the amount of shading to use for each pixel?>
-		<element-def name="custom-shading" extends="model-value" inherits="with-element-model,with-local-model">
+		<element-def name="abst-custom-shading" abstract="true" extends="model-value" inherits="with-element-model,with-local-model">
 			<element-model>
 				<?DOC The width of the widget?>
 				<value name="width" type="int" />
@@ -51,13 +50,20 @@
 			<attribute name="stretch-x" type="boolean" default="true" />
 			<?DOC If true, the entire height of the widget will be shaded by a single tile stretched across it.  If false, the tile will be repeated vertically across the height of the widget.?>
 			<attribute name="stretch-y" type="boolean" default="true" />
-			<?DOC The shading for the current pixel.<br>
-				This should be a number between -1 and 1 where -1 represents full shadow, 1 represents fully lit, and 0 represents no shading.?>
-			<attribute name="lit" type="expression" />
 			<?DOC The opacity of the shading on the current pixel, a number between 0 (fully transparent, no shading influence) and 1 (max shading influence on color)?>
 			<attribute name="opacity" type="expression" specify="optional" />
 			<?DOC An optional event which will cause the shading to re-render?>
 			<attribute name="refresh" type="expression" specify="optional" />
+		</element-def>
+		<?DOC A shader that allows custom specification of the amount of shading to use for each pixel?>
+		<element-def name="custom-shading" extends="abst-custom-shading">
+			<?DOC The shading for the current pixel.<br>
+				This should be a number between -1 and 1 where -1 represents full shadow, 1 represents fully lit, and 0 represents no shading.?>
+			<attribute name="lit" type="expression" />
+		</element-def>
+		<element-def name="custom-painting" extends="abst-custom-shading">
+			<?DOC The color for the current pixel?>
+			<attribute name="color" type="expression" />
 		</element-def>
 		<?DOC A shader that makes the &lt;widget> appear raised above the screen, like a button?>
 		<element-def name="raised-shading" extends="model-value">
@@ -150,6 +156,8 @@
 			<attribute name="max-value" type="expression" specify="optional" />
 		</element-def>
 
+		<element-def name="settings-menu" extends="field-panel" inherits="iconized" />
+
 		<?DOC A tiled pane takes a list of values and renders each with a renderer.<br>
 			This is similar to a table with a single column, except that this widget allows more customizable layouts,
 			complex rendering, and intuitive interaction.?>
@@ -164,6 +172,28 @@
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
 		<element-def name="search-table" extends="table">
+		</element-def>
+
+		<element-def name="bar-chart" extends="widget" inherits="multi-value-renderable">
+			<element-model>
+				<?DOC The index of the bar currently in use (e.g. being rendered, hovered, etc.)?>
+				<value name="valueIndex" type="int" priority="2" />
+			</element-model>
+			<styles>
+				<?DOC The color of the interior of each bar?>
+				<style-attribute name="bar-color" type="java.awt.Color" trickle-down="false" />
+				<?DOC The thickness of the outline around the bar?>
+				<style-attribute name="outline-thickness" type="int" trickle-down="false" />
+				<?DOC The color of the outline around the bar?>
+				<style-attribute name="outline-color" type="java.awt.Color" trickle-down="false" />
+			</styles>
+			<attribute name="values" type="expression" />
+			<attribute name="max" type="expression" />
+			<attribute name="bar-length" type="expression" />
+			<?DOC The orientation in which the bars will be layed out--not the orientation of the bars themselves?>
+			<attribute name="orientation" type="orientation" default="horizontal" />
+			<attribute name="padding" type="expression" specify="optional" />
+			<attribute name="title" type="expression" specify="optional" />
 		</element-def>
 	</elements>
 

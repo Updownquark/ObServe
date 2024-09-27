@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.function.Function;
 
-import org.qommons.Causable;
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
 import org.qommons.Identifiable;
@@ -176,7 +175,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	/**
-	 * Causes this observable to fire all its listeners' {@link Observer#onCompleted(Causable)} methods. Calls to
+	 * Causes this observable to fire all its listeners' {@link Observer#onCompleted(java.util.function.Supplier)} methods. Calls to
 	 * {@link #set(Object, Object)} after this call will throw {@link UnsupportedOperationException}s.
 	 *
 	 * @param cause The cause of the death
@@ -187,18 +186,18 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 				throw new UnsupportedOperationException("This value is already dead");
 			isAlive = false;
 			long stamp = theStamp;
-			ObservableValueEvent<T> completeEvt = createChangeEvent(theValue, theValue, getCurrentCauses());
-			try (Transaction evtT = completeEvt.use()) {
+			try (
+				Observer.CompletedCause completion = Observer.completion(() -> createChangeEvent(theValue, theValue, getCurrentCauses()))) {
 				theListeners.forEach(//
 					listener -> {
 						if (listener.lastUpdated < stamp) {
-							ObservableValueEvent<T> changeEvt = createChangeEvent(listener.knownValue, theValue, completeEvt);
+							ObservableValueEvent<T> changeEvt = createChangeEvent(listener.knownValue, theValue, completion.get());
 							try (Transaction cet = changeEvt.use()) {
 								listener.observer.onNext(changeEvt);
 							}
 							listener.lastUpdated = stamp;
 						}
-						listener.observer.onCompleted(completeEvt);
+						listener.observer.onCompleted(completion);
 					});
 			}
 			theListeners.clear();

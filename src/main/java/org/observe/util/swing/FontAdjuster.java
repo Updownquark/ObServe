@@ -176,6 +176,13 @@ public class FontAdjuster implements Cloneable {
 		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
 	}
 
+	public FontAdjuster italic() {
+		return italic(true);
+	}
+
+	public FontAdjuster italic(boolean italic) {
+		return withFontSlant(italic ? TextAttribute.POSTURE_OBLIQUE : TextAttribute.POSTURE_REGULAR);
+	}
 	/**
 	 * Makes the label's font {@link Font#PLAIN plain}
 	 *
@@ -255,7 +262,7 @@ public class FontAdjuster implements Cloneable {
 		if (theForeground != null) {
 			Color oldFG = c.getForeground();
 			c.setForeground(theForeground);
-			revert.add(() -> c.setForeground(oldFG));
+			// revert.add(() -> c.setForeground(oldFG));
 		}
 		if (theFont != null) {
 			Font oldFont = c.getFont();

@@ -99,17 +99,49 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		String accept = isAcceptable(value);
 		if (accept != null)
 			throw new IllegalArgumentException(accept);
-		try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
+
+		if (!theEventer.isAnyoneListening()) {
+			// If no one's listening, there's no reason to lock anything or make any events.
 			T old = theValue;
-			if (value == old && theEventer.isEventing())
-				return old; // Don't throw errors on recursive updates
-			theStamp++;
 			theValue = value;
-			ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
-			try (Transaction evtT = evt.use()) {
-				theEventer.onNext(evt);
-			}
+			theStamp++;
 			return old;
+		}
+		// If we're currently in an unlocked state, we can avoid creating 2 causables (one for the root lock, and one for the event)
+		// Make a first try at the event outside the lock so we can avoid creating 2 causes for a simple set operation
+		// If the value changes before we obtain the lock, we'll have to create another event
+		if (getCurrentCauses().isEmpty()) {
+			ObservableValueEvent<T> evt = createChangeEvent(theValue, value, cause);
+			try (Transaction evtT = evt.use(); Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, evt)) {
+				T old = theValue;
+				if (value == old && theEventer.isEventing())
+					return old; // Don't throw errors on recursive updates
+				theStamp++;
+				theValue = value;
+				Collection<Cause> causes = getUnfinishedCauses();
+				if (old == evt.getOldValue() && causes.size() == 1 && causes.iterator().next() == evt)
+					theEventer.onNext(evt);
+				else {
+					ObservableValueEvent<T> evt2 = createChangeEvent(old, value, getUnfinishedCauses());
+					try (Transaction evt2T = evt2.use()) {
+						theEventer.onNext(evt2);
+					}
+				}
+				return old;
+			}
+		} else {
+			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
+				T old = theValue;
+				if (value == old && theEventer.isEventing())
+					return old; // Don't throw errors on recursive updates
+				theStamp++;
+				theValue = value;
+				ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
+				try (Transaction evtT = evt.use()) {
+					theEventer.onNext(evt);
+				}
+				return old;
+			}
 		}
 	}
 

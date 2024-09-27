@@ -18,9 +18,9 @@ import org.qommons.tree.BetterTreeList;
 /**
  * A QuickWidget which contains other widgets that are (typically) drawn on top of it
  *
- * @param <C> The type of widgets in this container's content
+ * @param <W> The type of widgets in this container's content
  */
-public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
+public interface QuickContainer<W extends QuickWidget> extends QuickWidget {
 	/** The XML name of this type */
 	public static final String CONTAINER = "container";
 
@@ -45,12 +45,12 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		/**
 		 * An abstract {@link Def} implementation
 		 *
-		 * @param <W> The type of the container that this definition is for
-		 * @param <C> The type of widgets that the container will contain
+		 * @param <C> The type of the container that this definition is for
+		 * @param <W> The type of widgets that the container will contain
 		 */
-		public abstract class Abstract<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Def.Abstract<W>
-		implements Def<W, C> {
-			private final BetterList<QuickWidget.Def<? extends C>> theContents;
+		public abstract class Abstract<C extends QuickContainer<W>, W extends QuickWidget> extends QuickWidget.Def.Abstract<C>
+		implements Def<C, W> {
+			private final BetterList<QuickWidget.Def<? extends W>> theContents;
 
 			/**
 			 * @param parent The parent definition
@@ -58,12 +58,12 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
-				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
+				theContents = BetterTreeList.<QuickWidget.Def<? extends W>> build().build();
 			}
 
 			@QonfigChildGetter("content")
 			@Override
-			public BetterList<QuickWidget.Def<? extends C>> getContents() {
+			public BetterList<QuickWidget.Def<? extends W>> getContents() {
 				return theContents;
 			}
 
@@ -78,15 +78,15 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	/**
 	 * An interpretation of a QuickContainer
 	 *
-	 * @param <W> The type of the container that this interpretation is for
-	 * @param <C> The type of widgets that the container will contain
+	 * @param <C> The type of the container that this interpretation is for
+	 * @param <W> The type of widgets that the container will contain
 	 */
-	public interface Interpreted<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Interpreted<W> {
+	public interface Interpreted<C extends QuickContainer<W>, W extends QuickWidget> extends QuickWidget.Interpreted<C> {
 		@Override
-		Def<? super W, ? super C> getDefinition();
+		Def<? super C, ? super W> getDefinition();
 
 		/** @return The interpretations of all widgets that will be contained in the container produced by this interpretation */
-		BetterList<? extends QuickWidget.Interpreted<? extends C>> getContents();
+		BetterList<? extends QuickWidget.Interpreted<? extends W>> getContents();
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -136,24 +136,24 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	}
 
 	/** @return The widgets contained in this container */
-	BetterList<? extends C> getContents();
+	BetterList<? extends W> getContents();
 
 	/**
 	 * An abstract {@link QuickContainer} implementation
 	 *
-	 * @param <C> The type of the contained widgets
+	 * @param <W> The type of the contained widgets
 	 */
-	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<C> {
-		private ObservableCollection<C> theContents;
+	public abstract class Abstract<W extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<W> {
+		private ObservableCollection<W> theContents;
 
 		/** @param id The element identifier for this element */
 		protected Abstract(Object id) {
 			super(id);
-			theContents = ObservableCollection.<C> build().build();
+			theContents = ObservableCollection.<W> build().build();
 		}
 
 		@Override
-		public ObservableCollection<C> getContents() {
+		public ObservableCollection<W> getContents() {
 			return theContents;
 		}
 
@@ -161,10 +161,10 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
 
-			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
+			QuickContainer.Interpreted<?, W> myInterpreted = (QuickContainer.Interpreted<?, W>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.<ModelInstantiationException> simpleX(child -> (C) child.create())//
+			.<ModelInstantiationException> simpleX(child -> (W) child.create())//
 			.rightOrder()//
 			.onRightX(element -> {
 				try {
@@ -186,7 +186,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		@Override
 		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
-			for (C content : theContents)
+			for (W content : theContents)
 				content.instantiated();
 		}
 
@@ -194,17 +194,17 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
 
-			for (C content : theContents)
+			for (W content : theContents)
 				content.instantiate(myModels);
 		}
 
 		@Override
-		public QuickContainer.Abstract<C> copy(ExElement parent) {
-			QuickContainer.Abstract<C> copy = (QuickContainer.Abstract<C>) super.copy(parent);
+		public QuickContainer.Abstract<W> copy(ExElement parent) {
+			QuickContainer.Abstract<W> copy = (QuickContainer.Abstract<W>) super.copy(parent);
 
-			copy.theContents = ObservableCollection.<C> build().build();
-			for (C content : theContents)
-				copy.theContents.add((C) content.copy(copy));
+			copy.theContents = ObservableCollection.<W> build().build();
+			for (W content : theContents)
+				copy.theContents.add((W) content.copy(copy));
 
 			return copy;
 		}

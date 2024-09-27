@@ -388,11 +388,16 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	private List<AbstractLayout.LayoutChild> layoutChildren() {
 		if (theValues.isEmpty())
 			return Collections.emptyList();
-		T value = theValues.getFirst();
-		ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, 0, 0, false,
-			false, false, false, false, false);
-		Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
-		return Collections.nCopies(theValues.size(), new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer));
+		List<AbstractLayout.LayoutChild> children = new ArrayList<>(theValues.size());
+		int row = 0;
+		for (T value : theValues) {
+			ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, row, 0, false,
+				false, false, false, false, true);
+			Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+			children
+			.add(new AbstractLayout.LayoutChild.ExtractedLayoutChild(new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer)));
+		}
+		return children;
 	}
 
 	@Override
@@ -601,7 +606,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 		@Override
 		public ModelCell<T, T> setEnabled(String enabled) {
-			isEnabled=enabled;
+			isEnabled = enabled;
 			return this;
 		}
 	}

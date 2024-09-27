@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +20,7 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.Observer.SimpleObserver;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
@@ -33,7 +35,9 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.ThreadConstrainedLockingStrategy;
 
 /**
  * A value holder that can notify listeners when the value changes. The {@link #changes()} observable will always notify subscribers with an
@@ -98,12 +102,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			public Subscription subscribe(Observer<? super T> observer) {
 				return ObservableValue.this.changes().subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V value) {
+					public void onNext(ObservableValueEvent<T> value) {
 						observer.onNext(value.getNewValue());
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});
@@ -155,7 +159,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @return The event to propagate
 	 */
 	default ObservableValueEvent<T> createInitialEvent(T value, Object cause) {
-		return ObservableValueEvent.createInitialEvent(this, value, cause);
+		return ObservableValueEvent.createInitialEvent(this, value, cause == null ? Causable.EMPTY_CAUSES : new Object[] { cause });
 	}
 
 	/**
@@ -393,7 +397,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 	/**
 	 * @param until The observable to complete the value
-	 * @return An observable value identical to this one, but that will {@link Observer#onCompleted(Causable) complete} when
+	 * @return An observable value identical to this one, but that will {@link Observer#onCompleted(Supplier) complete} when
 	 *         <code>until</code> fires
 	 */
 	default ObservableValue<T> takeUntil(Observable<?> until) {
@@ -414,6 +418,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	default ObservableValue<T> refresh(Observable<?> refresh) {
 		return new RefreshingObservableValue<>(this, refresh);
+	}
+
+	/**
+	 * @param refresh A function to produce a refresh observable for the content of this observable value
+	 * @return An ObservableValue that fires events whenever the produced refresh observable does
+	 */
+	default ObservableValue<T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		return new RefreshEachValue<>(this, refresh);
 	}
 
 	/**
@@ -500,16 +512,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			public Subscription subscribe(Observer<? super T> observer) {
 				return getWrapped().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
 					@Override
-					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
+					public void onNext(ObservableValueEvent<? extends Observable<? extends T>> event) {
 						if (event.getNewValue() != null) {
 							event.getNewValue().takeUntil(value.noInitChanges()).subscribe(new Observer<T>() {
 								@Override
-								public <V extends T> void onNext(V event2) {
+								public void onNext(T event2) {
 									observer.onNext(event2);
 								}
 
 								@Override
-								public void onCompleted(Causable cause) {
+								public void onCompleted(Supplier<Causable> cause) {
 									// Don't use the completed events because the contents of this observable may be replaced
 								}
 							});
@@ -517,7 +529,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});
@@ -1038,12 +1050,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					boolean[] completed = new boolean[2];
 					Subscription outerSub = theWrapped.noInitChanges().subscribe(new Observer<ObservableValueEvent<T>>() {
 						@Override
-						public <V extends ObservableValueEvent<T>> void onNext(V value) {
+						public void onNext(ObservableValueEvent<T> value) {
 							observer.onNext(value);
 						}
 
 						@Override
-						public void onCompleted(Causable cause) {
+						public void onCompleted(Supplier<Causable> cause) {
 							// Just because the changes are completed doesn't mean the value is. Continue observing the refresh.
 							completed[0] = true;
 							if (completed[1])
@@ -1052,7 +1064,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					});
 					Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
 						@Override
-						public <V> void onNext(V evt) {
+						public void onNext(Object evt) {
 							T value = get();
 							ObservableValueEvent<T> evt2 = createChangeEvent(value, value, evt);
 							try (Transaction t = evt2.use()) {
@@ -1061,7 +1073,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						}
 
 						@Override
-						public void onCompleted(Causable cause) {
+						public void onCompleted(Supplier<Causable> cause) {
 							completed[1] = true;
 							if (completed[0])
 								observer.onCompleted(cause);
@@ -1112,6 +1124,164 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	}
 
 	/**
+	 * Implements {@link ObservableValue#refreshEach(Function)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class RefreshEachValue<T> extends WrappingObservableValue<T, T> {
+		private final Function<? super T, ? extends Observable<?>> theRefresh;
+		private final ReentrantLock theLock;
+
+		protected RefreshEachValue(ObservableValue<T> wrapped, Function<? super T, ? extends Observable<?>> refresh) {
+			super(wrapped);
+			theRefresh = refresh;
+			theLock = new ReentrantLock();
+		}
+
+		protected Function<? super T, ? extends Observable<?>> getRefresh() {
+			return theRefresh;
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		public Transaction lock() {
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			return Lockable.lockAll(getWrapped(), getRefreshLock());
+		}
+
+		@Override
+		public Transaction tryLock() {
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			return Lockable.tryLockAll(getWrapped(), getRefreshLock());
+		}
+
+		protected Lockable getRefreshLock() {
+			return Lockable.lockable(theLock, this, ThreadConstraint.ANY);
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			Observable<ObservableValueEvent<T>> wrappedChanges = getWrapped().changes();
+			return new Observable<ObservableValueEvent<T>>() {
+				private boolean isRefreshEventing;
+
+				@Override
+				public CoreId getCoreId() {
+					return wrappedChanges.getCoreId();
+				}
+
+				@Override
+				public Object getIdentity() {
+					return Identifiable.wrap(RefreshEachValue.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public boolean isEventing() {
+					return wrappedChanges.isEventing() || isRefreshEventing;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstraint.ANY; // Can't know
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					class RefreshEachObserver implements Observer<ObservableValueEvent<T>>, Subscription {
+						private T thePreviousValue;
+						private Subscription theRefreshSub;
+
+						@Override
+						public void onNext(ObservableValueEvent<T> value) {
+							if (theRefreshSub != null && !Objects.equals(thePreviousValue, value.getNewValue())) {
+								theRefreshSub.unsubscribe();
+								theRefreshSub = null;
+							}
+							if (theRefreshSub == null) {
+								thePreviousValue = value.getNewValue();
+								Observable<?> refresh = theRefresh.apply(value.getNewValue());
+								if (refresh != null)
+									theRefreshSub = refresh.subscribe(new Observer<Object>() {
+										@Override
+										public void onNext(Object value2) {
+											refresh(value2);
+										}
+
+										@Override
+										public void onCompleted(Supplier<Causable> cause) {
+											refresh(cause);
+										}
+									});
+							}
+							if (!value.isInitial())
+								observer.onNext(value);
+						}
+
+						@Override
+						public void onCompleted(Supplier<Causable> cause) {
+							unsubscribe();
+							observer.onCompleted(cause);
+						}
+
+						private void refresh(Object cause) {
+							ObservableValueEvent<T> change = createChangeEvent(thePreviousValue, thePreviousValue, cause);
+							try (Transaction t = change.use()) {
+								observer.onNext(change);
+							}
+						}
+
+						@Override
+						public void unsubscribe() {
+							Subscription sub = theRefreshSub;
+							theRefreshSub = null;
+							if (sub != null)
+								sub.unsubscribe();
+						}
+					}
+					RefreshEachObserver refreshObs = new RefreshEachObserver();
+					Subscription wrappedSub = wrappedChanges.subscribe(refreshObs);
+					return Subscription.forAll(refreshObs, wrappedSub);
+				}
+
+				@Override
+				public boolean isSafe() {
+					return wrappedChanges.isSafe();
+				}
+
+				@Override
+				public Transaction lock() {
+					return RefreshEachValue.this.lock();
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return RefreshEachValue.this.tryLock();
+				}
+			};
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "refreshEach", theRefresh);
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableValue#safe(ThreadConstraint, Observable)}
 	 *
 	 * @param <T> The type of the value
@@ -1120,6 +1290,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final ThreadConstraint theThreading;
 		private T theLastEventedValue;
 		private ObservableValueEvent<T> theLastEvent;
+		private ThreadConstrainedLockingStrategy theLocking;
 		private final ListenerList<Consumer<ObservableValueEvent<T>>> theListeners;
 		private volatile boolean isEventing;
 
@@ -1128,8 +1299,9 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			if (!threading.supportsInvoke())
 				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
+			theLocking = new ThreadConstrainedLockingStrategy(threading);
 			theListeners = ListenerList.build().build();
-			Consumer<ObservableValueEvent<T>> listener = evt -> {
+			SimpleObserver<ObservableValueEvent<T>> listener = evt -> {
 				theLastEvent = evt;
 				if (theThreading.isEventThread())
 					fire(evt, true);
@@ -1167,7 +1339,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public T get() {
-			return getWrapped().get();
+			return theLastEventedValue;
 		}
 
 		@Override
@@ -1190,22 +1362,22 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public CoreId getCoreId() {
-					return getWrapped().getCoreId();
+					return theLocking.getCoreId();
 				}
 
 				@Override
 				public boolean isSafe() {
-					return getWrapped().noInitChanges().isSafe();
+					return true;
 				}
 
 				@Override
 				public Transaction lock() {
-					return getWrapped().lock();
+					return theLocking.lock(false, null);
 				}
 
 				@Override
 				public Transaction tryLock() {
-					return getWrapped().tryLock();
+					return theLocking.tryLock(false, null);
 				}
 
 				@Override
@@ -1258,7 +1430,135 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			class ConstantChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+			class ConstantNoInitChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(ConstantObservableValue.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return CoreId.EMPTY;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstraint.NONE;
+				}
+
+				@Override
+				public boolean isEventing() {
+					return false;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					try (Observer.CompletedCause completion = Observer.completion(() -> createInitialEvent(theValue, theValue))) {
+						observer.onCompleted(completion);
+					}
+					return Subscription.NONE;
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Transaction lock() {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Transaction.NONE;
+				}
+			}
+			return new ConstantNoInitChanges();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> changes() {
+			/* I have an application that calls the subscribe method on this observable often.
+			 * Previously this was creating a default initial event for each invocation, and even though that type is not heavy,
+			 * the object allocation was causing a lot of overhead.
+			 *
+			 * The logic with this implementation is that most observers:
+			 * a) Don't use the onFinish() call, at least for initial events.
+			 * b) Don't care about the onCompleted() call at all.
+			 * This implementation is much faster for that case.  For the case that effects are used on the initial event,
+			 * this implementation is safe, though less performant than the previous and obvious implementation.
+			 */
+			class ContantInitialEvent implements ObservableValueEvent<T> {
+				private ThreadLocal<Map<CausableKey, Causable.Effect>> theEffects;
+
+				@Override
+				public BetterList<Object> getCauses() {
+					return BetterList.empty();
+				}
+
+				@Override
+				public Causable getRootCausable() {
+					return this;
+				}
+
+				@Override
+				public Effect onFinish(CausableKey key) {
+					ThreadLocal<Map<CausableKey, Causable.Effect>> effects = theEffects;
+					if (effects == null) {
+						synchronized (this) {
+							effects = theEffects;
+							if (effects == null)
+								theEffects = effects = new ThreadLocal<>();
+						}
+					}
+					Map<CausableKey, Causable.Effect> localEffects = effects.get();
+					if (localEffects == null) {
+						localEffects = new LinkedHashMap<>();
+						effects.set(localEffects);
+					}
+					return localEffects.computeIfAbsent(key, Effect::new);
+				}
+
+				@Override
+				public boolean isFinished() {
+					return false;
+				}
+
+				@Override
+				public boolean isTerminated() {
+					return false;
+				}
+
+				@Override
+				public Transaction use() {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public boolean isInitial() {
+					return true;
+				}
+
+				@Override
+				public T getOldValue() {
+					return get();
+				}
+
+				@Override
+				public T getNewValue() {
+					return get();
+				}
+
+				void finish() {
+					ThreadLocal<Map<CausableKey, Causable.Effect>> effects = theEffects;
+					Map<CausableKey, Causable.Effect> localEffects = effects == null ? null : effects.get();
+					if (localEffects != null)
+						Causable.terminateFull(localEffects, this);
+				}
+			}
+			ContantInitialEvent initialEvent = new ContantInitialEvent();
+			class ConstantInitChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(ConstantObservableValue.this.getIdentity(), "changes");
@@ -1281,9 +1581,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					ObservableValueEvent<T> complete = createChangeEvent(theValue, theValue);
-					try (Transaction t = complete.use()) {
-						observer.onCompleted(complete);
+					try {
+						observer.onNext(initialEvent);
+						observer.onCompleted(() -> initialEvent);
+					} finally {
+						initialEvent.finish();
 					}
 					return Subscription.NONE;
 				}
@@ -1303,7 +1605,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					return Transaction.NONE;
 				}
 			}
-			return new ConstantChanges();
+			return new ConstantInitChanges();
 		}
 
 		@Override
@@ -1405,7 +1707,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						}
 
 						@Override
-						public <V> void onNext(V value) {
+						public void onNext(Object value) {
 							boolean init = !isInitialized;
 							T newValue = theValue.get();
 							T oldValue = theCurrentValue;
@@ -1422,7 +1724,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						}
 
 						@Override
-						public void onCompleted(Causable cause) {
+						public void onCompleted(Supplier<Causable> cause) {
 							observer.onCompleted(cause);
 						}
 					}
@@ -1651,7 +1953,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						private ObservableValue<? extends T> theInnerObservable;
 
 						@Override
-						public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
+						public void onNext(ObservableValueEvent<? extends ObservableValue<? extends T>> event) {
 							firedInit[0] = true;
 							theLock.lock();
 							try {
@@ -1666,7 +1968,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									boolean[] firedInit2 = new boolean[1];
 									innerSub.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
 										@Override
-										public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
+										public void onNext(ObservableValueEvent<? extends T> event2) {
 											firedInit2[0] = true;
 											theLock.lock();
 											try {
@@ -1693,7 +1995,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 										}
 
 										@Override
-										public void onCompleted(Causable cause) {
+										public void onCompleted(Supplier<Causable> cause) {
 										}
 									}));
 									if (!firedInit2[0])
@@ -1718,7 +2020,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						}
 
 						@Override
-						public void onCompleted(Causable cause) {
+						public void onCompleted(Supplier<Causable> cause) {
 							firedInit[0] = true;
 							// The outer *changes* observable is complete, meaning this value can now never change
 							// It does NOT mean that we should stop listening to the inner observable
@@ -1912,7 +2214,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					}
 
 					@Override
-					public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
+					public void onNext(ObservableValueEvent<? extends T> event) {
 						lock.lock();
 						try {
 							if (valueSubs[index] == null && !event.isInitial()) {
@@ -1988,7 +2290,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						finished[index] = true;
 						valueSubs[index] = null;
 						if (allCompleted())
@@ -2074,7 +2376,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							theLastRememberedValue = value;
 							theStamp++;
 							isValueUpToDate = true;
-							ObservableValueEvent<T> event = new ObservableValueEvent<>(false, oldValue, value, cause);
+							ObservableValueEvent<T> event = new ObservableValueEvent.DefaultObservableValueEvent<>(false, oldValue, value,
+								cause);
 							try (Transaction t = event.use()) {
 								fire(event);
 							}

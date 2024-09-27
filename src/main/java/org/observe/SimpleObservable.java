@@ -3,6 +3,7 @@ package org.observe;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.Identifiable;
@@ -188,14 +189,14 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	}
 
 	@Override
-	public <V extends T> void onNext(V value) {
+	public void onNext(T value) {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
 			super.onNext(value);
 		}
 	}
 
 	@Override
-	public void onCompleted(Causable cause) {
+	public void onCompleted(Supplier<Causable> cause) {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			super.onCompleted(cause);
 		}
@@ -207,7 +208,7 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	}
 
 	/**
-	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Causable)} to be called on the current
+	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Supplier)} to be called on the current
 	 * thread while the lock is held.
 	 *
 	 * @return The transaction to close to release the lock

@@ -638,14 +638,14 @@ public class ObservableTransformations {
 			public Subscription subscribe(Observer<? super T> observer) {
 				return getWrapped().subscribe(new Observer<S>() {
 					@Override
-					public <V extends S> void onNext(V value) {
+					public void onNext(S value) {
 						theSourceValue.set(value, null);
 						T target = theTargetValue.get();
 						observer.onNext(target);
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});
@@ -808,14 +808,14 @@ public class ObservableTransformations {
 			public Subscription subscribe(Observer<? super T> observer) {
 				return getWrapped().subscribe(new Observer<T>() {
 					@Override
-					public <V extends T> void onNext(V value) {
+					public void onNext(T value) {
 						theSourceValue.set(value, null);
 						if (theTest.get() == null)
 							observer.onNext(value);
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});
@@ -953,13 +953,13 @@ public class ObservableTransformations {
 			public Subscription subscribe(Observer<? super T> observer) {
 				return getWrapped().subscribe(new Observer<T>() {
 					@Override
-					public <V extends T> void onNext(V value) {
+					public void onNext(T value) {
 						if (theFilterType.isInstance(value))
 							observer.onNext(value);
 					}
 
 					@Override
-					public void onCompleted(Causable cause) {
+					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
 				});

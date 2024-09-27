@@ -205,6 +205,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="save" type="expression" />
 			<?DOC The name of the model value that will contain the value that is attempting to be set on the value, for use by the save expression?>
 			<attribute name="target-as" type="identifier" />
+			<child-def name="post-action" type="action" min="0" max="inf" />
 		</element-def>
 
 		<?DOC An ordered collection of values.  For internal models, this may be initialized with elements.?>

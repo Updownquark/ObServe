@@ -27,9 +27,36 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.swing.*;
+import org.observe.util.swing.ComboButton;
+import org.observe.util.swing.ComponentDecorator;
+import org.observe.util.swing.FontAdjuster;
+import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.MultiRangeSlider;
 import org.observe.util.swing.MultiRangeSlider.Range;
-import org.observe.util.swing.PanelPopulation.*;
+import org.observe.util.swing.ObservableFileButton;
+import org.observe.util.swing.ObservableSpinner;
+import org.observe.util.swing.ObservableStyledDocument;
+import org.observe.util.swing.ObservableTextArea;
+import org.observe.util.swing.ObservableTextField;
+import org.observe.util.swing.PanelPopulation;
+import org.observe.util.swing.PanelPopulation.ButtonEditor;
+import org.observe.util.swing.PanelPopulation.CollapsePanel;
+import org.observe.util.swing.PanelPopulation.ComboButtonBuilder;
+import org.observe.util.swing.PanelPopulation.ComboEditor;
+import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.LabelEditor;
+import org.observe.util.swing.PanelPopulation.MenuBuilder;
+import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.ProgressEditor;
+import org.observe.util.swing.PanelPopulation.SettingsMenu;
+import org.observe.util.swing.PanelPopulation.SliderEditor;
+import org.observe.util.swing.PanelPopulation.SplitPane;
+import org.observe.util.swing.PanelPopulation.SteppedFieldEditor;
+import org.observe.util.swing.PanelPopulation.TabPaneEditor;
+import org.observe.util.swing.PanelPopulation.TableBuilder;
+import org.observe.util.swing.PanelPopulation.ToggleEditor;
+import org.observe.util.swing.PanelPopulation.TreeEditor;
+import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
 
@@ -176,8 +203,8 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public <F> AbstractQuickContainerPopulator addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value,
-		Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
+	public <S extends JSpinner, F> AbstractQuickContainerPopulator addSpinnerField(String fieldName, S spinner, SettableValue<F> value,
+		Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<S, F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addSpinnerField(fieldName, spinner, value, purifier, modify));
 	}
@@ -292,6 +319,11 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public JPanel getEditor() {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator disableWith(ObservableValue<String> disabled) {
 		throw new UnsupportedOperationException("Should not call this here");
 	}
 

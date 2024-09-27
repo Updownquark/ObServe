@@ -175,7 +175,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> print, JComboBox<C> combo,
 		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options,
-		ObservableCellRenderer<M, C> renderer) {
+			ObservableCellRenderer<M, C> renderer) {
 		Function<C, String>[] filter = new Function[1];
 		Object[] modelValue = new Object[1];
 		SettableValue<String> tooltip = SettableValue.<String> build().build();
@@ -190,7 +190,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					Component rendered = renderer.getCellRendererComponent(list,
 						new ModelCell.Default<>(() -> (M) modelValue[0], editValue, index, 0, isSelected, cellHasFocus, isSelected,
 							isSelected, true, true) //
-								.setEnabled(filter[0] == null ? null : filter[0].apply(editValue)),
+						.setEnabled(filter[0] == null ? null : filter[0].apply(editValue)),
 						CellRenderContext.DEFAULT);
 					return rendered;
 				}

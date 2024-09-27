@@ -44,6 +44,11 @@ implements ObservableSortedMultiMap<K, V> {
 	}
 
 	@Override
+	public Comparator<? super K> comparator() {
+		return getActiveKeyFlow().comparator();
+	}
+
+	@Override
 	public ObservableSortedSet<K> keySet() {
 		return (ObservableSortedSet<K>) super.keySet();
 	}

@@ -171,7 +171,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		public boolean isEditable(R row, C category) {
 			if (theAttributeMutator == null && theRowMutator == null) {
 				if (theEditor != null)
-					System.err.println("Warning: Editor configured for column " + theName + ", but no mutation function");
+					System.err.println("Warning: Editor configured for column " + theName + " (" + theType + "), but no mutation function");
 				return false;
 			}
 			return theEditability == null || theEditability.test(row, category);

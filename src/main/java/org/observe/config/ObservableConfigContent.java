@@ -26,7 +26,6 @@ import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -81,7 +80,7 @@ public class ObservableConfigContent {
 			try (Transaction t = theRoot.lock(false, null)) {
 				if (inUse) {
 					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH)
-						.act(LambdaUtils.<ObservableConfigEvent> printableConsumer(evt -> {
+						.act(Observer.<ObservableConfigEvent> printableObserver(evt -> {
 							if (evt.relativePath.size() > thePathElements.length)
 								return;
 							int pathIndex = 0;
@@ -704,8 +703,8 @@ public class ObservableConfigContent {
 			return getConfig().watch(ObservableConfigPath.create(ObservableConfigPath.ANY_NAME)).act(evt -> {
 				ObservableConfig child = evt.relativePath.get(0);
 				ObservableConfig oldValue = evt.changeType == CollectionChangeType.add ? null : child;
-				ObservableCollectionEvent<ObservableConfig> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(),
-					child.getIndexInParent(), evt.changeType, oldValue, child, evt, evt.movement);
+				ObservableCollectionEvent<ObservableConfig> collEvt = ObservableCollectionEvent.createCollectionEvent(
+					child.getParentChildRef(), child.getIndexInParent(), evt.changeType, oldValue, child, evt, evt.movement);
 				observer.accept(collEvt);
 			});
 		}
@@ -1030,8 +1029,8 @@ public class ObservableConfigContent {
 						changeType = CollectionChangeType.add;
 
 					ObservableConfig oldValue = changeType == CollectionChangeType.add ? null : child;
-					ObservableCollectionEvent<ObservableConfig> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(),
-						index, changeType, oldValue, child, evt, preMatches ? evt.movement : null);
+					ObservableCollectionEvent<ObservableConfig> collEvt = ObservableCollectionEvent.createCollectionEvent(
+						child.getParentChildRef(), index, changeType, oldValue, child, evt, preMatches ? evt.movement : null);
 					try (Transaction t = collEvt.use()) {
 						observer.accept(collEvt);
 					}

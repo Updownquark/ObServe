@@ -46,6 +46,7 @@ public class ComponentDecorator extends BgFontAdjuster {
 		isEnabled = null;
 		isUsingImage = false;
 		isIconCleared = false;
+		theCursor = null;
 		return this;
 	}
 

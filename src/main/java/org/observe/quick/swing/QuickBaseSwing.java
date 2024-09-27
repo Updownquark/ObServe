@@ -25,6 +25,7 @@ import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JSeparator;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.event.CaretListener;
@@ -70,6 +71,7 @@ import org.observe.quick.base.QuickGridFlowLayout;
 import org.observe.quick.base.QuickInfoDialog;
 import org.observe.quick.base.QuickInlineLayout;
 import org.observe.quick.base.QuickLabel;
+import org.observe.quick.base.QuickLayerLayout;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickMenu;
 import org.observe.quick.base.QuickMenuBar;
@@ -79,6 +81,7 @@ import org.observe.quick.base.QuickProgressBar;
 import org.observe.quick.base.QuickRadioButton;
 import org.observe.quick.base.QuickRadioButtons;
 import org.observe.quick.base.QuickScrollPane;
+import org.observe.quick.base.QuickSeparator;
 import org.observe.quick.base.QuickSimpleLayout;
 import org.observe.quick.base.QuickSize;
 import org.observe.quick.base.QuickSlider;
@@ -107,6 +110,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.BgFontAdjuster;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.LayerLayout;
 import org.observe.util.swing.ObservableColorEditor;
 import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
@@ -167,6 +171,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		// Simple widgets
 		tx.with(QuickLabel.Interpreted.class, QuickSwingPopulator.class, widget(SwingLabel::new));
 		tx.with(QuickSpacer.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSpacer());
+		tx.with(QuickSeparator.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSeparator());
 		tx.with(QuickProgressBar.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingProgressBar());
 		tx.with(QuickTextField.Interpreted.class, QuickSwingPopulator.class, widget(SwingTextField::new));
 		tx.with(QuickCheckBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingCheckBox::new));
@@ -207,6 +212,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickSimpleLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretSimpleLayout);
 		tx.with(QuickBorderLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretBorderLayout);
 		tx.with(QuickGridFlowLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretGridFlowLayout);
+		tx.with(QuickLayerLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretLayerLayout);
 
 		// Table
 		tx.with(QuickTable.Interpreted.class, QuickSwingPopulator.class, SwingTable::new);
@@ -544,11 +550,34 @@ public class QuickBaseSwing implements QuickInterpretation {
 		};
 	}
 
+	static QuickSwingLayout<QuickLayerLayout> interpretLayerLayout(QuickLayerLayout.Interpreted interpreted,
+		Transformer<ExpressoInterpretationException> tx) {
+		return new QuickSwingLayout<QuickLayerLayout>() {
+			@Override
+			public LayoutManager create(ContainerPopulator<?, ?> panel, QuickLayerLayout quick) throws ModelInstantiationException {
+				return new LayerLayout();
+			}
+
+			@Override
+			public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+			}
+		};
+	}
+
 	static class SwingSpacer extends QuickSwingPopulator.Abstract<QuickSpacer> {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSpacer quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			panel.spacer(quick.getLength(), sp -> component.accept(sp));
+		}
+	}
+
+	static class SwingSeparator extends QuickSwingPopulator.Abstract<QuickSeparator> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSeparator quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addComponent(null, new JSeparator(quick.isVertical() ? JSeparator.VERTICAL : JSeparator.HORIZONTAL),
+				c -> component.accept(c));
 		}
 	}
 
@@ -562,7 +591,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
 				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
-				lbl.withTooltip(quick.getTooltip());
 			});
 		}
 	}
@@ -889,8 +917,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 	private static final SettableValue<Boolean> TRUE = SettableValue.of(true, "Unmodifiable");
 	private static final SettableValue<Boolean> FALSE = SettableValue.of(false, "Unmodifiable");
 
-	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(T value, boolean hovered, boolean focused,
-		boolean pressed, boolean rightPressed) {
+	static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(T value, boolean hovered, boolean focused, boolean pressed,
+		boolean rightPressed) {
 		return new DynamicStyledDocument.StyledTextAreaContext.Default<>(//
 			hovered ? TRUE : FALSE, focused ? TRUE : FALSE, pressed ? TRUE : FALSE, rightPressed ? TRUE : FALSE, //
 				SettableValue.of(value, "Unmodifiable"));
@@ -933,7 +961,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 	static class SwingFieldPanel extends QuickSwingContainerPopulator.Abstract<QuickFieldPanel> {
 		private BetterList<QuickSwingPopulator<QuickWidget>> theContents;
 
-		SwingFieldPanel(QuickFieldPanel.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingFieldPanel(QuickFieldPanel.Interpreted<?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			theContents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
 				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
@@ -994,8 +1022,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.toString());
 			quick.setContext(tableCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T> renderer = theRenderer == null ? null
-				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValue(),
-					quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
+				: new QuickSwingTablePopulation.QuickSwingRenderer<>(quick, quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0],
+					theRenderer);
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
 				component.accept(cf);

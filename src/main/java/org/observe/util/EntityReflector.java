@@ -11,7 +11,20 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -566,7 +579,7 @@ public class EntityReflector<E> {
 	 * @param <E> The type of the entity
 	 * @param <F> The type of the field
 	 */
-	public static abstract class EntityFieldChangeEvent<E, F> extends ObservableValueEvent<F> {
+	public static abstract class EntityFieldChangeEvent<E, F> extends ObservableValueEvent.DefaultObservableValueEvent<F> {
 		private final int theFieldIndex;
 
 		/**
@@ -575,7 +588,7 @@ public class EntityReflector<E> {
 		 * @param newValue The new (current) value of the field
 		 * @param cause The cause of the change
 		 */
-		public EntityFieldChangeEvent(int fieldIndex, F oldValue, F newValue, Object cause) {
+		protected EntityFieldChangeEvent(int fieldIndex, F oldValue, F newValue, Object cause) {
 			super(false, oldValue, newValue, cause);
 			theFieldIndex = fieldIndex;
 		}
@@ -1390,48 +1403,36 @@ public class EntityReflector<E> {
 	 * @param <F> The type of the field
 	 */
 	public static class FieldGetter<E, F> extends FieldRelatedMethod<E, F, F> {
+		private DefaultMethod<E, F> theDefault;
 		private final boolean isParentReference;
+
 		FieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
 			super(reflector, method, field);
 			isParentReference = method.getAnnotation(ParentReference.class) != null;
 		}
 
+		void setDefault(DefaultMethod<E, F> defaultMethod) {
+			theDefault = defaultMethod;
+		}
+
 		@Override
-		protected F invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) {
-			return (F) backing.get(getField().getFieldIndex());
+		protected F invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
+			Object value = backing.get(getField().getFieldIndex());
+			if (value == null && theDefault != null)
+				value = theDefault.invokeLocal(proxy, args, backing);
+			if (value == null && getReturnType().isPrimitive())
+				value = TypeTokens.get().getDefaultValue(getReturnType());
+			return (F) value;
+		}
+
+		/** @return The default method to call to populate the field the first time it is accessed */
+		public DefaultMethod<E, F> getDefault() {
+			return theDefault;
 		}
 
 		/** @return Whether this getter is tagged with {@link ParentReference @ParentReference} */
 		public boolean isParentReference() {
 			return isParentReference;
-		}
-	}
-
-	/**
-	 * A getter for a field that has a default implementation which is called once and the value reused thereafter
-	 *
-	 * @param <E> The type of the entity
-	 * @param <F> The type of the field
-	 */
-	public static class CachedFieldGetter<E, F> extends FieldGetter<E, F> {
-		private final MethodHandle theHandle;
-
-		CachedFieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, MethodHandle handle) {
-			super(reflector, method, field);
-			theHandle = handle;
-		}
-
-		@Override
-		protected F invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) {
-			if (theHandle == null)
-				throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
-			Object value = backing.get(getField().getFieldIndex());
-			if (value == null) {
-				value = super.invokeLocal(proxy, args, backing);
-				if (value != null)
-					backing.set(getField().getFieldIndex(), value);
-			}
-			return (F) value;
 		}
 	}
 
@@ -2150,49 +2151,20 @@ public class EntityReflector<E> {
 
 			MethodInterpreter<E, ?> method = null; // Shouldn't have to initialize this, but the continues seem to be confusing the compiler
 			method = methods.searchValue(m2 -> -m2.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch);
-			if (method != null) { // Overridden by a subclass and handled
+			if (method instanceof FieldGetter) {
+				FieldGetter<E, ?> getter = (FieldGetter<E, ?>) method;
+				if (getter.getDefault() == null && m.isDefault()) {
+					((FieldGetter<E, Object>) getter).setDefault((DefaultMethod<E, Object>) extractDefaultMethod(clazz, m, errors, true));
+				}
+			} else if (method != null) { // Overridden by a subclass and handled
 			} else {
 				BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
 				if (custom != null) {
 					method = new CustomMethod<>(this, m, custom);
 				} else if (m.isDefault()) {
-					MethodHandle handle;
-					try {
-						Lookup lookup = getLookup(clazz);
-						if (lookup == null) {
-							handle = null;
-						} else {
-							// handle = lookup.unreflectSpecial(m, clazz);
-							handle = lookup.findSpecial(clazz, m.getName(), MethodType.methodType(m.getReturnType(), m.getParameterTypes()),
-								clazz);
-						}
-					} catch (IllegalArgumentException | InstantiationException | InvocationTargetException | NoSuchMethodException e) {
-						throw new IllegalStateException("Bad method? " + m + ": " + e);
-					} catch (SecurityException | IllegalAccessException e) {
-						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+					method = extractDefaultMethod(clazz, m, errors, false);
+					if (method == null)
 						continue;
-					} catch (RuntimeException | Error e) {
-						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
-						continue;
-					}
-					String fieldName = theGetterFilter.apply(m);
-					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.getIfPresent(fieldName);
-					if (field != null)
-						method = new CachedFieldGetter<>(this, m, (ReflectedField<E, ?>) field, handle);
-					else {
-						DefaultMethod<E, ?> defaultMethod = new DefaultMethod<>(this, m, handle);
-						method = defaultMethod;
-						if (m.getAnnotation(Cached.class) != null) {
-							if (m.getParameterCount() > 0) {
-								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-									"Cached Default methods cannot have parameters"));
-							} else if (m.getReturnType() == void.class) {
-								errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m,
-									"Cached Default methods cannot return void"));
-							} else
-								method = new CachedMethod<>(defaultMethod);
-						}
-					}
 				} else {
 					MethodInterpreter<Object, ?> objectMethod = OBJECT_METHODS.get(m);
 					if (objectMethod != null) {
@@ -2200,7 +2172,12 @@ public class EntityReflector<E> {
 					} else if (m.getDeclaringClass() == Object.class) {
 						continue; // e.g. private void Object.registerNatives()
 					} else {
-						String fieldName = theGetterFilter.apply(m);
+						EntityField fieldAnn = m.getAnnotation(EntityField.class);
+						String fieldName;
+						if (fieldAnn != null && !fieldAnn.name().isEmpty())
+							fieldName = fieldAnn.name();
+						else
+							fieldName = theGetterFilter.apply(m);
 						if (fieldName != null) {
 							method = getInterpreter(m); // Already added
 							if (method == null)
@@ -2335,19 +2312,55 @@ public class EntityReflector<E> {
 		}
 	}
 
+	DefaultMethod<E, ?> extractDefaultMethod(Class<?> clazz, Method m, List<EntityReflectionMessage> errors, boolean field) {
+		MethodHandle handle;
+		try {
+			Lookup lookup = getLookup(clazz);
+			if (lookup == null) {
+				handle = null;
+			} else {
+				// handle = lookup.unreflectSpecial(m, clazz);
+				handle = lookup.findSpecial(clazz, m.getName(), MethodType.methodType(m.getReturnType(), m.getParameterTypes()), clazz);
+			}
+		} catch (IllegalArgumentException | InstantiationException | InvocationTargetException | NoSuchMethodException e) {
+			throw new IllegalStateException("Bad method? " + m + ": " + e);
+		} catch (SecurityException | IllegalAccessException e) {
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+			return null;
+		} catch (RuntimeException | Error e) {
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+			return null;
+		}
+		DefaultMethod<E, ?> defaultMethod = new DefaultMethod<>(this, m, handle);
+		if (!field && m.getAnnotation(Cached.class) != null) {
+			if (m.getParameterCount() > 0) {
+				errors.add(
+					new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m, "Cached Default methods cannot have parameters"));
+			} else if (m.getReturnType() == void.class) {
+				errors
+				.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m, "Cached Default methods cannot return void"));
+			} else
+				return new CachedMethod<>(defaultMethod);
+		}
+		return defaultMethod;
+	}
+
 	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
 		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
 			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), BetterSortedList.SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
-				if (superMethod.get() instanceof CachedFieldGetter)
-					subMethod = new CachedFieldGetter<>(this, superMethod.get().getMethod(),
-						fields.get(((FieldGetter<?, ?>) superMethod.get()).getField().getName()),
-						((CachedFieldGetter<E, ?>) superMethod.get()).theHandle);
-				else if (superMethod.get() instanceof FieldGetter)
-					subMethod = new FieldGetter<>(this, superMethod.get().getMethod(),
-						fields.get(((FieldGetter<?, ?>) superMethod.get()).getField().getName()));
-				else if (superMethod.get() instanceof FieldSetter)
+				if (superMethod.get() instanceof FieldGetter) {
+					FieldGetter<?, ?> superGetter = (FieldGetter<?, ?>) superMethod.get();
+					FieldGetter<E, ?> subGetter = new FieldGetter<>(this, superMethod.get().getMethod(),
+						fields.get(superGetter.getField().getName()));
+					subMethod = subGetter;
+					if (superGetter.getDefault() != null) {
+						DefaultMethod<E, ?> subDefault = new DefaultMethod<>(this, superMethod.get().getMethod(),
+							superGetter.getDefault().getHandle());
+						((FieldGetter<E, Object>) subGetter).setDefault((DefaultMethod<E, Object>) subDefault);
+					}
+				} else if (superMethod.get() instanceof FieldSetter)
 					subMethod = new FieldSetter<>(this, superMethod.get().getMethod(),
 						fields.get(((FieldSetter<?, ?>) superMethod.get()).getField().getName()),
 						((FieldSetter<?, ?>) superMethod.get()).getSetterReturnType());

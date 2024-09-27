@@ -3,14 +3,25 @@ package org.observe.quick;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.collect.CollectionChangeEvent;
+import org.observe.collect.ObservableCollection;
+import org.observe.config.ObservableConfig;
 import org.observe.ds.ComponentController;
+import org.observe.ds.ComponentStage;
 import org.observe.ds.DependencyService;
+import org.observe.ds.DependencyServiceStage;
+import org.observe.ds.Service;
 import org.observe.ds.impl.Activate;
 import org.observe.ds.impl.Component;
 import org.observe.ds.impl.Configure;
@@ -20,13 +31,24 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
 import org.observe.expresso.qonfig.ExNamed;
 import org.observe.expresso.qonfig.ExpressoDocument;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExtModelValueElement;
 import org.observe.expresso.qonfig.ObservableModelElement;
+import org.observe.util.TypeTokens;
+import org.qommons.Causable;
+import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
+import org.qommons.ValueHolder;
+import org.qommons.config.AbstractQIS;
+import org.qommons.config.QommonsConfig;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 import org.qommons.io.BetterFile;
 import org.qommons.io.FileUtils;
@@ -52,6 +74,9 @@ public abstract class QuickOsgiComponent {
 	private QuickApp theQuickApp;
 	private final Map<BetterFile, Long> theRefreshFiles;
 
+	private final Set<Class<?>> theWaitingServices;
+	private QuickDocument.Interpreted theWaitingDoc;
+
 	/**
 	 * @param threading The thread constraint for creating and modifying UI components
 	 * @param dynamicRefresh Whether this component should watch the Quick source documents and reload itself when they change. This feature
@@ -60,11 +85,16 @@ public abstract class QuickOsgiComponent {
 	protected QuickOsgiComponent(ThreadConstraint threading, boolean dynamicRefresh) {
 		theThreading = threading;
 		theUntil = new SimpleObservable<>();
+		theWaitingServices = new LinkedHashSet<>();
 
 		if (dynamicRefresh) {
 			theRefreshFiles = new ConcurrentHashMap<>();
 			QommonsTimer.getCommonInstance().build(() -> {
-				if (theClassLoader != null && checkForRefresh()) {
+				if (theClassLoader == null)
+					return;
+				BetterFile refresh = checkForRefresh();
+				if (refresh != null) {
+					System.out.println("Refreshing " + refresh);
 					Thread thread = Thread.currentThread();
 					ClassLoader preCCL = thread.getContextClassLoader();
 					try {
@@ -124,18 +154,21 @@ public abstract class QuickOsgiComponent {
 	}
 
 	/** @return Whether any of the Quick source documents for this component have changed */
-	protected boolean checkForRefresh() {
+	protected BetterFile checkForRefresh() {
 		for (Map.Entry<BetterFile, Long> file : theRefreshFiles.entrySet()) {
 			if (file.getKey().getLastModified() != file.getValue().longValue())
-				return true;
+				return file.getKey();
 		}
-		return false;
+		return null;
 	}
 
 	/** Reloads the Quick UI for this component */
 	protected void refresh() {
 		try {
 			theUntil.onNext(null);
+			theWaitingDoc = null;
+			theWaitingServices.clear();
+
 			if (theRefreshFiles != null)
 				theRefreshFiles.clear();
 			addRefreshFile(FileUtils.ofUrl(theQuickAppFile));
@@ -149,7 +182,7 @@ public abstract class QuickOsgiComponent {
 			try {
 				theQuickApp = QuickApp.parseApp(theQuickAppFile, new URL[] { quickAppToolkitUrl }, Collections.emptyList());
 			} catch (TextParseException | IllegalStateException | IOException | QonfigParseException e) {
-				if (e instanceof QonfigParseException) {
+				if (e instanceof QonfigParseException && theRefreshFiles != null) {
 					try {
 						addRefreshFile(
 							FileUtils.ofUrl(new URL(((QonfigParseException) e).getIssues().get(0).fileLocation.getFileLocation())));
@@ -160,11 +193,19 @@ public abstract class QuickOsgiComponent {
 				return;
 			}
 
+			if (theRefreshFiles != null) {
+				try {
+					addRefreshFile(FileUtils.ofUrl(new URL(QommonsConfig.resolve(theQuickApp.getAppFile(), theQuickAppFile.toString()))));
+				} catch (IOException e) {
+				}
+			}
+
+			ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
 			QuickDocument.Def quickDocDef;
 			try {
-				quickDocDef = theQuickApp.parseQuick(null);
+				quickDocDef = theQuickApp.interpretApp(QuickDocument.Def.class, docSession);
 			} catch (IllegalArgumentException | TextParseException | IOException | QonfigParseException e) {
-				if (e instanceof QonfigParseException) {
+				if (e instanceof QonfigParseException && theRefreshFiles != null) {
 					try {
 						addRefreshFile(
 							FileUtils.ofUrl(new URL(((QonfigParseException) e).getIssues().get(0).fileLocation.getFileLocation())));
@@ -174,14 +215,53 @@ public abstract class QuickOsgiComponent {
 				error("Could not parse Quick file " + theQuickApp.getAppFile(), e);
 				return;
 			}
+
+			try {
+				quickDocDef.update(docSession.get().as(ExpressoQIS.class));
+			} catch (QonfigInterpretationException e) {
+				error("Could not interpret Quick file " + quickDocDef.reporting().getPosition().getFileName(), e);
+				return;
+			}
+			docSession.clear(); // Free up memory
+
 			try {
 				addRefreshFile(FileUtils.ofUrl(new URL(quickDocDef.reporting().getPosition().getFileLocation())));
 			} catch (MalformedURLException e) {
 			}
 
 			InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
-			env = env.with(quickDocDef.getHead().getClassViewElement().configureClassView(ClassView.build()//
-				.withWildcardImport("java.lang")).build());
+			ClassView.Builder classView = quickDocDef.getHead().getClassViewElement().configureClassView(env.getClassView().copy());
+			if (theClassLoader instanceof URLClassLoader) {
+				// If the quick file is in a folder with class files, add a wildcard import for that package
+				String quickFileDir = quickDocDef.getElement().getDocument().getLocation();
+				int lastSlash = quickFileDir.lastIndexOf('/');
+				if (lastSlash >= 0) { // Nothing to import if it's in the root
+					quickFileDir = quickFileDir.substring(0, lastSlash);
+					for (URL clRoot : ((URLClassLoader) theClassLoader).getURLs()) {
+						String path = clRoot.toString();
+						String relLoc = null;
+						if (quickFileDir.startsWith(path))
+							relLoc = quickFileDir.substring(path.length());
+						else if (path.startsWith("file:///")) {
+							path = path.substring("file://".length());
+							if (quickFileDir.startsWith(path))
+								relLoc = quickFileDir.substring(path.length());
+							else {
+								path = path.substring(1);
+								if (quickFileDir.startsWith(path))
+									relLoc = quickFileDir.substring(path.length());
+							}
+						}
+						if (relLoc != null) {
+							classView.withWildcardImport(relLoc//
+								.substring(1) // Take off the file separator
+								.replace("/", "."));
+							break;
+						}
+					}
+				}
+			}
+			env = env.with(classView.build());
 			ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 			try {
 				ExpressoDocument.Def<?, ?> expressoDoc = quickDocDef.getAddOn(ExpressoDocument.Def.class);
@@ -194,6 +274,13 @@ public abstract class QuickOsgiComponent {
 							throw new IllegalStateException("Argument conflict", e);
 						}
 						populateExtModel((ObservableModelElement.ExtModelElement.Def<?>) model, extSubModel, env);
+					} else if (model instanceof ObservableModelElement.ConfigModelElement.Def) {
+						ObservableModelElement.ConfigModelElement.Def<?> config = (ObservableModelElement.ConfigModelElement.Def<?>) model;
+						if (config.getConfigName().isEmpty()) {
+							config.setModelInitializer((configData, models) -> {
+								loadAndPersistConfig(configData, config);
+							});
+						}
 					}
 				}
 			} catch (ExpressoInterpretationException e) {
@@ -203,18 +290,68 @@ public abstract class QuickOsgiComponent {
 
 			QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 			quickDocDef = null; // Free up memory
-			QuickApplication app;
 			try {
 				interpretedDoc.updateDocument(env.withExt(extModels.build()));
+			} catch (ExpressoInterpretationException e) {
+				error("Could not interpret Quick UI for " + theQuickApp.getAppFile(), e);
+				return;
+			}
+
+			theWaitingDoc = interpretedDoc;
+			if (theWaitingServices.isEmpty())
+				installDocInstance();
+			else {
+				getDS().getStage().value().filter(v -> v == DependencyServiceStage.Initialized).take(1).act(__ -> {
+					if (!theWaitingServices.isEmpty()) {
+						StringBuilder message = new StringBuilder("Could not load Quick DS component '").append(theQuickApp.getAppFile())//
+							.append("'.\n\tDS dependenc")//
+							.append(theWaitingServices.size() == 1 ? "y was" : "ies were")//
+							.append(" not provided:\n");
+						StringUtils.print(message, "\n\t", theWaitingServices, (str, type) -> str.append(type.getName()));
+						message.append(" were not provided");
+						error(message.toString(), null);
+					}
+				});
+			}
+		} catch (RuntimeException | Error e) {
+			error("Could not interpret Quick component", e);
+		}
+	}
+
+	private void installDocInstance() {
+		QuickDocument.Interpreted interpretedDoc = theWaitingDoc;
+		theWaitingDoc = null;
+		if (interpretedDoc == null)
+			return;
+		try {
+			QuickApplication app;
+			try {
 				app = theQuickApp.interpretQuickApplication(interpretedDoc);
 			} catch (ExpressoInterpretationException e) {
 				error("Could not interpret Quick UI for " + theQuickApp.getAppFile(), e);
 				return;
 			}
 
+			QuickDocument doc = interpretedDoc.create();
+			try {
+				doc.update(interpretedDoc);
+
+				doc.instantiated();
+
+				doc.instantiate(getUntil());
+			} catch (ModelInstantiationException e) {
+				System.err.println("Could not instantiate Quick UI for " + theQuickApp.getAppFile());
+				e.printStackTrace();
+				return;
+			}
+
+			// Clean up to free memory
+			interpretedDoc.destroy();
+			interpretedDoc = null;
+
 			theThreading.invoke(() -> {
 				try {
-					createQuickUI(interpretedDoc, app);
+					installQuickUI(app, doc);
 				} catch (RuntimeException | Error e) {
 					error("Could not interpret Quick component", e);
 				}
@@ -229,27 +366,6 @@ public abstract class QuickOsgiComponent {
 	 * @param x The exception (may be null)
 	 */
 	protected abstract void error(String message, Throwable x);
-
-	private void createQuickUI(QuickDocument.Interpreted interpretedDoc, QuickApplication app) {
-		QuickDocument doc = interpretedDoc.create();
-		try {
-			doc.update(interpretedDoc);
-
-			doc.instantiated();
-
-			doc.instantiate(getUntil());
-		} catch (ModelInstantiationException e) {
-			System.err.println("Could not instantiate Quick UI for " + theQuickApp.getAppFile());
-			e.printStackTrace();
-			return;
-		}
-
-		// Clean up to free memory
-		interpretedDoc.destroy();
-		interpretedDoc = null;
-
-		installQuickUI(app, doc);
-	}
 
 	/**
 	 * @param app The Quick application
@@ -302,4 +418,116 @@ public abstract class QuickOsgiComponent {
 	protected abstract <M, MV extends M> MV satisfyExtModelValue(ObservableModelElement.ExtModelElement.Def<?> modelEl,
 		ExtModelValueElement.Def<?> valueEl, ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 			throws ExpressoInterpretationException;
+
+	/**
+	 * Satisfies an external model value
+	 *
+	 * @param <M> The model type of the value to satisfy
+	 * @param <MV> The instance type of the value to satisfy
+	 * @param <T> The type of the value to satisfy
+	 * @param modelEl The model element definition defining the value
+	 * @param valueEl The element definition defining the value
+	 * @param type The type for the value
+	 * @param env The expresso environment to create the value in
+	 * @return The instantiated value
+	 * @throws ExpressoInterpretationException If the value could not be created
+	 */
+	protected <M, MV extends M, T> MV satisfyServiceValue(ObservableModelElement.ExtModelElement.Def<?> modelEl,
+		ExtModelValueElement.Def<?> valueEl, ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
+			throws ExpressoInterpretationException {
+		if (type.getModelType() == ModelTypes.Value) {
+			Class<T> serviceType = (Class<T>) TypeTokens.getRawType(type.getType(0));
+			ObservableValue<T> serviceValue = getDS().getServices().flow()//
+				.filter(service -> service.getServiceType() == serviceType ? null : "Wrong service")//
+				.flatMap(service -> getDS().getProviders(service).flow()//
+					.refreshEach(provider -> provider.getStage().noInitChanges())//
+					.filter(provider -> provider.getStage().get() == ComponentStage.Satisfied ? null : "Not satisfied")//
+					.<T> transform(tx -> tx.cache(false).map(provider -> provider.provide((Service<T>) service))))//
+				.collectActive(getUntil())//
+				.observeFind(__ -> true).first().find();
+			// Don't connect the UI to the service locking at all
+			Object[] value = new Object[] { serviceValue.get() };
+			SettableValue<T> container = SettableValue.<T> build()//
+				.withThreadConstraint(ThreadConstraint.EDT)//
+				.withValue((T) value[0])//
+				.build();
+			boolean[] satisfied = new boolean[] { value[0] != null };
+			if (!satisfied[0]) {
+				if (!theWaitingServices.add(serviceType))
+					throw new ExpressoInterpretationException("Service " + serviceType.getName() + " requested multiple times",
+						valueEl.reporting().getFileLocation());
+			}
+			serviceValue.changes().takeUntil(getUntil()).act(evt -> {
+				if (evt.getNewValue() == value[0])
+					return;
+				value[0] = evt.getNewValue();
+				ThreadConstraint.EDT.invoke(() -> {
+					container.set(evt.getNewValue(), null);
+					if (!satisfied[0]) {
+						satisfied[0] = true;
+						serviceSatisfied(serviceType);
+					}
+				});
+			});
+			return (MV) container.disableWith(SettableValue.ALWAYS_DISABLED);
+		} else if (type.getModelType() == ModelTypes.Collection) {
+			Class<T> serviceType = (Class<T>) TypeTokens.getRawType(type.getType(0));
+			ObservableCollection<T> serviceValues = getDS().getServices().flow()//
+				.filter(service -> service.getServiceType() == serviceType ? null : "Wrong service")//
+				.flatMap(service -> getDS().getProviders(service).flow()//
+					.<T> transform(tx -> tx.cache(false).map(provider -> provider.provide((Service<T>) service))))//
+				.collectActive(getUntil());
+			// Don't connect the UI to the service locking at all
+			ObservableCollection<T> serviceCopy = ObservableCollection.<T> build()//
+				.withThreadConstraint(ThreadConstraint.EDT)//
+				.build();
+			try (Transaction t = serviceValues.lock(false, null)) {
+				if (!serviceValues.isEmpty()) {
+					getThreading().invoke(() -> serviceCopy.addAll(QommonsUtils.unmodifiableCopy(serviceValues)));
+				}
+				serviceValues.changes().takeUntil(getUntil()).act(evt -> {
+					getThreading().invoke(() -> {
+						try (Transaction t2 = serviceCopy.lock(true, Causable.broken(evt))) {
+							switch (evt.type) {
+							case add:
+								for (CollectionChangeEvent.ElementChange<T> change : evt.elements) {
+									serviceCopy.add(change.index, change.newValue);
+								}
+								break;
+							case remove:
+								for (CollectionChangeEvent.ElementChange<T> change : evt.getElementsReversed()) {
+									serviceCopy.remove(change.index);
+								}
+								break;
+							case set:
+								for (CollectionChangeEvent.ElementChange<T> change : evt.elements) {
+									serviceCopy.set(change.index, change.newValue);
+								}
+								break;
+							}
+						}
+					});
+				});
+			}
+			return (MV) serviceCopy.flow().unmodifiable(false).collectPassive();
+		} else {
+			throw new ExpressoInterpretationException("Cannot satisfy Sage service value of model type " + type.getModelType(),
+				valueEl.reporting().getFileLocation());
+		}
+	}
+
+	private void serviceSatisfied(Class<?> serviceType) {
+		theWaitingServices.remove(serviceType);
+		if (theWaitingServices.isEmpty() && theWaitingDoc != null)
+			installDocInstance();
+	}
+
+	/**
+	 * Called for &lt;config> elements in this component's model
+	 *
+	 * @param config The config element to populate
+	 * @param modelDef The &lt;config> element definition
+	 */
+	protected void loadAndPersistConfig(ObservableConfig config, ObservableModelElement.ConfigModelElement.Def<?> modelDef) {
+	}
 }

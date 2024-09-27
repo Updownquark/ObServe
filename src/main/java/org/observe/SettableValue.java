@@ -16,7 +16,17 @@ import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
-import org.qommons.*;
+import org.qommons.BiTuple;
+import org.qommons.CausalLock;
+import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
+import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.TransactableBuilder;
+import org.qommons.Transaction;
+import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -400,6 +410,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	@Override
+	default SettableValue<T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		return new RefreshEachSettableValue<>(this, refresh);
+	}
+
+	@Override
 	default SettableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
 		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
 			return this;
@@ -452,10 +467,21 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param <T> The type of the value
 	 * @param value The value to represent
 	 * @param disabled The message to report for the disablement of the value
-	 * @return A SettableValue that reflects the given value and is always enabled
+	 * @return A SettableValue that reflects the given value and is always disabled
 	 */
 	public static <T> SettableValue<T> asSettable(ObservableValue<T> value, Function<? super T, String> disabled){
 		return new AlwaysDisabledValue<>(value, disabled);
+	}
+
+	/**
+	 * @param <T> The type of the value
+	 * @param value The value to represent
+	 * @param lock The locking for the settable value
+	 * @param set A consumer that effectively changes the value (and fires an event) when called
+	 * @return A SettableValue that reflects the given value and is always enabled
+	 */
+	public static <T> SettableValue<T> settable(ObservableValue<T> value, CausalLock lock, Consumer<? super T> set) {
+		return new SyntheticSettableValue<>(value, lock, set);
 	}
 
 	/**
@@ -849,6 +875,71 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
+	 * Implements {@link SettableValue#refreshEach(Function)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class RefreshEachSettableValue<T> extends RefreshEachValue<T> implements SettableValue<T> {
+		public RefreshEachSettableValue(SettableValue<T> wrapped, Function<? super T, ? extends Observable<?>> refresh) {
+			super(wrapped, refresh);
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return super.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			if (write)
+				return getWrapped().lock(write, cause);
+			else
+				return Lockable.lockAll(Lockable.lockable(getWrapped(), write, cause), getRefreshLock());
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			if (write)
+				return getWrapped().tryLock(write, cause);
+			else
+				return Lockable.tryLockAll(Lockable.lockable(getWrapped(), write, cause), getRefreshLock());
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getWrapped().getCurrentCauses();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return getWrapped().isEnabled();
+		}
+	}
+
+	/**
 	 * Implements {@link SettableValue#safe(ThreadConstraint, Observable)}
 	 *
 	 * @param <T> The type of the value
@@ -1188,6 +1279,81 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.firstValue(s -> s != null, () -> null, isEnabled, getWrapped().isEnabled());
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#settable(ObservableValue, CausalLock, Consumer)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SyntheticSettableValue<T> extends WrappingObservableValue<T, T> implements SettableValue<T> {
+		private final CausalLock theLock;
+		private final Consumer<? super T> theSet;
+
+		public SyntheticSettableValue(ObservableValue<T> wrapped, CausalLock lock, Consumer<? super T> set) {
+			super(wrapped);
+			theLock = lock;
+			theSet = set;
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return getWrapped().noInitChanges();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "settable", theSet);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return theLock.getCurrentCauses();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theLock.lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return theLock.tryLock(write, cause);
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theLock.isLockSupported();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = lock(true, cause)) {
+				T old = get();
+				theSet.accept(value);
+				return old;
+			}
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return null;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return null;
 		}
 	}
 

@@ -212,10 +212,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
 				return null;
-			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
-				null, value, theLock.getUnfinishedCauses());
-			fire(event);
+			if (!theObservers.isEmpty()) {
+				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
+					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
+					null, value, theLock.getUnfinishedCauses());
+				fire(event);
+			}
 			return el;
 		}
 	}
@@ -234,18 +236,23 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElementMove move = new CollectionElementMove();
 			try (Transaction moveT = lock(true, move)) {
 				el = theValues.move(valueEl, after, before, first, () -> {
-					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, theValues.getElementsBefore(valueEl),
-						CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
-					fire(event);
+					if (!theObservers.isEmpty()) {
+						ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(valueEl,
+							theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
+						fire(event);
+					}
 					if (afterRemove != null)
 						afterRemove.run();
 				});
 				move.moved();
 				if (el.getElementId().equals(valueEl))
 					return getElement(valueEl);
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, theLock.getUnfinishedCauses());
-				fire(event);
+				if (!theObservers.isEmpty()) {
+					ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
+						theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value,
+						theLock.getUnfinishedCauses());
+					fire(event);
+				}
 			}
 			return el;
 		}
@@ -327,9 +334,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 								if (element.getElementId().equals(valueEl.getElementId()))
 									thisMoved[0] = true;
 								CollectionElementMove move = new CollectionElementMove();
-								fire(new ObservableCollectionEvent<>(element.getElementId(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
-									element.get(), op, move));
+								if (!theObservers.isEmpty()) {
+									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
+										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
+										element.get(), op, move));
+								}
 								return move;
 							}
 
@@ -341,9 +350,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 							@Override
 							public void transferred(CollectionElement<E> element, CollectionElementMove data) {
 								data.moved();
-								fire(new ObservableCollectionEvent<>(element.getElementId(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null, element.get(),
-									op, data));
+								if (!theObservers.isEmpty()) {
+									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
+										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null,
+										element.get(), op, data));
+								}
 							}
 						});
 					}
@@ -353,8 +364,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (value == old && theObservers.isFiring())
 					return; // Don't throw errors on recursive updates
 				valueEl.set(value);
-				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set, old,
-					value, theLock.getUnfinishedCauses()));
+				if (!theObservers.isEmpty()) {
+					fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
+						CollectionChangeType.set, old, value, theLock.getUnfinishedCauses()));
+				}
 			}
 
 			@Override
@@ -367,8 +380,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				try (Transaction t = lock(true, null)) {
 					E old = get();
 					valueEl.remove();
-					fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.remove,
-						old, old, theLock.getUnfinishedCauses()));
+					if (!theObservers.isEmpty()) {
+						fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
+							CollectionChangeType.remove, old, old, theLock.getUnfinishedCauses()));
+					}
 				}
 			}
 

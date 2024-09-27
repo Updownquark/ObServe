@@ -1639,7 +1639,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			listening.withConsumer((ObservableValueEvent<Transformation.TransformationState> evt) -> {
+			listening.withObserver((ObservableValueEvent<Transformation.TransformationState> evt) -> {
 				try (Transaction t = getParent().lock(false, null)) {
 					for (TransformedElement el : theElements)
 						el.updated(evt.getOldValue(), evt.getNewValue(), evt);

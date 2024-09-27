@@ -284,7 +284,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 				theListeners.forEach(intL -> {
 					if (intL.path == null || intL.path.matches(relativePath)) {
 						if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)
-							intL.listener.onCompleted(event);
+							intL.listener.onCompleted(() -> event);
 						else
 							intL.listener.onNext(event);
 					}

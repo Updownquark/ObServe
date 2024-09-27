@@ -42,16 +42,25 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 
 	@Override
 	protected void error(String message, Throwable x) {
-		if (theErrorDisplay == null) {
-			theErrorDisplay = new JTextPane();
-			theErrorDisplay.setFont(new FontAdjuster().withForeground(Color.red).adjust(theErrorDisplay.getFont()));
-		}
-		StringWriter writer = new StringWriter();
-		writer.append(DATE_FORMAT.format(new Date())).append('\n');
-		writer.append(message).append('\n');
-		x.printStackTrace(new PrintWriter(writer));
-		theErrorDisplay.setText(writer.toString());
-		installComponent(theScroll);
+		System.err.println(message);
+		if (x != null)
+			x.printStackTrace();
+		ThreadConstraint.EDT.invoke(() -> {
+			if (theErrorDisplay == null) {
+				theErrorDisplay = new JTextPane();
+				new FontAdjuster().withForeground(Color.red).adjust(theErrorDisplay);
+			}
+			StringWriter writer = new StringWriter();
+			writer.append(DATE_FORMAT.format(new Date())).append('\n');
+			writer.append(message);
+			if (x != null) {
+				writer.append('\n');
+				x.printStackTrace(new PrintWriter(writer));
+			}
+			theErrorDisplay.setText(writer.toString());
+			theScroll.setViewportView(theErrorDisplay);
+			installComponent(theScroll);
+		});
 	}
 
 	@Override
