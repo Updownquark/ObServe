@@ -139,7 +139,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -152,7 +152,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -179,7 +179,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickGridFlowLayout create(QuickWidget element) {
+		public QuickGridFlowLayout create(ExElement element) {
 			return new QuickGridFlowLayout(element);
 		}
 	}
@@ -194,7 +194,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	private int thePadding;
 
 	/** @param element The container whose contents to manage */
-	protected QuickGridFlowLayout(QuickWidget element) {
+	protected QuickGridFlowLayout(ExElement element) {
 		super(element);
 		theMaxRowCount = SettableValue.<SettableValue<Integer>> build().build();
 	}
@@ -240,7 +240,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super QuickWidget, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickGridFlowLayout.Interpreted myInterpreted = (QuickGridFlowLayout.Interpreted) interpreted;
 		thePrimaryStart = myInterpreted.getDefinition().getPrimaryStart();
@@ -265,7 +265,7 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public QuickGridFlowLayout copy(QuickWidget element) {
+	public QuickGridFlowLayout copy(ExElement element) {
 		QuickGridFlowLayout copy = (QuickGridFlowLayout) super.copy(element);
 
 		copy.theMaxRowCount = SettableValue.<SettableValue<Integer>> build().build();

@@ -1,5 +1,6 @@
 package org.observe.quick.style;
 
+import java.awt.Dimension;
 import java.awt.Image;
 import java.awt.MediaTracker;
 import java.awt.image.BufferedImage;
@@ -8,6 +9,8 @@ import java.net.URL;
 import java.text.ParseException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -21,10 +24,11 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils;
-import org.qommons.config.QommonsConfig;
+import org.qommons.BreakpointHere;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.ResourceLocator;
 
 /** General utilities for Quick Styles */
 public class QuickStyleUtils {
@@ -82,18 +86,20 @@ public class QuickStyleUtils {
 		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		if (expression != null) {
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
-				.holder2();
+				.placeHolder2();
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imgV = expression.interpret(ModelTypes.Value.forType(Image.class),
 				env, tce);
 			if (imgV != null)
 				return imgV;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<URL>> urlV = expression.interpret(ModelTypes.Value.forType(URL.class),
 				env, tce.clear());
+			ErrorReporting reporting = env.reporting().at(expression.getFilePosition());
 			if (urlV != null)
 				return urlV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(
-					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url).getImage()), __ -> "unsettable")));
+					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url).getImage()),
+						__ -> reporting.getFileLocation().getPosition(0).toShortString() + "url->image is not reversible")));
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = expression.interpret(ModelTypes.Value.forType(Icon.class),
-				env, tce);
+				env, tce.clear());
 			if (iconV != null) {
 				return iconV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(icon -> {
 					if (icon == null)
@@ -103,12 +109,12 @@ public class QuickStyleUtils {
 					BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
 					icon.paintIcon(null, image.getGraphics(), 0, 0);
 					return image;
-				}), __ -> "unsettable")));
+				}), __ -> reporting.getFileLocation().getPosition(0).toShortString() + "icon->image is not reversible")));
 			}
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = expression
 				.interpret(ModelTypes.Value.forType(String.class), env, tce.clear());
-			ErrorReporting reporting = env.reporting().at(expression.getFilePosition());
 			String sourceDocument = expression.getFilePosition().getFileLocation();
+			ClassLoader ccl = Thread.currentThread().getContextClassLoader();
 			if (stringV != null) {
 				RuntimeCache cache = env.get(RuntimeCache.ENV_KEY, RuntimeCache.class);
 				if (cache == null)
@@ -116,45 +122,17 @@ public class QuickStyleUtils {
 				env.putGlobal(RuntimeCache.ENV_KEY, cache);
 				RuntimeCache fCache = cache;
 				return stringV.map(ModelTypes.Value.forType(Image.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
-					if (loc == null)
+					if (loc == null || loc.isEmpty())
 						return null;
-					IconKey key = new IconKey(loc);
-					Object found = fCache.getCacheItem(key);
-					if (found instanceof Image)
-						return (Image) found;
-					else if (found != null)
-						return null; // Error. Don't report again, just return null
-					String relLoc;
+					Image img;
 					try {
-						relLoc = QommonsConfig.resolve(loc, QuickStyleUtils.class, sourceDocument);
-					} catch (IOException e) {
-						reporting.at(expression.getFilePosition())
-						.error("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
-						e.printStackTrace();
+						img = parseImage(loc, sourceDocument, ccl, fCache);
+					} catch (ParseException e) {
+						reporting.warn(e.getMessage());
 						return null;
 					}
-					Image img = null;
-					Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
-					if (icon == null)
-						icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
-					if (icon == null)
-						reporting.at(expression.getFilePosition()).error("Icon file not found: '" + loc);
-					else if (icon instanceof ImageIcon) {
-						if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED) {
-							fCache.setCacheItem(key, "Image load error");
-							reporting.at(expression.getFilePosition()).error("Icon file could not be loaded: '" + loc);
-						} else
-							img = ((ImageIcon) icon).getImage();
-					} else {
-						BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
-						// Hopefully the icon doesn't need the component argument
-						icon.paintIcon(null, image.getGraphics(), 0, 0);
-						img = image;
-					}
-					if (img != null)
-						fCache.setCacheItem(key, img);
 					return img;
-				}), __ -> "unsettable")));
+				}), __ -> reporting.getFileLocation().getPosition(0).toShortString() + "string->image is not reversible")));
 			}
 			reporting.warn("Cannot evaluate '" + expression + "' as an icon");
 			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Image.class), null, "Icon not provided");
@@ -169,47 +147,75 @@ public class QuickStyleUtils {
 	 * @throws ParseException If the icon could not be found or parsed
 	 */
 	public static Image parseIcon(String loc, InterpretedExpressoEnv env) throws ParseException {
-		if (loc == null)
+		if (loc == null || loc.isEmpty())
 			return null;
 		RuntimeCache cache = env.get(RuntimeCache.ENV_KEY, RuntimeCache.class);
 		if (cache == null)
 			cache = new RuntimeCache();
 		env.putGlobal(RuntimeCache.ENV_KEY, cache);
+		return parseImage(loc, env.reporting().getFileLocation().getFileLocation(), Thread.currentThread().getContextClassLoader(), cache);
+	}
 
-		IconKey key = new IconKey(loc);
+	private static final Pattern ICON_SIZE_POSTFIX = Pattern.compile("(?<loc>.*)\\$(?<w>\\d{1,6})x(?<h>\\d{1,6})");
+
+	private static Image parseImage(String iconLocation, String sourceDocument, ClassLoader contextClassLoader, RuntimeCache cache)
+		throws ParseException {
+		Matcher m = ICON_SIZE_POSTFIX.matcher(iconLocation);
+		Dimension size = null;
+		if (m.matches()) {
+			iconLocation = m.group("loc");
+			size = new Dimension(Integer.parseInt(m.group("w")), Integer.parseInt(m.group("h")));
+		}
+		IconKey key = new IconKey(iconLocation);
 		Object found = cache.getCacheItem(key);
-		if (found instanceof Image)
-			return (Image) found;
-		else if (found != null)
+		if (found instanceof ImageIcon)
+			return resize((ImageIcon) found, size);
+		else if (found instanceof String)
 			throw new ParseException((String) found, 0);
-		String sourceDocument = env.reporting().getFileLocation().getFileLocation();
-		String relLoc;
+		ImageIcon img;
 		try {
-			relLoc = QommonsConfig.resolve(loc, QuickStyleUtils.class, sourceDocument);
+			img = parseIcon(iconLocation, sourceDocument, contextClassLoader);
+			if (img == null) {
+				String msg = "Icon file not found@ '" + iconLocation + "'";
+				cache.setCacheItem(key, msg);
+				throw new ParseException(msg, 0);
+			}
 		} catch (IOException e) {
-			throw new ParseException("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument, 0);
+			e.printStackTrace();
+			String msg = "Icon could not be loaded@ '" + iconLocation + "': " + e.getMessage();
+			cache.setCacheItem(key, msg);
+			throw new ParseException(msg, 0);
+		} catch (ParseException e) {
+			cache.setCacheItem(key, e.getMessage());
+			throw e;
 		}
-		Image img = null;
-		Icon icon = ObservableSwingUtils.getFixedIcon(null, relLoc, 16, 16);
-		if (icon == null)
-			icon = ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
-		if (icon == null) {
-			cache.setCacheItem(key, "Icon file not found: '" + loc + "'");
-			throw new ParseException("Icon file not found: '" + loc + "'", 0);
-		} else if (icon instanceof ImageIcon) {
-			if (((ImageIcon) icon).getImageLoadStatus() == MediaTracker.ERRORED) {
-				cache.setCacheItem(key, "Image load error");
-				throw new ParseException("Icon file could not be loaded: '" + loc, 0);
-			} else
-				img = ((ImageIcon) icon).getImage();
-		} else {
-			BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
-			// Hopefully the icon doesn't need the component argument
-			icon.paintIcon(null, image.getGraphics(), 0, 0);
-			img = image;
+		cache.setCacheItem(key, img);
+		return resize(img, size);
+	}
+
+	private static ImageIcon parseIcon(String iconLocation, String sourceDocument, ClassLoader contextClassLoader)
+		throws IOException, ParseException {
+		// Try a whole bunch of different ways to resolve the icon resource
+		ResourceLocator locator = new ResourceLocator();
+		locator.relativeTo(ObservableSwingUtils.class.getClassLoader());
+		locator.relativeTo(contextClassLoader);
+		locator.relativeTo(sourceDocument);
+		URL url = locator.findResource(iconLocation);
+		if (url == null) {
+			BreakpointHere.breakpoint(); // TODO Remove
+			locator.findResource(iconLocation);
+			return null;
 		}
-		if (img != null)
-			cache.setCacheItem(key, img);
-		return img;
+		ImageIcon icon = new ImageIcon(url);
+		if (icon.getImageLoadStatus() == MediaTracker.ERRORED) {
+			throw new ParseException("Icon file could not be loaded: '" + iconLocation + "'", 0);
+		}
+		return icon;
+	}
+
+	private static Image resize(ImageIcon icon, Dimension size) {
+		if (size == null || (size.width == icon.getIconWidth() && size.height == icon.getIconHeight()))
+			return icon.getImage();
+		return icon.getImage().getScaledInstance(size.width, size.height, Image.SCALE_SMOOTH);
 	}
 }

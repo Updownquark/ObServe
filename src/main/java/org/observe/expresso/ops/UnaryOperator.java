@@ -20,7 +20,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
+import org.observe.expresso.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
@@ -117,7 +117,7 @@ public class UnaryOperator implements ObservableExpression {
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
-			exHandler.handle1(new ExpressoInterpretationException("Unsupported or unimplemented unary operator '" + theOperator + "'",
+			exHandler.handle1(()->new ExpressoInterpretationException("Unsupported or unimplemented unary operator '" + theOperator + "'",
 				env.reporting().at(getOperatorOffset()).getPosition(), theOperator.length()));
 			return null;
 		case 1:
@@ -130,11 +130,11 @@ public class UnaryOperator implements ObservableExpression {
 		int operandOffset = expressionOffset + getComponentOffset(0);
 		InterpretedExpressoEnv valueEnv = env.at(getComponentOffset(0));
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> op = theOperand
 			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), valueEnv, operandOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
+		if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
 				env.reporting().at(getComponentOffset(0)).getPosition(), theOperand.getExpressionLength()));
 			return null;
 		} else if (op == null)
@@ -154,9 +154,9 @@ public class UnaryOperator implements ObservableExpression {
 		else
 			operatorReporting = env.reporting().at(theOperand.getExpressionLength());
 		if (operator == null) {
-			exHandler.handle1(
-				new ExpressoInterpretationException("Unary operator " + theOperator + " is not supported for operand type " + opType,
-					env.reporting().getPosition(), getExpressionLength()));
+			exHandler.handle1(() ->
+			new ExpressoInterpretationException("Unary operator " + theOperator + " is not supported for operand type " + opType,
+				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		} else if (operator.isActionOnly()) {
 			if (type.getModelType() != ModelTypes.Action)
@@ -190,11 +190,12 @@ public class UnaryOperator implements ObservableExpression {
 			type = operatorType;
 			cast = null;
 		} else {
-			ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.<IllegalArgumentException> holder()
+			ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler
+				.<IllegalArgumentException> holder(exHandler.isInstantiating())
 				.fillStackTrace(true);
 			cast = (TypeConverter<T, T, T, T>) TypeTokens.get().getCast(type, operatorType, false, true, iae);
 			if (cast == null) {
-				exHandler.handle1(new ExpressoInterpretationException(
+				exHandler.handle1(() -> new ExpressoInterpretationException(
 					this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">", operatorReporting.getPosition(),
 					theOperator.length(), iae.get1()));
 				return null;

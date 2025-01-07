@@ -39,7 +39,6 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryClickAdapter;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -279,8 +278,8 @@ implements TableBuilder<R, T, P> {
 
 	@Override
 	public P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod) {
-		CategoryRenderStrategy<R, Object> moveColumn = new CategoryRenderStrategy<R, Object>(up ? "\u2191" : "\u2193",
-			TypeTokens.get().OBJECT, v -> null)//
+		CategoryRenderStrategy<R, Object> moveColumn = new CategoryRenderStrategy<R, Object>(up ? "\u2191" : "\u2193", Object.class,
+			v -> null)//
 			.withHeaderTooltip("Move row " + (up ? "up" : "down"))//
 			.decorateAll(deco -> deco.withIcon(PanelPopulationImpl.getMoveIcon(up, 16)))//
 			.withWidths(15, 20, 20)//
@@ -525,7 +524,7 @@ implements TableBuilder<R, T, P> {
 
 	@Override
 	protected void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange) {
-		theFilteredRows.changes().takeUntil(getUntil()).act(evt -> onChange.accept(evt));
+		theFilteredRows.changes().takeUntil(getUntil()).act(onChange::accept);
 	}
 
 	private static class ModelRowImpl<R> implements ModelRow<R> {

@@ -25,7 +25,7 @@ public class QuickLayerLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -36,7 +36,7 @@ public class QuickLayerLayout extends QuickLayout.Abstract {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -51,13 +51,13 @@ public class QuickLayerLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickLayerLayout create(QuickWidget element) {
+		public QuickLayerLayout create(ExElement element) {
 			return new QuickLayerLayout(element);
 		}
 	}
 
 	/** @param element The container whose contents to manage */
-	protected QuickLayerLayout(QuickWidget element) {
+	protected QuickLayerLayout(ExElement element) {
 		super(element);
 	}
 

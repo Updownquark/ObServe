@@ -56,7 +56,7 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
-		public Interpreted<AO> interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ExtModelValueElement<?>> Interpreted<? extends AO> interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
@@ -71,7 +71,7 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		 * @param definition The definition to interpret
 		 * @param element The model value element
 		 */
-		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExtModelValueElement<?>> element) {
 			super(definition, element);
 		}
 
@@ -81,13 +81,13 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
-		public AO create(ExtModelValueElement<?> element) {
+		public AO create(ExElement element) {
 			return (AO) new ExElementModelValue(element);
 		}
 	}
 
 	/** @param element The model value element */
-	protected ExElementModelValue(ExtModelValueElement<?> element) {
+	protected ExElementModelValue(ExElement element) {
 		super(element);
 	}
 

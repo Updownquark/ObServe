@@ -22,6 +22,8 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -131,7 +133,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			}
 
 			@Override
-			protected ActionStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public ActionStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new ActionStyle.Def(parentStyle, this, style);
 			}
 
@@ -729,7 +731,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 	static class ActionStyle extends QuickInstanceStyle.Abstract {
 		public static class Def extends QuickInstanceStyle.Def.Abstract {
 			Def(QuickInstanceStyle.Def parent, QuickStyledElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
-				super(parent, styledElement, wrapped);
+				super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
 			}
 
 			@Override
@@ -743,11 +745,11 @@ public interface ValueAction<T> extends QuickStyledElement {
 		public static class Interpreted extends QuickInstanceStyle.Interpreted.Abstract {
 			Interpreted(QuickInstanceStyle.Def definition, ValueAction.Interpreted<?, ?> styledElement,
 				QuickInstanceStyle.Interpreted parent, QuickInterpretedStyle wrapped) {
-				super(definition, styledElement, parent, wrapped);
+				super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 			}
 
 			@Override
-			public QuickInstanceStyle create(QuickStyledElement parent) {
+			public QuickInstanceStyle create(QuickStyled styled) {
 				return new ActionStyle();
 			}
 		}

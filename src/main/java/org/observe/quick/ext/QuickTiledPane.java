@@ -56,6 +56,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		private ModelComponentId theValueIndexVariable;
 		private CompiledExpression theValues;
 		private QuickWidget.Def<?> theRenderer;
+		private boolean isConstantSizing;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -98,6 +99,12 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return theRenderer;
 		}
 
+		/** @return Whether all values render to the same size */
+		@QonfigAttributeGetter(asType = TILED_PANE, value = "constant-size")
+		public boolean isConstantSizing() {
+			return isConstantSizing;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
@@ -114,6 +121,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			if (renderer == null)
 				renderer = session.metadata().get("default-renderer").get().peekFirst();
 			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
+			isConstantSizing = session.getAttribute("constant-size", boolean.class);
 		}
 
 		@Override
@@ -195,6 +203,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	private SettableValue<SettableValue<Boolean>> isSelected;
 	private SettableValue<SettableValue<Integer>> theValueIndex;
 	private QuickWidget theRenderer;
+	private boolean isConstantSizing;
 
 	/** @param id The element ID for this widget */
 	protected QuickTiledPane(Object id) {
@@ -250,6 +259,11 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		return theRenderer;
 	}
 
+	/** @return Whether all values render to the same size */
+	public boolean isConstantSizing() {
+		return isConstantSizing;
+	}
+
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
@@ -269,6 +283,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			theRenderer = myInterpreted.getRenderer().create();
 		if (theRenderer != null)
 			theRenderer.update(myInterpreted.getRenderer(), this);
+		isConstantSizing = myInterpreted.getDefinition().isConstantSizing();
 	}
 
 	@Override

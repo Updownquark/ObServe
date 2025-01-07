@@ -97,6 +97,7 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 	 */
 	public static abstract class Interpreted<C extends QonfigExternalDocument> extends ExElement.Interpreted.Abstract<C> {
 		private ExElement.Interpreted<?> theContent;
+		private InterpretedExpressoEnv theReferenceEnv;
 
 		/**
 		 * @param definition The definition to interpret
@@ -116,15 +117,21 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 			return theContent;
 		}
 
+		/** @return The interpreted environment from the reference (where the promise was specified) */
+		public InterpretedExpressoEnv getReferenceEnv() {
+			return theReferenceEnv;
+		}
+
 		/**
 		 * Initializes or updates this external document
 		 *
 		 * @param content The fulfilled content of the document to be injected into the source document
+		 * @param referenceEnv The interpreted environment from the reference (where the promise was specified)
 		 * @throws ExpressoInterpretationException If this document could not be interpreted
 		 */
-		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
+		public void update(ExElement.Interpreted<?> content, InterpretedExpressoEnv referenceEnv) throws ExpressoInterpretationException {
 			theContent = content;
-
+			theReferenceEnv = referenceEnv;
 			super.update(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
 		}
 	}

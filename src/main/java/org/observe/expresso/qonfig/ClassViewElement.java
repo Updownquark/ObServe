@@ -9,7 +9,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** An &lt;imports> element in an expresso &lt;head> section */
 @ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = ClassViewElement.IMPORTS)
-public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
+public class ClassViewElement extends ExElement.Def.Abstract<ExElement.Void> {
 	/** The XML name of this element */
 	public static final String IMPORTS = "imports";
 	/** The XML name of the &lt;import> element */
@@ -50,7 +50,7 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 
 	/** An &lt;import> element under an &lt;imports> element in an expresso &lt;head> section */
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = IMPORT)
-	public static class ImportElement extends ExElement.Def.Abstract<ExElement> {
+	public static class ImportElement extends ExElement.Def.Abstract<ExElement.Void> {
 		private String theImport;
 		private boolean isWildcard;
 

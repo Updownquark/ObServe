@@ -3,10 +3,10 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 
+import org.observe.expresso.BinaryOperatorSet;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.JavaExpressoParser;
-import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.collect.MutableCollectionElement.StdMsg;

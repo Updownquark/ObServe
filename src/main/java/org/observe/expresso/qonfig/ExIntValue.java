@@ -1,5 +1,8 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
@@ -35,6 +38,11 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
 		/** @return The initial value for the model value */
 		@QonfigAttributeGetter("init")
 		public CompiledExpression getInit() {
@@ -48,7 +56,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted<?> interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
@@ -117,7 +125,7 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theInitInstantiator = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate();

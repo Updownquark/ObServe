@@ -47,6 +47,9 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 */
 	ElementId getElementId();
 
+	@Override
+	ObservableElement<T> alias(String alias);
+
 	/** @return An observable of {@link ObservableValueEvent}s to alert a consumer to changes to this element's state */
 	default Observable<ObservableElementEvent<T>> elementChangesNoInit() {
 		return elementChanges().noInit();
@@ -109,6 +112,12 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 			}
 
 			@Override
+			public EmptyElement alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
+
+			@Override
 			public T get() {
 				return null;
 			}
@@ -159,6 +168,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					@Override
 					public CoreId getCoreId() {
 						return CoreId.EMPTY;
+					}
+
+					@Override
+					public CoreChangeSources getChangeSources() {
+						return CoreChangeSources.empty();
 					}
 
 					@Override

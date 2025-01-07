@@ -34,7 +34,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.QuickStyledElement;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
@@ -92,7 +93,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			}
 
 			@Override
-			protected SliderHandleStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public SliderHandleStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new SliderHandleStyle.Def(parentStyle, this, style);
 			}
 
@@ -108,7 +109,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 			/**
 			 * @param parent The parent element for the interpreted renderer
-			 * @return The interpretedrenderer
+			 * @return The interpreted renderer
 			 */
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
@@ -291,7 +292,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 				Def(QuickInstanceStyle.Def parent, SliderHandleRenderer.Def styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickXInterpretation.NAME, QuickXInterpretation.VERSION, SLIDER_HANDLE_RENDERER);
 					theLineColor = addApplicableAttribute(typeStyle.getAttribute("line-color"));
 					theLineThickness = addApplicableAttribute(typeStyle.getAttribute("line-thickness"));
@@ -356,7 +357,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				}
 
 				@Override
-				public SliderHandleStyle create(QuickStyledElement styledElement) {
+				public SliderHandleStyle create(QuickStyled styled) {
 					return new SliderHandleStyle();
 				}
 			}
@@ -377,9 +378,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 				throws ModelInstantiationException {
-				super.update(interpreted, styledElement);
+				super.update(interpreted, styled);
 
 				SliderHandleStyle.Interpreted myInterpreted = (SliderHandleStyle.Interpreted) interpreted;
 
@@ -391,8 +392,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			}
 
 			@Override
-			public SliderHandleStyle copy(QuickStyledElement styledElement) {
-				SliderHandleStyle copy = (SliderHandleStyle) super.copy(styledElement);
+			public SliderHandleStyle copy(QuickStyled styled) {
+				SliderHandleStyle copy = (SliderHandleStyle) super.copy(styled);
 
 				copy.theLineColor = copy.getApplicableAttribute(theLineColorAttr);
 				copy.theLineThickness = copy.getApplicableAttribute(theLineThicknessAttr);

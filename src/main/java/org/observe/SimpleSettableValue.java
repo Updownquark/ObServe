@@ -7,6 +7,7 @@ import java.util.function.Function;
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -16,12 +17,11 @@ import org.qommons.collect.ListenerList;
  *
  * @param <T> The type of the value
  */
-public class SimpleSettableValue<T> implements SettableValue<T> {
+public class SimpleSettableValue<T> extends AbstractIdentifiable implements SettableValue<T> {
 	private final SimpleObservable<ObservableValueEvent<T>> theEventer;
 	private final CausalLock theLock;
 
 	private final boolean isNullable;
-	private final Object theIdentity;
 	private long theStamp;
 	private T theValue;
 
@@ -35,7 +35,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	protected SimpleSettableValue(String description, boolean nullable, Function<Object, Transactable> lock,
 		ListenerList.Builder listening, T initialValue) {
 		isNullable = nullable;
-		theIdentity = Identifiable.baseId(description, this);
+		initIdentity(Identifiable.baseId(description, this));
 		if (lock == null)
 			theLock = null;
 		else {
@@ -50,8 +50,14 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public Object getIdentity() {
-		return theIdentity;
+	protected Object createIdentity() {
+		throw new IllegalStateException("Should have been initialized");
+	}
+
+	@Override
+	public SimpleSettableValue<T> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	@Override
@@ -95,7 +101,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+	public T set(T value) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
 		if (accept != null)
 			throw new IllegalArgumentException(accept);
@@ -111,7 +117,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		// Make a first try at the event outside the lock so we can avoid creating 2 causes for a simple set operation
 		// If the value changes before we obtain the lock, we'll have to create another event
 		if (getCurrentCauses().isEmpty()) {
-			ObservableValueEvent<T> evt = createChangeEvent(theValue, value, cause);
+			ObservableValueEvent<T> evt = createChangeEvent(theValue, value, getCurrentCauses());
 			try (Transaction evtT = evt.use(); Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, evt)) {
 				T old = theValue;
 				if (value == old && theEventer.isEventing())
@@ -130,7 +136,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 				return old;
 			}
 		} else {
-			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
+			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, null)) {
 				T old = theValue;
 				if (value == old && theEventer.isEventing())
 					return old; // Don't throw errors on recursive updates
@@ -146,7 +152,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public <V extends T> String isAcceptable(V value) {
+	public String isAcceptable(T value) {
 		if (value == null && !isNullable)
 			return "Null values not acceptable for this value";
 		return null;
@@ -163,11 +169,11 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock, ListenerList.Builder listening) {
-		return new SimpleObservable<>(null, Identifiable.wrap(theIdentity, "noInitChanges"), null, true, __ -> lock, listening);
+		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock, listening);
 	}
 
 	@Override
 	public String toString() {
-		return new StringBuilder(theIdentity.toString()).append('(').append(theValue).append(')').toString();
+		return new StringBuilder(getIdentity().toString()).append('(').append(theValue).append(')').toString();
 	}
 }

@@ -88,16 +88,16 @@ public class InstanceofExpression implements ObservableExpression {
 			throw new ExpressoInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>",
 				env.reporting().getPosition(), getExpressionLength());
 		} else if (!TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN)) {
-			exHandler.handle1(new ExpressoInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>",
+			exHandler.handle1(() -> new ExpressoInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>",
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 		EvaluatedExpression<SettableValue<?>, SettableValue<?>> leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset,
 			doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+		if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
 				theLeft.getExpressionLength(), doubleX.get2()));
 			return null;
 		} else if (leftValue == null)

@@ -21,6 +21,7 @@ import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigPromiseDef;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
@@ -77,6 +78,19 @@ public class QuickTypeStyle {
 				QuickTypeStyle parent = getOrCompile(inh, reporting, style);
 				if (parent != null)
 					parents.add(parent);
+			}
+			if (element instanceof QonfigPromiseDef) {
+				QonfigPromiseDef promise = (QonfigPromiseDef) element;
+				if (promise.getPromisedType() != null) {
+					QuickTypeStyle parent = getOrCompile(promise.getPromisedType(), reporting, style);
+					if (parent != null)
+						parents.add(parent);
+				}
+				for (QonfigAddOn inh : promise.getPromisedInheritance().values()) {
+					QuickTypeStyle parent = getOrCompile(inh, reporting, style);
+					if (parent != null)
+						parents.add(parent);
+				}
 			}
 			if (parents.isEmpty())
 				parents = Collections.emptyList();

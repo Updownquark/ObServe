@@ -48,6 +48,12 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	}
 
 	@Override
+	public DefaultObservableSortedSet<E> alias(String alias) {
+		super.alias(alias);
+		return this;
+	}
+
+	@Override
 	public int indexFor(Comparable<? super E> search) {
 		return getValues().indexFor(search);
 	}

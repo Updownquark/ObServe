@@ -14,6 +14,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 
@@ -88,8 +90,8 @@ public interface QuickTextElement extends QuickStyledElement {
 				 * @param wrapped The generic compiled style that this style class wraps
 				 */
 				protected Abstract(QuickInstanceStyle.Def parent, QuickTextElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
-					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
+					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-text");
 					theFontColor = addApplicableAttribute(typeStyle.getAttribute("font-color"));
 					theFontSize = addApplicableAttribute(typeStyle.getAttribute("font-size"));
@@ -150,7 +152,7 @@ public interface QuickTextElement extends QuickStyledElement {
 		/** Interpretation of a text element style */
 		public interface Interpreted extends QuickInstanceStyle.Interpreted {
 			@Override
-			QuickTextStyle create(QuickStyledElement styledElement);
+			QuickTextStyle create(QuickStyled styled);
 
 			/** @return The style attribute for the text's color */
 			QuickElementStyleAttribute<Color> getFontColor();
@@ -195,7 +197,7 @@ public interface QuickTextElement extends QuickStyledElement {
 				 */
 				protected Abstract(Def definition, QuickTextElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
-					super(definition, styledElement, parent, wrapped);
+					super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}
 
 				@Override
@@ -344,7 +346,7 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styledElement)
 				throws ModelInstantiationException {
 				super.update(interpreted, styledElement);
 
@@ -369,8 +371,8 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public QuickTextStyle.Abstract copy(QuickStyledElement styledElement) {
-				QuickTextStyle.Abstract copy = (QuickTextStyle.Abstract) super.copy(styledElement);
+			public QuickTextStyle.Abstract copy(QuickStyled styled) {
+				QuickTextStyle.Abstract copy = (QuickTextStyle.Abstract) super.copy(styled);
 
 				copy.theFontColor = copy.getApplicableAttribute(theFontColorAttr);
 				copy.theFontSize = copy.getApplicableAttribute(theFontSizeAttr);

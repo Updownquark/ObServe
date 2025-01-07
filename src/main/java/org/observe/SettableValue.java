@@ -3,10 +3,10 @@ package org.observe;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
-import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -46,39 +46,53 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	boolean isLockSupported();
 
 	/**
-	 * @param <V> The type of the value to set
 	 * @param value The value to assign to this value
-	 * @param cause Something that may have caused this change
 	 * @return The value that was previously set for in this container
 	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
 	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
 	 */
-	<V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException;
+	T set(T value) throws IllegalArgumentException, UnsupportedOperationException;
 
 	/**
-	 * @param <V> The type of the value to set
 	 * @param value The value to assign to this value
 	 * @param cause Something that may have caused this change
 	 * @return The value that was previously set for in this container
 	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
 	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
 	 */
-	default <V extends T> SettableValue<T> withValue(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+	default T set(T value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		if (cause == null)
+			return set(value);
+		try (Transaction t = lock(true, cause)) {
+			return set(value);
+		}
+	}
+
+	/**
+	 * @param value The value to assign to this value
+	 * @param cause Something that may have caused this change
+	 * @return The value that was previously set for in this container
+	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
+	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
+	 */
+	default SettableValue<T> withValue(T value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 		set(value, cause);
 		return this;
 	}
 
 	/**
-	 * @param <V> The type of the value to check
 	 * @param value The value to check
 	 * @return null if the value is not known to be unacceptable for this value, or an error text if it is known to be unacceptable. A null
 	 *         value returned from this method does not guarantee that a call to {@link #set(Object, Object)} for the same value will not
 	 *         throw an IllegalArgumentException
 	 */
-	<V extends T> String isAcceptable(V value);
+	String isAcceptable(T value);
 
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
+
+	@Override
+	SettableValue<T> alias(String alias);
 
 	@Override
 	default Transaction lock() {
@@ -101,6 +115,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
+	 * @param <V> The type of value to assign to
 	 * @param value The value to assign this settable to
 	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
 	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
@@ -110,6 +125,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
+	 * @param <V> The type of value to assign to
 	 * @param value The value to assign this settable to
 	 * @param onError The error handler for when the assignment fails
 	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
@@ -125,7 +141,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 				} catch (IllegalArgumentException e) {
 					if(onError!=null)
 						onError.accept(e);
-					throw new IllegalStateException(e.getMessage(), e);
+					throw e;
 				}
 			}
 
@@ -136,10 +152,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				BinaryOperator<String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
-				return SettableValue.this.isEnabled().combine(combineFn,
-					value.refresh(SettableValue.this.noInitChanges()).map(v -> isAcceptable(v)),
-					options -> options.fireIfUnchanged(false));
+				return ObservableValue.firstValue(v -> v != null, null, //
+					SettableValue.this.isEnabled(), //
+					value.refresh(noInitChanges())
+					.map(LambdaUtils.printableFn(v -> isAcceptable(v), () -> "acceptableTo(" + this + ")", null))//
+					);
 			}
 
 			@Override
@@ -172,15 +189,15 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
 		return new WrappingSettableValue<T>(this) {
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			public T set(T value) throws IllegalArgumentException {
 				String error = accept.apply(value);
 				if (error != null)
 					throw new IllegalArgumentException(error);
-				return getWrapped().set(value, cause);
+				return getWrapped().set(value);
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value) {
+			public String isAcceptable(T value) {
 				String error = accept.apply(value);
 				if (error != null)
 					return error;
@@ -200,9 +217,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	default SettableValue<T> onSet(Consumer<T> onSetAction) {
 		return new WrappingSettableValue<T>(this) {
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			public T set(T value) throws IllegalArgumentException {
 				onSetAction.accept(value);
-				return getWrapped().set(value, cause);
+				return getWrapped().set(value);
 			}
 		};
 	}
@@ -547,6 +564,17 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public UnsettableValue<T> alias(String alias) {
+			theSource.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return theSource.getAliases();
+		}
+
+		@Override
 		public long getStamp() {
 			return theSource.getStamp();
 		}
@@ -577,7 +605,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 *
 	 * @param <T> The type of the value
 	 */
-	public class WrappingSettableValue<T> implements SettableValue<T> {
+	public class WrappingSettableValue<T> extends AbstractIdentifiable implements SettableValue<T> {
 		private final SettableValue<T> theWrapped;
 
 		/** @param wrapped The wrapped value */
@@ -631,17 +659,23 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return theWrapped.getIdentity();
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			return theWrapped.set(value, cause);
+		public WrappingSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			return theWrapped.set(value);
+		}
+
+		@Override
+		public String isAcceptable(T value) {
 			return theWrapped.isAcceptable(value);
 		}
 
@@ -688,6 +722,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public TransformedSettableValue<S, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Lockable.lockAll(Lockable.lockable(getSource(), write, cause), getEngine());
 		}
@@ -713,7 +753,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			try (Transaction t = lock()) {
 				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
 				ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
@@ -724,15 +764,15 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock(true, cause)) {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = lock(true, null)) {
 				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
 				S source = state.getValue1()//
 					.set(//
 						value, state.getValue2(), false)
 					.getReversed();
 				T prevResult = getTransformation().isCached() ? get() : null;
-				S oldSource = getSource().set(source, cause);
+				S oldSource = getSource().set(source);
 				return getTransformation().getCombination().apply(oldSource, new Transformation.TransformationValues<S, T>() {
 					@Override
 					public boolean isSourceChange() {
@@ -788,6 +828,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public SettableValueTakenUntil<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return getWrapped().isLockSupported();
 		}
@@ -808,12 +854,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			return getWrapped().set(value, cause);
+		public T set(T value) throws IllegalArgumentException {
+			return getWrapped().set(value);
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			return getWrapped().isAcceptable(value);
 		}
 
@@ -839,6 +885,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public RefreshingSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return getWrapped().isLockSupported();
 		}
@@ -859,12 +911,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			return getWrapped().set(value, cause);
+		public T set(T value) throws IllegalArgumentException {
+			return getWrapped().set(value);
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			return getWrapped().isAcceptable(value);
 		}
 
@@ -887,6 +939,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		protected SettableValue<T> getWrapped() {
 			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public RefreshEachSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -924,12 +982,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			return getWrapped().set(value, cause);
+		public T set(T value) throws IllegalArgumentException {
+			return getWrapped().set(value);
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			return getWrapped().isAcceptable(value);
 		}
 
@@ -959,6 +1017,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public SafeSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Transaction lock(boolean write, Object cause) {
 			if (write && !getThreadConstraint().isEventThread())
 				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
@@ -983,14 +1047,14 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (!getThreadConstraint().isEventThread())
 				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-			return getWrapped().set(value, cause);
+			return getWrapped().set(value);
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			return getWrapped().isAcceptable(value);
 		}
 
@@ -1017,6 +1081,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		protected SettableFlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
 			Supplier<? extends T> defaultValue) {
 			super(value, defaultValue);
+		}
+
+		@Override
+		public SettableFlattenedObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1120,7 +1190,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			ObservableValue<? extends T> sv = getWrapped().get();
 			if (sv == null)
 				return "No wrapped value to set";
@@ -1131,12 +1201,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+		public T set(T value) throws IllegalArgumentException {
 			ObservableValue<? extends T> sv = getWrapped().get();
 			if (sv == null)
 				throw new IllegalArgumentException("No wrapped value to set");
 			else if (sv instanceof SettableValue)
-				return ((SettableValue<T>) sv).set(value, cause);
+				return ((SettableValue<T>) sv).set(value);
 			else
 				throw new IllegalArgumentException("Wrapped value is not settable");
 		}
@@ -1180,6 +1250,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theValue.isEventing();
+		}
+
+		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return Collections.emptyList();
 		}
@@ -1205,17 +1280,28 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public AlwaysDisabledValue<T> alias(String alias) {
+			theValue.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return theValue.getAliases();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theValue.isLockSupported();
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException(isAcceptable(value));
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			String enabled = theDisablement.apply(theValue.get());
 			if (enabled == null)
 				enabled = "Not enabled";
@@ -1261,7 +1347,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			String msg = isEnabled.get();
 			if (msg != null)
 				return msg;
@@ -1269,11 +1355,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+		public T set(T value) throws IllegalArgumentException {
 			String msg = isEnabled.get();
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
-			return getWrapped().set(value, cause);
+			return getWrapped().set(value);
 		}
 
 		@Override
@@ -1318,6 +1404,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public SyntheticSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return theLock.getCurrentCauses();
 		}
@@ -1338,8 +1430,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock(true, cause)) {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = lock(true, null)) {
 				T old = get();
 				theSet.accept(value);
 				return old;
@@ -1347,7 +1439,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			return null;
 		}
 
@@ -1371,6 +1463,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		protected List<? extends SettableValue<? extends T>> getValues() {
 			return (List<? extends SettableValue<? extends T>>) super.getValues();
+		}
+
+		@Override
+		public FirstSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1411,7 +1509,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			String enabled = null;
 			for (SettableValue<? extends T> v : getValues()) {
 				String msg = ((SettableValue<T>) v).isAcceptable(value);
@@ -1428,7 +1526,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			String enabled = null;
 			boolean set = false;
 			T setValue = null;
@@ -1439,7 +1537,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 					setValue = vValue;
 				String msg = ((SettableValue<T>) v).isAcceptable(value);
 				if (msg == null)
-					return ((SettableValue<T>) v).set(value, cause);
+					return ((SettableValue<T>) v).set(value);
 				else if (enabled == null)
 					enabled = msg;
 				if (pass) {

@@ -122,6 +122,9 @@
 		<add-on name="trailing" inherits="inline-alignment" />
 		<?DOC Components will be stretched to occupy the entire height or width of the container?>
 		<add-on name="justify" inherits="inline-alignment" />
+		<?DOC Makes all components take up the same amount of space, with each component centered in the space it takes up.<br>
+			Same as &lt;center> for cross-alignment.?>
+		<add-on name="equal-spacing" inherits="inline-alignment" />
 		<?DOC A layout that stacks components left-to-right or top-to-bottom (depending on the orientation)?>
 		<add-on name="inline-layout" inherits="layout">
 			<?DOC Whether the components are arranged top-to-bottom or left-to-right?>
@@ -137,7 +140,7 @@
 		<?DOC Allows the specification of the position and size for children of a container with a &lt;simple-layout>?>
 		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
 		<?DOC A layout that places each widget in the container independently with a large amount of control over positioning and size?>
-		<add-on name="simple-layout" requires="box" inherits="layout">
+		<add-on name="simple-layout" requires="box" inherits="layout,h-sizeable,v-sizeable">
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 		<?DOC A layout that arranges components next to each other up to a maximum number of components before wrapping to a new row?>
@@ -171,7 +174,9 @@
 			<?DOC How much space to put between components in a row and between rows?>
 			<attribute name="padding" type="int" default="2" />
 		</add-on>
-		<?DOC A simple layout that sizes all components of a container identially, occupying the full area of the container?>
+		<?DOC A simple layout that sizes all components of a container identially, occupying the full area of the container<br>
+			This is typically used for a container that should display only one of its children at a time.<br>
+			Use the 'visible' attribute on each child to control which is shown.?>
 		<add-on name="layer-layout" inherits="layout" />
 
 		<?DOC A widget that renders multiple values?>
@@ -230,17 +235,16 @@
 		</add-on>
 
 		<?DOC A tab in a &lt;tabs> pane?>
-		<add-on name="abstract-tab" abstract="true" inherits="styled,with-element-model">
-			<element-model>
-				<?DOC Whether this tab is currently selected?>
-				<value name="tabSelected" type="boolean" priority="100" />
-			</element-model>
+		<add-on name="abstract-tab" abstract="true" inherits="styled">
 			<?DOC The name to display to represent this tab?>
 			<attribute name="tab-name" type="expression" specify="optional" />
 			<?DOC The icon to display to represent this tab?>
 			<attribute name="tab-icon" type="expression" specify="optional" />
-			<?DOC An action to execute when this tab is selected?>
-			<attribute name="on-select" type="expression" specify="optional" />
+			<?DOC Whether this widget is available to display by the user selecting its tab.<br>
+				If this value can accept 'false', the UI will allow the user to remove this tab from the display,
+					e.g. by clicking an "X" on the tab.<br>
+				When the user does this, this value will be assigned to false.?>
+			<attribute name="tab-available" type="expression" default="true" />
 		</add-on>
 		<?DOC A tab in a &lt;tabs> pane?>
 		<add-on name="tab" requires="widget" inherits="abstract-tab">
@@ -263,17 +267,17 @@
 			<attr-mod name="column.value" default="{active-value-name} == null ? null : {active-value-name}.getLast()" />
 			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
 		</add-on>
+
+		<?DOC A data flavor for transferring data between widgets, e.g. by dragging?>
+		<add-on name="data-flavor" abstract="true" />
 	</add-ons>
 
 	<elements>
 		<?DOC An invisible space between components in a container?>
-		<element-def name="spacer" extends="widget">
-			<?DOC The width or height of the spacer, in pixels?>
-			<attribute name="length" type="int" />
-		</element-def>
+		<element-def name="spacer" extends="widget" inherits="h-sizeable,v-sizeable" />
 		<?DOC A bar to visually separate components in a container?>
 		<element-def name="separator" extends="widget">
-			<?DOC The width or height of the spacer, in pixels?>
+			<?DOC Whether the spacer is vertically or horizontally oriented?>
 			<attribute name="orientation" type="orientation" />
 		</element-def>
 		<?DOC A button that does something when the user clicks it?>
@@ -301,6 +305,7 @@
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
 			<attribute name="default-dir" type="expression" specify="optional" />
+			<attribute name="file-descrip" type="expression" />
 		</element-def>
 		<?DOC Allows the user to choose a color?>
 		<element-def name="color-chooser" extends="value-widget">
@@ -457,7 +462,39 @@
 			<attribute name="selection" type="expression" specify="optional" />
 			<?DOC The values the the user has selected in the widget?>
 			<attribute name="multi-selection" type="expression" specify="optional" />
+			<child-def name="transfer-source" type="transfer-source" min="0" />
+			<child-def name="transfer-accept" type="transfer-accept" min="0" />
 		</element-def>
+
+		<element-def name="transfer-source" inherits="with-local-model">
+			<attribute name="drag" type="boolean" default="true" />
+			<attribute name="copy" type="boolean" default="true" />
+			<attribute name="move" type="boolean" default="true" />
+			<child-def name="flavor" type="data-flavor" max="inf" />
+			<attribute name="can-transform" type="expression" default="true" />
+			<attribute name="transform" type="expression" />
+		</element-def>
+		<element-def name="transfer-accept" inherits="with-element-model,with-local-model,iconized">
+			<element-model>
+				<value name-attribute="transfer-value-as" priority="100" />
+				<list name-attribute="transfer-values-as" priority="100" />
+			</element-model>
+			<attribute name="transfer-value-as" type="identifier" specify="optional" />
+			<attribute name="transfer-values-as" type="identifier" specify="optional" />
+			<attribute name="drag" type="boolean" default="true" />
+			<attribute name="paste" type="boolean" default="true" />
+			<child-def name="flavor" type="data-flavor" max="inf" />
+			<attribute name="can-accept" type="expression" default="true" />
+			<attribute name="accept" type="expression" />
+			<attribute name="icon-offset-x" type="expression" default="0" />
+			<attribute name="icon-offset-y" type="expression" default="0" />
+		</element-def>
+
+		<element-def name="as-object" inherits="data-flavor,typed" />
+		<element-def name="as-text" inherits="data-flavor">
+			<attribute name="mime-type" type="string" default="text/plain" />
+		</element-def>
+
 		<?DOC A column in a tabular widget?>
 		<element-def name="column" inherits="column-set,styled,rendering">
 			<?DOC Default renderer for the column?>
@@ -485,9 +522,10 @@
 			<attribute name="width" type="int" specify="optional" />
 			<?DOC Configures the ability to update or replace the value of each row by providing a new value for the column?>
 			<child-def name="edit" type="column-edit" min="0" />
+			<child-def name="transfer-source" type="transfer-source" min="0" />
 		</element-def>
 		<?DOC A structure that configures a &lt;column>'s ability to edit its cell value and the model data behind it?>
-		<element-def name="column-edit" inherits="with-element-model">
+		<element-def name="column-edit" inherits="with-element-model,with-local-model">
 			<element-model>
 				<?DOC The value that the user has entered for the column?>
 				<value name-attribute="column-edit-value-name" />
@@ -504,33 +542,24 @@
 			<attribute name="clicks" type="int" specify="optional" />
 			<?DOC The widget that allows the user to create a new value for this column?>
 			<child-def name="editor" type="widget" />
-		</element-def>
-		<?DOC A reference to a &lt;abstract-column-set> specified in a model?>
-		<element-def name="columns-ref" inherits="column-set">
-			<?DOC An expression for a list of columns?>
-			<value type="expression" />
+			<child-def name="transfer-accept" type="transfer-accept" min="0" />
 		</element-def>
 		
-		<?DOC Abtract element for a set of columns.  The columns may be static or dynamic.
-			They may be defined in a &lt;model> or (if &lt;column-set> is inherited) in a &lt;tabular-widget>?>
-		<element-def name="abstract-column-set" extends="model-value" inherits="with-element-model" abstract="true" />
 		<?DOC A static set of columns for use in a &lt;tabular-widget>?>
-		<element-def name="columns" extends="abstract-column-set">
+		<element-def name="columns" extends="model-value" inherits="column-set">
 			<?DOC A column in the column set?>
 			<child-def name="columns" type="column-set" min="0" max="inf" />
 		</element-def>
 		<?DOC A column set that causes a &lt;tabular-widget> to display a column for each value in a list?>
-		<element-def name="variable-columns" extends="abstract-column-set" inherits="column-set">
+		<element-def name="variable-columns" extends="column">
 			<element-model>
-				<?DOC The column value for the current column?>
-				<value name-attribute="column-variable-name" />
+				<?DOC The value that the user has entered for the column?>
+				<value name-attribute="column-element-name" priority="100" />
 			</element-model>
 			<?DOC The list containing values for each column to display?>
 			<attribute name="for-each" type="expression" />
-			<?DOC The name for the variable containing the active column value?>
-			<attribute name="column-variable-name" type="identifier" default="columnVariableValue" />
-			<?DOC The column "renderer" for each value in the collection?>
-			<child-def name="column" type="column" />
+			<?DOC The name of the variable holding the active value in the for-each expression (the one being rendered or edited)?>
+			<attribute name="column-element-name" type="identifier" />
 		</element-def>
 		<?DOC Abstract action on a value or list of values in a widget that can display multiple values?>
 		<element-def name="abstract-value-action" abstract="true" inherits="with-local-model,iconized">
@@ -574,8 +603,12 @@
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
 			<?DOC The rows to display in the table?>
 			<attribute name="rows" type="expression" specify="required" />
+			<?DOC Whether the row of action buttons and table options appears along the top of the table or at the bottom?>
+			<attribute name="options-on-top" type="boolean" default="true" />
 			<?DOC An action that may be performed on rows, groups of rows, or the data set as a whole?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
+			<?DOC Table options - widgets to add in a panel above or below the table?>
+			<child-def name="option" type="widget" min="0" max="inf" />
 		</element-def>
 		<?DOC A hierarchical display of values?>
 		<element-def name="tree" extends="multi-value-widget">
@@ -599,6 +632,8 @@
 			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
+			<?DOC Tree options - widgets to add in a panel above or below the table?>
+			<child-def name="option" type="widget" min="0" max="inf" />
 		</element-def>
 		<?DOC A tree model whose content is dynamic, based on collections that can be modified outside the tree?>
 		<element-def name="dynamic-tree-model" inherits="tree-model">
@@ -643,7 +678,11 @@
 			<child-def name="column-header" type="widget" min="0" max="1" />
 		</element-def>
 
-		<?DOC A set of tabs that user can choose between, each of which displays a different widget?>
+		<?DOC A set of tabs that user can choose between, each of which displays a different widget<br>
+			In addition to the 'selected' boolean, the 'visible' boolean can be used to control and be notified of tab selection:<br>
+			When the user selects a tab, its visible boolean will be set to true if allowed,
+				and similarly the newly de-selected tab's visible boolean will be set to false if allowed.<br>
+			A tab may also be selected by its visible value being set to true.?>
 		<element-def name="tabs" extends="container">
 			<element-model>
 				<?DOC The ID value of the tab that is selected?>

@@ -1,12 +1,15 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
 import org.observe.Eventable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValueEvent;
 import org.observe.Transformation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractTransformedManager;
@@ -395,6 +398,17 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theSource.getThreadConstraint();
 		}
@@ -422,6 +436,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theSource.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theSource.getChangeSources();
 		}
 
 		@Override
@@ -515,6 +534,9 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<E> onElement, WeakListening listening) {
 			listening.withConsumer((ObservableCollectionEvent<? extends E> evt) -> {
+				// Some collections (e.g. flattened collection values) may experience singular changes
+				// which have effects on multiple elements at once.
+				// When multiple elements are removed at once, these elements may not be comparable, so
 				switch (evt.getType()) {
 				case add:
 					BaseDerivedElement el = new BaseDerivedElement(theSource.mutableElement(evt.getElementId()));
@@ -524,6 +546,8 @@ public class ObservableCollectionActiveManagers {
 					CollectionElementListener<E> listener = theElementListeners.remove(evt.getElementId());
 					if (listener != null)
 						listener.removed(evt.getOldValue(), evt);
+					else
+						System.out.println("Removed element had no listener? " + evt);
 					break;
 				case set:
 					listener = theElementListeners.get(evt.getElementId());
@@ -643,6 +667,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources();
 		}
 
 		@Override
@@ -829,6 +858,17 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			Equivalence<? super T> equiv = getParent().equivalence();
 			if (equiv instanceof Equivalence.SortedEquivalence)
@@ -934,6 +974,17 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override
@@ -1305,6 +1356,17 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public boolean clear() {
 			return false;
 		}
@@ -1472,6 +1534,17 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "withEquivalence", theEquivalence);
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override

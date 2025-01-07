@@ -21,6 +21,7 @@ import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickValueWidget.WidgetValueSupplier;
 import org.observe.quick.QuickWithBackground;
+import org.observe.quick.style.QuickStyled;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -334,7 +335,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			.withAll(widgetModelCopy)//
 			.build();
 
-		TextStyle styleCopy = theTextStyle.getStyle().copy(theTextStyle);
+		TextStyle styleCopy = theTextStyle.getStyle().copy(theTextStyle.getAddOn(QuickStyled.class));
 		styleCopy.instantiate(styleElementModelCopy);
 		return styleCopy;
 	}

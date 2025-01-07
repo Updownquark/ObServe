@@ -150,18 +150,18 @@ public class MethodInvocation extends Invocation {
 							clazz);
 						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					} else if (!exHandler.hasException())
-						exHandler.handle1(
-							new ExpressoInterpretationException("No such method " + printSignature() + " in class " + clazz.getName(),
-								env.reporting().getPosition(), getExpressionLength()));
+						exHandler.handle1(() ->
+						new ExpressoInterpretationException("No such method " + printSignature() + " in class " + clazz.getName(),
+							env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 			}
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>> ctx;
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-				.stack(ExceptionHandler.holder());
+				.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 			ctx = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset, doubleX);
-			if (doubleX.get2() != null) {
-				exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+			if (doubleX.hasException2()) {
+				exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
 					theContext.getExpressionLength(), doubleX.get2()));
 				return null;
 			} else if (ctx == null)
@@ -181,9 +181,9 @@ public class MethodInvocation extends Invocation {
 			} else if (exHandler.hasException())
 				return null;
 			else {
-				exHandler.handle1(
-					new ExpressoInterpretationException("No such method " + printSignature() + " on " + theContext + "(" + ctxType + ")",
-						env.reporting().getPosition(), getExpressionLength()));
+				exHandler.handle1(() ->
+				new ExpressoInterpretationException("No such method " + printSignature() + " on " + theContext + "(" + ctxType + ")",
+					env.reporting().getPosition(), getExpressionLength()));
 				return null;
 			}
 		} else {
@@ -199,7 +199,7 @@ public class MethodInvocation extends Invocation {
 			} else if (exHandler.hasException())
 				return null;
 			else {
-				exHandler.handle1(new ExpressoInterpretationException("No such imported method " + printSignature(),
+				exHandler.handle1(() -> new ExpressoInterpretationException("No such imported method " + printSignature(),
 					env.reporting().getPosition(), getExpressionLength()));
 				return null;
 			}

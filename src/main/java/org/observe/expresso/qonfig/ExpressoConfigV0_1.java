@@ -364,7 +364,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+			public <E2 extends ExElement> Interpreted<?> interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted<>(this, element);
 			}
 		}
@@ -422,7 +422,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+		public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 			super.update(interpreted, element);
 
 			Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
@@ -694,12 +694,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final ModelValueInstantiator<SettableValue<FileDataSource>> theWrapped;
 			private final ModelValueInstantiator<SettableValue<Integer>> theMaxArchiveDepth;
 			private final List<ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.FileArchival>>> theArchiveMethods;
+			private final String theLocation;
 
 			Instantiator(ExArchiveEnabledFileSource.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theWrapped = interpreted.getWrapped() == null ? null : interpreted.getWrapped().instantiate();
 				theMaxArchiveDepth = interpreted.getMaxArchiveDepth().instantiate();
 				theArchiveMethods = QommonsUtils.filterMapE(interpreted.getArchiveMethods(), null, am -> am.instantiate());
+				theLocation = interpreted.reporting().getFileLocation().getPosition(0).toShortString();
 			}
 
 			@Override
@@ -714,18 +716,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				SettableValue<FileDataSource> wrapped = theWrapped == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
 					: theWrapped.get(models);
 				SettableValue<Integer> maxArchiveDepth = theMaxArchiveDepth.get(models);
 				List<ArchiveEnabledFileSource.FileArchival> archiveMethods = new ArrayList<>(theArchiveMethods.size());
 				for (ModelValueInstantiator<SettableValue<ArchiveEnabledFileSource.FileArchival>> am : theArchiveMethods)
 					archiveMethods.add(am.get(models).get());
+				String uModMsg = theLocation + ": Unmodifiable";
 				return SettableValue.asSettable(wrapped.transform(tx -> tx.map(w -> {
 					ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(w)//
 						.withArchival(archiveMethods);
 					maxArchiveDepth.changes().takeUntil(wrapped.noInitChanges()).act(evt -> aefs.setMaxArchiveDepth(evt.getNewValue()));
 					return aefs;
-				})), __ -> "Unmodifiable");
+				})), __ -> uModMsg);
 			}
 
 			@Override
@@ -747,12 +751,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 				if (!diff)
 					return value;
+				String uModMsg = theLocation + ": Unmodifiable";
 				return SettableValue.asSettable(newWrapped.transform(tx -> tx.map(w -> {
 					ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(w)//
 						.withArchival(archiveMethods);
 					newMAD.changes().takeUntil(newWrapped.noInitChanges()).act(evt -> aefs.setMaxArchiveDepth(evt.getNewValue()));
 					return aefs;
-				})), __ -> "Unmodifiable");
+				})), __ -> uModMsg);
 			}
 		}
 	}
@@ -808,6 +813,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.ZipCompression> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				return SettableValue.of(new ArchiveEnabledFileSource.ZipCompression(), "Unmodifiable");
 			}
 
@@ -872,6 +878,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.GZipCompression> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				return SettableValue.of(new ArchiveEnabledFileSource.GZipCompression(), "Unmodifiable");
 			}
 
@@ -936,6 +943,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ArchiveEnabledFileSource.TarArchival> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				return SettableValue.of(new ArchiveEnabledFileSource.TarArchival(), "Unmodifiable");
 			}
 
@@ -1045,6 +1053,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<Format<T>> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				List<FormatValidation<T>> validation = new ArrayList<>(theValidation.size());
 				for (FormatValidation.Instantiator<T, ?> v : theValidation)
 					validation.add(v.get(models));
@@ -1087,7 +1096,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				ModelSetInstance newModels) throws ModelInstantiationException;
 		}
 
-		private static class ValidatedFormatValue<T> implements SettableValue<Format<T>> {
+		private static class ValidatedFormatValue<T> extends AbstractIdentifiable implements SettableValue<Format<T>> {
 			private final SettableValue<Format<T>> theSourceFormat;
 			private final List<FormatValidation<T>> theValidation;
 
@@ -1123,14 +1132,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public Observable<ObservableValueEvent<Format<T>>> noInitChanges() {
 				Observable<ObservableValueEvent<Format<T>>> sourceChanges = theSourceFormat.noInitChanges();
-				return new Observable<ObservableValueEvent<Format<T>>>() {
+				class ValidatedFormatChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<Format<T>>> {
 					@Override
 					public CoreId getCoreId() {
 						return theSourceFormat.getCoreId();
 					}
 
 					@Override
-					public Object getIdentity() {
+					protected Object createIdentity() {
 						return Identifiable.wrap(sourceChanges.getIdentity(), "validated", theValidation.toArray());
 					}
 
@@ -1182,12 +1191,24 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					public Transaction tryLock() {
 						return sourceChanges.tryLock();
 					}
-				};
+
+					@Override
+					public CoreChangeSources getChangeSources() {
+						return sourceChanges.getChangeSources();
+					}
+				}
+				return new ValidatedFormatChanges();
 			}
 
 			@Override
-			public Object getIdentity() {
+			protected Object createIdentity() {
 				return Identifiable.wrap(theSourceFormat.getIdentity(), "validated", theValidation.toArray());
+			}
+
+			@Override
+			public ValidatedFormatValue<T> alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 
 			@Override
@@ -1216,13 +1237,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public <V extends Format<T>> Format<T> set(V value, Object cause)
-				throws IllegalArgumentException, UnsupportedOperationException {
+			public Format<T> set(Format<T> value) throws IllegalArgumentException, UnsupportedOperationException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override
-			public <V extends Format<T>> String isAcceptable(V value) {
+			public String isAcceptable(Format<T> value) {
 				return StdMsg.UNSUPPORTED_OPERATION;
 			}
 
@@ -1374,23 +1394,25 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected SettableValue<Format<BetterFile>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				SettableValue<FileDataSource> fileSource = theFileSource == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+				String uModMsg = reporting().getFileLocation().getPosition(0).toShortString() + "formats are not reversible";
+				SettableValue<FileDataSource> fileSource = theFileSource == null ? SettableValue.of(new NativeFileSource(), uModMsg)
 					: theFileSource.get(models);
 				SettableValue<BetterFile> workingDir;
 				if (theWorkingDir != null)
 					workingDir = theWorkingDir.get(models);
 				else
 					workingDir = SettableValue.asSettable(fileSource.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
-						__ -> "Unmodifiable");
+						__ -> uModMsg);
 
 				return SettableValue.asSettable(fileSource.transform(tx -> tx.combineWith(workingDir)//
-					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> "Unmodifiable");
+					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> uModMsg);
 			}
 
 			@Override
 			protected SettableValue<Format<BetterFile>> copyFormat(SettableValue<Format<BetterFile>> format, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<FileDataSource> srcFS = theFileSource == null ? SettableValue.of(new NativeFileSource(), "Unmodifiable")
+				String uModMsg = reporting().getFileLocation().getPosition(0).toShortString() + "formats are not reversible";
+				SettableValue<FileDataSource> srcFS = theFileSource == null ? SettableValue.of(new NativeFileSource(), uModMsg)
 					: theFileSource.get(sourceModels);
 				SettableValue<FileDataSource> newFS = theFileSource == null ? srcFS
 					: theFileSource.forModelCopy(srcFS, sourceModels, newModels);
@@ -1400,18 +1422,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					newWD = theWorkingDir.forModelCopy(srcWD, sourceModels, newModels);
 				} else {
 					srcWD = SettableValue.asSettable(srcFS.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
-						__ -> "Unmodifiable");
+						__ -> uModMsg);
 					if (newFS == srcFS)
 						newWD = srcWD;
 					else
 						newWD = SettableValue.asSettable(newFS.map(fs -> BetterFile.at(fs, System.getProperty("user.dir"))),
-							__ -> "Unmodifiable");
+							__ -> uModMsg);
 				}
 				if (srcFS == newFS && srcWD == newWD)
 					return format;
 
 				return SettableValue.asSettable(newFS.transform(tx -> tx.combineWith(newWD)//
-					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> "Unmodifiable");
+					.combine((fs, wd) -> new BetterFile.FileFormat(fs, wd, isAllowEmpty))), __ -> uModMsg);
 			}
 		}
 	}
@@ -1423,11 +1445,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	static class DoubleFormat extends AbstractFormat<Double> {
 		public static final String DOUBLE_FORMAT = "double-format";
 
-		private CompiledExpression theSignificantDigits;
+		private CompiledExpression theMinSignificantDigits;
+		private CompiledExpression theMaxSignificantDigits;
+		private int theMaxIntDigits;
+		private int theZeroExp;
+		private boolean isEmptyAllowed;
 		private String theUnit;
 		private boolean isUnitRequired;
 		private boolean isMetricPrefixed;
 		private boolean isMetricPrefixedP2;
+		private boolean isMetricPrefixed3K;
+		private double theDefaultPrefixMult;
 		private final List<Prefix> thePrefixes;
 		private final Map<String, Double> thePrefixMults;
 
@@ -1437,9 +1465,29 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			thePrefixMults = new LinkedHashMap<>();
 		}
 
-		@QonfigAttributeGetter("sig-digs")
-		public CompiledExpression getSignificantDigits() {
-			return theSignificantDigits;
+		@QonfigAttributeGetter("min-sig-digs")
+		public CompiledExpression getMinSignificantDigits() {
+			return theMinSignificantDigits;
+		}
+
+		@QonfigAttributeGetter("max-sig-digs")
+		public CompiledExpression getMaxSignificantDigits() {
+			return theMaxSignificantDigits;
+		}
+
+		@QonfigAttributeGetter("max-int-digits")
+		public int getMaxIntDigits() {
+			return theMaxIntDigits;
+		}
+
+		@QonfigAttributeGetter("zero-exp")
+		public int getZeroExp() {
+			return theZeroExp;
+		}
+
+		@QonfigAttributeGetter("allow-empty")
+		public boolean isEmptyAllowed() {
+			return isEmptyAllowed;
 		}
 
 		@QonfigAttributeGetter("unit")
@@ -1462,6 +1510,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return isMetricPrefixedP2;
 		}
 
+		@QonfigAttributeGetter("metric-prefixes-3k")
+		public boolean isMetricPrefixed3K() {
+			return isMetricPrefixed3K;
+		}
+
+		@QonfigAttributeGetter("default-prefix-multiplier")
+		public double getDefaultPrefixMult() {
+			return theDefaultPrefixMult;
+		}
+
 		@QonfigChildGetter("prefix")
 		public List<Prefix> getPrefixes() {
 			return Collections.unmodifiableList(thePrefixes);
@@ -1474,14 +1532,40 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doPrepare(session);
-			theSignificantDigits = getAttributeExpression("sig-digs", session);
+			theMinSignificantDigits = getAttributeExpression("min-sig-digs", session);
+			theMaxSignificantDigits = getAttributeExpression("max-sig-digs", session);
+			String maxIntDigits = session.getAttributeText("max-int-digits");
+			theMaxIntDigits = maxIntDigits == null ? -1 : Integer.parseInt(maxIntDigits);
+			if (maxIntDigits != null && theMaxIntDigits < 0) {
+				session.reporting().at(session.attributes().get("max-int-digits").getLocatedContent())
+				.warn("max-int-digits must be greater >= zero");
+				theMaxIntDigits = -1;
+			}
+			String zeroExp = session.getAttributeText("zero-exp");
+			theZeroExp = zeroExp == null ? -1 : Integer.parseInt(zeroExp);
+			if (zeroExp != null && theZeroExp <= 0) {
+				session.reporting().at(session.attributes().get("zero-exp").getLocatedContent()).warn("zero-exp must be greater than zero");
+				theZeroExp = -1;
+			}
+			isEmptyAllowed = session.getAttribute("allow-empty", boolean.class);
 			theUnit = session.getAttributeText("unit");
 			isUnitRequired = session.getAttribute("unit-required", boolean.class);
 			isMetricPrefixed = session.getAttribute("metric-prefixes", boolean.class);
 			isMetricPrefixedP2 = session.getAttribute("metric-prefixes-p2", boolean.class);
-			if (isMetricPrefixed && isMetricPrefixedP2)
-				throw new QonfigInterpretationException("Only one of 'metrix-prefixes' and 'metric-prefixes-p2' may be specified",
+			isMetricPrefixed3K = session.getAttribute("metric-prefixes-3k", boolean.class);
+			int mp = 0;
+			if (isMetricPrefixed)
+				mp++;
+			if (isMetricPrefixedP2)
+				mp++;
+			if (isMetricPrefixed3K)
+				mp++;
+			if (mp > 1)
+				throw new QonfigInterpretationException(
+					"Only one of 'metrix-prefixes', 'metric-prefixes-p2', or 'metric-prefixes-3k'" + " may be specified",
 					session.attributes().get("metric-prefixes-p2").getLocatedContent());
+			String dpm = session.getAttributeText("default-prefix-multiplier");
+			theDefaultPrefixMult = dpm == null ? Double.NaN : Double.parseDouble(dpm);
 			syncChildren(Prefix.class, thePrefixes, session.forChildren("prefix"));
 			thePrefixMults.clear();
 			for (Prefix prefix : thePrefixes) {
@@ -1500,7 +1584,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<Double> {
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSignificantDigits;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMinSignificantDigits;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaxSignificantDigits;
 
 			Interpreted(DoubleFormat definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -1511,8 +1596,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return (DoubleFormat) super.getDefinition();
 			}
 
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSignificantDigits() {
-				return theSignificantDigits;
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getMinSignificantDigits() {
+				return theMinSignificantDigits;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getMaxSignificantDigits() {
+				return theMaxSignificantDigits;
 			}
 
 			@Override
@@ -1523,7 +1612,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theSignificantDigits = interpret(getDefinition().getSignificantDigits(), ModelTypes.Value.INT);
+				theMinSignificantDigits = interpret(getDefinition().getMinSignificantDigits(), ModelTypes.Value.INT);
+				theMaxSignificantDigits = interpret(getDefinition().getMaxSignificantDigits(), ModelTypes.Value.INT);
 			}
 
 			@Override
@@ -1538,59 +1628,93 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator extends AbstractFormat.Instantiator<Double> {
-			private ModelValueInstantiator<SettableValue<Integer>> theSignificantDigits;
-			private String theUnit;
-			private boolean isUnitRequired;
-			private boolean isMetricPrefixed;
-			private boolean isMetricPrefixedP2;
-			private Map<String, Double> thePrefixMults;
+			private final ModelValueInstantiator<SettableValue<Integer>> theMinSignificantDigits;
+			private final ModelValueInstantiator<SettableValue<Integer>> theMaxSignificantDigits;
+			private final int theMaxIntDigits;
+			private final int theZeroExp;
+			private final boolean isEmptyAllowed;
+			private final String theUnit;
+			private final boolean isUnitRequired;
+			private final boolean isMetricPrefixed;
+			private final boolean isMetricPrefixedP2;
+			private final boolean isMetricPrefixed3K;
+			private final double theDefaultPrefixMult;
+			private final Map<String, Double> thePrefixMults;
+			private final String theUModMsg;
 
 			public Instantiator(DoubleFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theSignificantDigits = interpreted.getSignificantDigits().instantiate();
+				theMinSignificantDigits = interpreted.getMinSignificantDigits().instantiate();
+				theMaxSignificantDigits = interpreted.getMaxSignificantDigits() == null ? null
+					: interpreted.getMaxSignificantDigits().instantiate();
+				theMaxIntDigits = interpreted.getDefinition().getMaxIntDigits();
+				theZeroExp = interpreted.getDefinition().getZeroExp();
+				isEmptyAllowed = interpreted.getDefinition().isEmptyAllowed();
 				theUnit = interpreted.getDefinition().getUnit();
 				isUnitRequired = interpreted.getDefinition().isUnitRequired();
 				isMetricPrefixed = interpreted.getDefinition().isMetricPrefixed();
 				isMetricPrefixedP2 = interpreted.getDefinition().isMetricPrefixedP2();
+				isMetricPrefixed3K = interpreted.getDefinition().isMetricPrefixed3K();
+				theDefaultPrefixMult = interpreted.getDefinition().getDefaultPrefixMult();
 				thePrefixMults = QommonsUtils.unmodifiableCopy(interpreted.getDefinition().getPrefixMults());
+				theUModMsg = interpreted.reporting().getFileLocation().getPosition(0).toShortString() + "formats are not reversible";
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
 				super.instantiate();
-				theSignificantDigits.instantiate();
+				theMinSignificantDigits.instantiate();
+				if (theMaxSignificantDigits != null)
+					theMaxSignificantDigits.instantiate();
 			}
 
 			@Override
 			protected SettableValue<Format<Double>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				SettableValue<Integer> sigDigs = theSignificantDigits.get(models);
-				return createFormat(sigDigs);
+				SettableValue<Integer> minSigDigs = theMinSignificantDigits.get(models);
+				SettableValue<Integer> maxSigDigs = theMaxSignificantDigits == null ? null : theMaxSignificantDigits.get(models);
+				return createFormat(minSigDigs, maxSigDigs);
 			}
 
-			private SettableValue<Format<Double>> createFormat(SettableValue<Integer> sigDigs) {
-				return SettableValue.asSettable(sigDigs.map(sd -> {
-					Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sd);
-					builder.withUnit(theUnit, isUnitRequired);
-					if (isMetricPrefixed)
-						builder.withMetricPrefixes();
-					else if (isMetricPrefixedP2)
-						builder.withMetricPrefixesPower2();
-					for (Map.Entry<String, Double> prefix : thePrefixMults.entrySet())
-						builder.withPrefix(prefix.getKey(), prefix.getValue());
-					return builder.build();
-				}), __ -> "Unmodifiable");
+			private SettableValue<Format<Double>> createFormat(SettableValue<Integer> minSigDigs, SettableValue<Integer> maxSigDigs) {
+				return SettableValue.asSettable(minSigDigs.transform(tx -> tx//
+					.combineWith(maxSigDigs == null ? ObservableValue.of(null) : maxSigDigs)//
+					.combine((min, max) -> {
+						Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(min);
+						if (max != null)
+							builder.withSigDigs(min, max);
+						if (theMaxIntDigits >= 0)
+							builder.printIntFor(theMaxIntDigits, true);
+						if (theZeroExp > 0)
+							builder.withZeroExp(theZeroExp);
+						builder.emptyAllowed(isEmptyAllowed);
+						builder.withUnit(theUnit, isUnitRequired);
+						if (isMetricPrefixed)
+							builder.withMetricPrefixes();
+						else if (isMetricPrefixedP2)
+							builder.withMetricPrefixesPower2();
+						else if (isMetricPrefixed3K)
+							builder.withMetricPrefixesPower3K();
+						for (Map.Entry<String, Double> prefix : thePrefixMults.entrySet())
+							builder.withPrefix(prefix.getKey(), prefix.getValue());
+						if (!Double.isNaN(theDefaultPrefixMult))
+							builder.withDefaultPrefixMultiplier(theDefaultPrefixMult);
+						return builder.build();
+					})), __ -> theUModMsg);
 			}
 
 			@Override
 			protected SettableValue<Format<Double>> copyFormat(SettableValue<Format<Double>> format, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<Integer> srcSigDigs = theSignificantDigits.get(sourceModels);
-				SettableValue<Integer> newSigDigs = theSignificantDigits.forModelCopy(srcSigDigs, sourceModels, newModels);
-				if (newSigDigs == srcSigDigs)
+				SettableValue<Integer> srcMinSigDigs = theMinSignificantDigits.get(sourceModels);
+				SettableValue<Integer> srcMaxSigDigs = theMaxSignificantDigits == null ? null : theMaxSignificantDigits.get(sourceModels);
+				SettableValue<Integer> newMinSigDigs = theMinSignificantDigits.forModelCopy(srcMinSigDigs, sourceModels, newModels);
+				SettableValue<Integer> newMaxSigDigs = theMaxSignificantDigits == null ? null
+					: theMaxSignificantDigits.forModelCopy(srcMinSigDigs, sourceModels, newModels);
+				if (newMinSigDigs == srcMinSigDigs && newMaxSigDigs == srcMaxSigDigs)
 					return format;
 				else
-					return createFormat(newSigDigs);
+					return createFormat(newMinSigDigs, newMaxSigDigs);
 			}
 		}
 	}
@@ -1783,6 +1907,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final boolean isFormat24H;
 			private final TimeUtils.RelativeInstantEvaluation theRelativeEvaluation;
 			private final ModelValueInstantiator<SettableValue<Instant>> theRelativeTo;
+			private final String theLocation;
 
 			Instantiator(DateFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -1792,6 +1917,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				isFormat24H = interpreted.getDefinition().isFormat24H();
 				theRelativeEvaluation = interpreted.getDefinition().getRelativeEvaluation();
 				theRelativeTo = interpreted.getRelativeTo() == null ? null : interpreted.getRelativeTo().instantiate();
+				theLocation = interpreted.reporting().getFileLocation().getPosition(0).toShortString();
 			}
 
 			@Override
@@ -1810,7 +1936,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					.withTimeZone(theTimeZone)//
 					.withMaxResolution(theMaxResolution)//
 					.with24HourFormat(isFormat24H)//
-					.withEvaluationType(theRelativeEvaluation)), "Unsettable");
+					.withEvaluationType(theRelativeEvaluation)), theLocation + ": Unsettable");
 			}
 
 			@Override
@@ -1826,7 +1952,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					.withTimeZone(theTimeZone)//
 					.withMaxResolution(theMaxResolution)//
 					.with24HourFormat(isFormat24H)//
-					.withEvaluationType(theRelativeEvaluation)), "Unsettable");
+					.withEvaluationType(theRelativeEvaluation)), theLocation + ": Unsettable");
 			}
 		}
 	}
@@ -1898,14 +2024,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator extends AbstractFormat.Instantiator<String> {
+			private final String theLocation;
+
 			public Instantiator(RegexStringFormat.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
+				theLocation = interpreted.reporting().getFileLocation().getPosition(0).toShortString();
 			}
 
 			@Override
 			protected SettableValue<Format<String>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(INSTANCE, "Unmodifiable");
+				return SettableValue.of(INSTANCE, theLocation + ": Unmodifiable");
 			}
 
 			@Override
@@ -1985,17 +2114,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends AbstractFormat.Instantiator<T> {
-			private Format<T> theFormat;
+			private final Format<T> theFormat;
+			private final String theLocation;
 
 			Instantiator(StandardTextFormat.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
 				theFormat = interpreted.getFormat();
+				theLocation = interpreted.reporting().getFileLocation().getPosition(0).toShortString();
 			}
 
 			@Override
 			protected SettableValue<Format<T>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(theFormat, StdMsg.UNSUPPORTED_OPERATION);
+				return SettableValue.of(theFormat, theLocation + ": Unmodifiable");
 			}
 
 			@Override
@@ -2339,6 +2470,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ObservableConfigFormat<T>> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				SettableValue<Format<T>> textFormat;
 				if (theTextFormat != null)
 					textFormat = theTextFormat.get(models);
@@ -2358,8 +2490,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					});
 				} else
 					defaultValue = ObservableValue.of(theStaticDefaultValue);
+				String uModMsg = reporting().getFileLocation().getPosition(0).toShortString() + ": Unmodifiable";
 				return SettableValue.asSettable(textFormat.map(tf -> ObservableConfigFormat.ofQommonFormat(tf, defaultValue)),
-					__ -> "Unmodifiable");
+					__ -> uModMsg);
 			}
 
 			@Override
@@ -2389,8 +2522,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					srcDefaultValue = newDefaultValue = ObservableValue.of(theStaticDefaultValue);
 				if (srcTextFormat == newTextFormat && srcDefaultValue == newDefaultValue)
 					return value;
+				String uModMsg = reporting().getFileLocation().getPosition(0).toShortString() + ": Unmodifiable";
 				return SettableValue.asSettable(newTextFormat.map(tf -> ObservableConfigFormat.ofQommonFormat(tf, newDefaultValue)),
-					__ -> "Unmodifiable");
+					__ -> uModMsg);
 			}
 		}
 	}
@@ -2568,6 +2702,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public SettableValue<ObservableConfigFormat<E>> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				ObservableConfigFormatSet formatSet;
 				if (theFormatSet != null)
 					formatSet = theFormatSet.get(models).get();
@@ -2622,7 +2757,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public ExAddOn.Interpreted<? extends ExElement, ? extends Void<ExElement>> interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ExElement> ExAddOn.Interpreted<? super E2, ? extends Void<ExElement>> interpret(
+			ExElement.Interpreted<E2> element) {
 			return null;
 		}
 	}

@@ -42,6 +42,12 @@ implements ObservableSortedMultiMap<K, V> {
 	}
 
 	@Override
+	public DefaultPassiveSortedMultiMap<S, K0, V0, K, V> alias(String alias) {
+		super.alias(alias);
+		return this;
+	}
+
+	@Override
 	public ObservableSortedSet<K> keySet() {
 		return (ObservableSortedSet<K>) super.keySet();
 	}

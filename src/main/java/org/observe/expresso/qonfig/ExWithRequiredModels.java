@@ -107,7 +107,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -200,7 +200,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;

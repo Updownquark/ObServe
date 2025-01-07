@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -22,6 +23,7 @@ import java.util.stream.Stream;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Subscription;
 import org.observe.XformOptions;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
@@ -282,6 +284,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstraint.union(theParent.getThreadConstraint(), theFilter.getThreadConstraint());
 		}
@@ -314,6 +327,11 @@ public class ObservableCollectionActiveManagers2 {
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(Lockable.lockable(theParent, false, null),
 				Lockable.lockable(theFilter));
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(theParent.getChangeSources(), theFilter.getChangeSources());
 		}
 
 		@Override
@@ -521,6 +539,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theUnionConstraint;
 		}
@@ -713,6 +742,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getParent().isEventing();
 		}
@@ -857,6 +897,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstrained.getThreadConstraint(getParent(), theRefresh);
 		}
@@ -879,6 +930,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), theRefresh);
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(super.getChangeSources(), theRefresh.getChangeSources());
 		}
 
 		@Override
@@ -1032,6 +1088,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return ThreadConstraint.ANY; // Can't know
 		}
@@ -1070,6 +1137,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(super.getChangeSources(), CoreChangeSources.of(theRefreshObservables.keySet()));
 		}
 
 		@Override
@@ -1221,6 +1293,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			return Equivalence.DEFAULT;
 		}
@@ -1269,6 +1352,12 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(theParent.getChangeSources(),
+				CoreChangeSources.of(theOuterElements, h -> h.manager.getChangeSources()));
+		}
+
+		@Override
 		public boolean isEventing() {
 			try (Transaction t = theParent.lock(false, null)) {
 				if (theParent.isEventing())
@@ -1283,19 +1372,19 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public boolean isContentControlled() {
-			// The only way this method could ever reliably return false is if we could be sure
-			// that the outer collection could never obtain any new values nor have any set operations that result in new flows
-			// If we could determine that, the code below would be correct. As it is, we always have to return true.
-			// try (Transaction t = theParent.lock(false, null)) {
-			// boolean anyControlled = false;
-			// for (FlattenedHolder outerEl : theOuterElements) {
-			// if (outerEl.manager == null)
-			// continue;
-			// anyControlled |= outerEl.manager.isContentControlled();
-			// }
-			// return anyControlled;
-			// }
-			return true;
+			// The only way this method can reliably return false is if we can be sure
+			// that the outer collection can never obtain any new values nor have any set operations that result in new flows.
+			if (theParent.getThreadConstraint() == ThreadConstraint.NONE) {
+				boolean anyControlled = false;
+				for (FlattenedHolder outerEl : theOuterElements) {
+					if (outerEl.manager == null)
+						continue;
+					anyControlled |= outerEl.manager.isContentControlled();
+				}
+				return anyControlled;
+			} else { // Otherwise, we have to return true
+				return true;
+			}
 		}
 
 		@Override

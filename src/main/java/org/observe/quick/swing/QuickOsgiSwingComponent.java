@@ -22,6 +22,7 @@ import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.ThreadConstraint;
 
+/** An OSGi component that loads a Quick Swing user interface document */
 public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 	private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("HH:mm:ss");
 
@@ -29,6 +30,7 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 	private final JPanel thePanel;
 	private JTextPane theErrorDisplay;
 
+	/** @param dynamicRefresh Whether to refresh the user interface when any of the source documents change */
 	protected QuickOsgiSwingComponent(boolean dynamicRefresh) {
 		super(ThreadConstraint.EDT, dynamicRefresh);
 		thePanel = new JPanel(new JustifiedBoxLayout(true).mainJustified().crossJustified());
@@ -88,5 +90,6 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 		installComponent(thePanel);
 	}
 
+	/** @param component The swing component to display */
 	protected abstract void installComponent(JComponent component);
 }

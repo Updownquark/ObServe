@@ -2,9 +2,11 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -15,6 +17,7 @@ import java.util.stream.Stream;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
@@ -83,6 +86,12 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ReversedSet<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -239,6 +248,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public boolean isEventing() {
 			return theWrapped.isEventing();
 		}
@@ -339,6 +359,11 @@ public class ObservableSetImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theWrapped.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theWrapped.getChangeSources();
 		}
 
 		@Override
@@ -661,6 +686,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -693,6 +729,11 @@ public class ObservableSetImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources();
 		}
 
 		@Override
@@ -1383,6 +1424,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public PassiveDerivedSet<E, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
@@ -1479,6 +1526,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public ActiveDerivedSet<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
 			try (Transaction t = lock(true, null)) {
@@ -1549,6 +1602,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public ConstantObservableSet<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			ElementId el = theIndex.get(value);
 			if (el != null)
@@ -1590,6 +1649,12 @@ public class ObservableSetImpl {
 		 */
 		protected FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable, Equivalence<? super E> equivalence) {
 			super(collectionObservable, equivalence);
+		}
+
+		@Override
+		public FlattenedValueSet<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1672,6 +1737,12 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableSet<E> getWrapped() throws IllegalStateException {
 			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSetImpl<E, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override

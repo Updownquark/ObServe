@@ -93,31 +93,31 @@ public class ArrayAccessExpression implements ObservableExpression {
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
-			exHandler.handle1(new ExpressoInterpretationException("An array access expression can only be evaluated as a value",
+			exHandler.handle1(() -> new ExpressoInterpretationException("An array access expression can only be evaluated as a value",
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 
 		EvaluatedExpression<SettableValue<?>, SettableValue<Object[]>> arrayValue;
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
-			.holder2();
+			.holder2(exHandler.isInstantiating());
 		arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
 			(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset, tce);
 		if (arrayValue == null) {
-			if (tce.get1() != null)
-				exHandler.handle1(
-					new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(), theArray.getExpressionLength()));
+			if (tce.hasException1())
+				exHandler.handle1(() ->
+				new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(), theArray.getExpressionLength()));
 			else
-				exHandler.handle1(
-					new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(), getExpressionLength()));
+				exHandler.handle1(() ->
+				new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
 		InterpretedExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
 		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue;
-		indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset, tce);
+		indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset, tce.use());
 		if (indexValue == null) {
-			exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(),
+			exHandler.handle1(() -> new ExpressoInterpretationException(tce.get1().getMessage(),
 				env.reporting().at(getComponentOffset(1)).getPosition(), theIndex.getExpressionLength()));
 			return null;
 		}
@@ -131,7 +131,8 @@ public class ArrayAccessExpression implements ObservableExpression {
 		ErrorReporting indexReporting, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		if (targetType == null) {
-			exHandler.handle1(new ExpressoInterpretationException("Value is not an array", arrayReporting.getFileLocation().getPosition(0),
+			exHandler.handle1(() -> new ExpressoInterpretationException("Value is not an array",
+				arrayReporting.getFileLocation().getPosition(0),
 				theArray.getExpressionLength()));
 			return null;
 		}

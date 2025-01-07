@@ -1,9 +1,11 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -11,6 +13,7 @@ import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Transformation;
@@ -178,6 +181,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** @return Whether this manager will prevent its collection from being able to manage elements arbitrarily */
 		boolean isContentControlled();
+
+		/** @return The change sources contributing to this flow */
+		Observable.CoreChangeSources getChangeSources();
 	}
 
 	/**
@@ -926,13 +932,16 @@ public class ObservableCollectionDataFlowImpl {
 			Transformation<I, T> def) {
 			if (def instanceof Transformation.ReversibleTransformation) {
 				Transformation.TransformReverse<I, T> reverse = ((Transformation.ReversibleTransformation<I, T>) def).getReverse();
-				if (reverse instanceof Transformation.MappingSourceReplacingReverse
-					&& ((Transformation.MappingSourceReplacingReverse<I, T>) reverse).isInexactReversible()) {
+				if (sourceEquivalence == Equivalence.DEFAULT && (!(reverse instanceof Transformation.MappingSourceReplacingReverse)
+					|| !((Transformation.MappingSourceReplacingReverse<I, T>) reverse).isInexactReversible())) {
 					// Inexact reversibility has some interesting consequences, especially if further links, particularly distinct links,
 					// are derived from inexact-reversible transformations
 					// E.g. take a simple integer x2 inexact transform derived with distinctness.
 					// If 1 is added to the distinct collection, the actual value that will be added is 0 ( 1 / 2 )
 					// This difference must be handled correctly and this is done though the peculiar mapping equivalence.
+					// we also need this transform for non-default equivalence (e.g. sorted)
+					return def.equivalence();
+				} else {
 					Function<? super I, ? extends T> map = LambdaUtils.printableFn(v -> {
 						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 						return engine.map(v, engine.get());
@@ -949,8 +958,7 @@ public class ObservableCollectionDataFlowImpl {
 							return rq.getReversed();
 						}, reverse::toString, reverse));
 					return mappedEquivalence;
-				} else
-					return def.equivalence();
+				}
 			} else
 				return def.equivalence();
 		}
@@ -1331,7 +1339,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public CoreId getCoreId() {
-			return theParent.getCoreId();
+			return theParent.getCoreId().and(theEngine.getCoreId());
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources().union(theEngine.noInitChanges().getChangeSources());
 		}
 
 		@Override
@@ -1346,6 +1359,17 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "xform", theEngine.getTransformation().getIdentity());
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override

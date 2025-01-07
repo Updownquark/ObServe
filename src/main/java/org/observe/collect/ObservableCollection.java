@@ -30,8 +30,11 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
+import org.observe.dbug.Dbug;
+import org.observe.dbug.DbugAnchorType;
 import org.observe.util.ObservableUtils;
 import org.observe.util.SafeObservableCollection;
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -81,6 +84,18 @@ import org.qommons.tree.BetterTreeList;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends BetterList<E>, Eventable, CausableChanging {
+	/** The {@link Dbug} anchor type for this class */
+	public static final DbugAnchorType<ObservableCollection<?>> DBUG = Dbug.common()
+		.anchor((Class<ObservableCollection<?>>) (Class<?>) ObservableCollection.class, b -> b//
+			.withEvent("change", e -> e//
+				.withParameter("type", TypeTokens.get().of(CollectionChangeType.class))//
+				.withParameter("id", TypeTokens.get().of(ElementId.class))//
+				.withParameter("index", TypeTokens.get().INT)//
+				.withParameter("oldValue", TypeTokens.get().OBJECT)//
+				.withParameter("newValue", TypeTokens.get().OBJECT)//
+				)//
+			);
+
 	/**
 	 * It is illegal to attempt to modify a collection (or even fire an update event on it) as a result of a currently executing
 	 * modification (or update) to the collection. If such an attempt is made (and the implementation is able detect it), an
@@ -183,6 +198,9 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			}
 		};
 	}
+
+	@Override
+	ObservableCollection<E> alias(String alias);
 
 	/** @return A collection that is identical to this one, but with its elements reversed */
 	@Override
@@ -308,6 +326,12 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			}
 
 			@Override
+			public ObservableCollectionImpl.ReducedValue<E, Integer, Integer> alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
+
+			@Override
 			public long getStamp() {
 				return getCollection().getStamp();
 			}
@@ -401,6 +425,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			@Override
 			public CoreId getCoreId() {
 				return ObservableCollection.this.getCoreId();
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return ObservableCollection.this.getChangeSources();
 			}
 		}
 		return new SimpleChanges();
@@ -503,6 +532,12 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(getCollection().getIdentity(), "reduce", seed, add, remove);
+			}
+
+			@Override
+			public ObservableCollectionImpl.ReducedValue<E, T, T> alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 
 			@Override
@@ -754,6 +789,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			@Override
 			public CoreId getCoreId() {
 				return Lockable.getCoreId(Lockable.lockable(coll), coll);
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return CoreChangeSources.of(coll.getChangeSources(), CoreChangeSources.of(coll));
 			}
 		}
 		return new FoldedCollectionObservable();

@@ -4,8 +4,9 @@ import java.util.Collection;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.collect.CollectionElementMove;
-import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
@@ -65,6 +66,11 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	@Override
 	public CoreId getCoreId() {
 		return theWrapped.getCoreId();
+	}
+
+	@Override
+	public CoreChangeSources getChangeSources() {
+		return theWrapped.getChangeSources();
 	}
 
 	@Override
@@ -186,7 +192,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		return unmodifiable;
 	}
 
-	private static class UnmodifiableChildList implements BetterList<ObservableConfig> {
+	private static class UnmodifiableChildList extends AbstractIdentifiable implements BetterList<ObservableConfig> {
 		private final BetterList<ObservableConfig> theBacking;
 
 		UnmodifiableChildList(BetterList<ObservableConfig> backing) {
@@ -317,8 +323,8 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return Identifiable.wrap(theBacking.getIdentity(), "unmodifiable");
+		protected Object createIdentity() {
+			return theBacking.getIdentity();
 		}
 
 		@Override

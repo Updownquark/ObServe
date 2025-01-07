@@ -2,6 +2,7 @@ package org.observe.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -37,7 +38,7 @@ public class CsvEntitySetTestUtils {
 			.with("name", TypeTokens.get().STRING)//
 			.with("values", new TypeToken<List<Integer>>() {
 			}), //
-			Arrays.asList("id")).setFormat("values", new Format.ListFormat<>(Format.INT, ",", null));
+			Arrays.asList("id")).setFormat("values", new Format.CollectionFormat<>(Format.INT, ",", null, null, ArrayList::new));
 		entitySet.setTargetFileSize(10 * 1024);
 		return entitySet;
 	}

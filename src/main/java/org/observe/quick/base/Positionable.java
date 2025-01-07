@@ -1,5 +1,8 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
@@ -14,6 +17,7 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.config.QonfigAddOn;
@@ -48,6 +52,11 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		protected Def(boolean vertical, QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 			isVertical = vertical;
+		}
+
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return Collections.singleton((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExModelAugmentation.Def.class);
 		}
 
 		/** @return Whether this positionable is vertical or horizontal */
@@ -117,7 +126,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted.Vertical interpret(ExElement.Interpreted<?> element) {
+			public <E2 extends ExElement> Interpreted.Vertical interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted.Vertical(this, element);
 			}
 		}
@@ -155,7 +164,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted.Horizontal interpret(ExElement.Interpreted<?> element) {
+			public <E2 extends ExElement> Interpreted.Horizontal interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted.Horizontal(this, element);
 			}
 		}
@@ -293,7 +302,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
 		theLeadingInstantiator = myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate();

@@ -95,6 +95,9 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		return noInitChanges().getCoreId();
 	}
 
+	@Override
+	ObservableValue<T> alias(String alias);
+
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
 		class ValueObservable extends AbstractIdentifiable implements Observable<T> {
@@ -146,6 +149,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableValue.this.getIdentity(), "value");
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return noInitChanges().getChangeSources();
 			}
 		}
 		return new ValueObservable();
@@ -505,61 +513,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 *         completes.
 	 */
 	public static <T> Observable<T> flattenObservableValue(ObservableValue<? extends Observable<? extends T>> value) {
-		Observable<ObservableValueEvent<? extends Observable<? extends T>>> changes;
-		changes = (Observable<ObservableValueEvent<? extends Observable<? extends T>>>) (Observable<?>) value.changes();
-		return new Observable.WrappingObservable<ObservableValueEvent<? extends Observable<? extends T>>, T>(changes) {
-			@Override
-			public Subscription subscribe(Observer<? super T> observer) {
-				return getWrapped().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
-					@Override
-					public void onNext(ObservableValueEvent<? extends Observable<? extends T>> event) {
-						if (event.getNewValue() != null) {
-							event.getNewValue().takeUntil(value.noInitChanges()).subscribe(new Observer<T>() {
-								@Override
-								public void onNext(T event2) {
-									observer.onNext(event2);
-								}
-
-								@Override
-								public void onCompleted(Supplier<Causable> cause) {
-									// Don't use the completed events because the contents of this observable may be replaced
-								}
-							});
-						}
-					}
-
-					@Override
-					public void onCompleted(Supplier<Causable> cause) {
-						observer.onCompleted(cause);
-					}
-				});
-			}
-
-			@Override
-			public boolean isSafe() {
-				return false; // Can't guarantee that the contents will always be safe
-			}
-
-			@Override
-			public boolean isLockSupported() {
-				return value.changes().isLockSupported();
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lock(value.changes(), value::get);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLock(value.changes(), value::get);
-			}
-
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(value.getIdentity(), "flatten");
-			}
-		};
+		return new FlattenedValueObservable<>(value);
 	}
 
 	/**
@@ -626,9 +580,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param <F> The type of the wrapped value
 	 * @param <T> The type of this value
 	 */
-	abstract class WrappingObservableValue<F, T> implements ObservableValue<T> {
+	abstract class WrappingObservableValue<F, T> extends AbstractIdentifiable implements ObservableValue<T> {
 		protected final ObservableValue<F> theWrapped;
-		private Object theIdentity;
 
 		protected WrappingObservableValue(ObservableValue<F> wrapped) {
 			theWrapped = wrapped;
@@ -639,15 +592,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = createIdentity();
-			return theIdentity;
-		}
-
-		protected abstract Object createIdentity();
-
-		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theWrapped.getThreadConstraint();
 		}
@@ -655,6 +599,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public long getStamp() {
 			return theWrapped.getStamp();
+		}
+
+		@Override
+		public WrappingObservableValue<F, T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -680,10 +630,9 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 *
 	 * @param <T> The type of the value
 	 */
-	public class ObservableValueChanges<T> implements Observable<ObservableValueEvent<T>> {
+	public class ObservableValueChanges<T> extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 		private final ObservableValue<T> theValue;
 		private final Observable<ObservableValueEvent<T>> theNoInitChanges;
-		private Object theIdentity;
 
 		/** @param value The value that this changes observable is for */
 		public ObservableValueChanges(ObservableValue<T> value) {
@@ -697,10 +646,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theValue.getIdentity(), "changes");
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theValue.getIdentity(), "changes");
 		}
 
 		@Override
@@ -742,6 +689,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInit() {
 			return theNoInitChanges;
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theNoInitChanges.getChangeSources();
 		}
 
 		@Override
@@ -829,9 +781,23 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							}
 						});
 						theTransformSub = theEngine.noInitChanges().act(evt -> {
-							BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
-							if (change != null)
-								fire(change.getValue1(), change.getValue2(), evt);
+							try (Transaction t2 = theSource.lock()) {
+								BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
+								if (change == null)
+									return;
+								T oldValue = change.getValue1();
+								T newValue;
+								// Check to see if the source is also changed such that we may not have received the change yet
+								if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
+									if (checkSourceChanged())
+										newValue = theElement.getCurrentValue(theEngine.getCachedState());
+									else
+										newValue = change.getValue2();
+								} else
+									newValue = change.getValue2();
+								if (change != null)
+									fire(oldValue, newValue, evt);
+							}
 						});
 					}
 				}
@@ -872,8 +838,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			Transformation.TransformationState state = theEngine.get();
 			if (state != cachedState)
 				theElement.transformationStateChanged(cachedState, state);
-			if (!theObservers.isEmpty() || !theTransformation.isCached())
+			// If the source is eventing, it's possible that we haven't received the event that will update us yet
+			if (!theTransformation.isCached() || (!theSource.isEventing() && !theObservers.isEmpty()))
 				return new BiTuple<>(theElement, state);
+			checkSourceChanged();
+			return new BiTuple<>(theElement, state);
+		}
+
+		boolean checkSourceChanged() {
 			long stamp = theSource.getStamp();
 			if (stamp == -1 || stamp != theSourceStamp) {
 				try (Transaction t = lock()) {
@@ -884,13 +856,40 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					theCachedSource = source;
 					theElement.sourceChanged(oldSource, source, theEngine.get());
 				}
-			}
-			return new BiTuple<>(theElement, state);
+				return true;
+			} else
+				return false;
 		}
 
 		@Override
 		protected Object createIdentity() {
-			return Identifiable.wrap(theSource.getIdentity(), "transform", theTransformation);
+			if (theTransformation.getArgs().isEmpty() && LambdaUtils.isTrivial(theTransformation.getCombination()))
+				return theSource.getIdentity();
+			Identifiable.CustomIdentityBuilder idBuilder = Identifiable.buildId()//
+				.withPrintedId(theSource)//
+				.append(".")//
+				.withPrintedId(theTransformation.getCombination());
+			if (theTransformation.getArgs().isEmpty())
+				idBuilder.append("()");
+			else {
+				idBuilder.append("(");
+				boolean firstArg = true;
+				for (ObservableValue<?> arg : theTransformation.getArgs()) {
+					if (firstArg)
+						firstArg = false;
+					else
+						idBuilder.append(", ");
+					idBuilder.withPrintedId(arg);
+				}
+				idBuilder.append(")");
+			}
+			return idBuilder.build();
+		}
+
+		@Override
+		public TransformedObservableValue<S, T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -906,6 +905,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public boolean isEventing() {
 			return theSource.isEventing() || theEngine.isEventing();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstraint.union(theSource.getThreadConstraint(), theEngine.getThreadConstraint());
 		}
 
 		@Override
@@ -958,6 +962,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public CoreId getCoreId() {
 					return Lockable.getCoreId(theSource, theEngine);
 				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.of(theSource.noInitChanges(), theEngine.noInitChanges());
+				}
 			}
 			return new Changes();
 		}
@@ -1008,7 +1017,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	class RefreshingObservableValue<T> extends WrappingObservableValue<T, T> {
 		private final Observable<?> theRefresh;
-		private Object theChangesIdentity;
 
 		protected RefreshingObservableValue(ObservableValue<T> wrap, Observable<?> refresh) {
 			super(wrap);
@@ -1031,18 +1039,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return new Observable<ObservableValueEvent<T>>() {
+			class RefreshingValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
 				public boolean isEventing() {
 					return getWrapped().isEventing() && theRefresh.isEventing();
 				}
 
 				@Override
-				public Object getIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(theWrapped.noInitChanges().getIdentity(), "refresh",
-							theRefresh.getIdentity());
-					return theChangesIdentity;
+				protected Object createIdentity() {
+					return Identifiable.wrap(theWrapped.noInitChanges().getIdentity(), "refresh", theRefresh.getIdentity());
 				}
 
 				@Override
@@ -1087,7 +1092,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public ThreadConstraint getThreadConstraint() {
-					return theWrapped.getThreadConstraint();
+					return ThreadConstraint.union(theWrapped.getThreadConstraint(), theRefresh.getThreadConstraint());
 				}
 
 				@Override
@@ -1109,7 +1114,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public CoreId getCoreId() {
 					return Lockable.getCoreId(theWrapped, theRefresh);
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.of(theWrapped.noInitChanges(), theRefresh);
+				}
+			}
+			return new RefreshingValueChanges();
 		}
 
 		@Override
@@ -1172,7 +1183,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			Observable<ObservableValueEvent<T>> wrappedChanges = getWrapped().changes();
-			return new Observable<ObservableValueEvent<T>>() {
+			class RefreshEachChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				private boolean isRefreshEventing;
 
 				@Override
@@ -1181,7 +1192,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public Object getIdentity() {
+				protected Object createIdentity() {
 					return Identifiable.wrap(RefreshEachValue.this.getIdentity(), "noInitChanges");
 				}
 
@@ -1267,7 +1278,18 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public Transaction tryLock() {
 					return RefreshEachValue.this.tryLock();
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					T value = getWrapped().get();
+					Observable<?> refresh = theRefresh.apply(value);
+					if (refresh != null)
+						return CoreChangeSources.of(getWrapped().noInitChanges(), refresh);
+					else
+						return getWrapped().noInitChanges().getChangeSources();
+				}
+			}
+			return new RefreshEachChanges();
 		}
 
 		@Override
@@ -1385,6 +1407,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					Runnable remove = theListeners.add(observer::onNext, true);
 					return remove::run;
 				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return getWrapped().noInitChanges().getChangeSources();
+				}
 			}
 			return new SafeChanges();
 		}
@@ -1393,6 +1420,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		public boolean isEventing() {
 			return isEventing;
 		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theThreading;
+		}
 	}
 
 	/**
@@ -1400,10 +1432,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 *
 	 * @param <T> The type of this value
 	 */
-	class ConstantObservableValue<T> implements ObservableValue<T> {
+	class ConstantObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final T theValue;
-
-		private Object theIdentity;
 
 		/** @param value This observable value's value */
 		public ConstantObservableValue(T value) {
@@ -1411,11 +1441,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.idFor(theValue, () -> String.valueOf(theValue), () -> Objects.hashCode(theValue),
-					other -> Objects.equals(theValue, other));
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.idFor(theValue, () -> String.valueOf(theValue), () -> Objects.hashCode(theValue),
+				other -> Objects.equals(theValue, other));
+		}
+
+		@Override
+		public ConstantObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1472,6 +1506,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				@Override
 				public Transaction tryLock() {
 					return Transaction.NONE;
+				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.empty();
 				}
 			}
 			return new ConstantNoInitChanges();
@@ -1604,6 +1643,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public Transaction tryLock() {
 					return Transaction.NONE;
 				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.empty();
+				}
 			}
 			return new ConstantInitChanges();
 		}
@@ -1634,8 +1678,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final LongSupplier theStamp;
 		private final Observable<?> theChanges;
 		private final Supplier<?> theIdentity;
-		private Object theChangeIdentity;
-		private Object theNoInitChangeIdentity;
 
 		public SyntheticObservable(Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes,
 			Supplier<?> identity) {
@@ -1653,6 +1695,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		protected Object createIdentity() {
 			return theIdentity.get();
+		}
+
+		@Override
+		public SyntheticObservable<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1676,18 +1724,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		Observable<ObservableValueEvent<T>> changes(boolean withInit, long stamp, T initialValue) {
-			return new Observable<ObservableValueEvent<T>>() {
+			class SyntheticObservableChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
-				public Object getIdentity() {
-					if (withInit) {
-						if (theChangeIdentity == null)
-							theChangeIdentity = Identifiable.wrap(SyntheticObservable.this.getIdentity(), "changes");
-						return theChangeIdentity;
-					} else {
-						if (theNoInitChangeIdentity == null)
-							theNoInitChangeIdentity = Identifiable.wrap(SyntheticObservable.this.getIdentity(), "noInitChanges");
-						return theNoInitChangeIdentity;
-					}
+				protected Object createIdentity() {
+					if (withInit)
+						return Identifiable.wrap(SyntheticObservable.this.getIdentity(), "changes");
+					else
+						return Identifiable.wrap(SyntheticObservable.this.getIdentity(), "noInitChanges");
 				}
 
 				@Override
@@ -1777,7 +1820,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					else
 						return this;
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theChanges.getChangeSources();
+				}
+			}
+			return new SyntheticObservableChanges();
 		}
 
 		/** @return A value the same as this, but which caches its synthetically-generated value for performance */
@@ -1785,7 +1834,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return new CachedObservableValue<>(this);
 		}
 
-		static class CachedObservableValue<T> implements ObservableValue<T> {
+		static class CachedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 			private final SyntheticObservable<T> theValue;
 			private volatile T theCachedValue;
 			private volatile long theCachedStamp;
@@ -1796,8 +1845,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public Object getIdentity() {
+			protected Object createIdentity() {
 				return theValue.getIdentity();
+			}
+
+			@Override
+			public CachedObservableValue<T> alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 
 			@Override
@@ -1850,8 +1905,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	class FlattenedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
 		private final Supplier<? extends T> theDefaultValue;
-		private Object theChangesIdentity;
-		private Object theNoInitChangesIdentity;
 
 		protected FlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
 			Supplier<? extends T> defaultValue) {
@@ -1868,6 +1921,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(theValue.getIdentity(), "flat");
+		}
+
+		@Override
+		public FlattenedObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1917,11 +1976,20 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theValue.getThreadConstraint() == ThreadConstraint.NONE) {
+				ObservableValue<? extends T> obs = theValue.get();
+				return obs == null ? ThreadConstraint.NONE : obs.getThreadConstraint();
+			}
+			return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
 		public String toString() {
 			return "flat(" + theValue + ")";
 		}
 
-		private class FlattenedValueChanges implements Observable<ObservableValueEvent<T>> {
+		private class FlattenedValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 			private final boolean withInitialEvent;
 
 			public FlattenedValueChanges(boolean withInitialEvent) {
@@ -1929,16 +1997,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public Object getIdentity() {
-				if (withInitialEvent) {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "changes");
-					return theChangesIdentity;
-				} else {
-					if (theNoInitChangesIdentity == null)
-						theNoInitChangesIdentity = Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "noInitChanges");
-					return theNoInitChangesIdentity;
-				}
+			protected Object createIdentity() {
+				if (withInitialEvent)
+					return Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "changes");
+				else
+					return Identifiable.wrap(FlattenedObservableValue.this.getIdentity(), "noInitChanges");
 			}
 
 			@Override
@@ -2043,11 +2106,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
-				if (theValue.getThreadConstraint() == ThreadConstraint.NONE) {
-					ObservableValue<? extends T> obs = theValue.get();
-					return obs == null ? ThreadConstraint.NONE : obs.getThreadConstraint();
-				}
-				return ThreadConstraint.ANY; // Can't know
+				return FlattenedObservableValue.this.getThreadConstraint();
 			}
 
 			@Override
@@ -2080,6 +2139,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					return Lockable.getCoreId(theValue, theValue::get);
 				}
 			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				ObservableValue<?> content = theValue.get();
+				if (content != null)
+					return Observable.CoreChangeSources.of(theValue.noInitChanges(), content.noInitChanges());
+				else
+					return theValue.noInitChanges().getChangeSources();
+			}
 		}
 	}
 
@@ -2088,12 +2156,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 *
 	 * @param <T> The type of the value
 	 */
-	class FirstObservableValue<T> implements ObservableValue<T> {
+	class FirstObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableValue<? extends T>[] theValues;
 		private final Predicate<? super T> theTest;
 		private final Supplier<? extends T> theDefault;
-		private Object theIdentity;
-		private Object theChangesIdentity;
 
 		protected FirstObservableValue(ObservableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
@@ -2116,30 +2182,27 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null) {
-				StringBuilder str = new StringBuilder("first");
-				if (theTest != null)
-					str.append(":").append(theTest).append('(');
-				else
-					str.append('(');
-				List<Object> obsIds = new ArrayList<>(theValues.length + 2);
-				for (int i = 0; i < theValues.length; i++) {
-					obsIds.add(theValues[i].getIdentity());
-					str.append(theValues[i].getIdentity());
-					if (i < theValues.length - 1)
-						str.append(", ");
-				}
-				if (theTest != null)
-					obsIds.add(theTest);
-				if (theDefault != null) {
-					obsIds.add(theDefault);
-					str.append("):").append(theDefault);
-				} else
-					str.append(')');
-				theIdentity = Identifiable.baseId(str.toString(), obsIds);
+		protected Object createIdentity() {
+			Identifiable.CustomIdentityBuilder builder = Identifiable.buildId();
+			builder.append("first");
+			if (theTest != null)
+				builder.append(":").withPrintedId(theTest);
+			builder.append("(");
+			for (int i = 0; i < theValues.length; i++) {
+				if (i > 0)
+					builder.append(", ");
+				builder.withPrintedId(theValues[i].getIdentity());
 			}
-			return theIdentity;
+			builder.append(")");
+			if (theDefault != null)
+				builder.append(":").withPrintedId(theDefault);
+			return builder.build();
+		}
+
+		@Override
+		public FirstObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -2151,15 +2214,19 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		public T get() {
 			for (ObservableValue<? extends T> v : theValues) {
 				T value = v.get();
-				if (theTest != null) {
-					if (theTest.test(value))
-						return value;
-				} else if (value != null)
+				if (test(value))
 					return value;
 			}
 			if (theDefault != null)
 				return theDefault.get();
 			return null;
+		}
+
+		private boolean test(T value) {
+			if (theTest != null)
+				return theTest.test(value);
+			else
+				return value != null;
 		}
 
 		@Override
@@ -2177,18 +2244,21 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			for (ObservableValue<? extends T> value : theValues) {
 				if (value.isEventing())
 					return true;
-				else if (theTest.test(value.get()))
+				else if (test(value.get()))
 					return false;
 			}
 			return false;
 		}
 
-		class FirstValueChanges implements Observable<ObservableValueEvent<T>> {
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), LambdaUtils.identity());
+		}
+
+		class FirstValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 			@Override
-			public Object getIdentity() {
-				if (theChangesIdentity == null)
-					theChangesIdentity = Identifiable.wrap(FirstObservableValue.this.getIdentity(), "changes");
-				return theChangesIdentity;
+			protected Object createIdentity() {
+				return Identifiable.wrap(FirstObservableValue.this.getIdentity(), "changes");
 			}
 
 			@Override
@@ -2233,10 +2303,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 								found = false;
 							}
 							int nextIndex = index + 1;
-							if (!found) {
-								while (nextIndex < theValues.length && finished[nextIndex])
-									nextIndex++;
-							}
 							ObservableValueEvent<T> toFire;
 							if (!found) {
 								if (!isFound && !event.isInitial())
@@ -2342,11 +2408,99 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			public CoreId getCoreId() {
 				return Lockable.getCoreId(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
 			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				Observable<?>[] applicable = new Observable[theValues.length];
+				int i = 0;
+				for (ObservableValue<? extends T> value : theValues) {
+					applicable[i++] = value.noInitChanges();
+					T v = value.get();
+					if (test(v))
+						break;
+				}
+				return CoreChangeSources.of(applicable);
+			}
 		}
 
 		@Override
 		public String toString() {
 			return getIdentity().toString();
+		}
+	}
+
+	/**
+	 * An observable composed of an ObservableValue containing an observable. This observable will fire when the content of the observable
+	 * value fires.
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class FlattenedValueObservable<T> extends Observable.WrappingObservable<ObservableValueEvent<? extends Observable<? extends T>>, T> {
+		private final ObservableValue<? extends Observable<? extends T>> theValue;
+
+		protected FlattenedValueObservable(ObservableValue<? extends Observable<? extends T>> value) {
+			super((Observable<ObservableValueEvent<? extends Observable<? extends T>>>) (Observable<?>) value.changes());
+			theValue = value;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			return getWrapped().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
+				@Override
+				public void onNext(ObservableValueEvent<? extends Observable<? extends T>> event) {
+					if (event.getNewValue() != null) {
+						event.getNewValue().takeUntil(theValue.noInitChanges()).subscribe(new Observer<T>() {
+							@Override
+							public void onNext(T event2) {
+								observer.onNext(event2);
+							}
+
+							@Override
+							public void onCompleted(Supplier<Causable> cause) {
+								// Don't use the completed events because the contents of this observable may be replaced
+							}
+						});
+					}
+				}
+
+				@Override
+				public void onCompleted(Supplier<Causable> cause) {
+					observer.onCompleted(cause);
+				}
+			});
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false; // Can't guarantee that the contents will always be safe
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theValue.changes().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock() {
+			return Lockable.lock(theValue.changes(), theValue::get);
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Lockable.tryLock(theValue.changes(), theValue::get);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theValue.getIdentity(), "flatten");
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			if (theValue.getThreadConstraint() == ThreadConstraint.NONE)
+				return theValue.get().getThreadConstraint();
+			else
+				return ThreadConstraint.ANY; // Can't know
 		}
 	}
 
@@ -2362,7 +2516,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		volatile T theLastRememberedValue;
 		volatile long theStamp;
 
-		public LazyObservableValue(Transactable lock) {
+		protected LazyObservableValue(Transactable lock) {
 			theLock = lock;
 			theStamp = -1;
 			theListeners = ListenerList.build().withInUse(new ListenerList.InUseListener() {
@@ -2389,6 +2543,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					}
 				}
 			}).build();
+		}
+
+		@Override
+		public LazyObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -2457,6 +2617,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					Runnable remove = theListeners.add(observer, true);
 					return remove::run;
+				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return LazyObservableValue.this.getChangeSources();
 				}
 			}
 			return new LOVChanges();

@@ -28,6 +28,9 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	static TypeToken<ObservableSortedCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedCollection.class).wildCard();
 
 	@Override
+	ObservableSortedCollection<E> alias(String alias);
+
+	@Override
 	default Iterator<E> iterator() {
 		return BetterSortedList.super.iterator();
 	}

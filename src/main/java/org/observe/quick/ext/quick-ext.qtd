@@ -21,6 +21,12 @@
 				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
 			</styles>
 		</add-on>
+		<add-on name="value-selector-available" requires="table" abstract="true">
+			<attr-mod name="table.rows" specify="forbidden" default="$AVAILABLE_ROWS$" />
+		</add-on>
+		<add-on name="value-selector-included" requires="table" abstract="true">
+			<attr-mod name="table.rows" specify="forbidden" default="$INCLUDED_ROWS$" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -170,8 +176,46 @@
 			<attribute name="values" type="expression" specify="required" />
 			<?DOC The layout that the tiled panel will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
+			<?DOC If it is known that all possible values will be rendered to the same dimensions,
+				setting this to true can improve performance significantly for large collections?>
+			<attribute name="constant-size" type="boolean" default="false" />
 		</element-def>
-		<element-def name="search-table" extends="table">
+
+		<element-def name="super-table" extends="table">
+			<attribute name="searchable" type="boolean" default="true" />
+			<attribute name="item-name" type="string" specify="optional" />
+			<?DOC A collection of the same type as this table's rows that, if specified,
+				will contain the list of row values actually displayed to the user in the table?>
+			<attribute name="displayed" type="expression" specify="optional" />
+			<child-def name="adaptive-height" type="adaptive-height" min="0" />
+		</element-def>
+		<element-def name="adaptive-height">
+			<attribute name="min-rows" type="int" specify="optional" />
+			<attribute name="pref-rows" type="int" specify="optional" />
+			<attribute name="max-rows" type="int" specify="optional" />
+		</element-def>
+
+		<?DOC A pair of tables with a button bar between them. Values in the table on the left can be selected and included in the table
+			on the right or removed again using the buttons.<br>
+			This widget can be used to allow the user to select a sub-set of available values for a subsequent operation.?>
+		<element-def name="value-selector" extends="widget">
+			<element-model>
+				<?DOC The available value that is currently active (being rendered or operated on)?>
+				<value name-attribute="available-value-name" priority="1" />
+				<list name="$AVAILABLE_ROWS$" priority="0" />
+				<list name="$INCLUDED_ROWS$" priority="0" />
+			</element-model>
+			<attribute name="available" type="expression" />
+			<attribute name="included" type="expression" />
+			<attribute name="available-value-name" type="identifier" default="availableValue" />
+			<?DOC Converts a value from the available collection to a value that can be added to the included collection.<br>
+				If not specified, the included collection must be able to accept values from the available collection.?>
+			<attribute name="include" type="expression" default="{available-value-name}" />
+			<attribute name="item-name" type="string" default="item" />
+			<?DOC Configuration for the table of values available for the user to include?>
+			<child-def name="available" type="super-table" inherits="value-selector-available" />
+			<?DOC Configuration for the table of included values?>
+			<child-def name="included" type="table" inherits="value-selector-included" />
 		</element-def>
 
 		<element-def name="bar-chart" extends="widget" inherits="multi-value-renderable">

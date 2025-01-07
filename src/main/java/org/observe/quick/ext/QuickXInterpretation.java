@@ -26,6 +26,7 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.style.QuickStyledElement;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
@@ -70,7 +71,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
 		// Shading
-		interpreter.createWith(QuickShaded.SHADED, QuickShaded.Def.class, ExAddOn.creator(QuickShaded.Def::new));
+		interpreter.createWith(QuickShaded.SHADED, QuickShaded.Def.class,
+			ExAddOn.creator(QuickStyledElement.Def.class, QuickShaded.Def::new));
 		interpreter.createWith(QuickCustomShadingElement.CUSTOM_SHADING, QuickCustomShadingElement.class,
 			ExElement.creator(QuickCustomShadingElement::new));
 		interpreter.createWith(QuickCustomPaintingElement.CUSTOM_PAINTING, QuickCustomPaintingElement.class,
@@ -89,7 +91,11 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 		interpreter.createWith(QuickSettingsMenu.SETTINGS_MENU, QuickSettingsMenu.Def.class, ExElement.creator(QuickSettingsMenu.Def::new));
 		interpreter.createWith(QuickTiledPane.TILED_PANE, QuickTiledPane.Def.class, ExElement.creator(QuickTiledPane.Def::new));
-		interpreter.createWith(QuickSearchTable.SEARCH_TABLE, QuickSearchTable.Def.class, ExElement.creator(QuickSearchTable.Def::new));
+		interpreter.createWith(QuickSuperTable.SUPER_TABLE, QuickSuperTable.Def.class, ExElement.creator(QuickSuperTable.Def::new));
+		interpreter.createWith(QuickSuperTable.ADAPTIVE_HEIGHT, QuickSuperTable.AdaptiveHeight.Def.class,
+			ExElement.creator(QuickSuperTable.AdaptiveHeight.Def::new));
+		interpreter.createWith(QuickValueSelector.VALUE_SELECTOR, QuickValueSelector.Def.class,
+			ExElement.creator(QuickValueSelector.Def::new));
 
 		interpreter.createWith(QuickBarChart.BAR_CHART, QuickBarChart.Def.class, ExElement.creator(QuickBarChart.Def::new));
 
@@ -271,6 +277,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			private final ModelComponentId theYVariable;
 			private final ModelComponentId thePXVariable;
 			private final ModelComponentId thePYVariable;
+			private final String theLocation;
 
 			protected Instantiator(QuickAbstractCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -287,6 +294,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 				theYVariable = interpreted.getDefinition().getYVariable();
 				thePXVariable = interpreted.getDefinition().getPXVariable();
 				thePYVariable = interpreted.getDefinition().getPYVariable();
+				theLocation = interpreted.reporting().getFileLocation().getPosition(0).toShortString();
 			}
 
 			@Override
@@ -305,14 +313,18 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			@Override
 			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
+				instantiate(models);
+				String location = theLocation;
 				SettableValue<Integer> width = SettableValue.<Integer> build().withDescription("width").withValue(0).build();
 				SettableValue<Integer> height = SettableValue.<Integer> build().withDescription("height").withValue(0).build();
 				SettableValue<Integer> x = SettableValue.<Integer> build().withDescription("x").withValue(0).build();
 				SettableValue<Integer> y = SettableValue.<Integer> build().withDescription("y").withValue(0).build();
+				String pxUMod = location + "." + thePXVariable + " is unmodifiable";
 				SettableValue<Float> px = SettableValue.asSettable(x.transform(tx -> tx//
-					.combineWith(width).combine((xv, wv) -> xv * 1.0f / wv)), __ -> "Not Settable");
+					.combineWith(width).combine((xv, wv) -> xv * 1.0f / wv)), __ -> pxUMod);
+				String pyUMod = location + "." + thePYVariable + " is unmodifiable";
 				SettableValue<Float> py = SettableValue.asSettable(y.transform(tx -> tx//
-					.combineWith(height).combine((yv, hv) -> yv * 1.0f / hv)), __ -> "Not Settable");
+					.combineWith(height).combine((yv, hv) -> yv * 1.0f / hv)), __ -> pyUMod);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theWidthVariable, models, width);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theHeightVariable, models, height);
 				ExFlexibleElementModelAddOn.satisfyElementValue(theXVariable, models, x);
@@ -326,7 +338,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 				Observable<?> refresh = theRefresh == null ? null : theRefresh.get(models);
 				return SettableValue.of(
 					createShading(models, width, height, x, y, unitWidth, unitHeight, isStretchX, isStretchY, opacity, refresh),
-					"Not Settable");
+					location + ".shading is unmodifiable");
 			}
 
 			protected abstract QuickShading createShading(ModelSetInstance models, SettableValue<Integer> width,
@@ -654,6 +666,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				return SettableValue.of(
 					new QuickRaisedShading(isRound, isHorizontal, isVertical, theOpacity == null ? null : theOpacity.get(models)),
 					"Not Settable");

@@ -14,6 +14,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement;
 
@@ -51,16 +52,16 @@ public class ObservableTableModel<R> extends AbstractObservableTableModel<R> imp
 		}
 		CategoryRenderStrategy<R, ?>[] columns = new CategoryRenderStrategy[colNames.length];
 		for (int i = 0; i < columns.length; i++) {
-			columns[i] = new CategoryRenderStrategy<>(colNames[i], (TypeToken<Object>) detectColumnClass(columnAccessors[i]),
+			columns[i] = new CategoryRenderStrategy<>(colNames[i], (Class<Object>) detectColumnClass(columnAccessors[i]),
 				columnAccessors[i]);
 		}
 		return ObservableCollection.of(columns);
 	}
 
-	private static TypeToken<?> detectColumnClass(Function<?, ?> accessor) {
+	private static Class<?> detectColumnClass(Function<?, ?> accessor) {
 		// Note that this doesn't work on lambdas, or classes that use a type argument for the function result type
 		// So this will return Object a lot
-		return TypeToken.of(accessor.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+		return TypeTokens.getRawType(TypeToken.of(accessor.getClass()).resolveType(Function.class.getTypeParameters()[1]));
 	}
 
 	/**

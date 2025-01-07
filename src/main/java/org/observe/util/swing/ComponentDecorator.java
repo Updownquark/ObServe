@@ -17,6 +17,7 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JLayer;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.border.Border;
@@ -256,10 +257,19 @@ public class ComponentDecorator extends BgFontAdjuster {
 	public Runnable decorate(Component c) {
 		List<Runnable> revert = new ArrayList<>();
 		revert.add(super.decorate(c));
-		if (c instanceof JComponent && theBorder != null) {
-			Border oldBorder = ((JComponent) c).getBorder();
-			((JComponent) c).setBorder(theBorder);
-			revert.add(() -> ((JComponent) c).setBorder(oldBorder));
+		if (theBorder != null) {
+			if (c instanceof JLayer) {
+				JLayer<?> layer = (JLayer<?>) c;
+				if (layer.getView() instanceof JComponent) {
+					Border oldBorder = ((JComponent) layer.getView()).getBorder();
+					((JComponent) layer.getView()).setBorder(theBorder);
+					revert.add(() -> ((JComponent) layer.getView()).setBorder(oldBorder));
+				}
+			} else if (c instanceof JComponent) {
+				Border oldBorder = ((JComponent) c).getBorder();
+				((JComponent) c).setBorder(theBorder);
+				revert.add(() -> ((JComponent) c).setBorder(oldBorder));
+			}
 		}
 
 		if (c instanceof JLabel) {

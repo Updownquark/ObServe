@@ -1,22 +1,27 @@
 package org.observe.quick.ext;
 
 import java.awt.Color;
+import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.quick.base.QuickSize;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledAddOn;
 import org.observe.quick.style.QuickStyledElement;
-import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
+import org.qommons.QommonsUtils;
 import org.qommons.config.QonfigAddOn;
 
 /** Add-on allowing specification of styled shading on boxes */
@@ -42,8 +47,14 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		 * @param type The Qonfig type of this add-on
 		 * @param element The widget to shade
 		 */
-		public Def(QonfigAddOn type, ExElement.Def<?> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends QuickStyledElement> element) {
 			super(type, element);
+		}
+
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return QommonsUtils.unmodifiableDistinctCopy((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExModelAugmentation.Def.class,
+				QuickStyled.Def.class);
 		}
 
 		@Override
@@ -87,7 +98,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends QuickStyledElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -105,7 +116,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		 * @param def The definition to interpret
 		 * @param element The widget to shade
 		 */
-		protected Interpreted(Def def, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def def, ExElement.Interpreted<? extends QuickStyledElement> element) {
 			super(def, element);
 		}
 
@@ -154,7 +165,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 			// We have to use a post-update here because the style object isn't created until after ExElement.doUpdate() finishes
 			super.postUpdate(element);
 
-			QuickStyledElement.QuickInstanceStyle.Interpreted styled = ((QuickStyledElement.Interpreted<?>) element).getStyle();
+			QuickInstanceStyle.Interpreted styled = element.getAddOnValue(QuickStyled.Interpreted.class, QuickStyled.Interpreted::getStyle);
 			InterpretedExpressoEnv env = element.getExpressoEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			theLightSource = styled.get(cache.getAttribute(getDefinition().getLightSource(), Float.class, env));
@@ -166,11 +177,12 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		}
 
 		@Override
-		public QuickShaded create(QuickStyledElement element) {
+		public QuickShaded create(ExElement element) {
 			return new QuickShaded(element);
 		}
 	}
 
+	private QuickStyledElement theStyledElement;
 	private QuickStyleAttribute<Float> theLightSourceAttr;
 	private QuickStyleAttribute<Color> theLightColorAttr;
 	private QuickStyleAttribute<Color> theShadowColorAttr;
@@ -185,7 +197,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 	private ObservableValue<QuickShading> theShading;
 
 	/** @param element The widget to shade */
-	protected QuickShaded(QuickStyledElement element) {
+	protected QuickShaded(ExElement element) {
 		super(element);
 	}
 
@@ -225,7 +237,14 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	@Override
-	public void postUpdate(ExAddOn.Interpreted<? extends QuickStyledElement, ?> interpreted, QuickStyledElement element) {
+	public void update(ExAddOn.Interpreted<? super QuickStyledElement, ?> interpreted, ExElement element)
+		throws ModelInstantiationException {
+		super.update(interpreted, element);
+		theStyledElement = element.as(QuickStyledElement.class, null);
+	}
+
+	@Override
+	public void postUpdate(ExAddOn.Interpreted<? super QuickStyledElement, ?> interpreted, ExElement element) {
 		super.postUpdate(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
@@ -237,7 +256,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 		theMaxShadeAmountAttr = myInterpreted.getMaxShadeAmount().getAttribute();
 		theShadingAttr = myInterpreted.getShading().getAttribute();
 
-		QuickInstanceStyle style = element.getStyle();
+		QuickInstanceStyle style = theStyledElement.getStyle();
 
 		theLightSource = style.getApplicableAttribute(theLightSourceAttr);
 		theLightColor = style.getApplicableAttribute(theLightColorAttr);
@@ -248,11 +267,15 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 	}
 
 	@Override
-	public QuickShaded copy(QuickStyledElement element) {
+	public QuickShaded copy(ExElement element) {
 		QuickShaded copy = (QuickShaded) super.copy(element);
 
-		QuickInstanceStyle style = element.getStyle();
-
+		try {
+			copy.theStyledElement = element.as(QuickStyledElement.class, null);
+		} catch (ModelInstantiationException e) {
+			throw new IllegalStateException("This shouldn't happen!", e);
+		}
+		QuickInstanceStyle style = copy.theStyledElement.getStyle();
 		copy.theLightSource = style.getApplicableAttribute(theLightSourceAttr);
 		copy.theLightColor = style.getApplicableAttribute(theLightColorAttr);
 		copy.theShadowColor = style.getApplicableAttribute(theShadowColorAttr);

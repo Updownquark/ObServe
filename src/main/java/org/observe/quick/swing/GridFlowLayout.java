@@ -17,7 +17,7 @@ import org.observe.util.swing.JustifiedBoxLayout;
  * {@link JustifiedBoxLayout} for a container containing a series of containers with {@link JustifiedBoxLayout}s of opposite
  * {@link JustifiedBoxLayout#isVertical() orientation}.
  */
-public class GridFlowLayout implements AbstractLayout {
+public class GridFlowLayout extends AbstractLayout {
 	private QuickGridFlowLayout.Edge thePrimaryStart;
 	private QuickGridFlowLayout.Edge theSecondaryStart;
 	private int theMaxRowCount;
@@ -232,6 +232,11 @@ public class GridFlowLayout implements AbstractLayout {
 		}
 
 		@Override
+		public Object getConstraints() {
+			return null;
+		}
+
+		@Override
 		public int size() {
 			return components.size();
 		}
@@ -246,6 +251,11 @@ public class GridFlowLayout implements AbstractLayout {
 						return sizes[index][type + 1];
 					else
 						return components.get(index).getSize(type);
+				}
+
+				@Override
+				public Object getConstraints() {
+					return null;
 				}
 			};
 		}

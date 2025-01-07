@@ -1,4 +1,4 @@
-package org.observe.expresso.ops;
+package org.observe.expresso;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -9,7 +9,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 
-import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ops.BinaryOperator;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
@@ -393,6 +393,11 @@ public class BinaryOperatorSet {
 				public String getDescription() {
 					return op.getDescription();
 				}
+
+				@Override
+				public String toString() {
+					return "cast:" + theConverter.getConvertedType();
+				}
 			};
 		}
 
@@ -433,6 +438,11 @@ public class BinaryOperatorSet {
 				@Override
 				public String getDescription() {
 					return op.getDescription();
+				}
+
+				@Override
+				public String toString() {
+					return "cast:" + theConverter.getReverseType();
 				}
 			};
 		}
@@ -486,6 +496,11 @@ public class BinaryOperatorSet {
 				@Override
 				public String getDescription() {
 					return op.getDescription();
+				}
+
+				@Override
+				public String toString() {
+					return op.toString();
 				}
 			};
 		}
@@ -991,7 +1006,7 @@ public class BinaryOperatorSet {
 					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 				TypeToken<?> leftTarget = leftOpType.resolveType(Comparable.class.getTypeParameters()[0]);
 				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType)) {
-					exHandler.handle1(new ExpressoInterpretationException(
+					exHandler.handle1(() -> new ExpressoInterpretationException(
 						"Comparable comparison cannot be used for incompatible types " + leftTarget + " and " + rightOpType, position,
 						length));
 					return null;
@@ -1265,6 +1280,16 @@ public class BinaryOperatorSet {
 			}
 		}
 		return ret;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o)
+			return true;
+		else if (!(o instanceof BinaryOperatorSet))
+			return false;
+		else
+			return theOperators.equals(((BinaryOperatorSet) o).theOperators);
 	}
 
 	/** @return A builder pre-configured for all of this operator set's operations */
@@ -1670,6 +1695,26 @@ public class BinaryOperatorSet {
 			withCastPrimary(operator, Long.class, Double.class, boolean.class, CastOp.longDouble);
 			withCastPrimary(operator, Float.class, Double.class, boolean.class, CastOp.floatDouble);
 
+			return this;
+		}
+
+		/**
+		 * @param ops The operator set whose operators to copy into this builder
+		 * @return This builder
+		 */
+		public Builder withAll(BinaryOperatorSet ops) {
+			for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : ops.theOperators.entrySet()) {
+				for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
+					for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries()) {
+						for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op4 : op3.getValue2().getAllEntries()) {
+							theOperators.computeIfAbsent(op.getKey(), __ -> new ClassMap<>())//
+							.computeIfAbsent(op2.getValue1(), () -> new ClassMap<>())//
+							.computeIfAbsent(op3.getValue1(), () -> new ClassMap<>())//
+							.put(op4.getValue1(), op4.getValue2());
+						}
+					}
+				}
+			}
 			return this;
 		}
 

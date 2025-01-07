@@ -357,7 +357,7 @@ public abstract class ModelType<M> implements Named {
 				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
 				TypeConverter<Object, Object, Object, Object>[] casts = new TypeConverter[params.length];
 				boolean trivial = true, exit = false;
-				ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.holder();
+				ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.placeHolder();
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
 					TypeToken<?> myType = getType(i);
 					TypeToken<?> targetType = target.getType(i);
@@ -371,7 +371,7 @@ public abstract class ModelType<M> implements Named {
 					} else {
 						trivial = true;
 						casts[i] = (TypeConverter<Object, Object, Object, Object>) TypeTokens.get()//
-							.getCast(targetType, myType, true, true, iae);
+							.getCast(targetType, myType, true, true, iae.clear());
 						if (casts[i] == null) {
 							exit = true;
 							break;
@@ -448,7 +448,7 @@ public abstract class ModelType<M> implements Named {
 				// This next line is for debugging. I'm going to keep it here because it continues to be useful,
 				// and it's only a performance hit when there's a conversion error, and then only a slight one.
 				sourceType.convert(targetType, env);
-				exHandler.handle1(new TypeConversionException(source.toString(), sourceType, targetType));
+				exHandler.handle1(() -> new TypeConversionException(source.toString(), sourceType, targetType));
 				return null;
 			} else if (converter instanceof NoOpConverter)
 				return (InterpretedValueSynth<M2, MV2>) source;
@@ -1159,7 +1159,7 @@ public abstract class ModelType<M> implements Named {
 		@Override
 		public MVT forModelCopy(MVT value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 			MVS sourceV = theSource.get(sourceModels);
-			MVS newSourceV = theSource.get(newModels);
+			MVS newSourceV = theSource.forModelCopy(sourceV, sourceModels, newModels);
 			if (sourceV == newSourceV)
 				return value;
 			else

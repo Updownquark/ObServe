@@ -18,7 +18,10 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  */
 public interface SettableElement<E> extends ObservableElement<E>, SettableValue<E> {
 	@Override
-	default <V extends E> SettableElement<E> withValue(V value, Object cause)
+	SettableElement<E> alias(String alias);
+
+	@Override
+	default SettableElement<E> withValue(E value, Object cause)
 		throws IllegalArgumentException, UnsupportedOperationException {
 		SettableValue.super.withValue(value, cause);
 		return this;
@@ -50,6 +53,12 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		@Override
 		protected SettableElement<E> getSource() {
 			return (SettableElement<E>) super.getSource();
+		}
+
+		@Override
+		public UnsettableElement<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -100,12 +109,12 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		}
 
 		@Override
-		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override
-		public <V extends E> String isAcceptable(V value) {
+		public String isAcceptable(E value) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
 
@@ -127,6 +136,12 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.baseId("EmptyElement", this);
+		}
+
+		@Override
+		public EmptyElement<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 	}
 }

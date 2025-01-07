@@ -3,9 +3,15 @@ package org.observe.quick.base;
 import java.io.File;
 
 import org.observe.SettableValue;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -26,6 +32,8 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		instance = QuickFileButton.class)
 	public static class Def extends QuickValueWidget.Def.Abstract<QuickFileButton> {
 		private boolean isOpen;
+		private CompiledExpression theDefaultDir;
+		private CompiledExpression theFileDescrip;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -41,9 +49,22 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 			return isOpen;
 		}
 
+		/** @return The initial directory for the file chooser */
+		@QonfigAttributeGetter("default-dir")
+		public CompiledExpression getDefaultDir() {
+			return theDefaultDir;
+		}
+
+		/** @return The description for the type of file selectable */
+		@QonfigAttributeGetter("file-descrip")
+		public CompiledExpression getFileDescrip() {
+			return theFileDescrip;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
+			theDefaultDir = getAttributeExpression("default-dir", session);
 			isOpen = session.getAttribute("open", boolean.class);
 		}
 
@@ -55,6 +76,9 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 
 	/** {@link QuickFileButton} interpretation */
 	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<File, QuickFileButton> {
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<File>> theDefaultDir;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theFileDescrip;
+
 		/**
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget
@@ -73,17 +97,45 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 			return ModelTypes.Value.forType(File.class);
 		}
 
+		/** @return The initial directory for the file chooser */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<File>> getDefaultDir() {
+			return theDefaultDir;
+		}
+
+		/** @return The description for the type of file selectable */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFileDescrip() {
+			return theFileDescrip;
+		}
+
+		@Override
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
+
+			theDefaultDir = getDefinition().getDefaultDir() == null ? null
+				: getDefinition().getDefaultDir().interpret(ModelTypes.Value.forType(File.class), env);
+			theFileDescrip = getDefinition().getFileDescrip() == null ? null
+				: getDefinition().getFileDescrip().interpret(ModelTypes.Value.forType(String.class), env);
+		}
+
 		@Override
 		public QuickFileButton create() {
 			return new QuickFileButton(getIdentity());
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<File>> theDefaultDirInstantiator;
+	private ModelValueInstantiator<SettableValue<String>> theFileDescripInstantiator;
+
 	private boolean isOpen;
+	private SettableValue<SettableValue<File>> theDefaultDir;
+	private SettableValue<SettableValue<String>> theFileDescrip;
 
 	/** @param id The element ID for this widget */
 	protected QuickFileButton(Object id) {
 		super(id);
+
+		theDefaultDir = SettableValue.create();
+		theFileDescrip = SettableValue.create();
 	}
 
 	/** @return Whether the file is to be read (and so must exist) or saved to (and so might not yet exist) */
@@ -91,10 +143,50 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		return isOpen;
 	}
 
+	/** @return The initial directory for the file chooser */
+	public SettableValue<File> getDefaultDir() {
+		return SettableValue.flatten(theDefaultDir);
+	}
+
+	/** @return The description for the type of file selectable */
+	public SettableValue<String> getFileDescrip() {
+		return SettableValue.flatten(theFileDescrip);
+	}
+
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		isOpen = myInterpreted.getDefinition().isOpen();
+		theDefaultDirInstantiator = myInterpreted.getDefaultDir() == null ? null : myInterpreted.getDefaultDir().instantiate();
+		theFileDescripInstantiator = myInterpreted.getFileDescrip() == null ? null : myInterpreted.getFileDescrip().instantiate();
+	}
+
+	@Override
+	public void instantiated() throws ModelInstantiationException {
+		super.instantiated();
+		if (theDefaultDirInstantiator != null)
+			theDefaultDirInstantiator.instantiate();
+		if (theFileDescripInstantiator != null)
+			theFileDescripInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+
+		// Populate with a value so the default directory is persistent for the session at least
+		theDefaultDir.set(theDefaultDirInstantiator == null ? SettableValue.create() : theDefaultDirInstantiator.get(myModels), null);
+		theFileDescrip.set(theFileDescripInstantiator == null ? null : theFileDescripInstantiator.get(myModels), null);
+	}
+
+	@Override
+	public QuickFileButton copy(ExElement parent) {
+		QuickFileButton copy = (QuickFileButton) super.copy(parent);
+
+		copy.theDefaultDir = SettableValue.create();
+		copy.theFileDescrip = SettableValue.create();
+
+		return copy;
 	}
 }

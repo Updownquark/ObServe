@@ -10,7 +10,24 @@ import java.util.List;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
-import org.observe.expresso.ops.*;
+import org.observe.expresso.ops.ArrayAccessExpression;
+import org.observe.expresso.ops.ArrayInitializerExpression;
+import org.observe.expresso.ops.AssignmentExpression;
+import org.observe.expresso.ops.AttributeReferenceExpression;
+import org.observe.expresso.ops.BinaryOperator;
+import org.observe.expresso.ops.BufferedExpression;
+import org.observe.expresso.ops.BufferedName;
+import org.observe.expresso.ops.BufferedType;
+import org.observe.expresso.ops.CastExpression;
+import org.observe.expresso.ops.ClassInstanceExpression;
+import org.observe.expresso.ops.ConditionalExpression;
+import org.observe.expresso.ops.ConstructorInvocation;
+import org.observe.expresso.ops.ExternalLiteral;
+import org.observe.expresso.ops.InstanceofExpression;
+import org.observe.expresso.ops.MethodInvocation;
+import org.observe.expresso.ops.NameExpression;
+import org.observe.expresso.ops.ParentheticExpression;
+import org.observe.expresso.ops.UnaryOperator;
 import org.qommons.DefaultCharSubSequence;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
@@ -45,6 +62,7 @@ public class JavaExpressoParser implements ExpressoParser {
 			public void write(byte[] b, int off, int len) throws IOException { // Suppress ANTLR printout
 			}
 		}));
+		text = text.replace("\n", " ");// ANTLR can't handle newlines
 		ExpressoAntlrParser parser;
 		ParseTree result;
 		try {

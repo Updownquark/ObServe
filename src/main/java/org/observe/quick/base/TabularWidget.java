@@ -1,6 +1,7 @@
 package org.observe.quick.base;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.observe.SettableValue;
@@ -70,6 +71,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			private ModelComponentId theSelectedVariable;
 			private ModelComponentId theRowIndexVariable;
 			private ModelComponentId theColumnIndexVariable;
+			private final List<QuickDragging.TransferSource.Def> theTransferSources;
+			private final List<QuickDragging.TransferAccept.Def> theTransferAccepters;
 
 			/**
 			 * @param parent The parent element of the widget
@@ -78,6 +81,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 				theColumns = new ArrayList<>();
+				theTransferSources = new ArrayList<>();
+				theTransferAccepters = new ArrayList<>();
 			}
 
 			@Override
@@ -105,6 +110,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				return theColumnIndexVariable;
 			}
 
+			@Override
+			public List<QuickDragging.TransferSource.Def> getTransferSources() {
+				return Collections.unmodifiableList(theTransferSources);
+			}
+
+			@Override
+			public List<QuickDragging.TransferAccept.Def> getTransferAccepters() {
+				return Collections.unmodifiableList(theTransferAccepters);
+			}
+
 			/**
 			 * @param session The session to inspect
 			 * @return The name of the model variable in which the value of the active row will be available to expressions
@@ -124,6 +139,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				elModels.satisfyElementValueType(getActiveValueVariable(), ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(getRowType((TabularWidget.Interpreted<?, ?>) interp, env)));
 				syncChildren(QuickTableColumn.TableColumnSet.Def.class, theColumns, session.forChildren("columns"));
+				syncChildren(QuickDragging.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
+				syncChildren(QuickDragging.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
 			}
 
 			/**
@@ -162,6 +179,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		public abstract class Abstract<R, W extends TabularWidget<R>> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<R, W> {
 			private ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> theColumns;
+			private final List<QuickDragging.TransferSource.Interpreted<R, ?>> theTransferSources;
+			private final List<QuickDragging.TransferAccept.Interpreted<R, ?>> theTransferAccepters;
 			private TypeToken<R> theRowType;
 
 			/**
@@ -170,6 +189,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			 */
 			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
+				theTransferSources = new ArrayList<>();
+				theTransferAccepters = new ArrayList<>();
 			}
 
 			@Override
@@ -188,6 +209,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 
 			@Override
+			public List<QuickDragging.TransferSource.Interpreted<R, ?>> getTransferSources() {
+				return Collections.unmodifiableList(theTransferSources);
+			}
+
+			@Override
+			public List<QuickDragging.TransferAccept.Interpreted<R, ?>> getTransferAccepters() {
+				return Collections.unmodifiableList(theTransferAccepters);
+			}
+
+			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				theRowType = (TypeToken<R>) getAddOn(ExWithElementModel.Interpreted.class).getElement().getExpressoEnv().getModels()
@@ -196,6 +227,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 					theColumns = ObservableCollection.<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> build().build();
 				syncChildren(getDefinition().getColumns(), theColumns, def -> def.interpret(this),
 					TableColumnSet.Interpreted::updateColumns);
+				syncChildren(getDefinition().getTransferSources(), theTransferSources,
+					def -> (QuickDragging.TransferSource.Interpreted<R, ?>) def.interpret(this),
+					(ts, env2) -> ts.updateTransferSource(env2, theRowType));
+				syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
+					def -> (QuickDragging.TransferAccept.Interpreted<R, ?>) def.interpret(this),
+					(ts, env2) -> ts.updateTransferAccepter(env2, theRowType));
 			}
 
 			@Override
@@ -247,8 +284,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 			/** @param descrip A description of this context for debugging */
 			public Default(String descrip) {
-				this(
-					SettableValue.<R> build().withDescription(descrip + ".rowValue").build(), //
+				this(SettableValue.<R> build().withDescription(descrip + ".rowValue").build(), //
 					SettableValue.<Boolean> build().withValue(false).withDescription(descrip + ".selected").build(),
 					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".rowIndex").build(), //
 					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".columnIndex").build());
@@ -295,6 +331,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
 		private ObservableCollection<QuickTableColumn.TableColumnSet<R>> theColumnSets;
 		private ObservableCollection<QuickTableColumn<R, ?>> theColumns;
+		private List<QuickDragging.TransferSource<R, ?>> theTransferSources;
+		private List<QuickDragging.TransferAccept<R, ?>> theTransferAccepters;
 
 		private ModelComponentId theSelectedVariable;
 		private ModelComponentId theRowIndexVariable;
@@ -316,6 +354,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			theColumns = theColumnSets.flow().<QuickTableColumn<R, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 				.collect();
 			theActiveValue = SettableValue.<SettableValue<R>> build().build();
+			theTransferSources = new ArrayList<>();
+			theTransferAccepters = new ArrayList<>();
 		}
 
 		@Override
@@ -326,6 +366,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		@Override
 		public ObservableCollection<QuickTableColumn<R, ?>> getAllColumns() {
 			return theColumns.flow().unmodifiable(false).collect();
+		}
+
+		@Override
+		public List<QuickDragging.TransferSource<R, ?>> getTransferSources() {
+			return Collections.unmodifiableList(theTransferSources);
+		}
+
+		@Override
+		public List<QuickDragging.TransferAccept<R, ?>> getTransferAccepters() {
+			return Collections.unmodifiableList(theTransferAccepters);
 		}
 
 		@Override
@@ -427,6 +477,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 						return element.useValue(element.getLeftValue());
 					}
 				}, CollectionUtils.AdjustmentOrder.RightOrder);
+			syncChildren(myInterpreted.getTransferSources(), theTransferSources, interp -> interp.create(),
+				QuickDragging.TransferSource::update);
+			syncChildren(myInterpreted.getTransferAccepters(), theTransferAccepters, interp -> interp.create(),
+				QuickDragging.TransferAccept::update);
 		}
 
 		@Override
@@ -435,6 +489,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 			for (TableColumnSet<R> column : theColumnSets)
 				column.instantiated();
+			for (QuickDragging.TransferSource<R, ?> ts : theTransferSources)
+				ts.instantiated();
+			for (QuickDragging.TransferAccept<R, ?> ta : theTransferAccepters)
+				ta.instantiated();
 		}
 
 		@Override
@@ -448,6 +506,11 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 			for (TableColumnSet<R> column : theColumnSets)
 				column.instantiate(myModels);
+			// TODO Model copy?
+			for (QuickDragging.TransferSource<R, ?> ts : theTransferSources)
+				ts.instantiated();
+			for (QuickDragging.TransferAccept<R, ?> ta : theTransferAccepters)
+				ta.instantiated();
 		}
 
 		@Override
@@ -464,6 +527,11 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 
 			for (TableColumnSet<R> columnSet : theColumnSets)
 				copy.theColumnSets.add(columnSet.copy(this));
+			copy.theTransferSources = new ArrayList<>();
+			for (QuickDragging.TransferSource<R, ?> ts : theTransferSources)
+				copy.theTransferSources.add(ts.copy(copy));
+			for (QuickDragging.TransferAccept<R, ?> ta : theTransferAccepters)
+				copy.theTransferAccepters.add(ta.copy(copy));
 
 			return copy;
 		}

@@ -1,12 +1,15 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.TransformationState;
@@ -150,6 +153,17 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theSource.getThreadConstraint();
 		}
@@ -182,6 +196,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theSource.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theSource.getChangeSources();
 		}
 
 		@Override
@@ -260,6 +279,17 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			Equivalence<? super T> equiv = theParent.equivalence();
 			if (equiv instanceof Equivalence.SortedEquivalence)
@@ -300,6 +330,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources();
 		}
 
 		@Override
@@ -375,6 +410,17 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -412,6 +458,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources();
 		}
 
 		@Override
@@ -669,6 +720,17 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
 		}
@@ -706,6 +768,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources().union(theRefresh);
 		}
 
 		@Override
@@ -779,6 +846,17 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
+		public Identifiable alias(String alias) {
+			// Aliasing not supported at this time
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
 			return theParent.equivalence();
 		}
@@ -816,6 +894,11 @@ public class ObservableCollectionPassiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theParent.getChangeSources();
 		}
 
 		@Override

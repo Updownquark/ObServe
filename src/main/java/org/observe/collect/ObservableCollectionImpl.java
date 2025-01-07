@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -34,11 +35,13 @@ import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionE
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
+import org.observe.dbug.DbugAnchor;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
@@ -145,6 +148,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public OnlyElement<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public long getStamp() {
 			return theCollection.getStamp();
 		}
@@ -175,6 +184,12 @@ public final class ObservableCollectionImpl {
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(OnlyElement.this.getIdentity(), "enabled");
+				}
+
+				@Override
+				public OnlyEnabled alias(String alias) {
+					super.alias(alias);
+					return this;
 				}
 
 				@Override
@@ -228,6 +243,11 @@ public final class ObservableCollectionImpl {
 						@Override
 						public CoreId getCoreId() {
 							return theCollection.getCoreId();
+						}
+
+						@Override
+						public CoreChangeSources getChangeSources() {
+							return theCollection.getChangeSources();
 						}
 
 						@Override
@@ -287,7 +307,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <V extends E> String isAcceptable(V value) {
+		public String isAcceptable(E value) {
 			try (Transaction t = theCollection.lock(false, null)) {
 				if (theCollection.size() == 1)
 					return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isAcceptable(value);
@@ -317,8 +337,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theCollection.lock(true, cause)) {
+		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = theCollection.lock(true, null)) {
 				if (theCollection.size() == 1) {
 					CollectionElement<E> firstEl = theCollection.getTerminalElement(true);
 					E oldValue = firstEl.get();
@@ -365,6 +385,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public CoreId getCoreId() {
 					return theCollection.getCoreId();
+				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theCollection.getChangeSources();
 				}
 
 				@Override
@@ -477,6 +502,12 @@ public final class ObservableCollectionImpl {
 		/** @return The default value supplier for this finder (used when no element in the collection matches the search) */
 		protected Supplier<? extends E> getDefault() {
 			return theDefault;
+		}
+
+		@Override
+		public AbstractObservableElementFinder<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -816,6 +847,11 @@ public final class ObservableCollectionImpl {
 				public CoreId getCoreId() {
 					return theCollection.getCoreId();
 				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theCollection.getChangeSources();
+				}
 			}
 			return new ElementChanges();
 		}
@@ -893,6 +929,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ObservableCollectionFinder<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
 			CollectionElement<E> element = getCollection().find(theTest, isFirst.withDefault(true));
 			if (element == null)
@@ -949,9 +991,14 @@ public final class ObservableCollectionImpl {
 							if (msg == null)
 								return null;
 						}
-						if (getDefault() != null)
-							msg = getCollection().canAdd(getDefault().get(), //
+						if (getDefault() != null) {
+							String msg2 = getCollection().canAdd(getDefault().get(), //
 								isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+							if (msg2 == null)
+								return null;
+							else if (msg == null)
+								msg = msg2;
+						}
 					}
 					if (msg == null)
 						msg = StdMsg.UNSUPPORTED_OPERATION;
@@ -1013,6 +1060,11 @@ public final class ObservableCollectionImpl {
 						public CoreId getCoreId() {
 							return getCollection().getCoreId();
 						}
+
+						@Override
+						public CoreChangeSources getChangeSources() {
+							return getCollection().getChangeSources();
+						}
 					}
 					return new NoInitChanges();
 				}
@@ -1020,6 +1072,12 @@ public final class ObservableCollectionImpl {
 				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(ObservableCollectionFinder.this.getIdentity(), "enabled");
+				}
+
+				@Override
+				public Enabled alias(String alias) {
+					super.alias(alias);
+					return this;
 				}
 
 				@Override
@@ -1031,7 +1089,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <V extends E> String isAcceptable(V value) {
+		public String isAcceptable(E value) {
 			if (!theTest.test(value))
 				return StdMsg.ILLEGAL_ELEMENT;
 			String msg = null;
@@ -1045,8 +1103,12 @@ public final class ObservableCollectionImpl {
 					if (msg == null)
 						return null;
 				}
-				msg = getCollection().canAdd(value, //
-					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+				if (msg != null) {
+					String msg2 = getCollection().canAdd(value, //
+						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+					if (msg2 == null)
+						return null;
+				}
 				if (msg == null)
 					return null;
 			}
@@ -1054,7 +1116,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (!theTest.test(value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			String msg = null;
@@ -1228,7 +1290,6 @@ public final class ObservableCollectionImpl {
 	 */
 	public static abstract class ReducedValue<E, X, T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableCollection<E> theCollection;
-		private Object theChangesIdentity;
 
 		/** @param collection The collection to reduce */
 		protected ReducedValue(ObservableCollection<E> collection) {
@@ -1241,18 +1302,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ReducedValue<E, X, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public long getStamp() {
 			return theCollection.getStamp();
 		}
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return new Observable<ObservableValueEvent<T>>() {
+			class ReducedChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
-				public Object getIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(ReducedValue.this.getIdentity(), "noInitChanges");
-					return theChangesIdentity;
+				protected Object createIdentity() {
+					return Identifiable.wrap(ReducedValue.this.getIdentity(), "noInitChanges");
 				}
 
 				@Override
@@ -1335,7 +1400,13 @@ public final class ObservableCollectionImpl {
 				public CoreId getCoreId() {
 					return theCollection.getCoreId();
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theCollection.getChangeSources();
+				}
+			}
+			return new ReducedChanges();
 		}
 
 		@Override
@@ -1627,17 +1698,22 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theLeft;
 		private final ObservableCollection<X> theRight;
 		private final Predicate<ValueCounts<E, X>> theSatisfiedCheck;
-		private Object theChangesIdentity;
 
 		/**
 		 * @param left The left collection
 		 * @param right The right collection
 		 * @param satisfied The test to determine this value after any changes
 		 */
-		public IntersectionValue(ObservableCollection<E> left, ObservableCollection<X> right, Predicate<ValueCounts<E, X>> satisfied) {
+		protected IntersectionValue(ObservableCollection<E> left, ObservableCollection<X> right, Predicate<ValueCounts<E, X>> satisfied) {
 			theLeft = left;
 			theRight = right;
 			theSatisfiedCheck = satisfied;
+		}
+
+		@Override
+		public IntersectionValue<E, X> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		/** @return The left collection */
@@ -1657,12 +1733,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Observable<ObservableValueEvent<Boolean>> changes() {
-			return new Observable<ObservableValueEvent<Boolean>>() {
+			class IntersectionChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<Boolean>> {
 				@Override
-				public Object getIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(IntersectionValue.this.getIdentity(), "changes");
-					return theChangesIdentity;
+				protected Object createIdentity() {
+					return Identifiable.wrap(IntersectionValue.this.getIdentity(), "changes");
 				}
 
 				@Override
@@ -1721,7 +1795,13 @@ public final class ObservableCollectionImpl {
 				public CoreId getCoreId() {
 					return Lockable.getCoreId(Lockable.lockable(theLeft), Lockable.lockable(theRight));
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.of(theLeft.getChangeSources(), theRight.getChangeSources());
+				}
+			}
+			return new IntersectionChanges();
 		}
 
 		@Override
@@ -1838,6 +1918,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ReversedObservableCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence<? super E> equivalence() {
 			return getWrapped().equivalence();
 		}
@@ -1871,6 +1957,11 @@ public final class ObservableCollectionImpl {
 		public void setValue(Collection<ElementId> elements, E value) {
 			getWrapped().setValue(//
 				elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getWrapped().getChangeSources();
 		}
 
 		@Override
@@ -1960,6 +2051,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public PassiveDerivedCollection<E, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return theFlow.isContentControlled();
 		}
@@ -2008,6 +2105,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theFlow.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theFlow.getChangeSources();
 		}
 
 		@Override
@@ -2569,6 +2671,7 @@ public final class ObservableCollectionImpl {
 		private final Equivalence<? super T> theEquivalence;
 		private final AtomicLong theStamp;
 		private final WeakListening.Builder theWeakListening;
+		private final DbugAnchor<ObservableCollection<?>> theDbugAnchor;
 
 		/**
 		 * @param flow The active data manager to power this collection
@@ -2581,6 +2684,7 @@ public final class ObservableCollectionImpl {
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theStamp = new AtomicLong();
+			theDbugAnchor = DBUG.instance(this, LambdaUtils.consumeDoNothing());
 
 			// Begin listening
 			ElementAccepter<T> onElement = (el, causes) -> {
@@ -2710,12 +2814,25 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
+
+				theDbugAnchor.event("change", event, evt -> evt//
+					.withParameter("type", event.getType())//
+					.withParameter("id", event.getElementId())//
+					.withParameter("index", event.getIndex())//
+					.withParameter("oldValue", event.getOldValue())//
+					.withParameter("newValue", event.getNewValue()));
 			}
 		}
 
 		@Override
 		protected Object createIdentity() {
 			return theFlow.getIdentity();
+		}
+
+		@Override
+		public ActiveDerivedCollection<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -2797,6 +2914,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theFlow.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theFlow.getChangeSources();
 		}
 
 		@Override
@@ -3112,6 +3234,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public ConstantCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return false;
 		}
@@ -3119,6 +3247,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Equivalence<? super E> equivalence() {
 			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.empty();
 		}
 
 		@Override
@@ -3161,6 +3294,12 @@ public final class ObservableCollectionImpl {
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(theCollectionObservable.getIdentity(), "flatten");
+		}
+
+		@Override
+		public FlattenedValueCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -3211,6 +3350,15 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), false, null));
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			ObservableCollection<? extends E> cv = theCollectionObservable.get();
+			if (cv == null)
+				return theCollectionObservable.noInitChanges().getChangeSources();
+			else
+				return CoreChangeSources.of(theCollectionObservable.noInitChanges().getChangeSources(), cv.getChangeSources());
 		}
 
 		@Override
@@ -3552,6 +3700,11 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public CoreChangeSources getChangeSources() {
+					return FlattenedValueCollection.this.getChangeSources();
+				}
+
+				@Override
 				protected Object createIdentity() {
 					return Identifiable.wrap(FlattenedValueCollection.this.getIdentity(), "changes");
 				}
@@ -3563,8 +3716,11 @@ public final class ObservableCollectionImpl {
 		public Observable<Causable> simpleChanges() {
 			// We can be more efficient here. Listen to the changes observable of the content collection,
 			// as well as logical changes to the container.
+			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable
+				.map(LambdaUtils.<ObservableCollection<?>, Observable<Causable>> printableFn(
+					coll -> coll != null ? coll.simpleChanges() : Observable.<Causable> empty(), "simpleChanges", "simpleChanges"));
 			return Observable.or(//
-				theCollectionObservable.noInitChanges().filter(evt -> {
+				theCollectionObservable.noInitChanges().filter(LambdaUtils.printableFn(evt -> {
 					if (evt.getOldValue() == evt.getNewValue())
 						return false;
 					else if (evt.getOldValue() != null && evt.getNewValue() != null) {
@@ -3577,8 +3733,12 @@ public final class ObservableCollectionImpl {
 							return false;
 					}
 					return true;
-				}), ObservableValue
-				.flattenObservableValue(theCollectionObservable.map(coll -> coll != null ? coll.simpleChanges() : Observable.empty())));
+				}, "contentChange", "contentChange")), new ObservableValue.FlattenedValueObservable<Causable>(toFlattenChanges) {
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return FlattenedValueCollection.this.getThreadConstraint();
+					}
+				});
 		}
 
 		@Override
@@ -3591,75 +3751,142 @@ public final class ObservableCollectionImpl {
 			return subscribe(observer, true, forward);
 		}
 
+		static class ContainedElement<E> {
+			final FlattenedValueCollection<E>.FlattenedElementId id;
+			E value;
+
+			ContainedElement(FlattenedValueCollection<E>.FlattenedElementId id, E value) {
+				this.id = id;
+				this.value = value;
+			}
+		}
+
 		private CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean populate,
 			boolean forward) {
 			class ElementMappingChangeObserver implements Consumer<ObservableCollectionEvent<? extends E>> {
 				private final ObservableCollection<? extends E> theCollection;
+				private final Supplier<ObservableCollection<? extends E>> theCurrentCollection;
 				private final Consumer<? super ObservableCollectionEvent<? extends E>> theWrapped;
+				private final List<ContainedElement<E>> theElements;
+				private boolean isActive;
 
 				ElementMappingChangeObserver(ObservableCollection<? extends E> collection,
+					Supplier<ObservableCollection<? extends E>> currentCollection,
 					Consumer<? super ObservableCollectionEvent<? extends E>> wrapped) {
 					theCollection = collection;
+					theCurrentCollection = currentCollection;
 					theWrapped = wrapped;
+					theElements = new ArrayList<>();
+					isActive = true;
 				}
 
 				@Override
 				public void accept(ObservableCollectionEvent<? extends E> event) {
+					FlattenedElementId id;
+					switch (event.getType()) {
+					case add:
+						// Possible that the collection has switched out without us having received the event yet
+						if (isActive && theCollection != theCurrentCollection.get())
+							isActive = false;
+						if (!isActive)
+							return;
+						if (event.getIndex() < theElements.size()
+							&& theElements.get(event.getIndex()).id.theSourceEl.equals(event.getElementId()))
+							return;
+						// I added some redundancy on initial population due to issues unsubscribing/re-subscribing from a collection
+						// that is currently firing an event
+						id = new FlattenedElementId(theCollection, event.getElementId());
+						theElements.add(event.getIndex(), new ContainedElement<>(id, event.getNewValue()));
+						break;
+					case remove:
+						id = theElements.remove(event.getIndex()).id;
+						break;
+					case set:
+						// Possible that the collection has switched out without us having received the event yet
+						if (isActive && theCollection != theCurrentCollection.get())
+							isActive = false;
+						if (!isActive)
+							return;
+						ContainedElement<E> el = theElements.get(event.getIndex());
+						id = el.id;
+						el.value = event.getNewValue();
+						break;
+					default:
+						throw new IllegalStateException(event.getType().name());
+					}
 					ObservableCollectionEvent<E> mapped = (ObservableCollectionEvent<E>) event
-						.derive(new FlattenedElementId(theCollection, event.getElementId()), event.getIndex());
+						.derive(id, event.getIndex());
 					try (Transaction t = mapped.use()) {
 						theWrapped.accept(mapped);
 					}
 				}
+
+				void remove(Object cause) {
+					// De-populate in opposite direction
+					for (int i = theElements.size() - 1; i >= 0; i--) {
+						ContainedElement<E> el = theElements.get(i);
+						ObservableCollectionEvent<E> event = new ObservableCollectionEvent.DefaultObservableCollectionEvent<>(el.id, i,
+							CollectionChangeType.remove, el.value, el.value, cause);
+						try (Transaction t = event.use()) {
+							theWrapped.accept(event);
+						}
+					}
+				}
 			}
-			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
+			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>,
+			Supplier<ObservableCollection<? extends E>> {
 				ObservableCollection<? extends E> collection;
+				ElementMappingChangeObserver collectionObserver;
 				Subscription collectionSub;
 
 				@Override
 				public void onNext(ObservableValueEvent<? extends ObservableCollection<? extends E>> collEvt) {
 					// The only way we can avoid de-populating and populating the values into the listener is if the old and new collections
 					// share identity *and* element IDs, since those are part of the events and the contract of the subscribe method
-					boolean clearAndAdd;
-					if (!populate && collEvt.isInitial())
+					boolean clearAndAdd, resubscribe;
+					if (!populate && collEvt.isInitial()) {
 						clearAndAdd = false;
-					else if (collection == collEvt.getNewValue())
-						clearAndAdd = false;
+						resubscribe = true;
+					} else if (collection == collEvt.getNewValue())
+						clearAndAdd = resubscribe = false;
 					else if (collection == null || collEvt.getNewValue() == null//
 						|| !collection.getIdentity().equals(collEvt.getNewValue().getIdentity()))
-						clearAndAdd = true;
+						clearAndAdd = resubscribe = true;
 					else if (collection.size() != collEvt.getNewValue().size())
-						clearAndAdd = true;
+						clearAndAdd = resubscribe = true;
 					else if (collection.isEmpty()//
 						|| collection.getTerminalElement(true).getElementId()
-						.equals(collEvt.getNewValue().getTerminalElement(true).getElementId()))
+						.equals(collEvt.getNewValue().getTerminalElement(true).getElementId())) {
 						clearAndAdd = false;
-					else
-						clearAndAdd = true;
-					if (collection != null) {
-						if (clearAndAdd) {
-							// The collection in the value is not changing--we just don't want it to while we're working
-							try (Transaction t = collection.lock(false, null)) {
-								if (collectionSub != null) // Subscription may have failed. Don't cause more trouble.
-									collectionSub.unsubscribe();
-								collectionSub = null;
-								// De-populate in opposite direction
-								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
-									!forward, collEvt);
+						resubscribe = true;
+					} else
+						clearAndAdd = resubscribe = true;
+					// System.out.println(Integer.toHexString(System.identityHashCode(FlattenedValueCollection.this)) + ": switch("
+					// + clearAndAdd + ") " + collection + "->" + collEvt.getNewValue());
+					if (collection != null && resubscribe) {
+						Subscription oldSub = collectionSub;
+						collectionSub = null;
+						if (oldSub != null) {
+							oldSub.unsubscribe();
+							// We used to rely on the contained collection to determine which values to remove from the observer,
+							// but when observable chains are especially tangled (e.g. with complex Quick documents),
+							// the elements may already be removed, but the observer may not have been alerted yet.
+							// So instead, the collection observer keeps track of all the elements it's been given
+							// and we can use that information to depopulate accurately.
+							if (clearAndAdd) {
+								collectionObserver.remove(collEvt);
+								collectionObserver = null;
 							}
-						} else { // Don't need to lock
-							collectionSub.unsubscribe();
-							collectionSub = null;
 						}
 					}
 					collection = collEvt.getNewValue();
-					if (collection != null) {
+					if (collection != null && resubscribe) {
 						// The collection in the value is not changing--we just don't want it to while we're working
 						try (Transaction t = collection.lock(false, null)) {
-							if (clearAndAdd)
-								ObservableUtils.populateValues(collection, new ElementMappingChangeObserver(collection, observer), forward,
-									collEvt);
-							collectionSub = collection.onChange(new ElementMappingChangeObserver(collection, observer));
+							if (collectionObserver == null)
+								collectionObserver = new ElementMappingChangeObserver(collection, this, observer);
+							ObservableUtils.populateValues(collection, collectionObserver, forward, collEvt);
+							collectionSub = collection.onChange(collectionObserver);
 						}
 					}
 				}
@@ -3667,6 +3894,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public void onCompleted(Supplier<Causable> cause) {
 					unsubscribe(true);
+				}
+
+				@Override
+				public ObservableCollection<? extends E> get() {
+					return collection;
 				}
 
 				void unsubscribe(boolean removeAll) {
@@ -3677,7 +3909,7 @@ public final class ObservableCollectionImpl {
 								collectionSub.unsubscribe();
 								collectionSub = null;
 								// De-populate in opposite direction
-								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
+								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, this, observer),
 									!forward, null);
 							}
 						} else { // Don't need to lock
@@ -3715,8 +3947,10 @@ public final class ObservableCollectionImpl {
 			if (id == null)
 				return null;
 			FlattenedElementId flatId = (FlattenedElementId) id;
-			if (!flatId.check(this, coll))
+			if (!flatId.check(this, coll)) {
+				BreakpointHere.breakpoint();
 				throw new NoSuchElementException(StdMsg.ELEMENT_REMOVED);
+			}
 			return flatId.theSourceEl;
 		}
 
@@ -3899,7 +4133,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <T> The type of the collection
 	 */
-	public static class SimpleCollectionBackedObservable<T> implements ObservableCollection<T> {
+	public static class SimpleCollectionBackedObservable<T> extends AbstractIdentifiable implements ObservableCollection<T> {
 		private final ObservableCollection<T> theCollection;
 		private final List<ElementId> theBackingElements;
 		private final SettableValue<? extends Collection<T>> theCollectionValue;
@@ -3907,23 +4141,29 @@ public final class ObservableCollectionImpl {
 		private final AtomicInteger theSubscriptionCount;
 		private long theStampCopy;
 		private boolean isModifying;
+		private boolean isLocked;
 
 		/**
 		 * @param collection The collection to back this observable collection
 		 * @param collectionValue The settable value containing the collection contents
 		 */
-		protected SimpleCollectionBackedObservable(ObservableCollection<T> collection,
+		public SimpleCollectionBackedObservable(ObservableCollection<T> collection,
 			SettableValue<? extends Collection<T>> collectionValue) {
 			theCollection = collection;
 			theBackingElements = new ArrayList<>();
 			theCollectionValue = collectionValue;
 			theSubscriptionCount = new AtomicInteger();
 			theStampCopy = -1;
-			sync(null);
+		}
+
+		/** @return The collection-typed value backing this collection */
+		protected SettableValue<? extends Collection<T>> getCollectionValue() {
+			return theCollectionValue;
 		}
 
 		@Override
 		public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
+			update();
 			return theCollection.getElement(index);
 		}
 
@@ -3949,9 +4189,15 @@ public final class ObservableCollectionImpl {
 			Transaction cvT = theCollectionValue.lock(write, cause);
 			Collection<T> cv = theCollectionValue.get();
 			Transaction cT = Transactable.lock(cv, write, cause);
-			update();
+			Transaction isLockedT;
+			if (!isLocked) {
+				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
+				update();
+				isLocked = true;
+			} else
+				isLockedT = Transaction.NONE;
 			Transaction collT = theCollection.lock(write, cause);
-			return Transaction.and(cvT, cT, collT);
+			return Transaction.and(cvT, cT, isLockedT, collT);
 		}
 
 		@Override
@@ -3965,14 +4211,20 @@ public final class ObservableCollectionImpl {
 				cvT.close();
 				return null;
 			}
-			update();
+			Transaction isLockedT;
+			if (!isLocked) {
+				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
+				update();
+				isLocked = true;
+			} else
+				isLockedT = Transaction.NONE;
 			Transaction collT = theCollection.tryLock(write, cause);
 			if (collT == null) {
 				cT.close();
 				cvT.close();
-				return null;
+				isLockedT.close();
 			}
-			return Transaction.and(cvT, cT, collT);
+			return Transaction.and(cvT, cT, isLockedT, collT);
 		}
 
 		@Override
@@ -3983,6 +4235,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theCollectionValue.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theCollectionValue.noInitChanges().getChangeSources();
 		}
 
 		@Override
@@ -3997,8 +4254,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return Identifiable.wrap(theCollectionValue.getIdentity(), "observeCollection");
+		}
+
+		@Override
+		public SimpleCollectionBackedObservable<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -4214,8 +4477,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			update();
-			return theStampCopy;
+			return getBackingStamp();
 		}
 
 		@Override
@@ -4316,6 +4578,8 @@ public final class ObservableCollectionImpl {
 
 		/** If the observable value has changed, synchronizes its contents with this collection */
 		protected void update() {
+			if (isLocked)
+				return;
 			long stamp = getBackingStamp();
 			if (stamp != theStampCopy) {
 				theStampCopy = stamp;
@@ -4337,10 +4601,13 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = theCollectionValue.lock(); //
 				Causable.CausableInUse syncCause = Causable.cause(cause)) {
 				Collection<T> cv = theCollectionValue.get();
-				try (Transaction t2 = Transactable.lock(cv, false, syncCause)) {
+				try (Transaction t2 = theCollection.lock(true, syncCause); //
+					Transaction t3 = Transactable.lock(cv, false, syncCause)) {
 					List<T> list = cv instanceof List ? (List<T>) cv : QommonsUtils.unmodifiableCopy(cv);
-					CollectionUtils.SimpleAdjustment<T, T, RuntimeException> syncAction = CollectionUtils.synchronize(theCollection, list)//
-						.simple(LambdaUtils.identity());
+					CollectionUtils.SimpleAdjustment<T, T, RuntimeException> syncAction = CollectionUtils
+						.synchronize(theCollection, list, (v1, v2) -> v1 == v2)//
+						.simple(LambdaUtils.identity())//
+						.commonUses(true, true);
 					if (theCollection.isContentControlled())
 						syncAction.addLast();
 					else

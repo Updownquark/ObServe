@@ -13,6 +13,7 @@ import org.observe.CausableChanging;
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -66,6 +67,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 */
 	Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action);
 
+	@Override
+	ObservableMap<K, V> alias(String alias);
+
 	/** @return An observable collection of all the values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
@@ -89,7 +93,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			try (Transaction ct = subCause.use()) {
 				int index = forward ? 0 : size() - 1;
 				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
-					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
+					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent.Default<>(entryEl.getElementId(),
+						entryEl.getElementId(),
 						index, index, CollectionChangeType.add, entryEl.get().getKey(), entryEl.get().getKey(), null,
 						entryEl.get().getValue(), subCause);
 					try (Transaction mt = mapEvent.use()) {
@@ -112,7 +117,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					try (Transaction ct = unsubCause.use()) {
 						int index = !forward ? 0 : size() - 1;
 						for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
-							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entryEl.getElementId(),
+							ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent.Default<>(entryEl.getElementId(),
 								entryEl.getElementId(), index, index, CollectionChangeType.remove, //
 								entryEl.get().getKey(), entryEl.get().getKey(), entryEl.get().getValue(), entryEl.get().getValue(),
 								subCause);
@@ -133,6 +138,15 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
 	default SettableElement<V> observe(K key) {
+		return observe(key, null);
+	}
+
+	/**
+	 * @param key The key to get the value for
+	 * @param defaultValue The value for the result to have when no entry for the given key is present in the map
+	 * @return An observable value that changes whenever the value for the given key changes in this map
+	 */
+	default SettableElement<V> observe(K key, V defaultValue) {
 		class MapValueObservable extends AbstractIdentifiable implements SettableElement<V> {
 			private ElementId thePreviousElement;
 
@@ -175,7 +189,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 						entry = getEntry(key);
 						thePreviousElement = entry == null ? null : entry.getElementId();
 					}
-					return entry == null ? null : entry.getValue();
+					return entry == null ? defaultValue : entry.getValue();
 				}
 			}
 
@@ -194,8 +208,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 									newExists = true;
 								else
 									newExists = keySet().contains(key);
-								V oldValue = exists[0] ? evt.getOldValue() : null;
-								V newValue = newExists ? evt.getNewValue() : null;
+								V oldValue = exists[0] ? evt.getOldValue() : defaultValue;
+								V newValue = newExists ? evt.getNewValue() : defaultValue;
 								exists[0] = newExists;
 								ObservableElementEvent<V> evt2 = new ObservableElementEvent<>(false, //
 									evt.getType() == CollectionChangeType.add ? null : evt.getElementId(), evt.getElementId(), //
@@ -248,6 +262,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					protected Object createIdentity() {
 						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "noInitChanges");
 					}
+
+					@Override
+					public CoreChangeSources getChangeSources() {
+						return changes().getChangeSources();
+					}
 				}
 				return new MapValueChanges();
 			}
@@ -263,6 +282,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
+			public MapValueObservable alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
+
+			@Override
 			public ObservableValue<String> isEnabled() {
 				class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
 					@Override
@@ -273,6 +298,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					@Override
 					public Object createIdentity() {
 						return Identifiable.wrap(MapValueObservable.this.getIdentity(), "enabled");
+					}
+
+					@Override
+					public Enabled alias(String alias) {
+						super.alias(alias);
+						return this;
 					}
 
 					@Override
@@ -345,6 +376,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 							protected Object createIdentity() {
 								return Identifiable.wrap(Enabled.this.getIdentity(), "noInitChanges");
 							}
+
+							@Override
+							public CoreChangeSources getChangeSources() {
+								return ObservableMap.this.changes().getChangeSources();
+							}
 						}
 						return new NoInitChanges();
 					}
@@ -358,7 +394,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
-			public <V2 extends V> String isAcceptable(V2 value) {
+			public String isAcceptable(V value) {
 				try (Transaction t = ObservableMap.this.lock(false, null)) {
 					MapEntryHandle<K, V> entry;
 					if (thePreviousElement != null && thePreviousElement.isPresent())
@@ -367,16 +403,23 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 						entry = getEntry(key);
 						thePreviousElement = CollectionElement.getElementId(entry);
 					}
-					if (entry != null)
-						return mutableEntry(entry.getElementId()).isAcceptable(value);
-					else
+					if (entry != null) {
+						MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
+						String msg = mutableEntry.isAcceptable(value);
+						if (msg != null && equivalence().elementEquals(defaultValue, value)) {
+							String msg2 = mutableEntry.canRemove();
+							if (msg2 == null)
+								return null;
+						}
+						return msg;
+					} else
 						return canPut(key, value);
 				}
 			}
 
 			@Override
-			public <V2 extends V> V set(V2 value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				try (Transaction t = ObservableMap.this.lock(false, cause)) {
+			public V set(V value) throws IllegalArgumentException, UnsupportedOperationException {
+				try (Transaction t = ObservableMap.this.lock(false, null)) {
 					MapEntryHandle<K, V> entry;
 					if (thePreviousElement != null && thePreviousElement.isPresent())
 						entry = getEntryById(thePreviousElement);
@@ -386,7 +429,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					}
 					if (entry != null) {
 						V oldValue = entry.getValue();
-						mutableEntry(entry.getElementId()).set(value);
+						MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
+						if (mutableEntry.isAcceptable(value) == null) {
+							mutableEntry.set(value);
+						} else if (equivalence().elementEquals(defaultValue, value) && mutableEntry.canRemove() == null)
+							mutableEntry.remove();
+						else // Let the element throw the exception
+							mutableEntry.set(value);
 						return oldValue;
 					} else {
 						putEntry(key, value, false);
@@ -417,7 +466,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 							}
 							ObservableElementEvent<V> initEvt = new ObservableElementEvent<>(true, null,
 								entry == null ? null : entry.getElementId(), //
-									null, entry == null ? null : entry.getValue(), null);
+									null, entry == null ? defaultValue : entry.getValue(), null);
 							try (Transaction evtT = initEvt.use()) {
 								observer.onNext(initEvt);
 							}
@@ -453,6 +502,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					@Override
 					public CoreId getCoreId() {
 						return changes.getCoreId();
+					}
+
+					@Override
+					public CoreChangeSources getChangeSources() {
+						return changes.getChangeSources();
 					}
 				}
 				return new MapObservableWithInit();
@@ -573,8 +627,19 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
+		public ObservableMapValueCollection<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getMap().isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getMap().getChangeSources();
 		}
 
 		@Override
@@ -637,8 +702,19 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
+		public ObservableEntrySet<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getMap().isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getMap().getChangeSources();
 		}
 
 		@Override
@@ -762,6 +838,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public Object createIdentity() {
 			return Identifiable.baseId("observable-map", this);
+		}
+
+		@Override
+		public DefaultObservableMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theEntries.getChangeSources();
 		}
 
 		@Override
@@ -939,7 +1026,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theEntries.onChange(evt -> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
-				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getIndex(), evt.getType(),
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId(), evt.getIndex(), evt.getType(),
 					evt.getOldValue() == null ? null : evt.getOldValue().getKey(), evt.getNewValue().getKey(), oldValue,
 						evt.getNewValue().getValue(), evt, evt.getMovement());
 				try (Transaction t = mapEvent.use()) {
@@ -1046,6 +1133,16 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
+		public EmptyObservableMap<K, V> alias(String alias) {
+			return this; // No aliasing for this constant
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.empty();
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return true;
 		}
@@ -1137,7 +1234,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class UnmodifiableObservableMap<K, V> implements ObservableMap<K, V> {
+	class UnmodifiableObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
 		private final ObservableMap<K, V> theWrapped;
 		private final ObservableSet<K> theKeySet;
 
@@ -1154,6 +1251,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public boolean isEventing() {
 			return theWrapped.isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theWrapped.getChangeSources();
 		}
 
 		@Override
@@ -1178,8 +1280,14 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return theWrapped.getIdentity();
+		}
+
+		@Override
+		public UnmodifiableObservableMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1284,7 +1392,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class ConstantObservableMap<K, V> implements ObservableMap<K, V> {
+	class ConstantObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
 		private final BetterMap<K, V> theBacking;
 
 		public ConstantObservableMap(BetterMap<K, V> backing) {
@@ -1320,13 +1428,24 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return theBacking.getIdentity();
+		}
+
+		@Override
+		public ConstantObservableMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
 		public boolean isEventing() {
 			return false;
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.empty();
 		}
 
 		@Override
@@ -1374,11 +1493,22 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			return theBacking.toString();
 		}
 
-		protected static class KeySet<K> implements ObservableSet<K> {
+		protected static class KeySet<K> extends AbstractIdentifiable implements ObservableSet<K> {
 			private final BetterSet<K> theBacking;
 
 			protected KeySet(BetterSet<K> backing) {
 				theBacking = backing;
+			}
+
+			@Override
+			public KeySet<K> alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return CoreChangeSources.empty();
 			}
 
 			@Override
@@ -1536,7 +1666,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
-			public Object getIdentity() {
+			protected Object createIdentity() {
 				return theBacking.getIdentity();
 			}
 

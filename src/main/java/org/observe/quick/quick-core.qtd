@@ -48,6 +48,8 @@
 			<attribute name="width" type="expression" specify="optional" />
 			<?DOC The height of the window?>
 			<attribute name="height" type="expression" specify="optional" />
+			<?DOC An event that will cause this dialog to attempt to re-size itself to display all its content ideally ?>
+			<attribute name="re-pack" type="expression" specify="optional" />
 			<?DOC The icon for the window?>
 			<attribute name="window-icon" type="expression" specify="optional" />
 			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>

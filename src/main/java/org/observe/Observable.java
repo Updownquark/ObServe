@@ -3,14 +3,20 @@ package org.observe;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.observe.Observer.SimpleObserver;
 import org.qommons.Causable;
@@ -18,12 +24,13 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
-import org.qommons.StringUtils;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MappedCollection;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
 import org.qommons.threading.QommonsTimer;
 
@@ -94,16 +101,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
 		return new ComposedObservable<>(LambdaUtils.printableFn(args -> func.apply((T) args[0]), func::toString, func), "map", this);
-	}
-
-	/**
-	 * A shortcut for {@link #flatten(Observable) flatten}({@link #map(Function) map}(map))
-	 *
-	 * @param map The function producing an observable for each value from this observable
-	 * @return An observable that may produce any number of values for each value from this observable
-	 */
-	default <R> Observable<R> flatMap(Function<? super T, ? extends Observable<? extends R>> map) {
-		return flatten(map(map));
 	}
 
 	/**
@@ -209,6 +206,20 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	}
 
 	/**
+	 * <p>
+	 * Returns an observable containing all current, core sources of change in observable.
+	 * </p>
+	 * <b>A <b>core</b> observable is one that has no components.</b>
+	 * <p>
+	 * The returned observable contains all core observables that are currently affecting this observable. I.e., all core observables that,
+	 * if they were to fire an event, might cause this observable to fire an event.
+	 * </p>
+	 *
+	 * @return An observable containing all possible sources of change in this observable
+	 */
+	CoreChangeSources getChangeSources();
+
+	/**
 	 * @param <V> The super-type of all observables to or
 	 * @param obs The observables to combine
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
@@ -233,14 +244,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
 	 */
 	public static <T> Observable<T> constant(T value) {
-		return new Observable<T>() {
-			private Object theIdentity;
+		class ConstantObservable extends AbstractIdentifiable implements Observable<T> {
 			@Override
-			public Object getIdentity() {
-				if (theIdentity == null)
-					theIdentity = Identifiable.idFor(value, () -> String.valueOf(value), () -> Objects.hashCode(value),
-						other -> Objects.equals(value, other));
-				return theIdentity;
+			protected Object createIdentity() {
+				return Identifiable.idFor(value, () -> String.valueOf(value), () -> Objects.hashCode(value),
+					other -> Objects.equals(value, other));
 			}
 
 			@Override
@@ -280,18 +288,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			}
 
 			@Override
+			public CoreChangeSources getChangeSources() {
+				return CoreChangeSources.empty();
+			}
+
+			@Override
 			public String toString() {
 				return "" + value;
 			}
 		};
-	}
-
-	/**
-	 * @param ov An observable of observables
-	 * @return An observable reflecting the values of the inner observables
-	 */
-	public static <T> Observable<T> flatten(Observable<? extends Observable<? extends T>> ov) {
-		return new FlattenedObservable<>(ov);
+		return new ConstantObservable();
 	}
 
 	/** An empty observable that never does anything */
@@ -301,6 +307,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public Object getIdentity() {
 			return theIdentity;
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			return this; // Can't alias this constant
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override
@@ -347,6 +363,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.empty();
+		}
+
+		@Override
 		public Observable<Object> filter(Function<? super Object, Boolean> func) {
 			return this;
 		}
@@ -358,11 +379,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public <R> Observable<R> map(Function<? super Object, R> func) {
-			return (Observable<R>) this;
-		}
-
-		@Override
-		public <R> Observable<R> flatMap(Function<? super Object, ? extends Observable<? extends R>> map) {
 			return (Observable<R>) this;
 		}
 
@@ -482,6 +498,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return theWrapped.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theWrapped.getChangeSources();
 		}
 	}
 
@@ -630,7 +651,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 *
 	 * @param <T> The type of the composed observable
 	 */
-	public class ComposedObservable<T> implements Observable<T> {
+	public class ComposedObservable<T> extends AbstractIdentifiable implements Observable<T> {
 		private static final Object UNSET = new Object();
 
 		private final Observable<?>[] theComposed;
@@ -640,7 +661,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		private final ListenerList<Observer<? super T>> theObservers;
 
 		private final String theOperation;
-		private Object theIdentity;
 
 		/**
 		 * @param function The function that operates on the argument observables to produce this observable's value
@@ -712,14 +732,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null) {
-				Object[] obsIds = new Object[theComposed.length - 1];
-				for (int i = 0; i < obsIds.length; i++)
-					obsIds[i] = theComposed[i + 1].getIdentity();
-				theIdentity = Identifiable.wrap(theComposed[0].getIdentity(), theOperation, obsIds);
-			}
-			return theIdentity;
+		protected Object createIdentity() {
+			Object[] obsIds = new Object[theComposed.length - 1];
+			for (int i = 0; i < obsIds.length; i++)
+				obsIds[i] = theComposed[i + 1].getIdentity();
+			return Identifiable.wrap(theComposed[0].getIdentity(), theOperation, obsIds);
 		}
 
 		@Override
@@ -772,6 +789,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public boolean equals(Object obj) {
 			return obj instanceof Observable && getIdentity().equals(((Observable<?>) obj).getIdentity());
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(theComposed);
 		}
 
 		@Override
@@ -1152,28 +1174,33 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	}
 
 	/**
-	 * Implements {@link Observable#or(Observable...)}
+	 * A simple observable that fires whenever any of a number of others fires, with the same value
 	 *
-	 * @param <V> The super type of the observables being or-ed
+	 * @param <V> The super-type of the component observables
 	 */
-	class OrObservable<V> extends AbstractIdentifiable implements Observable<V> {
-		private final Observable<? extends V>[] theObservables;
-
-		public OrObservable(List<? extends Observable<? extends V>> obs) {
-			this.theObservables = obs.toArray(new Observable[obs.size()]);
-		}
+	abstract class AbstractOrObservable<V> extends AbstractIdentifiable implements Observable<V> {
+		protected abstract Collection<Observable<? extends V>> getComponents();
 
 		@Override
 		protected Object createIdentity() {
-			return Identifiable.idFor(theObservables, () -> {
-				return StringUtils.conversational(", ", null).print(theObservables, StringBuilder::append).toString();
-			}, () -> Arrays.hashCode(theObservables), other -> theObservables.equals(other));
+			Identifiable.CustomIdentityBuilder builder = Identifiable.buildId();
+			builder.append("or(");
+			boolean first = true;
+			for (Observable<? extends V> component : getComponents()) {
+				if (first)
+					first = false;
+				else
+					builder.append(", ");
+				builder.withPrintedIdS(component::getIdentity);
+			}
+			builder.append(")");
+			return builder.build();
 		}
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
 			ThreadConstraint c = ThreadConstraint.NONE;
-			for (Observable<? extends V> obs : theObservables) {
+			for (Observable<? extends V> obs : getComponents()) {
 				ThreadConstraint obsC = obs.getThreadConstraint();
 				if (c == ThreadConstraint.NONE)
 					c = obsC;
@@ -1185,7 +1212,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public boolean isEventing() {
-			for (Observable<? extends V> obs : theObservables) {
+			for (Observable<? extends V> obs : getComponents()) {
 				if (obs != null && obs.isEventing())
 					return true;
 			}
@@ -1194,18 +1221,20 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super V> observer) {
-			Subscription[] subs = new Subscription[theObservables.length];
+			Observable<? extends V>[] components = getComponents().toArray(new Observable[getComponents().size()]);
+			Subscription[] subs = new Subscription[getComponents().size()];
 			boolean[] init = new boolean[] { true };
-			for (int i = 0; i < theObservables.length; i++) {
+			for (int i = 0; i < subs.length; i++) {
 				int index = i;
-				Lockable[] others = new Lockable[theObservables.length - 1];
-				for (int j = 0; j < theObservables.length; j++) {
+				Lockable[] others = new Lockable[subs.length - 1];
+
+				for (int j = 0; j < subs.length; j++) {
 					if (j < index)
-						others[j] = theObservables[j];
+						others[j] = components[j];
 					else if (j > index)
-						others[j - 1] = theObservables[j];
+						others[j - 1] = components[j];
 				}
-				subs[i] = theObservables[i] == null ? Subscription.NONE : theObservables[i].subscribe(new Observer<V>() {
+				subs[i] = components[i] == null ? Subscription.NONE : components[i].subscribe(new Observer<V>() {
 					@Override
 					public void onNext(V value) {
 						try (Transaction t = Lockable.lockAll(others)) {
@@ -1239,7 +1268,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public boolean isSafe() {
-			for (Observable<?> o : theObservables)
+			for (Observable<?> o : getComponents())
 				if (o != null && !o.isSafe())
 					return false;
 			return true;
@@ -1247,19 +1276,46 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Transaction lock() {
-			return Lockable.lockAll(theObservables);
+			return Lockable.lockAll(getComponents());
 		}
 
 		@Override
 		public Transaction tryLock() {
-			return Lockable.tryLockAll(theObservables);
+			return Lockable.tryLockAll(getComponents());
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(theObservables);
+			return Lockable.getCoreId(getComponents());
 		}
-	};
+	}
+
+	/**
+	 * Implements {@link Observable#or(Observable...)}
+	 *
+	 * @param <V> The super type of the observables being or-ed
+	 */
+	class OrObservable<V> extends AbstractOrObservable<V> {
+		private final Observable<? extends V>[] theObservables;
+
+		public OrObservable(List<? extends Observable<? extends V>> obs) {
+			theObservables = obs.toArray(new Observable[obs.size()]);
+			for (int i = 0; i < theObservables.length; i++) {
+				if (theObservables[i] == null)
+					throw new NullPointerException("Element [" + i + "] is null");
+			}
+		}
+
+		@Override
+		protected List<Observable<? extends V>> getComponents() {
+			return Arrays.asList(theObservables);
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(theObservables);
+		}
+	}
 
 	/** Implements {@link Observable#onRootFinish(Observable)} */
 	class CausableRootFinish extends WrappingObservable<Causable, Causable> {
@@ -1290,117 +1346,17 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			});
 		}
 	}
-	/**
-	 * Implements {@link Observable#flatten(Observable)}
-	 *
-	 * @param <T> The type of value fired by the inner observable
-	 */
-	class FlattenedObservable<T> implements Observable<T> {
-		private final Observable<? extends Observable<? extends T>> theWrapper;
-		private Object theIdentity;
-
-		protected FlattenedObservable(Observable<? extends Observable<? extends T>> wrapper) {
-			theWrapper = wrapper;
-		}
-
-		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theWrapper.getIdentity(), "flatten");
-			return theIdentity;
-		}
-
-		@Override
-		public ThreadConstraint getThreadConstraint() {
-			return null; // We can't know
-		}
-
-		@Override
-		public boolean isEventing() {
-			return theWrapper.isEventing(); // Best guess, can't know for sure
-		}
-
-		protected Observable<? extends Observable<? extends T>> getWrapper() {
-			return theWrapper;
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super T> observer) {
-			return theWrapper.subscribe(new Observer<Observable<? extends T>>() {
-				@Override
-				public void onNext(Observable<? extends T> innerObs) {
-					if (innerObs != null) {
-						innerObs.takeUntil(theWrapper.noInit()).subscribe(new Observer<T>() {
-							@Override
-							public void onNext(T value) {
-								observer.onNext(value);
-							}
-
-							@Override
-							public void onCompleted(Supplier<Causable> cause) {
-								// Do nothing. The outer observable may get another value.
-							}
-						});
-					} else
-						observer.onNext(null);
-				}
-
-				@Override
-				public void onCompleted(Supplier<Causable> cause) {
-					observer.onCompleted(cause);
-				}
-			});
-		}
-
-		@Override
-		public boolean isSafe() {
-			return false; // Can't guarantee that all values in the wrapper will be safe
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapper.lock(); // Can't access the contents reliably
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapper.tryLock(); // Can't access the contents reliably
-		}
-
-		@Override
-		public CoreId getCoreId() {
-			return theWrapper.getCoreId(); // Can't access the contents reliably
-		}
-
-		@Override
-		public int hashCode() {
-			return theWrapper.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			else if (!(obj instanceof FlattenedObservable))
-				return false;
-			return theWrapper.equals(((FlattenedObservable<?>) obj).theWrapper);
-		}
-
-		@Override
-		public String toString() {
-			return theWrapper + ".flat()";
-		}
-	}
 
 	/** Implements {@link Observable#onVmShutdown()} */
-	class VmShutdownObservable implements Observable<Void> {
-		private Object theIdentity;
+	class VmShutdownObservable extends AbstractIdentifiable implements Observable<Void> {
+		public static final VmShutdownObservable INSTANCE = new VmShutdownObservable();
+
+		private VmShutdownObservable() {
+		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.baseId("vmShutdown", this);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.baseId("vmShutdown", this);
 		}
 
 		@Override
@@ -1459,6 +1415,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.core(this);
+		}
+
+		@Override
 		public String toString() {
 			return "vmShutdown";
 		}
@@ -1469,7 +1430,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 *
 	 * @param <T> The type of value the observable publishes
 	 */
-	class IntervalObservable<T> implements Observable<T> {
+	class IntervalObservable<T> extends AbstractIdentifiable implements Observable<T> {
 		private final QommonsTimer theTimer;
 		private final QommonsTimer.TaskHandle theTask;
 		private final Function<? super Duration, ? extends T> theValue;
@@ -1479,8 +1440,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		private boolean isActual;
 
 		private Duration theInitDelay;
-
-		private Object theIdentity;
 
 		public IntervalObservable(QommonsTimer timer, Duration initDelay, Duration interval, Duration until,
 			Function<? super Duration, ? extends T> value, Consumer<? super T> postAction) {
@@ -1510,23 +1469,20 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null) {
-				StringBuilder str = new StringBuilder("every(");
-				if (theInitDelay == null)
-					str.append("null");
-				else
-					QommonsUtils.printDuration(theInitDelay, str, true);
-				str.append(", ");
-				QommonsUtils.printDuration(theTask.getFrequency(), str, true);
-				str.append(", ");
-				if (theTask.getLastRun() == null)
-					str.append("null");
-				else
-					QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
-				theIdentity = Identifiable.baseId(str.toString(), this);
-			}
-			return theIdentity;
+		protected Object createIdentity() {
+			StringBuilder str = new StringBuilder("every(");
+			if (theInitDelay == null)
+				str.append("null");
+			else
+				QommonsUtils.printDuration(theInitDelay, str, true);
+			str.append(", ");
+			QommonsUtils.printDuration(theTask.getFrequency(), str, true);
+			str.append(", ");
+			if (theTask.getLastRun() == null)
+				str.append("null");
+			else
+				QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
+			return Identifiable.baseId(str.toString(), this);
 		}
 
 		public IntervalObservable<T> actualDuration(boolean actual) {
@@ -1609,6 +1565,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.core(this);
+		}
+
+		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder("every(");
 			if (theInitDelay == null)
@@ -1623,6 +1584,155 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			else
 				QommonsUtils.printDuration(Duration.between(Instant.now(), theTask.getLastRun()), str, true);
 			return str.toString();
+		}
+	}
+
+	/**
+	 * An observable containing only core sources of change for some observable structure or structures
+	 *
+	 * @see Observable#getChangeSources()
+	 */
+	final class CoreChangeSources extends AbstractOrObservable<Object> {
+		private static CoreChangeSources EMPTY = new CoreChangeSources(Collections.emptyMap());
+
+		/** @return A {@link CoreChangeSources} for observables that never fire events */
+		public static <T> CoreChangeSources empty() {
+			return EMPTY;
+		}
+
+		/**
+		 * A {@link CoreChangeSources} for observables that have no components
+		 *
+		 * @param observable The core observable
+		 * @return The core changes for the core observable
+		 */
+		public static <T> CoreChangeSources core(Observable<T> observable) {
+			if (observable == null)
+				return EMPTY;
+			return new CoreChangeSources(Collections.singletonMap(observable.getIdentity(), observable));
+		}
+
+		public static CoreChangeSources of(Observable<?>... observables) {
+			return of(Arrays.asList(observables));
+		}
+
+		public static <T> CoreChangeSources of(Collection<T> values, Function<T, Observable<?>> observe) {
+			return of(new MappedCollection<>(values, observe));
+		}
+
+		public static CoreChangeSources of(Collection<? extends Observable<?>> observables) {
+			if (observables == null || observables.isEmpty())
+				return EMPTY;
+			else if (observables.size() == 1) {
+				Observable<?> observable = observables.iterator().next();
+				if (observable == null)
+					return EMPTY;
+				else
+					return observable.getChangeSources();
+			}
+			CoreChangeSources[] csArray = new CoreChangeSources[observables.size()];
+			Set<Object> largestIdSet = Collections.emptySet();
+			int largestIndex = -1;
+			int i = 0;
+			for (Observable<?> observable : observables) {
+				csArray[i] = observable == null ? EMPTY : observable.getChangeSources();
+				if (csArray[i].theChangeSources.size() > largestIdSet.size()) {
+					largestIdSet = csArray[i].theChangeSources.keySet();
+					largestIndex = i;
+				}
+				i++;
+			}
+			boolean allInLargest = true;
+			for (i = 0; i < csArray.length; i++) {
+				if (i != largestIndex && !largestIdSet.containsAll(csArray[i].theChangeSources.keySet())) {
+					allInLargest = false;
+					break;
+				}
+			}
+			if (allInLargest) {
+				if (largestIndex < 0)
+					return EMPTY;
+				else
+					return csArray[largestIndex];
+			}
+			Map<Object, Observable<?>> changeSources = new LinkedHashMap<>();
+			for (CoreChangeSources cs : csArray)
+				changeSources.putAll(cs.theChangeSources);
+			return new CoreChangeSources(changeSources);
+		}
+
+		private final Map<Object, Observable<?>> theChangeSources;
+
+		private CoreChangeSources(Map<Object, Observable<?>> simpleChangeSources) {
+			theChangeSources = simpleChangeSources;
+		}
+
+		@Override
+		protected Collection<Observable<? extends Object>> getComponents() {
+			return theChangeSources.values();
+		}
+
+		public boolean isEmpty() {
+			return theChangeSources.isEmpty();
+		}
+
+		public CoreChangeSources union(Observable<?>... others) {
+			if (others == null || others.length == 0)
+				return this;
+			return of(BetterList.of(Stream.concat(Stream.of(this), Arrays.stream(others))));
+		}
+
+		public CoreChangeSources excluding(CoreChangeSources other) {
+			if (other == null || other == EMPTY)
+				return this;
+			Map<Object, Observable<?>> changeSources = null;
+			if (theChangeSources.size() <= other.theChangeSources.size()) {
+				for (Object cs : theChangeSources.keySet()) {
+					if (other.theChangeSources.containsKey(cs)) {
+						changeSources = createChangeSourcesWithout(cs, other.theChangeSources.keySet());
+						break;
+					}
+				}
+			} else {
+				for (Object cs : other.theChangeSources.keySet()) {
+					if (theChangeSources.containsKey(cs)) {
+						changeSources = createChangeSourcesWithout(null, other.theChangeSources.keySet());
+						break;
+					}
+				}
+			}
+			if (changeSources == null)
+				return this; // No commonality
+			else if (changeSources.isEmpty())
+				return EMPTY; // other contained all of these change sources
+			else if (changeSources.size() == 1) {
+				Map.Entry<Object, Observable<?>> cs = changeSources.entrySet().iterator().next();
+				return new CoreChangeSources(Collections.singletonMap(cs.getKey(), cs.getValue()));
+			}
+			return new CoreChangeSources(changeSources);
+		}
+
+		private Map<Object, Observable<?>> createChangeSourcesWithout(Object firstExcluded, Set<Object> exclude) {
+			if (theChangeSources.size() == 1)
+				return Collections.emptyMap();
+			Map<Object, Observable<?>> changeSources = new LinkedHashMap<>((theChangeSources.size() - 1) * 3 / 2 + 1);
+			boolean foundFirst = firstExcluded == null;
+			for (Map.Entry<Object, Observable<?>> cs : theChangeSources.entrySet()) {
+				Object id = cs.getKey();
+				if (foundFirst) {
+					if (!exclude.contains(id))
+						changeSources.put(id, cs.getValue());
+				} else if (firstExcluded == id)
+					foundFirst = true;
+				else
+					changeSources.put(id, cs.getValue());
+			}
+			return changeSources;
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return this;
 		}
 	}
 }

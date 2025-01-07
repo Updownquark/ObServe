@@ -13,6 +13,7 @@ import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -54,7 +55,6 @@ public class ObservableConfigContent {
 		private final long[] thePathElementStamps;
 		private Subscription thePathSubscription;
 		private final ListenerList<Observer<? super ObservableValueEvent<ObservableConfig>>> theListeners;
-		private Object theChangesIdentity;
 
 		/**
 		 * @param root The root config to observe
@@ -181,6 +181,12 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public ObservableConfigChild alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public ObservableConfig get() {
 			try (Transaction t = lock()) {
 				resolvePath(0, false);
@@ -260,12 +266,10 @@ public class ObservableConfigContent {
 
 		@Override
 		public Observable<ObservableValueEvent<ObservableConfig>> noInitChanges() {
-			return new Observable<ObservableValueEvent<ObservableConfig>>() {
+			class ConfigChildChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<ObservableConfig>> {
 				@Override
-				public Object getIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(ObservableConfigChild.this.getIdentity(), "noInitChanges");
-					return theChangesIdentity;
+				protected Object createIdentity() {
+					return Identifiable.wrap(ObservableConfigChild.this.getIdentity(), "noInitChanges");
 				}
 
 				@Override
@@ -302,7 +306,13 @@ public class ObservableConfigContent {
 				public CoreId getCoreId() {
 					return theRoot.getCoreId();
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theRoot.getChangeSources();
+				}
+			}
+			return new ConfigChildChanges();
 		}
 
 		@Override
@@ -363,6 +373,12 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public ObservableConfigValue alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public String get() {
 			try (Transaction t = lock()) {
 				return parse(theConfigChild.get());
@@ -414,6 +430,11 @@ public class ObservableConfigContent {
 				}
 
 				@Override
+				public CoreChangeSources getChangeSources() {
+					return theConfigChild.theRoot.getChangeSources();
+				}
+
+				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
 					try (Transaction t = theConfigChild.theRoot.lock(false, null)) {
 						Subscription[] configSub = new Subscription[1];
@@ -445,8 +466,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public String set(String value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
+		public String set(String value) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = theConfigChild.getRoot().lock(true, null)) {
 				String msg = isValueAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
@@ -493,17 +514,24 @@ public class ObservableConfigContent {
 	}
 
 	/** Superclass to assist in implementing the collection behind {@link ObservableConfig#getContent(ObservableConfigPath)} */
-	protected static abstract class AbstractObservableConfigContent implements ObservableCollection<ObservableConfig> {
+	protected static abstract class AbstractObservableConfigContent extends AbstractIdentifiable
+	implements ObservableCollection<ObservableConfig> {
 		private final ObservableConfig theConfig;
 
 		/** @param config The root config */
-		public AbstractObservableConfigContent(ObservableConfig config) {
+		protected AbstractObservableConfigContent(ObservableConfig config) {
 			theConfig = config;
 		}
 
 		/** @return The root config */
 		public ObservableConfig getConfig() {
 			return theConfig;
+		}
+
+		@Override
+		public AbstractObservableConfigContent alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -552,6 +580,11 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return theConfig.getChangeSources();
+		}
+
+		@Override
 		public Equivalence<? super ObservableConfig> equivalence() {
 			return Equivalence.DEFAULT;
 		}
@@ -559,18 +592,14 @@ public class ObservableConfigContent {
 
 	/** Implements the collection behind {@link ObservableConfig#getAllContent()} */
 	protected static class FullObservableConfigContent extends AbstractObservableConfigContent {
-		private Object theIdentity;
-
 		/** @param config The parent config */
 		public FullObservableConfigContent(ObservableConfig config) {
 			super(config);
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(getConfig(), "allContent");
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(getConfig(), "allContent");
 		}
 
 		@Override
@@ -789,7 +818,6 @@ public class ObservableConfigContent {
 	/** Implements the collection behind {@link ObservableConfig#getContent(ObservableConfigPath)} for single-element paths */
 	protected static class SimpleObservableConfigContent extends AbstractObservableConfigContent {
 		private final ObservableConfigPathElement thePathElement;
-		private Object theIdentity;
 
 		/**
 		 * @param config The parent config
@@ -801,10 +829,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(getConfig(), "content", thePathElement);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(getConfig(), "content", thePathElement);
 		}
 
 		@Override

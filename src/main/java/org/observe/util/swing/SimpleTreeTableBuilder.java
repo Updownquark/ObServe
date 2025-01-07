@@ -31,7 +31,6 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.ObservableCollectionSynchronization;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.AbstractObservableTableModel.TableRenderContext;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
@@ -46,8 +45,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Implements {@link PanelPopulation}'s tree table.
@@ -102,7 +99,7 @@ implements TreeTableEditor<F, P> {
 		theChildren2 = children2;
 		theChildren3 = children3;
 		isRootVisible = true;
-		theTreeColumn = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) TypeTokens.get().OBJECT,
+		theTreeColumn = new CategoryRenderStrategy<>("Tree", (Class<F>) Object.class,
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 	}
 
@@ -212,7 +209,7 @@ implements TreeTableEditor<F, P> {
 	@Override
 	protected ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> createColumnSet() {
 		if (theTreeColumn == null)
-			theTreeColumn = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) TypeTokens.get().OBJECT, f -> f.getLast());
+			theTreeColumn = new CategoryRenderStrategy<>("Tree", (Class<F>) Object.class, f -> f.getLast());
 		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns = getColumns();
 		columns = columns.safe(ThreadConstraint.EDT, getUntil());
 		columns = ObservableCollection.flattenCollections(ObservableCollection.of(theTreeColumn), columns).collect();

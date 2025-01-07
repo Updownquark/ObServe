@@ -103,7 +103,7 @@
 				<button icon="`/icons/add.png`" action="app.c.add(app.c.size())" />
 			</box>
 			<split fill="true" orientation="vertical">
-				<search-table rows="rows" active-value-name="v">
+				<super-table rows="rows" active-value-name="v">
 					<titled-border title="`A x C`" />
 					<model>
 						<transform name="rows" source="app.ac">
@@ -122,8 +122,8 @@
 					<column name="`D`" pref-width="30" value="d" />
 					<column name="`E`" pref-width="50" value="e" />
 					<column name="`|E| % 3`" pref-width="50" value="Math.abs(e)%3" />
-				</search-table>
-				<search-table rows="rows" active-value-name="v">
+				</super-table>
+				<super-table rows="rows" active-value-name="v">
 					<titled-border title="`A x C x F`" />
 					<model>
 						<transform name="rows" source="app.acf">
@@ -145,7 +145,7 @@
 					<column name="`E`" pref-width="50" value="e" />
 					<column name="`F`" pref-width="50" value="f" />
 					<column name="`G`" pref-width="50" value="g" />
-				</search-table>
+				</super-table>
 			</split>
 			
 			<label>For the following selected D value, the average value of E will be reported for all rows with the given D value</label>

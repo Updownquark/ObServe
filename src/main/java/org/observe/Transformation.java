@@ -167,6 +167,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	private final BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> theCombination;
 	private final Equivalence<? super T> theResultEquivalence;
 	private final boolean isTesting;
+	private Object theIdentity;
 
 	/**
 	 * @param options The transformation options to copy into this definition
@@ -248,18 +249,32 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 	@Override
 	public Object getIdentity() {
-		if (theArgs.isEmpty()) {
-			return Identifiable.baseId(theCombination.toString(), theCombination);
-		} else {
-			StringBuilder descrip = new StringBuilder("combine(");
-			List<Object> ids = new ArrayList<>(theArgs.size() + 1);
-			ids.add(theCombination);
-			descrip.append(theCombination).append(", ");
-			ids.addAll(theArgs.keySet());
-			StringUtils.conversational(", ", null).print(descrip, theArgs.keySet(), (str, v) -> str.append(v.getIdentity()));
-			descrip.append(')');
-			return Identifiable.baseId(descrip.toString(), ids);
+		if (theIdentity == null) {
+			if (theArgs.isEmpty()) {
+				theIdentity = Identifiable.baseId(theCombination.toString(), theCombination);
+			} else {
+				StringBuilder descrip = new StringBuilder("combine(");
+				List<Object> ids = new ArrayList<>(theArgs.size() + 1);
+				ids.add(theCombination);
+				descrip.append(theCombination).append(", ");
+				ids.addAll(theArgs.keySet());
+				StringUtils.conversational(", ", null).print(descrip, theArgs.keySet(), (str, v) -> str.append(v.getIdentity()));
+				descrip.append(')');
+				theIdentity = Identifiable.baseId(descrip.toString(), ids);
+			}
 		}
+		return theIdentity;
+	}
+
+	@Override
+	public Identifiable alias(String alias) {
+		theIdentity = Identifiable.AliasedIdentity.alias(getIdentity(), alias);
+		return this;
+	}
+
+	@Override
+	public Set<String> getAliases() {
+		return Identifiable.AliasedIdentity.getAliases(theIdentity);
 	}
 
 	/** @return The observable values to combine with each source element */
@@ -922,13 +937,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				}
 				reverse = theReverse;
 			} else if (theCreator == null)
-				return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
+				return ReverseQueryResult.reject(theTransformation.toString() + ": " + StdMsg.UNSUPPORTED_OPERATION);
 			else
 				reverse = theCreator.curry3(!test);
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> enabled = add ? theAddAcceptability
 				: theAcceptability;
 			if (reverse == null)
-				return ReverseQueryResult.reject(StdMsg.UNSUPPORTED_OPERATION);
+				return ReverseQueryResult.reject(theTransformation.toString() + ": " + StdMsg.UNSUPPORTED_OPERATION);
 			if (enabled != null) {
 				String msg = enabled.apply(newValue, transformValues);
 				if (msg != null)
@@ -968,7 +983,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					}
 				});
 				if (!theTransformation.equivalence().elementEquals(reTransformed, newValue))
-					return ReverseQueryResult.reject(INEXACT_REVERSE_MSG);
+					return ReverseQueryResult.reject(theTransformation.toString() + ": " + INEXACT_REVERSE_MSG);
 			}
 			return ReverseQueryResult.value(reversed);
 		}
@@ -2129,10 +2144,12 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 	static class StampedArgValues implements TransformationState {
 		final Object[] argValues;
+		final long[] argStamps;
 		final long stamp;
 
-		StampedArgValues(Object[] argValues, long stamp) {
+		StampedArgValues(Object[] argValues, long[] argStamps, long stamp) {
 			this.argValues = argValues;
+			this.argStamps = argStamps;
 			this.stamp = stamp;
 		}
 
@@ -2147,7 +2164,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 	}
 
-	static class EngineImpl<S, T> implements Engine<S, T> {
+	static class EngineImpl<S, T> extends AbstractIdentifiable implements Engine<S, T> {
 		final Transformation<S, T> theTransformation;
 		final boolean isSelfCombined;
 		private volatile StampedArgValues theCachedValues;
@@ -2160,7 +2177,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			theSourceEquivalence = sourceEquivalence;
 			if (theTransformation.getArgs().isEmpty()) {
 				theChanges = null;
-				theCachedValues = new StampedArgValues(new Object[0], 0);
+				theCachedValues = new StampedArgValues(new Object[0], new long[0], 0);
 			} else {
 				theChanges = ListenerList.build().withInUse(new ListenerList.InUseListener() {
 					private final Subscription[] theArgSubs = new Subscription[theTransformation.getArgs().size()];
@@ -2202,7 +2219,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 										}, () -> arg + " changes for " + transformation, null));
 										if (!(initialized[0]))
 											throw new IllegalStateException("Value " + args[i] + " did not fire an initial event");
-										theCachedValues = new StampedArgValues(values.clone(), stamp);
+										theCachedValues = new StampedArgValues(values.clone(), stamps, stamp);
 									} else {
 										arg.noInitChanges().act(evt -> {
 											argChanged(index, arg, evt, values, stamps, allInitialized[0], otherLocks);
@@ -2220,12 +2237,33 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 					private void argChanged(int argIndex, ObservableValue<?> arg, ObservableValueEvent<?> evt, Object[] argValues,
 						long[] argStamps, boolean initialized, Lockable[] otherLocks) {
+						StampedArgValues cache = theCachedValues;
+						long newArgStamp = arg.getStamp();
+						if (argStamps[argIndex] == newArgStamp)
+							return; // We already noticed
 						try (Transaction t2 = Lockable.lockAll(otherLocks)) {
+							cache = theCachedValues;
+							if (argStamps[argIndex] == newArgStamp)
+								return; // We already noticed
 							argValues[argIndex] = evt.getNewValue();
-							argStamps[argIndex] = arg.getStamp();
-							Object[] valueCopy = argValues.clone();
-							long newStamp = Stamped.compositeStamp(argStamps);
-							StampedArgValues newState = new StampedArgValues(valueCopy, newStamp);
+							argStamps[argIndex] = newArgStamp;
+							// Check to see if any other arguments' values have changed.
+							// If we're being listened to, this is only possible if the arg is eventing and we haven't received the event
+							// yet
+							for (int a = 0; a < cache.argValues.length; a++) {
+								if (a == argIndex)
+									continue;
+								ObservableValue<?> otherArg = theTransformation.getArg(a);
+								if (otherArg.isEventing()) {
+									newArgStamp = otherArg.getStamp();
+									if (newArgStamp != cache.argStamps[a]) {
+										argValues[a] = otherArg.get();
+										argStamps[a] = newArgStamp;
+									}
+								}
+							}
+							long newStamp = Stamped.compositeStamp(cache.argStamps);
+							StampedArgValues newState = new StampedArgValues(argValues, argStamps, newStamp);
 							if (initialized)
 								newState(newState, evt);
 							else
@@ -2252,8 +2290,14 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return theTransformation.getIdentity();
+		}
+
+		@Override
+		public EngineImpl<S, T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -2281,7 +2325,14 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(theTransformation.getArgs());
+			return Stamped.compositeStamp(getArgStamps());
+		}
+
+		private long[] getArgStamps() {
+			long[] argStamps = new long[theTransformation.getArgs().size()];
+			for (int a = 0; a < argStamps.length; a++)
+				argStamps[a] = theTransformation.getArg(a).getStamp();
+			return argStamps;
 		}
 
 		@Override
@@ -2291,24 +2342,39 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		@Override
 		public TransformationState get() {
-			StampedArgValues cached = theCachedValues;
-			if (theChanges != null && theChanges.isEmpty()) {
-				long stamp = getStamp();
-				if (cached == null || cached.stamp != stamp) {
-					try (Transaction t = lock()) {
-						stamp = getStamp();
-						cached = theCachedValues; // Re-check cached values in case some other thread got us up-to-date
-						if (cached == null || cached.stamp != stamp) {
-							Object[] args = new Object[theTransformation.getArgs().size()];
-							int i = 0;
-							for (ObservableValue<?> arg : theTransformation.getArgs())
-								args[i++] = arg.get();
-							theCachedValues = cached = new StampedArgValues(args, stamp);
-						}
+			if (theChanges == null) // No args to listen to
+				return theCachedValues;
+			else if (!theChanges.isEmpty() && !isEventing())
+				return theCachedValues; // Up-to-date
+			try (Transaction t = lock()) {
+				StampedArgValues cache = theCachedValues;
+				if (!theChanges.isEmpty() && !isEventing())
+					return cache; // Up-to-date
+				Object[] argValues;
+				long[] argStamps;
+				boolean init = cache == null;
+				if (cache != null) {
+					argValues = cache.argValues;
+					argStamps = cache.argStamps;
+				} else {
+					int argCount = theTransformation.getArgs().size();
+					argValues = new Object[argCount];
+					argStamps = new long[argCount];
+				}
+				boolean anythingChanged = init;
+				for (int a = 0; a < theTransformation.getArgs().size(); a++) {
+					ObservableValue<?> arg = theTransformation.getArg(a);
+					long argStamp = arg.getStamp();
+					if (init || argStamps[a] != argStamp) {
+						anythingChanged = true;
+						argStamps[a] = argStamp;
+						argValues[a] = arg.get();
 					}
 				}
+				if (anythingChanged)
+					theCachedValues = cache = new StampedArgValues(argValues, argStamps, Stamped.compositeStamp(argStamps));
+				return cache;
 			}
-			return cached;
 		}
 
 		@Override
@@ -2347,6 +2413,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				@Override
 				public CoreId getCoreId() {
 					return EngineImpl.this.getCoreId();
+				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return CoreChangeSources.of(theTransformation.getArgs(), ObservableValue::noInitChanges);
 				}
 
 				@Override

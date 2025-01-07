@@ -144,9 +144,14 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 					t.close();
 			});
 
+			// Debugging printlns
+			// System.out.println(
+			// Integer.toHexString(System.identityHashCode(this)) + ":\n\t" + theLeftElements + "\n\t<-->\n\t" + theRightElements);
 			theLeftSub = theLeft.onChange(evt -> {
 				if (theCallbackLock)
 					return;
+				// System.out.println(Integer.toHexString(System.identityHashCode(this)) + ":\n\t" + theLeftElements + "\n\t<-->\n\t"
+				// + theRightElements + "\n\tleft: " + evt);
 				// This outer transaction is because locking once for a series of changes
 				// is much more efficient than repeatedly locking for each change
 				Map<Object, Object> data = evt.getRootCausable().onFinish(ck);
@@ -161,7 +166,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 				ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(theLeft, evt);
 				try (Transaction linkEvtT = innerLinkEvt.use(); //
 					Transaction evtT = theRight.lock(true, innerLinkEvt)) {
-					theCallbackLock = true;
+					theCallbackLock = !theRight.isEventing();
 					switch (evt.getType()) {
 					case add:
 						added(true, //
@@ -179,11 +184,14 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 				} finally {
 					theCallbackLock = false;
 				}
+				// System.out.println("Post:\n\t" + theLeftElements + "\n\t<-->\n\t" + theRightElements);
 			});
 
 			theRightSub = theRight.onChange(evt -> {
 				if (theCallbackLock)
 					return;
+				// System.out.println(Integer.toHexString(System.identityHashCode(this)) + ":\n\t" + theLeftElements + "\n]t<-->\n\t"
+				// + theRightElements + "\n\tright: " + evt);
 				// This outer transaction is because locking once for a series of changes
 				// is much more efficient than repeatedly locking for each change
 				Map<Object, Object> data = evt.getRootCausable().onFinish(ck);
@@ -198,7 +206,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 				ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(theRight, evt);
 				try (Transaction linkEvtT = innerLinkEvt.use(); //
 					Transaction evtT = theLeft.lock(true, innerLinkEvt)) {
-					theCallbackLock = true;
+					theCallbackLock = !theLeft.isEventing();
 					switch (evt.getType()) {
 					case add:
 						added(false, //
@@ -216,6 +224,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 				} finally {
 					theCallbackLock = false;
 				}
+				// System.out.println("Post:\n\t" + theLeftElements + "\n\t<-->\n\t" + theRightElements);
 			});
 		}
 	}
@@ -293,6 +302,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 					canAdd = null; // Try again
 				}
 			}
+			boolean otherEventing = opp.isEventing();
 			ElementId oppEl = null;
 			if (canAdd == null)
 				canAdd = opp.canAdd(newValue, //
@@ -310,7 +320,10 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 			}
 			common = new CommonElement(valueEls.getElementId(), //
 				left ? id : oppEl, left ? oppEl : id);
-			if (oppEl != null) {// Added to right successfully
+			// If the add succeeded, we may be able to do the linkage here.
+			// But if it's already eventing, we may be out of sync.
+			// In that case, behave as if the add failed and we'll link it up by value when we see it come in on the other side.
+			if (oppEl != null && !otherEventing) {
 				List<CommonElement> oppElements = getElements(!left);
 				int oppIndex = opp.getElementsBefore(oppEl);
 				if (oppIndex > 0)
@@ -319,7 +332,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 					oppElements.get(oppIndex).link(false, !left, common);
 				oppElements.add(oppIndex, common);
 				valueEls.get().addMatch();
-			} else // Couldn't add, leave unmatched
+			} else // Couldn't add (or may be out-of-sync), leave unmatched
 				valueEls.get().addUnmatched(left, common);
 		}
 		if (index > 0)
@@ -339,19 +352,24 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 			values.removeMatch();
 			// Try to remove the value from the other side
 			ObservableCollection<V> opp = getCollection(!left);
-			MutableCollectionElement<V> oppEl = opp.mutableElement(common.getId(!left));
-			int oppIndex = opp.getElementsBefore(oppEl.getElementId());
-			if (oppEl.canRemove() == null && !opp.isEventing()) {
-				try {
-					oppEl.remove();
-					getElements(!left).remove(oppIndex).setId(!left, null);
-				} catch (RuntimeException | Error e) {
-					System.err.println("Unadvertised failed remove");
-					e.printStackTrace();
+			ElementId oppElId = common.getId(!left);
+			if (oppElId.isPresent()) { // Could have already been removed by the same underlying cause
+				MutableCollectionElement<V> oppEl = opp.mutableElement(oppElId);
+				if (oppEl.canRemove() == null && !opp.isEventing()) {
+					int oppIndex = opp.getElementsBefore(oppElId);
+					try {
+						oppEl.remove();
+						getElements(!left).remove(oppIndex).setId(!left, null);
+					} catch (RuntimeException | Error e) {
+						System.err.println("Unadvertised failed remove");
+						e.printStackTrace();
+						values.addUnmatched(!left, common);
+					}
+				} else
 					values.addUnmatched(!left, common);
-				}
-			} else
+			} else { // The other collection will tell us later
 				values.addUnmatched(!left, common);
+			}
 		}
 		common.setId(left, null);
 		if (values.isEmpty())

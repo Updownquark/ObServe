@@ -25,6 +25,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -114,7 +116,7 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			protected QuickBorderStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public QuickBorderStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new QuickBorderStyle.Def.Default(parentStyle, this, style);
 			}
 		}
@@ -219,7 +221,7 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			protected QuickTitledBorderStyle.Def wrap(QuickStyledElement.QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public QuickTitledBorderStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new QuickTitledBorderStyle.Def(parentStyle, this, style);
 			}
 		}
@@ -321,7 +323,7 @@ public interface QuickBorder extends QuickStyledElement {
 				 */
 				public Def(QuickInstanceStyle.Def parent, TitledBorder.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "titled-border");
 					theBorderColor = addApplicableAttribute(typeStyle.getAttribute("border-color"));
 					theBorderThickness = addApplicableAttribute(typeStyle.getAttribute("thickness"));
@@ -386,7 +388,7 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickTitledBorderStyle create(QuickStyledElement styledElement) {
+				public QuickTitledBorderStyle create(QuickStyled styled) {
 					return new QuickTitledBorderStyle();
 				}
 			}
@@ -407,9 +409,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 				throws ModelInstantiationException {
-				super.update(interpreted, styledElement);
+				super.update(interpreted, styled);
 
 				Interpreted myInterpreted = (Interpreted) interpreted;
 				theBorderColorAttr = myInterpreted.getBorderColor().getAttribute();
@@ -420,8 +422,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public QuickTitledBorderStyle copy(QuickStyledElement styledElement) {
-				QuickTitledBorderStyle copy = (QuickTitledBorderStyle) super.copy(styledElement);
+			public QuickTitledBorderStyle copy(QuickStyled styled) {
+				QuickTitledBorderStyle copy = (QuickTitledBorderStyle) super.copy(styled);
 
 				copy.theBorderColor = copy.getApplicableAttribute(theBorderColorAttr);
 				copy.theBorderThickness = copy.getApplicableAttribute(theBorderThicknessAttr);
@@ -456,8 +458,8 @@ public interface QuickBorder extends QuickStyledElement {
 				 * @param wrapped The generic compiled style that this style class wraps
 				 */
 				public Default(QuickInstanceStyle.Def parent, QuickBorder.Def<?> styledElement, QuickCompiledStyle wrapped) {
-					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
+					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "border");
 					theBorderColor = addApplicableAttribute(typeStyle.getAttribute("border-color"));
 					theBorderThickness = addApplicableAttribute(typeStyle.getAttribute("thickness"));
@@ -491,7 +493,7 @@ public interface QuickBorder extends QuickStyledElement {
 			QuickElementStyleAttribute<Integer> getBorderThickness();
 
 			@Override
-			QuickBorderStyle create(QuickStyledElement styledElement);
+			QuickBorderStyle create(QuickStyled styled);
 
 			/** Default {@link QuickBorderStyle} interpretation implementation */
 			public class Default extends QuickInstanceStyle.Interpreted.Abstract implements Interpreted {
@@ -506,7 +508,7 @@ public interface QuickBorder extends QuickStyledElement {
 				 */
 				public Default(Def definition, QuickBorder.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
-					super(definition, styledElement, parent, wrapped);
+					super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}
 
 				@Override
@@ -534,7 +536,7 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickBorderStyle create(QuickStyledElement styledElement) {
+				public QuickBorderStyle create(QuickStyled styled) {
 					return new QuickBorderStyle.Default();
 				}
 			}
@@ -564,9 +566,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 				throws ModelInstantiationException {
-				super.update(interpreted, styledElement);
+				super.update(interpreted, styled);
 
 				QuickBorderStyle.Interpreted myInterpreted = (QuickBorderStyle.Interpreted) interpreted;
 				theBorderColorAttr = myInterpreted.getBorderColor().getAttribute();
@@ -577,8 +579,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public Default copy(QuickStyledElement styledElement) {
-				Default copy = (Default) super.copy(styledElement);
+			public Default copy(QuickStyled styled) {
+				Default copy = (Default) super.copy(styled);
 
 				copy.theBorderColor = copy.getApplicableAttribute(theBorderColorAttr);
 				copy.theBorderThickness = copy.getApplicableAttribute(theBorderThicknessAttr);

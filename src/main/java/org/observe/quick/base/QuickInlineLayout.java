@@ -36,6 +36,8 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			return JustifiedBoxLayout.Alignment.CENTER;
 		case "justify":
 			return JustifiedBoxLayout.Alignment.JUSTIFIED;
+		case "equal-spacing":
+			return JustifiedBoxLayout.Alignment.EQUAL_SPACING;
 		default:
 			throw new QonfigInterpretationException("Unrecognized " + attributeName + ": '" + attributeText + "'",
 				session.attributes().get(attributeName).getLocatedContent());
@@ -95,7 +97,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -106,7 +108,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		protected Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -121,7 +123,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickInlineLayout create(QuickWidget element) {
+		public QuickInlineLayout create(ExElement element) {
 			return new QuickInlineLayout(element);
 		}
 	}
@@ -132,7 +134,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private int thePadding;
 
 	/** @param element The container whose contents to manage */
-	protected QuickInlineLayout(QuickWidget element) {
+	protected QuickInlineLayout(ExElement element) {
 		super(element);
 	}
 
@@ -162,7 +164,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super QuickWidget, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();

@@ -11,6 +11,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.qommons.CausalLock;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstrained;
@@ -25,13 +26,11 @@ import org.qommons.collect.BetterMultiMap;
  * @param <K> The key type for the map
  * @param <V> The value type for the map
  */
-public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements ObservableMultiMap<K, V> {
+public abstract class AbstractDerivedObservableMultiMap<S, K, V> extends AbstractIdentifiable implements ObservableMultiMap<K, V> {
 	private final ObservableCollection<S> theSourceCollection;
 	private final DistinctDataFlow<S, ?, K> theActiveKeyFlow;
 	private final CollectionDataFlow<S, ?, V> theActiveValueFlow;
 	private final AddKeyHolder<K> theAddKey;
-
-	private Object theIdentity;
 
 	/**
 	 * @param sourceCollection The source collection whose data the source map is gathered from
@@ -74,10 +73,14 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> implements Obse
 	protected abstract ObservableCollectionDataFlowImpl.CollectionOperation<?, ?, V> getValueManager();
 
 	@Override
-	public Object getIdentity() {
-		if (theIdentity == null)
-			theIdentity = new MultiMapIdentity(theActiveKeyFlow.getIdentity(), getValueManager().getIdentity());
-		return theIdentity;
+	protected Object createIdentity() {
+		return new MultiMapIdentity(theActiveKeyFlow.getIdentity(), getValueManager().getIdentity());
+	}
+
+	@Override
+	public AbstractDerivedObservableMultiMap<S, K, V> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	@Override

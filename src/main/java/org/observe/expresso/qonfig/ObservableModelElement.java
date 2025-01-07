@@ -32,10 +32,11 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelComponentInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
@@ -300,19 +301,20 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
-		// Find all the model value instances and initialize them with this as their parent before they are initialized properly
-		for (ModelComponentId name : getModels().getComponents()) {
-			ModelValueInstantiator<?> component = getModels().getComponent(name);
-			if (component instanceof ModelValueElement)
-				theValues.add((ModelValueElement<?>) component);
-		}
-
 		ObservableModelElement.Interpreted<?> myInterpreted = (ObservableModelElement.Interpreted<?>) interpreted;
 
-		Collections.sort(theValues,
-			(mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(), mv2.reporting().getPosition().getPosition()));
-		for (int v = 0; v < theValues.size(); v++)
-			theValues.get(v).update(myInterpreted.getValues().get(v), this);
+		// Find all the model value instances and initialize them with this as their parent before they are initialized properly
+		theValues.clear();
+		for (ModelValueElement.Interpreted<?, ?, ?> mv : myInterpreted.getValues()) {
+			InterpretableModelComponentNode<?> modelV = myInterpreted.getModels().getComponentIfExists(mv.getDefinition().getModelPath());
+			if (modelV != null) {
+				ModelComponentInstantiator<?> component = getModels().getComponent(modelV.getIdentity());
+				if (component.getBacking() instanceof ModelValueElement) {
+					ModelValueElement<?> mve = (ModelValueElement<?>) component.getBacking();
+					mve.update(mv, this);
+				}
+			}
+		}
 	}
 
 	@Override

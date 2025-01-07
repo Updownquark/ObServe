@@ -48,7 +48,7 @@ public class ExStyleModelValue extends ExElementModelValue {
 		}
 
 		@Override
-		public Interpreted<AO> interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ExtModelValueElement<?>> Interpreted<AO> interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
@@ -63,18 +63,18 @@ public class ExStyleModelValue extends ExElementModelValue {
 		 * @param definition The definition to interpret
 		 * @param element The element to affect
 		 */
-		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExtModelValueElement<?>> element) {
 			super(definition, element);
 		}
 
 		@Override
-		public AO create(ExtModelValueElement<?> element) {
+		public AO create(ExElement element) {
 			return (AO) new ExStyleModelValue(element);
 		}
 	}
 
 	/** @param element The model value element */
-	protected ExStyleModelValue(ExtModelValueElement<?> element) {
+	protected ExStyleModelValue(ExElement element) {
 		super(element);
 	}
 }

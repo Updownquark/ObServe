@@ -1,5 +1,8 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -36,6 +39,11 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
 		/** @return The type of the model value */
 		@QonfigAttributeGetter("type")
 		public VariableType getValueType() {
@@ -49,12 +57,13 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			if (typeV != null && !typeV.text.isEmpty()) {
 				theValueType = VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position));
 				session.put(ExTyped.VALUE_TYPE_KEY, theValueType);
-			} else
+			} else {
 				theValueType = session.get(ExTyped.VALUE_TYPE_KEY, VariableType.class);
+			}
 		}
 
 		@Override
-		public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted<?> interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted<>(this, element);
 		}
 	}
@@ -124,7 +133,7 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theValueType = myInterpreted.getValueType();

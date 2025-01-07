@@ -9,6 +9,7 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -162,25 +163,27 @@ public interface QuickContainer<W extends QuickWidget> extends QuickWidget {
 			super.doUpdate(interpreted);
 
 			QuickContainer.Interpreted<?, W> myInterpreted = (QuickContainer.Interpreted<?, W>) interpreted;
-			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
-				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.<ModelInstantiationException> simpleX(child -> (W) child.create())//
-			.rightOrder()//
-			.onRightX(element -> {
-				try {
-					element.getLeftValue().update(element.getRightValue(), this);
-				} catch (RuntimeException | Error e) {
-					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-				}
-			})//
-			.onCommonX(element -> {
-				try {
-					element.getLeftValue().update(element.getRightValue(), this);
-				} catch (RuntimeException | Error e) {
-					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-				}
-			})//
-			.adjust();
+			try (Transaction t = theContents.lock(true, null)) {
+				CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
+					(widget, child) -> widget.getIdentity() == child.getIdentity())//
+					.<ModelInstantiationException> simpleX(child -> (W) child.create())//
+					.rightOrder()//
+					.onRightX(element -> {
+						try {
+							element.getLeftValue().update(element.getRightValue(), this);
+						} catch (RuntimeException | Error e) {
+							element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+						}
+					})//
+					.onCommonX(element -> {
+						try {
+							element.getLeftValue().update(element.getRightValue(), this);
+						} catch (RuntimeException | Error e) {
+							element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+						}
+					})//
+					.adjust();
+			}
 		}
 
 		@Override

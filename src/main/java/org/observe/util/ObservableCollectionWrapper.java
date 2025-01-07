@@ -4,9 +4,11 @@ import java.util.Collection;
 import java.util.function.Consumer;
 
 import org.observe.Equivalence;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -21,7 +23,7 @@ import org.qommons.collect.MutableCollectionElement;
  *
  * @param <E> The type of the collection
  */
-public abstract class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
+public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiable implements ObservableCollection<E> {
 	private ObservableCollection<E> theWrapped;
 
 	/**
@@ -47,8 +49,14 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
-	public Object getIdentity() {
+	protected Object createIdentity() {
 		return getWrapped().getIdentity();
+	}
+
+	@Override
+	public ObservableCollectionWrapper<E> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	@Override
@@ -180,6 +188,11 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	@Override
 	public CoreId getCoreId() {
 		return getWrapped().getCoreId();
+	}
+
+	@Override
+	public CoreChangeSources getChangeSources() {
+		return getWrapped().getChangeSources();
 	}
 
 	@Override

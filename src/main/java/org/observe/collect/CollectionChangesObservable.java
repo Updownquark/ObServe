@@ -751,6 +751,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
+	public CoreChangeSources getChangeSources() {
+		return collection.getChangeSources();
+	}
+
+	@Override
 	public String toString() {
 		return "changes(" + collection.getIdentity() + ")";
 	}

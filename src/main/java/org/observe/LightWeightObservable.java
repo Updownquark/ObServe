@@ -3,6 +3,8 @@ package org.observe;
 import java.util.function.Supplier;
 
 import org.qommons.Causable;
+import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -12,7 +14,7 @@ import org.qommons.collect.ListenerList;
  *
  * @param <T> The type of values from this observable
  */
-public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
+public class LightWeightObservable<T> extends AbstractIdentifiable implements Observable<T>, Observer<T> {
 	private boolean isAlive = true;
 	private final ListenerList<Observer<? super T>> theListeners;
 
@@ -62,8 +64,8 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
-	public Object getIdentity() {
-		return null;
+	protected Object createIdentity() {
+		return Identifiable.baseId("lightWeightObservable", this);
 	}
 
 	/** @return Whether this observable is still alive */
@@ -125,7 +127,12 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		return new ReadOnlyObservable<>(this);
 	}
 
-	static class ReadOnlyObservable<T> implements Observable<T> {
+	@Override
+	public CoreChangeSources getChangeSources() {
+		return CoreChangeSources.core(this);
+	}
+
+	static class ReadOnlyObservable<T> extends AbstractIdentifiable implements Observable<T> {
 		private final Observable<T> theWrapped;
 
 		ReadOnlyObservable(Observable<T> wrap) {
@@ -133,7 +140,7 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		}
 
 		@Override
-		public Object getIdentity() {
+		protected Object createIdentity() {
 			return theWrapped.getIdentity();
 		}
 
@@ -175,6 +182,11 @@ public class LightWeightObservable<T> implements Observable<T>, Observer<T> {
 		@Override
 		public int hashCode() {
 			return theWrapped.hashCode();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theWrapped.getChangeSources();
 		}
 
 		@Override

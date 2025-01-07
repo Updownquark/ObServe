@@ -95,8 +95,15 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 	}
 
 	private void updateText(String text) {
+		if (text == null) {
+			setText("");
+			return;
+		}
 		String oldText = getText();
 		if (oldText == null || oldText.length() < 3) {
+			setText(text);
+			return;
+		} else if (isHtml() && (oldText.startsWith("<html>") || text.startsWith("<html>"))) {
 			setText(text);
 			return;
 		}
@@ -233,6 +240,11 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 		return this;
 	}
 
+	/** @return Whether this text area is interpreting its text as styled HTML */
+	public boolean isHtml() {
+		return getContentType().contains("html");
+	}
+
 	/**
 	 * @param wordWrap Whether this text area should wrap lines that are longer than the text area's width
 	 * @return This text area
@@ -283,6 +295,13 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 	public void setEnabled(boolean enabled) {
 		if (theEditor != null)
 			theEditor.setEnabled(enabled);
+	}
+
+	@Override
+	public void setEditable(boolean b) {
+		super.setEditable(b);
+		if (theEditor != null)
+			theEditor.setEditable(b);
 	}
 
 	@Override

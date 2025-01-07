@@ -98,7 +98,7 @@ public class ConstructorInvocation extends Invocation {
 			throw new ExpressoInterpretationException("No such type found: " + theType, env.reporting().at(4).getPosition(),
 				theType.getFullLength());
 		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tce = ExceptionHandler
-			.<ExpressoInterpretationException> holder();
+			.<ExpressoInterpretationException> holder(exHandler.isInstantiating());
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset, tce);
 		if (result != null) {
@@ -106,11 +106,11 @@ public class ConstructorInvocation extends Invocation {
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
-		} else if (tce.hasException()) {
-			exHandler.handle1(tce.get1());
+		} else if (tce.hasException1()) {
+			exHandler.handle1(tce::get1);
 			return null;
 		} else {
-			exHandler.handle1(new ExpressoInterpretationException("No such constructor " + printSignature(),
+			exHandler.handle1(() -> new ExpressoInterpretationException("No such constructor " + printSignature(),
 				env.reporting().at(4).getPosition(), getExpressionLength() - 4));
 			return null;
 		}

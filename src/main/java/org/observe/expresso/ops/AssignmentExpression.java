@@ -24,6 +24,8 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -116,10 +118,10 @@ public class AssignmentExpression implements ObservableExpression {
 		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> target;
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
-		target = theTarget.evaluate(ModelTypes.Value.anyAs(), env, expressionOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
+		target = theTarget.evaluate(ModelTypes.Value.anyAs(), env, expressionOffset, doubleX.use());
+		if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
 				theTarget.getExpressionLength(), doubleX.get2()));
 			return null;
 		} else if (target == null)
@@ -127,16 +129,49 @@ public class AssignmentExpression implements ObservableExpression {
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> value;
 		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
-			value = theValue.evaluate(
-				ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
-				env.at(theTarget.getExpressionLength() + 1), valueOffset, doubleX);
-			if (doubleX.get2() != null) {
-				exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
-					env.reporting().at(valueOffset).getPosition(), theValue.getExpressionLength(), doubleX.get2()));
-				return null;
-			} else if (value == null)
-				return null;
+			TypeToken<S> targetType = (TypeToken<S>) target.getType().getType(0);
+			if (SettableValue.class.isAssignableFrom(TypeTokens.getRawType(targetType))) {
+				/* There's a weird case where if there's a field on a java object of type SettableValue<T>
+				 * and in expresso one tries to assign a value of type T to it,
+				 * the code would, as previously written, interpret the right hand side as a SettableValue<T> with a constant value,
+				 * and attempt to assign the constant SettableValue to the SettableValue field.
+				 * This is typically not what is intended.  If the field is final, the assignment is always disabled.
+				 * If it's not final then it will succeed, but will often not do what the user intended.
+				 * This code block is a workaround for this.
+				 */
+				TypeToken<T> valueType = (TypeToken<T>) targetType.resolveType(SettableValue.class.getTypeParameters()[0]);
+				value = theValue.evaluate(ModelTypes.Value.forType(TypeTokens.get().getExtendsWildcard(valueType)),
+					env.at(theTarget.getExpressionLength() + 1), valueOffset, doubleX.use());
+				if (doubleX.hasException2()) {
+					EvaluatedExpression<SettableValue<?>, SettableValue<S>> target2 = theTarget.evaluate(
+						ModelTypes.Value.forType((TypeToken<S>) TypeTokens.get().getSuperWildcard(value.getType().getType(0))), env,
+						expressionOffset, doubleX.clear2());
+					if (target2 != null)
+						target = target2;
+					else {
+						value = null;
+						doubleX.clear2();
+					}
+				} else {
+					value = null;
+					doubleX.clear2();
+				}
+			} else
+				value = null;
+			if (value == null) {
+				value = theValue.evaluate(
+					ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
+					env.at(theTarget.getExpressionLength() + 1), valueOffset, doubleX.use());
+				if (doubleX.hasException2()) {
+					exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
+						env.reporting().at(valueOffset).getPosition(), theValue.getExpressionLength(), doubleX.get2()));
+					return null;
+				} else if (value == null)
+					return null;
+			}
 		}
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> fTarget = target;
+		EvaluatedExpression<SettableValue<?>, SettableValue<T>> fValue = value;
 		boolean listAction = List.class.isAssignableFrom(TypeTokens.getRawType(target.getType().getType(0)));
 		ErrorReporting reporting = env.reporting();
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
@@ -153,12 +188,12 @@ public class AssignmentExpression implements ObservableExpression {
 
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return QommonsUtils.unmodifiableCopy(target, value);
+				return QommonsUtils.unmodifiableCopy(fTarget, fValue);
 			}
 
 			@Override
 			public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(target.instantiate(), value.instantiate(), reporting, listAction);
+				return new Instantiator<>(fTarget.instantiate(), fValue.instantiate(), reporting, listAction);
 			}
 
 			@Override
@@ -377,7 +412,14 @@ public class AssignmentExpression implements ObservableExpression {
 				return message[0];
 			}, () -> Stamped.compositeStamp(theTarget.getStamp(), theSource.getStamp()), //
 				Observable.or(theTarget.noInitChanges(), theSource.noInitChanges()));
-			return ObservableValue.flatten(theTarget.isEnabled().map(e -> e == null ? simpleAssignmentEnabled : listAssignmentEnabled));
+			ObservableValue<ObservableValue<String>> toFlatten = theTarget.isEnabled()
+				.map(e -> e == null ? simpleAssignmentEnabled : listAssignmentEnabled);
+			return new ObservableValue.FlattenedObservableValue<String>(toFlatten, null) {
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstrained.getThreadConstraint(theTarget, theSource);
+				}
+			};
 
 		}
 

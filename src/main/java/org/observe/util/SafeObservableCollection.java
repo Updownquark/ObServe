@@ -54,7 +54,7 @@ import com.google.common.reflect.TypeToken;
 public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
 	/** Anchor type for {@link Dbug}-based debugging */
 	@SuppressWarnings("rawtypes")
-	public static DbugAnchorType<SafeObservableCollection> DBUG = Dbug.common().anchor(SafeObservableCollection.class, a -> a//
+	public static DbugAnchorType<SafeObservableCollection> SOC_DBUG = Dbug.common().anchor(SafeObservableCollection.class, a -> a//
 		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
 		.withEvent("handleEvent").withEvent("flush")//
 		);
@@ -179,10 +179,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		thePeriodicFlushTask = QommonsTimer.getCommonInstance().build(() -> {
 			if (doFlush())
 				scheduleFlush();
-		}, Duration.ofMillis(500), false).withThreading((task, timer) -> {
-			threading.invoke(task);
-			return true;
-		});
+		}, Duration.ofMillis(500), false).withThreading(threading);
 		theFlushKey = Causable.key((cause, values) -> {
 			theMidMoveCount = 0;
 			if (threading.isEventThread()) {
@@ -245,10 +242,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			try {
 				theStamp = theCollection.getStamp();
 
-				boolean[] init = new boolean[] { true };
-				collSub[0] = theCollection.subscribe(//
-					evt -> handleEvent(evt, init[0]), true);
-				init[0] = false;
+				collSub[0] = theCollection.subscribe(this::handleEvent, true);
 				if (hasQueuedEvents()) {
 					if (theThreadConstraint.isEventThread())
 						doFlush();
@@ -278,12 +272,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		return !theAddedElements.isEmpty() || !theRemovedElements.isEmpty() || !theChangedElements.isEmpty();
 	}
 
-	/**
-	 * @param evt The event that occurred in the source collection
-	 * @param initial Whether the event is occurring during initialization of this safe collection (for elements that were already present
-	 *        in the source upon creation of the safe collection)
-	 */
-	protected void handleEvent(ObservableCollectionEvent<? extends E> evt, boolean initial) {
+	/** @param evt The event that occurred in the source collection */
+	protected void handleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (!theFlushLock.compareAndSet(false, true)) {
 			if (isOnEventThread()) {
 				if (!evt.isUpdate())
@@ -310,6 +300,33 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private void doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (isFinished)
 			return;
+		if (!hasQueuedEvents() && theThreadConstraint.isEventThread()) {
+			// If the event is happening on the event thread and we don't have any cached changes,
+			// we can just execute the change directly without any batching or thread worries.
+			// Listeners who want batched changes can use the changes() observable.
+			// We're fully sync'd with the backing collection, so this should be cake.
+			// This feature should make this collection much lighter-weight in the most common case
+			// where the source collection is modified on the event thread.
+			try (Transaction t = theSyntheticCollection.lock(true, evt)) { // Link the events
+				switch (evt.getType()) {
+				case add:
+					theSyntheticCollection.add(evt.getIndex(), createElement(evt.getElementId(), evt.getNewValue()));
+					break;
+				case remove:
+					ElementRef<E> ref = theElementsBySource.remove(evt.getElementId());
+					theSyntheticCollection.mutableElement(ref.synthId).remove();
+					break;
+				case set:
+					ref = theElementsBySource.get(evt.getElementId());
+					if (!evt.isUpdate())
+						ref = new ElementRef<>(evt.getElementId(), evt.getNewValue(), ref.synthId);
+					theSyntheticCollection.mutableElement(ref.synthId).set(ref);
+					break;
+				}
+				theStamp = theCollection.getStamp();
+			}
+			return;
+		}
 		switch (evt.getType()) {
 		case add:
 			theAddedElements.add(evt.getElementId());

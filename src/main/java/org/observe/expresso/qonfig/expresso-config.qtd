@@ -180,8 +180,17 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<?DOC A customizable format for double-precision floating-point values?>
 		<element-def name="double-format" extends="format">
 			<attr-mod name="typed.type" specify="forbidden" />
-			<?DOC The number of significant digits to print?>
-			<attribute name="sig-digs" type="expression" />
+			<?DOC The minimum number of significant digits to print?>
+			<attribute name="min-sig-digs" type="expression" />
+			<?DOC The maximum number of significant digits to print. If unspecified, this is the same as the min-sig-digs?>
+			<attribute name="max-sig-digs" type="expression" specify="optional" />
+			<?DOC The maximum number of digits which will be printed as a simple integer.  Zero means numbers will never be printed as integers
+				(unless min-sig-digs is zero). If unspecified, this is the same as max-sig-digs ?>
+			<attribute name="max-int-digits" type="int" specify="optional" />
+			<?DOC The minimum negative exponent for which the value will be printed as zero?>
+			<attribute name="zero-exp" type="int" specify="optional" />
+			<?DOC Whether the user may enter the empty string to result in a null value?>
+			<attribute name="allow-empty" type="boolean" default="false" />
 			<?DOC The base unit to print?>
 			<attribute name="unit" type="identifier" specify="optional" />
 			<?DOC Whether the unit must be included in text to be parsed?>
@@ -190,6 +199,10 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="metric-prefixes" type="boolean" default="false" />
 			<?DOC Whether to print and parse standard metric prefixes, interpreted as powers of 1024 instead of 1000?>
 			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
+			<?DOC Whether to print and parse standard metric prefixes, but only the powers of 1000 (e.g. no centi- or hecto-)?>
+			<attribute name="metric-prefixes-3k" type="boolean" default="false" />
+			<?DOC A default multiplier to apply to values parsed without a unit?>
+			<attribute name="default-prefix-multiplier" type="float" specify="optional" />
 			<?DOC A custom prefix to parse?>
 			<child-def name="prefix" type="prefix" min="0" max="inf" />
 			<!-- TODO -->

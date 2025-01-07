@@ -11,12 +11,13 @@ import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.qommons.ArrayUtils;
+import org.qommons.BreakpointHere;
 
 /**
  * A very simple layout that lays out components in a column or a row, with support for 4 different {@link Alignment alignments} in each
  * dimension
  */
-public class JustifiedBoxLayout implements AbstractLayout {
+public class JustifiedBoxLayout extends AbstractLayout {
 	/** Anchor type for {@link Dbug}-based debugging */
 	public static final DbugAnchorType<JustifiedBoxLayout> DBUG = Dbug.common().anchor(JustifiedBoxLayout.class, a -> a//
 		.withEvent("minSize").withEvent("prefSize").withEvent("maxSize").withEvent("layout")//
@@ -31,7 +32,12 @@ public class JustifiedBoxLayout implements AbstractLayout {
 		/** Aligns components with their preferred size (if possible) in the middle of the container */
 		CENTER,
 		/** Aligns components with the size of the container */
-		JUSTIFIED;
+		JUSTIFIED,
+		/**
+		 * Makes all components take up the same amount of space, with each component centered in the space it takes up. Same as
+		 * {@link #CENTER} for cross-alignment.
+		 */
+		EQUAL_SPACING;
 	}
 	private final boolean isVertical;
 
@@ -250,30 +256,6 @@ public class JustifiedBoxLayout implements AbstractLayout {
 		return this;
 	}
 
-	/**
-	 * @param component The component
-	 * @return The minimum size to use for the component
-	 */
-	protected Dimension getMinSize(Component component) {
-		return component.getMinimumSize();
-	}
-
-	/**
-	 * @param component The component
-	 * @return The preferred size to use for the component
-	 */
-	protected Dimension getPrefSize(Component component) {
-		return component.getPreferredSize();
-	}
-
-	/**
-	 * @param component The component
-	 * @return The maximum size to use for the component
-	 */
-	protected Dimension getMaxSize(Component component) {
-		return component.getMaximumSize();
-	}
-
 	@Override
 	public boolean getScrollableTracksViewportWidth(Container parent) {
 		return isVertical;
@@ -284,22 +266,79 @@ public class JustifiedBoxLayout implements AbstractLayout {
 		return !isVertical;
 	}
 
+	private boolean isDebugBreak;
+
+	@Override
+	public Dimension minimumLayoutSize(Container parent) {
+		isDebugBreak = PanelPopulation.isDebugging(parent.getName(), "jbl", "size");
+		try {
+			return super.minimumLayoutSize(parent);
+		} finally {
+			isDebugBreak = false;
+		}
+	}
+
+	@Override
+	public Dimension preferredLayoutSize(Container parent) {
+		isDebugBreak = PanelPopulation.isDebugging(parent.getName(), "jbl", "size");
+		try {
+			return super.preferredLayoutSize(parent);
+		} finally {
+			isDebugBreak = false;
+		}
+	}
+
+	@Override
+	public Dimension maximumLayoutSize(Container parent) {
+		isDebugBreak = PanelPopulation.isDebugging(parent.getName(), "jbl", "size");
+		try {
+			return super.maximumLayoutSize(parent);
+		} finally {
+			isDebugBreak = false;
+		}
+	}
+
+	@Override
+	public void layoutContainer(Container parent) {
+		isDebugBreak = PanelPopulation.isDebugging(parent.getName(), "jbl", "layout");
+		try {
+			super.layoutContainer(parent);
+		} finally {
+			isDebugBreak = false;
+		}
+	}
+
 	@Override
 	public Dimension minimumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		if (isDebugBreak)
+			BreakpointHere.breakpoint();
 		anchor.event("minSize", null);
 		int main = 0;
 		int cross = 0;
 		boolean first = true;
+		boolean equalSpacing = theMainAlign == Alignment.EQUAL_SPACING;
 		for (LayoutChild comp : components) {
 			if (first)
 				first = false;
-			else
+			else if (!equalSpacing)
 				main += thePadding;
 			Dimension min = comp.getSize(-1);
-			main += getMain(min);
+			if (equalSpacing)
+				main = Math.max(main, getMain(min));
+			else
+				main += getMain(min);
 			int compCross = getCross(min);
 			if (compCross > cross)
 				cross = compCross;
+		}
+		if (equalSpacing && !components.isEmpty()) {
+			if (main < Integer.MAX_VALUE / components.size()) {
+				main *= components.size();
+				main += thePadding * (components.size() - 1);
+				if (main < 0)
+					main = Integer.MAX_VALUE;
+			} else
+				main = Integer.MAX_VALUE;
 		}
 		Insets insets = parentInsets;
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
@@ -309,20 +348,35 @@ public class JustifiedBoxLayout implements AbstractLayout {
 
 	@Override
 	public Dimension preferredLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		if (isDebugBreak)
+			BreakpointHere.breakpoint();
 		anchor.event("prefSize", null);
 		int main = 0;
 		int cross = 0;
 		boolean first = true;
+		boolean equalSpacing = theMainAlign == Alignment.EQUAL_SPACING;
 		for (LayoutChild comp : components) {
 			if (first)
 				first = false;
-			else
+			else if (!equalSpacing)
 				main += thePadding;
 			Dimension pref = comp.getSize(0);
-			main += getMain(pref);
+			if (equalSpacing)
+				main = Math.max(main, getMain(pref));
+			else
+				main += getMain(pref);
 			int compCross = getCross(pref);
 			if (compCross > cross)
 				cross = compCross;
+		}
+		if (equalSpacing && !components.isEmpty()) {
+			if (main < Integer.MAX_VALUE / components.size()) {
+				main *= components.size();
+				main += thePadding * (components.size() - 1);
+				if (main < 0)
+					main = Integer.MAX_VALUE;
+			} else
+				main = Integer.MAX_VALUE;
 		}
 		Insets insets = parentInsets;
 		int hIns = insets.left + insets.right + theMargin.left + theMargin.right;
@@ -332,6 +386,8 @@ public class JustifiedBoxLayout implements AbstractLayout {
 
 	@Override
 	public Dimension maximumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		if (isDebugBreak)
+			BreakpointHere.breakpoint();
 		anchor.event("maxSize", null);
 		boolean computeMain = theMainAlign == Alignment.JUSTIFIED;
 		boolean computeCross = theCrossAlign == Alignment.JUSTIFIED;
@@ -389,6 +445,8 @@ public class JustifiedBoxLayout implements AbstractLayout {
 
 	@Override
 	public Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+		if (isDebugBreak)
+			BreakpointHere.breakpoint();
 		Dimension parentSize = containerSize;
 		anchor.event("layout", null);
 
@@ -399,15 +457,28 @@ public class JustifiedBoxLayout implements AbstractLayout {
 		boolean first = true;
 		int[] preferredMainSizes = new int[components.size()];
 		int[] preferredCrossSizes = new int[components.size()];
+		boolean equalSpacing = theMainAlign == Alignment.EQUAL_SPACING;
+		int maxMain = 0;
 		for (int i = 0; i < components.size(); i++) {
 			if (first)
 				first = false;
-			else
+			else if (!equalSpacing)
 				totalLength += thePadding;
 			Dimension ps = components.get(i).getSize(0);
 			preferredMainSizes[i] = getMain(ps);
 			preferredCrossSizes[i] = getCross(ps);
-			totalLength += preferredMainSizes[i];
+			if (equalSpacing)
+				maxMain = Math.max(maxMain, preferredMainSizes[i]);
+			else
+				totalLength += preferredMainSizes[i];
+		}
+		if (equalSpacing && !components.isEmpty()) {
+			if (maxMain < Integer.MAX_VALUE / components.size()) {
+				totalLength += maxMain * components.size() + thePadding * (components.size() - 1);
+				if (totalLength < 0)
+					totalLength = Integer.MAX_VALUE;
+			} else
+				totalLength = Integer.MAX_VALUE;
 		}
 
 		int parentLength = getMain(parentSize);
@@ -444,22 +515,31 @@ public class JustifiedBoxLayout implements AbstractLayout {
 			break;
 		case JUSTIFIED:
 			break;
+		case EQUAL_SPACING:
+			pad = parentLength / components.size();
+			pos = 0;
+			break;
 		}
 		Rectangle[] bounds = new Rectangle[components.size()];
 		int parentCross = getCross(containerSize) - (isVertical//
 			? insets.left + insets.right + theMargin.left + theMargin.right//
 				: insets.top + insets.bottom + theMargin.top + theMargin.bottom);
 		int crossMargin = isVertical ? insets.left + theMargin.left : insets.top + theMargin.top;
+		boolean equalSpacing = theMainAlign == Alignment.EQUAL_SPACING;
 		for (int i = 0; i < components.size(); i++) {
 			int main = preferredMainSizes[i];
 			int cross = Math.min(preferredCrossSizes[i], parentCross);
 			bounds[i] = new Rectangle();
-			setBound(true, bounds[i], pos, main);
+			if (equalSpacing) {
+				setBound(true, bounds[i], pos + (pad - main) / 2, main);
+			} else
+				setBound(true, bounds[i], pos, main);
 			switch (theCrossAlign) {
 			case LEADING:
 				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
+			case EQUAL_SPACING:
 				setBound(false, bounds[i], crossMargin + (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
@@ -469,7 +549,10 @@ public class JustifiedBoxLayout implements AbstractLayout {
 				setBound(false, bounds[i], crossMargin, parentCross);
 				break;
 			}
-			pos += getMain(bounds[i].getSize()) + pad;
+			if (equalSpacing)
+				pos += pad;
+			else
+				pos += getMain(bounds[i].getSize()) + pad;
 		}
 		return bounds;
 	}
@@ -554,6 +637,7 @@ public class JustifiedBoxLayout implements AbstractLayout {
 				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
+			case EQUAL_SPACING:
 				setBound(false, bounds[i], (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:
@@ -592,6 +676,7 @@ public class JustifiedBoxLayout implements AbstractLayout {
 				setBound(false, bounds[i], crossMargin, cross);
 				break;
 			case CENTER:
+			case EQUAL_SPACING:
 				setBound(false, bounds[i], (parentCross - cross) / 2, cross);
 				break;
 			case TRAILING:

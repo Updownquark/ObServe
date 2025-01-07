@@ -1,7 +1,10 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -13,10 +16,13 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
+import org.observe.collect.FlatMapOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.SortedDataFlow;
+import org.observe.collect.ObservableCollectionImpl;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -32,11 +38,10 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.CollectionTransform;
-import org.observe.expresso.qonfig.ExpressoTransformations.FlowTransformInstantiator;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
+import org.observe.expresso.qonfig.ExpressoTransformations.TransformInstantiator;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -51,12 +56,224 @@ import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigValueType;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.io.LocatedFilePosition;
-import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
 /** Transformations for {@link ModelTypes#Collection Collection} model values */
 public class ObservableCollectionTransformations {
+	/**
+	 * A transformer capable of transforming an observable structure into an {@link ObservableCollection}. This type contains added
+	 * capabilities so that when multiple flow operations are stacked, the intermediate structures don't need to be instantiated.
+	 *
+	 * @param <M1> The type of the source observable structure
+	 * @param <M2> The type of the target collection
+	 * @param <T> The element type of the target collection
+	 */
+	public interface CollectionFlowTransformInstantiator<M1, M2 extends ObservableCollection<?>, T> extends Operation.Instantiator<M1, M2> {
+		/**
+		 * Transforms a source observable structure into a transformed flow
+		 *
+		 * @param source The source observable structure
+		 * @param models The models to do the transformation
+		 * @return The transformed flow
+		 * @throws ModelInstantiationException If the transformation fails
+		 */
+		CollectionDataFlow<?, ?, T> transformToFlow(M1 source, ModelSetInstance models) throws ModelInstantiationException;
+
+		@Override
+		default M2 transform(M1 source, ModelSetInstance models) throws ModelInstantiationException {
+			ObservableCollection.CollectionDataFlow<?, ?, T> flow = transformToFlow(source, models);
+			return (M2) flow.collect();
+		}
+	}
+
+	/**
+	 * A transformer capable for transforming an observable structure into another via a {CollectionDataFlow collection flow}. This type
+	 * contains added capabilities so that when multiple flow operations are stacked, the intermediate structures don't need to be
+	 * instantiated.
+	 *
+	 * @param <M1> The type of the source collection
+	 * @param <M2> The type of the target observable structure
+	 * @param <S> The element type of the source collection
+	 */
+	public interface CollectionFlowSourcedTransformInstantiator<M1, M2, S> extends Operation.Instantiator<M1, M2> {
+		/**
+		 * Transforms a source collection flow into a transformed observable structure
+		 *
+		 * @param flow The flow to transform
+		 * @param models The models to do the transformation
+		 * @return The transformed observable structure
+		 * @throws ModelInstantiationException If the transformation fails
+		 */
+		M2 transformFromFlow(CollectionDataFlow<?, ?, S> flow, ModelSetInstance models) throws ModelInstantiationException;
+
+		@Override
+		default <S0> TransformInstantiator<S0, M2> after(TransformInstantiator<S0, ? extends M1> before) {
+			if (before instanceof CollectionFlowToFlowTransformInstantiator) {
+				CollectionFlowToFlowTransformInstantiator<S0, ? extends M1, Object, S> flowBefore = (CollectionFlowToFlowTransformInstantiator<S0, ? extends M1, Object, S>) before;
+				CollectionFlowSourcedTransformInstantiator<M1, M2, S> next = this;
+				return new CollectionFlowSourcedTransformInstantiator<S0, M2, Object>() {
+					@Override
+					public M2 transformFromFlow(CollectionDataFlow<?, ?, Object> source, ModelSetInstance models)
+						throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformFlow(source, models);
+						return next.transformFromFlow(sourceFlow, models);
+					}
+
+					@Override
+					public M2 transform(S0 source, ModelSetInstance models) throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformToFlow(source, models);
+						return next.transformFromFlow(sourceFlow, models);
+					}
+
+					@Override
+					public void instantiate() throws ModelInstantiationException {
+						flowBefore.instantiate();
+						next.instantiate();
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						return flowBefore.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+					}
+
+					@Override
+					public String toString() {
+						return flowBefore + "->" + next;
+					}
+				};
+			} else if (before instanceof CollectionFlowTransformInstantiator) {
+				CollectionFlowTransformInstantiator<S0, ? extends M1, S> flowBefore = (CollectionFlowTransformInstantiator<S0, ? extends M1, S>) before;
+				CollectionFlowSourcedTransformInstantiator<M1, M2, S> next = this;
+				return new Operation.Instantiator<S0, M2>() {
+					@Override
+					public M2 transform(S0 source, ModelSetInstance models) throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformToFlow(source, models);
+						return next.transformFromFlow(sourceFlow, models);
+					}
+
+					@Override
+					public void instantiate() throws ModelInstantiationException {
+						flowBefore.instantiate();
+						next.instantiate();
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						return flowBefore.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+					}
+
+					@Override
+					public String toString() {
+						return flowBefore + "->" + next;
+					}
+				};
+			} else
+				return Operation.Instantiator.super.after(before);
+		}
+	}
+
+	/**
+	 * A transformer capable of transforming an observable structure into an {@link ObservableCollection} via a {@link CollectionDataFlow
+	 * collection flow}. This type contains added capabilities so that when multiple flow operations are stacked, the intermediate
+	 * structures don't need to be instantiated.
+	 *
+	 * @param <M1> The type of the source observable structure
+	 * @param <M2> The type of the target collection
+	 * @param <S> The element type of the source collection
+	 * @param <T> The element type of the target collection
+	 */
+	public interface CollectionFlowToFlowTransformInstantiator<M1, M2 extends ObservableCollection<?>, S, T>
+	extends CollectionFlowTransformInstantiator<M1, M2, T>, CollectionFlowSourcedTransformInstantiator<M1, M2, S> {
+		/**
+		 * Transforms a collection flow
+		 *
+		 * @param source The source flow
+		 * @param models The models to do the transformation
+		 * @return The transformed flow
+		 * @throws ModelInstantiationException If the transformation fails
+		 */
+		CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+			throws ModelInstantiationException;
+
+		@Override
+		default M2 transformFromFlow(CollectionDataFlow<?, ?, S> flow, ModelSetInstance models) throws ModelInstantiationException {
+			return (M2) transformFlow(flow, models)//
+				.collect();
+		}
+
+		@Override
+		default <S0> TransformInstantiator<S0, M2> after(TransformInstantiator<S0, ? extends M1> before) {
+			if (before instanceof CollectionFlowToFlowTransformInstantiator) {
+				CollectionFlowToFlowTransformInstantiator<S0, ? extends M1, Object, S> flowBefore = (CollectionFlowToFlowTransformInstantiator<S0, ? extends M1, Object, S>) before;
+				CollectionFlowToFlowTransformInstantiator<M1, M2, S, T> next = this;
+				return new CollectionFlowToFlowTransformInstantiator<S0, M2, Object, T>() {
+					@Override
+					public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, Object> source, ModelSetInstance models)
+						throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformFlow(source, models);
+						return next.transformFlow(sourceFlow, models);
+					}
+
+					@Override
+					public CollectionDataFlow<?, ?, T> transformToFlow(S0 source, ModelSetInstance models)
+						throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformToFlow(source, models);
+						return next.transformFlow(sourceFlow, models);
+					}
+
+					@Override
+					public void instantiate() throws ModelInstantiationException {
+						flowBefore.instantiate();
+						next.instantiate();
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						return flowBefore.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+					}
+
+					@Override
+					public String toString() {
+						return flowBefore + "->" + next;
+					}
+				};
+			} else if (before instanceof CollectionFlowTransformInstantiator) {
+				CollectionFlowTransformInstantiator<S0, ? extends M1, S> flowBefore = (CollectionFlowTransformInstantiator<S0, ? extends M1, S>) before;
+				CollectionFlowToFlowTransformInstantiator<M1, M2, S, T> next = this;
+				return new CollectionFlowTransformInstantiator<S0, M2, T>() {
+					@Override
+					public CollectionDataFlow<?, ?, T> transformToFlow(S0 source, ModelSetInstance models)
+						throws ModelInstantiationException {
+						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformToFlow(source, models);
+						return next.transformFlow(sourceFlow, models);
+					}
+
+					@Override
+					public void instantiate() throws ModelInstantiationException {
+						flowBefore.instantiate();
+						next.instantiate();
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						return flowBefore.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+					}
+
+					@Override
+					public String toString() {
+						return flowBefore + "->" + next;
+					}
+				};
+			} else
+				return CollectionFlowSourcedTransformInstantiator.super.after(before);
+		}
+	}
+
 	private ObservableCollectionTransformations() {
 	}
 
@@ -69,32 +286,47 @@ public class ObservableCollectionTransformations {
 		interpreter.createWith(MapCollectionTransform.MAP_TO, CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
 		interpreter.createWith(FilterCollectionTransform.FILTER, CollectionTransform.class,
 			ExElement.creator(FilterCollectionTransform::new));
-		interpreter.createWith("filter-by-type", CollectionTransform.class, ExElement.creator(TypeFilteredCollectionTransform::new));
-		interpreter.createWith("reverse", CollectionTransform.class, ExElement.creator(ReverseCollectionTransform::new));
-		interpreter.createWith("refresh", CollectionTransform.class, ExElement.creator(RefreshCollectionTransform::new));
-		interpreter.createWith("refresh-each", CollectionTransform.class, ExElement.creator(RefreshEachCollectionTransform::new));
-		interpreter.createWith("distinct", CollectionTransform.class, ExElement.creator(DistinctCollectionTransform::new));
-		interpreter.createWith("sort", CollectionTransform.class, ExElement.creator(SortedCollectionTransform::new));
-		interpreter.createWith("unmodifiable", CollectionTransform.class, ExElement.creator(UnmodifiableCollectionTransform::new));
-		interpreter.createWith("filter-mod", CollectionTransform.class, ExElement.creator(FilterModCollectionTransform::new));
-		interpreter.createWith("map-equivalent", CollectionTransform.class, ExElement.creator(MapEquivalentCollectionTransform::new));
+		interpreter.createWith(TypeFilteredCollectionTransform.FILTER_BY_TYPE, CollectionTransform.class,
+			ExElement.creator(TypeFilteredCollectionTransform::new));
+		interpreter.createWith(ReverseCollectionTransform.REVERSE, CollectionTransform.class,
+			ExElement.creator(ReverseCollectionTransform::new));
+		interpreter.createWith(RefreshCollectionTransform.REFRESH, CollectionTransform.class,
+			ExElement.creator(RefreshCollectionTransform::new));
+		interpreter.createWith(RefreshEachCollectionTransform.REFRESH_EACH, CollectionTransform.class,
+			ExElement.creator(RefreshEachCollectionTransform::new));
+		interpreter.createWith(DistinctCollectionTransform.DISTINCT, CollectionTransform.class,
+			ExElement.creator(DistinctCollectionTransform::new));
+		interpreter.createWith(ExSort.SORT, CollectionTransform.class, ExElement.creator(SortedCollectionTransform::new));
+		interpreter.createWith(UnmodifiableCollectionTransform.UNMODIFIABLE, CollectionTransform.class,
+			ExElement.creator(UnmodifiableCollectionTransform::new));
+		interpreter.createWith(FilterModCollectionTransform.FILTER_MOD, CollectionTransform.class,
+			ExElement.creator(FilterModCollectionTransform::new));
+		interpreter.createWith(MapEquivalentCollectionTransform.MAP_EQUIVALENT, CollectionTransform.class,
+			ExElement.creator(MapEquivalentCollectionTransform::new));
 		interpreter.createWith(FlattenCollectionTransform.FLATTEN, CollectionTransform.class,
 			ExElement.creator(FlattenCollectionTransform::new));
 		interpreter.createWith(CrossCollectionTransform.CROSS, CollectionTransform.class, ExElement.creator(CrossCollectionTransform::new));
-		interpreter.createWith("where-contained", CollectionTransform.class, ExElement.creator(WhereContainedCollectionTransform::new));
-		interpreter.createWith("group-by", CollectionTransform.class, ExElement.creator(GroupByCollectionTransform::new));
-		interpreter.createWith("size", CollectionTransform.class, ExElement.creator(SizeCollectionTransform::new));
+		interpreter.createWith(WhereContainedCollectionTransform.WHERE_CONTAINED, CollectionTransform.class,
+			ExElement.creator(WhereContainedCollectionTransform::new));
+		interpreter.createWith(SizeCollectionTransform.SIZE, CollectionTransform.class, ExElement.creator(SizeCollectionTransform::new));
 		interpreter.createWith(ReducedCollectionTransform.REDUCE, CollectionTransform.class,
 			ExElement.creator(ReducedCollectionTransform::new));
-		interpreter.createWith("collect", CollectionTransform.class, ExElement.creator(CollectCollectionTransform::new));
+		interpreter.createWith(TerminalCollectionTransform.TERMINAL, CollectionTransform.class,
+			ExElement.creator(TerminalCollectionTransform::new));
+		interpreter.createWith(GroupByTransform.GROUP_BY, CollectionTransform.class, ExElement.creator(GroupByTransform::new));
+		interpreter.createWith(CollectCollectionTransform.COLLECT, CollectionTransform.class,
+			ExElement.creator(CollectCollectionTransform::new));
 
 		// TODO Probably should support value-set transformations here, just grabbing the values and returning a collection
 		// This can always be overridden later
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = MapCollectionTransform.MAP_TO,
+		interpretation = MapCollectionTransform.Interpreted.class)
 	static class MapCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>> extends
 	ExpressoTransformations.AbstractCompiledTransformation<C1, C2, ExElement> implements CollectionTransform<C1, C2, ExElement> {
-		public static final String MAP_TO = "map-to";
+		static final String MAP_TO = "map-to";
 
 		private ModelType<C1> theSourceType;
 		private ModelType<C2> theTargetType;
@@ -173,7 +405,7 @@ public class ObservableCollectionTransformations {
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
 		extends ExpressoTransformations.AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2>
-		implements FlowTransformInstantiator<CV1, CV2, S, T> {
+		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, S, T> {
 
 			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
@@ -231,7 +463,7 @@ public class ObservableCollectionTransformations {
 		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
-		FilterCollectionTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		FilterCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
@@ -300,7 +532,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelInstantiator theModels;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
@@ -323,12 +556,17 @@ public class ObservableCollectionTransformations {
 				models = theModels.wrap(models);
 				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
+				SettableValue<T> flatSourceV = (SettableValue<T>) models.get(theSourceVariable);
 				SettableValue<String> testV = theTest.get(models);
 				String print = theTest.toString();
 				Function<T, String> filter = LambdaUtils.printableFn(v -> {
 					sourceV.set(v, null);
 					return testV.get();
 				}, () -> print);
+				Observable.CoreChangeSources refresh = testV.noInitChanges().getChangeSources()
+					.excluding(flatSourceV.noInitChanges().getChangeSources());
+				if (!refresh.isEmpty())
+					source = source.refresh(refresh);
 				return source.filter(filter);
 			}
 
@@ -345,27 +583,26 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = TypeFilteredCollectionTransform.FILTER_BY_TYPE,
+		interpretation = TypeFilteredCollectionTransform.Interpreted.class)
 	static class TypeFilteredCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private VariableType theType;
+		static final String FILTER_BY_TYPE = "filter-by-type";
 
 		TypeFilteredCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public VariableType getType() {
-			return theType;
-		}
-
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			QonfigValue typeQV = session.attributes().get("type").get();
-			theType = typeQV == null ? null
-				: VariableType.parseType(new LocatedPositionedContent.Default(typeQV.fileLocation, typeQV.position));
-			if (theType instanceof VariableType.Parameterized)
+			VariableType type = getAddOn(ExTyped.Def.class).getValueType();
+			if (type instanceof VariableType.Parameterized) {
+				QonfigValue typeQV = session.attributes().get("type").get();
 				throw new QonfigInterpretationException("Parameterized types are not permitted for filter type",
 					new LocatedFilePosition(typeQV.fileLocation, typeQV.position.getPosition(0)), typeQV.position.length());
+			}
 		}
 
 		@Override
@@ -374,8 +611,6 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
-			private Class<?> theType;
-
 			Interpreted(TypeFilteredCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -385,16 +620,6 @@ public class ObservableCollectionTransformations {
 				return (TypeFilteredCollectionTransform<C>) super.getDefinition();
 			}
 
-			public Class<?> getType() {
-				return theType;
-			}
-
-			@Override
-			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(sourceType, env);
-				theType = TypeTokens.getRawType(getDefinition().getType().getType(getExpressoEnv()));
-			}
-
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
@@ -402,11 +627,12 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public Operation.Instantiator<CV, CV> instantiate() {
-				return new Instantiator<>(theType);
+				return new Instantiator<>(TypeTokens.getRawType(getAddOn(ExTyped.Interpreted.class).getValueType()));
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final Class<?> theType;
 
 			Instantiator(Class<?> type) {
@@ -481,8 +707,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = ReverseCollectionTransform.REVERSE,
+		interpretation = ReverseCollectionTransform.Interpreted.class)
 	static class ReverseCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String REVERSE = "reverse";
+
 		ReverseCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -513,7 +744,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			@Override
 			public CV transform(CV source, ModelSetInstance models) throws ModelInstantiationException {
 				return (CV) source.reverse();
@@ -542,10 +774,12 @@ public class ObservableCollectionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "refresh",
+		qonfigType = RefreshCollectionTransform.REFRESH,
 		interpretation = RefreshCollectionTransform.Interpreted.class)
 	static class RefreshCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String REFRESH = "refresh";
+
 		private CompiledExpression theRefresh;
 
 		RefreshCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -606,7 +840,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelValueInstantiator<Observable<?>> theRefresh;
 
 			Instantiator(ModelValueInstantiator<Observable<?>> refresh) {
@@ -640,13 +875,14 @@ public class ObservableCollectionTransformations {
 
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-			qonfigType = "refresh-each",
+			qonfigType = RefreshEachCollectionTransform.REFRESH_EACH,
 			interpretation = RefreshEachCollectionTransform.Interpreted.class),
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "complex-operation",
 		interpretation = RefreshEachCollectionTransform.Interpreted.class) })
 	static class RefreshEachCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String REFRESH_EACH = "refresh-each";
 		private ModelComponentId theSourceName;
 		private CompiledExpression theRefresh;
 
@@ -726,7 +962,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelInstantiator theLocalModel;
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<Observable<?>>> theRefresh;
@@ -772,8 +1009,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = DistinctCollectionTransform.DISTINCT,
+		interpretation = DistinctCollectionTransform.Interpreted.class)
 	static class DistinctCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableSet<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
+		static final String DISTINCT = "distinct";
+
 		private ModelType<C2> theTargetType;
 		private boolean isUseFirst;
 		private boolean isPreservingSourceOrder;
@@ -783,14 +1025,17 @@ public class ObservableCollectionTransformations {
 			super(parent, qonfigType);
 		}
 
+		@QonfigAttributeGetter("use-first")
 		public boolean isUseFirst() {
 			return isUseFirst;
 		}
 
+		@QonfigAttributeGetter("preserve-source-order")
 		public boolean isPreservingSourceOrder() {
 			return isPreservingSourceOrder;
 		}
 
+		@QonfigChildGetter("sort")
 		public ExSort.ExRootSort getSort() {
 			return theSort;
 		}
@@ -855,7 +1100,7 @@ public class ObservableCollectionTransformations {
 							theSort.destroy();
 						theSort = (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSort().interpret(this);
 					}
-					theSort.update(getExpressoEnv());
+					theSort.update(theValueType, getExpressoEnv());
 				}
 			}
 
@@ -877,7 +1122,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Instantiator<T, CV1 extends ObservableCollection<?>, CV2 extends ObservableSet<?>>
-		implements FlowTransformInstantiator<CV1, CV2, T, T> {
+		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, T, T> {
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 			private final boolean isUseFirst;
 			private final boolean isPreservingSourceOrder;
@@ -988,7 +1233,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Instantiator<T, CV1 extends ObservableCollection<?>, CV2 extends ObservableSortedCollection<?>>
-		implements FlowTransformInstantiator<CV1, CV2, T, T> {
+		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, T, T> {
 			private final ModelValueInstantiator<Comparator<? super T>> theSorting;
 
 			Instantiator(ModelValueInstantiator<Comparator<? super T>> sorting) {
@@ -1027,10 +1272,12 @@ public class ObservableCollectionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "unmodifiable",
+		qonfigType = UnmodifiableCollectionTransform.UNMODIFIABLE,
 		interpretation = UnmodifiableCollectionTransform.Interpreted.class)
 	static class UnmodifiableCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String UNMODIFIABLE = "unmodifiable";
+
 		private boolean isAllowUpdates;
 
 		UnmodifiableCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1078,7 +1325,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final boolean isAllowUpdates;
 
 			Instantiator(boolean allowUpdates) {
@@ -1108,10 +1356,12 @@ public class ObservableCollectionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "refresh",
+		qonfigType = FilterModCollectionTransform.FILTER_MOD,
 		interpretation = FilterModCollectionTransform.Interpreted.class)
 	static class FilterModCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String FILTER_MOD = "filter-mod";
+
 		FilterModCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -1159,8 +1409,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = MapEquivalentCollectionTransform.MAP_EQUIVALENT,
+		interpretation = MapEquivalentCollectionTransform.Interpreted.class)
 	static class MapEquivalentCollectionTransform<C extends ObservableCollection<?>>
 	extends ExpressoTransformations.AbstractCompiledTransformation<C, C, ExElement> implements CollectionTransform<C, C, ExElement> {
+		static final String MAP_EQUIVALENT = "map-equivalent";
+
 		private ModelType<C> theSourceType;
 		private ExSort.ExRootSort theSort;
 
@@ -1263,7 +1518,8 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
-		extends AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2> implements FlowTransformInstantiator<CV1, CV2, S, T> {
+		extends AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2>
+		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, S, T> {
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 			private final LocatedFilePosition theLocation;
 
@@ -1344,10 +1600,10 @@ public class ObservableCollectionTransformations {
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 			qonfigType = FlattenCollectionTransform.FLATTEN,
-			interpretation = CrossCollectionTransform.Interpreted.class), //
+			interpretation = FlattenCollectionTransform.Interpreted.class), //
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "abst-map-op",
-		interpretation = CrossCollectionTransform.Interpreted.class) })
+		interpretation = FlattenCollectionTransform.Interpreted.class) })
 	static class FlattenCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>>
 	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
 		public static final String FLATTEN = "flatten";
@@ -1366,7 +1622,7 @@ public class ObservableCollectionTransformations {
 			super(parent, qonfigType);
 		}
 
-		@QonfigChildGetter("sort")
+		@QonfigChildGetter(asType = FLATTEN, value = "sort")
 		public ExSort.ExRootSort getSort() {
 			return theSort;
 		}
@@ -1406,10 +1662,22 @@ public class ObservableCollectionTransformations {
 			return isOneToMany;
 		}
 
-		@QonfigAttributeGetter("to")
+		@QonfigAttributeGetter(asType = FLATTEN, value = "to")
 		@Override
 		public ModelType<? extends C2> getTargetModelType() {
 			return theTargetModelType;
+		}
+
+		// These 2 methods suppress a warning
+
+		@QonfigAttributeGetter(asType = FLATTEN, value = "equivalence")
+		public Void getEquivalence() {
+			return null;
+		}
+
+		@QonfigChildGetter(asType = FLATTEN, value = "reverse")
+		public ExElement.Def<?> getReverse() {
+			return null;
 		}
 
 		@Override
@@ -1417,9 +1685,12 @@ public class ObservableCollectionTransformations {
 			update(session);
 			if (!session.forChildren("reverse").isEmpty())
 				throw new QonfigInterpretationException("Reverse is not yet implemented",
-					session.attributes().get("reverse").getLocatedContent());
+					session.children().get("reverse").get().getFirst().getElement().getFilePosition());
+			if (session.attributes().get("equivalence").get() != null)
+				throw new QonfigInterpretationException("Equivalence is not yet implemented",
+					session.attributes().get("equivalence").getLocatedContent());
 			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
-			isPropagateToParent = session.attributes().get("propagate-to-parent").getValue(boolean.class, false);
+			isPropagateToParent = session.attributes().get("propagate-update-to-parent").getValue(boolean.class, false);
 			isCached = session.attributes().get("cache").getValue(boolean.class, false);
 			isReEvalOnUpdate = session.attributes().get("re-eval-on-update").getValue(boolean.class, false);
 			isFireIfUnchanged = session.attributes().get("fire-if-unchanged").getValue(boolean.class, false);
@@ -1468,6 +1739,33 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
+		// All this tomfoolery is to avoid keeping any references to definition or interpretation values at runtime
+		static final class MyOptions {
+			private final Consumer<FlatMapOptions<?, ?, ?>> theOptions;
+
+			public MyOptions(Consumer<FlatMapOptions<?, ?, ?>> options) {
+				theOptions = options;
+			}
+
+			public <T, V, X> FlatMapOptions<T, V, X> apply(FlatMapOptions<T, V, X> options) {
+				theOptions.accept(options);
+				return options;
+			}
+		}
+
+		MyOptions options() {
+			boolean propagateToParent = isPropagateToParent();
+			boolean cache = isCached();
+			boolean reEvalOnUpdate = isReEvalOnUpdate();
+			boolean fireIfUnchanged = isFireIfUnchanged();
+			boolean nullToNull = isNullToNull();
+			boolean manyToOne = isManyToOne();
+			boolean oneToMany = isOneToMany();
+			return new MyOptions(opts -> opts.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged)
+				.nullToNull(nullToNull).manyToOne(manyToOne).oneToMany(oneToMany)//
+				.propagateUpdateToParent(propagateToParent));
+		}
+
 		static class Interpreted<C1 extends ObservableCollection<?>, CV1 extends C1, S, T, C2 extends ObservableCollection<?>, CV2 extends C2>
 		extends ExElement.Interpreted.Abstract<ExElement> implements Operation.Interpreted<C1, CV1, C2, CV2, ExElement> {
 			private TypeToken<T> theResultType;
@@ -1487,23 +1785,43 @@ public class ObservableCollectionTransformations {
 			public void update(ModelInstanceType<C1, CV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				Class<?> raw = TypeTokens.getRawType(sourceType.getType(0));
 				TypeToken<T> resultType;
+				MyOptions options = getDefinition().options();
 				if (ObservableValue.class.isAssignableFrom(raw)) {
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableValue.class.getTypeParameters()[0]);
-					theFlatten = flatValues();
+					theFlatten = LambdaUtils.printableFn(flow -> flow.flattenValues(v -> (ObservableValue<? extends T>) v), "flatValues",
+						null);
 				} else if (ObservableCollection.class.isAssignableFrom(raw)) {
-					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
-					// TODO Use map options, reverse
-					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableCollection.class.getTypeParameters()[0]);
-					theFlatten = flatCollections(getDefinition().isPropagateToParent(), getDefinition().isCached(),
-						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
-						getDefinition().isManyToOne(), getDefinition().isOneToMany());
+					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(Collection.class.getTypeParameters()[0]);
+					theFlatten = LambdaUtils.printableFn(
+						flow -> flow.flatMap(v -> v == null ? null : ((ObservableCollection<T>) v).flow(), opts -> options.apply(opts)//
+							.map((s, v) -> v)),
+						"FlatCollections", null);
+				} else if (Collection.class.isAssignableFrom(raw)) {
+					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(Collection.class.getTypeParameters()[0]);
+					theFlatten = LambdaUtils.printableFn(flow -> flow//
+						.<ObservableCollection<T>> transform(tx -> tx//
+							.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)//
+							.build((s, txvs) -> {
+								CollectionObservable<T> coll;
+								if (txvs.hasPreviousResult()) {
+									coll = (CollectionObservable<T>) txvs.getPreviousResult();
+									coll.getCollectionValue().set((Collection<T>) s);
+								} else {
+									coll = new CollectionObservable<>(SettableValue.<Collection<T>> build()//
+										.withValue((Collection<T>) s)//
+										.build());
+								}
+								return coll;
+							}))//
+						.flatMap(v -> v.flow(), opts -> options.apply(opts)//
+							.map((s, v) -> v)), //
+						"FlatCollections", null);
 				} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
-					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
-					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
-					theFlatten = flatFlows(getDefinition().isPropagateToParent(), getDefinition().isCached(),
-						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
-						getDefinition().isManyToOne(), getDefinition().isOneToMany());
+					theFlatten = LambdaUtils.printableFn(flow -> flow.flatMap(v -> (CollectionDataFlow<?, ?, ? extends T>) v, //
+						opts -> options.apply(opts)//
+						.map((s, v) -> v)),
+						"flatFlows", null);
 				} else
 					throw new ExpressoInterpretationException("Cannot flatten a collection of type " + sourceType.getType(0),
 						reporting().getFileLocation().getPosition(0), 0);
@@ -1544,30 +1862,19 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatValues() {
-			return LambdaUtils.printableFn(flow -> flow.flattenValues(v -> (ObservableValue<? extends T>) v), "flatValues", null);
-		}
+		static class CollectionObservable<T> extends ObservableCollectionImpl.SimpleCollectionBackedObservable<T> {
+			CollectionObservable(SettableValue<? extends Collection<T>> collectionValue) {
+				super(ObservableCollection.<T> build().build(), collectionValue);
+			}
 
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatCollections(boolean propagateToParent,
-			boolean cache, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(v -> ((ObservableCollection<? extends T>) v).flow(), opts -> opts//
-				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
-				.oneToMany(oneToMany)//
-				.propagateUpdateToParent(propagateToParent)//
-				.map((s, v) -> v)), "FlatCollections", null);
-		}
-
-		static <T> Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> flatFlows(boolean propagateToParent, boolean cache,
-			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany) {
-			return LambdaUtils.printableFn(flow -> flow.flatMap(v -> (CollectionDataFlow<?, ?, ? extends T>) v, opts -> opts//
-				.cache(cache).reEvalOnUpdate(reEvalOnUpdate).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
-				.oneToMany(oneToMany)//
-				.propagateUpdateToParent(propagateToParent)//
-				.map((s, v) -> v)), "flatFlows", null);
+			@Override
+			protected SettableValue<Collection<T>> getCollectionValue() {
+				return (SettableValue<Collection<T>>) super.getCollectionValue();
+			}
 		}
 
 		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
-		implements FlowTransformInstantiator<CV1, CV2, S, T> {
+		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, S, T> {
 			private final ModelType<CV2> theTargetModelType;
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 			private Function<CollectionDataFlow<?, ?, ?>, CollectionDataFlow<?, ?, T>> theFlatten;
@@ -1830,7 +2137,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Instantiator<CV1 extends ObservableCollection<?>, S, T, X>
-		implements FlowTransformInstantiator<CV1, ObservableCollection<T>, S, T> {
+		implements CollectionFlowToFlowTransformInstantiator<CV1, ObservableCollection<T>, S, T> {
 			private final ModelInstantiator theModels;
 			private final ModelComponentId theSourceAs;
 			private final ModelComponentId theCrossedAs;
@@ -1918,10 +2225,12 @@ public class ObservableCollectionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "where-contained",
+		qonfigType = WhereContainedCollectionTransform.WHERE_CONTAINED,
 		interpretation = WhereContainedCollectionTransform.Interpreted.class)
 	static class WhereContainedCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String WHERE_CONTAINED = "where-contained";
+
 		private CompiledExpression theFilter;
 		private boolean isInclusive;
 
@@ -1929,11 +2238,12 @@ public class ObservableCollectionTransformations {
 			super(parent, qonfigType);
 		}
 
-		@QonfigAttributeGetter("flter")
+		@QonfigAttributeGetter("filter")
 		public CompiledExpression getFilter() {
 			return theFilter;
 		}
 
+		@QonfigAttributeGetter("inclusive")
 		public boolean isInclusive() {
 			return isInclusive;
 		}
@@ -1988,7 +2298,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final ModelValueInstantiator<ObservableCollection<?>> theFilter;
 			private final boolean isInclusive;
 
@@ -2022,46 +2333,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
-	static class GroupByCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
-	implements CollectionTransform<C, ObservableMultiMap<?, ?>, ExElement> {
-		private String theSourceAs;
-		private CompiledExpression theKey;
-
-		public GroupByCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
-		}
-
-		public String getSourceAs() {
-			return theSourceAs;
-		}
-
-		@QonfigAttributeGetter("key")
-		public CompiledExpression getKey() {
-			return theKey;
-		}
-
-		@Override
-		public ModelType<? extends ObservableMultiMap<?, ?>> getTargetModelType() {
-			return ModelTypes.MultiMap;
-		}
-
-		@Override
-		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			super.update(session);
-			theSourceAs = session.getAttributeText("source-as");
-			theKey = getAttributeExpression("key", session);
-		}
-
-		@Override
-		public ExpressoTransformations.Operation.Interpreted<C, ?, ObservableMultiMap<?, ?>, ?, ? extends ExElement> interpret(
-			ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
-			throw new ExpressoInterpretationException("Not yet implemented", reporting().getFileLocation().getPosition(0), 0);
-		}
-	}
-
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "size", interpretation = SizeCollectionTransform.Interpreted.class)
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = SizeCollectionTransform.SIZE,
+		interpretation = SizeCollectionTransform.Interpreted.class)
 	static class SizeCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
 	implements CollectionTransform<C, SettableValue<?>, ExElement> {
+		static final String SIZE = "size";
+
 		private QonfigValueType.Literal theType;
 
 		SizeCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -2368,10 +2646,270 @@ public class ObservableCollectionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "collect",
+		qonfigType = TerminalCollectionTransform.TERMINAL,
+		interpretation = TerminalCollectionTransform.Interpreted.class) //
+	static class TerminalCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
+	implements CollectionTransform<C, SettableValue<?>, ExElement> {
+		public static final String TERMINAL = "terminal";
+
+		private boolean isFirst;
+
+		public TerminalCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@QonfigAttributeGetter("first")
+		public boolean isFirst() {
+			return isFirst;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
+			super.update(session);
+
+			isFirst = session.getAttribute("first", boolean.class);
+		}
+
+		@Override
+		public Operation.Interpreted<C, ?, SettableValue<?>, ?, ? extends ExElement> interpret(ExElement.Interpreted<?> parent)
+			throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<C extends ObservableCollection<?>, CV extends C, T> extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<C, CV, SettableValue<?>, SettableValue<T>, ExElement> {
+			private TypeToken<T> theValueType;
+
+			Interpreted(TerminalCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public TerminalCollectionTransform<C> getDefinition() {
+				return (TerminalCollectionTransform<C>) super.getDefinition();
+			}
+
+			public TypeToken<T> getValueType() {
+				return theValueType;
+			}
+
+			@Override
+			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theValueType = (TypeToken<T>) sourceType.getType(0);
+				super.update(env);
+			}
+
+			@Override
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<T>> getTargetType() {
+				return ModelTypes.Value.forType(theValueType);
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<CV, SettableValue<T>> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<C extends ObservableCollection<?>, T> implements Operation.Instantiator<C, SettableValue<T>> {
+			private final boolean isFirst;
+
+			Instantiator(Interpreted<?, C, T> interpreted) throws ModelInstantiationException {
+				isFirst = interpreted.getDefinition().isFirst();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+			}
+
+			@Override
+			public SettableValue<T> transform(C source, ModelSetInstance models) throws ModelInstantiationException {
+				return ((ObservableCollection<T>) source).observeTerminal().at(isFirst).find();
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				return false;
+			}
+		}
+	}
+
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = GroupByTransform.GROUP_BY,
+			interpretation = GroupByTransform.Interpreted.class), //
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "complex-operation",
+		interpretation = GroupByTransform.Interpreted.class)//
+	})
+	static class GroupByTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
+	implements CollectionTransform<C, ObservableMultiMap<?, ?>, ExElement> {
+		/** The XML name of this element */
+		public static final String GROUP_BY = "group-by";
+
+		private ModelComponentId theSourceAs;
+		private CompiledExpression theKey;
+
+		public GroupByTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		/**
+		 * @return The ID of the model value that will hold the value of elements in the source collection to be grouped by the
+		 *         {@link #getKey() key} expression
+		 */
+		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
+		public ModelComponentId getSourceAs() {
+			return theSourceAs;
+		}
+
+		/** @return The expression determining the key group that each element in the collection belongs to */
+		@QonfigAttributeGetter(asType = GROUP_BY, value = "key")
+		public CompiledExpression getKey() {
+			return theKey;
+		}
+
+		@Override
+		public ModelType<? extends ObservableMultiMap<?, ?>> getTargetModelType() {
+			return ModelTypes.MultiMap;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
+			super.update(session);
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceAs = elModels.getElementValueModelId(sourceAs);
+			theKey = getAttributeExpression("key", session);
+			elModels.<Interpreted<C, ?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceAs, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+		}
+
+		@Override
+		public ExpressoTransformations.Operation.Interpreted<C, ?, ObservableMultiMap<?, ?>, ?, ? extends ExElement> interpret(
+			ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<C extends ObservableCollection<?>, S, CV extends C, K> extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<C, CV, ObservableMultiMap<?, ?>, ObservableMultiMap<K, S>, ExElement> {
+			private TypeToken<S> theSourceType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<K>> theKey;
+			private ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<K, S>> theTargetType;
+
+			Interpreted(GroupByTransform<C> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public GroupByTransform<C> getDefinition() {
+				return (GroupByTransform<C>) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<K>> getKey() {
+				return theKey;
+			}
+
+			public TypeToken<S> getSourceType() {
+				return theSourceType;
+			}
+
+			@Override
+			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSourceType = (TypeToken<S>) sourceType.getType(0);
+				super.update(env);
+				theKey = interpret(getDefinition().getKey(), ModelTypes.Value.anyAs());
+				theTargetType = ModelTypes.MultiMap.forType((TypeToken<K>) theKey.getType().getType(0), theSourceType);
+			}
+
+			@Override
+			public ModelInstanceType<? extends ObservableMultiMap<?, ?>, ? extends ObservableMultiMap<K, S>> getTargetType() {
+				return theTargetType;
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theKey);
+			}
+
+			@Override
+			public Operation.Instantiator<CV, ObservableMultiMap<K, S>> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<C extends ObservableCollection<?>, K, V> implements //
+		ObservableMultiMapTransformations.CollectionToMultiMapTransformInstantiator<C, ObservableMultiMap<K, V>, V, K, V> {
+			private ModelInstantiator theModels;
+			private ModelComponentId theSourceAs;
+			private ModelValueInstantiator<SettableValue<K>> theKey;
+
+			Instantiator(Interpreted<?, V, C, K> interpreted) throws ModelInstantiationException {
+				theModels = interpreted.getModels().instantiate();
+				theSourceAs = interpreted.getDefinition().getSourceAs();
+				theKey = interpreted.getKey().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				theModels.instantiate();
+				theKey.instantiate();
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				sourceModels = theModels.wrap(sourceModels);
+				newModels = theModels.wrap(newModels);
+				SettableValue<K> sourceKey = theKey.get(sourceModels);
+				SettableValue<K> newKey = theKey.forModelCopy(sourceKey, sourceModels, newModels);
+				return sourceKey != newKey;
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, V> getSourceFlow(C source, ModelSetInstance models) throws ModelInstantiationException {
+				return (CollectionDataFlow<?, ?, V>) source.flow();
+			}
+
+			@Override
+			public MultiMapFlow<K, V> toMapFlow(CollectionDataFlow<?, ?, V> sourceFlow, ModelSetInstance models)
+				throws ModelInstantiationException {
+				models = theModels.wrap(models);
+				SettableValue<V> value = SettableValue.create();
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAs, models, value);
+				SettableValue<K> key = theKey.get(models);
+				BiFunction<K, V, V> reverse;
+				if (key.isEnabled().get() == null) {
+					reverse = (k, v) -> {
+						value.set(v);
+						key.set(k);
+						return value.get();
+					};
+				} else
+					reverse = null;
+				return sourceFlow.groupBy(v -> {
+					value.set(v);
+					return key.get();
+				}, reverse);
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = CollectCollectionTransform.COLLECT,
 		interpretation = CollectCollectionTransform.Interpreted.class)
 	static class CollectCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
+		static final String COLLECT = "collect";
+
 		Boolean isActive;
 
 		CollectCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -2430,7 +2968,8 @@ public class ObservableCollectionTransformations {
 			}
 		}
 
-		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
 			private final Boolean isActive;
 
 			Instantiator(Boolean active) {

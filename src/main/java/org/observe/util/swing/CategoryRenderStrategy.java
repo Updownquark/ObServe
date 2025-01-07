@@ -16,11 +16,10 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
 import org.qommons.LambdaUtils;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Contains utilities to render and edit values in a table column (for a table whose model is an {@link ObservableTableModel})
@@ -32,7 +31,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	public class CategoryMutationStrategy {
 		private BiPredicate<? super R, ? super C> theEditability;
 		private BiFunction<? super R, ? super C, ? extends C> theAttributeMutator;
-		private BiFunction<? super R, ? super C, ? extends R> theRowMutator;
+		private BiFunction<? super CollectionElement<? extends R>, ? super C, ? extends R> theRowMutator;
 		private boolean updateRowIfUnchanged;
 
 		private ObservableCellEditor<R, C> theEditor;
@@ -61,6 +60,12 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		public CategoryMutationStrategy withRowValueSwitch(BiFunction<? super R, ? super C, ? extends R> rowMutator) {
+			theRowMutator = LambdaUtils.printableBiFn((el, cv) -> rowMutator.apply(el.get(), cv), rowMutator::toString, rowMutator);
+			return this;
+		}
+
+		public CategoryMutationStrategy withRowValueSwitch2(
+			BiFunction<? super CollectionElement<? extends R>, ? super C, ? extends R> rowMutator) {
 			theRowMutator = rowMutator;
 			return this;
 		}
@@ -120,7 +125,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		public CategoryMutationStrategy asSlider(int minValue, int maxValue) {
-			Class<?> raw = TypeTokens.getRawType(TypeTokens.get().wrap(getType()));
+			Class<?> raw = TypeTokens.get().wrap(getType());
 			if (raw == Integer.class)
 				return withEditor((ObservableCellEditor<R, C>) ObservableCellEditor.createIntSliderEditor(minValue, maxValue));
 			else if (raw == Double.class)
@@ -130,7 +135,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		public CategoryMutationStrategy asSlider(double minValue, double maxValue) {
-			Class<?> raw = TypeTokens.getRawType(TypeTokens.get().wrap(getType()));
+			Class<?> raw = TypeTokens.get().wrap(getType());
 			if (raw == Integer.class)
 				throw new IllegalStateException("Use asSlider(int, int)");
 			else if (raw == Double.class)
@@ -185,7 +190,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			R2 oldRow = rowElement.get();
 			R2 newRow = oldRow;
 			if (theRowMutator != null) {
-				newRow = (R2) theRowMutator.apply(oldRow, categoryValue); // Just assume that the result will also be an instance of R2
+				newRow = (R2) theRowMutator.apply(rowElement, categoryValue); // Just assume that the result will also be an instance of R2
 			} else if (theAttributeMutator != null)
 				theAttributeMutator.apply(oldRow, categoryValue);
 
@@ -208,7 +213,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 		public CategoryMutationStrategy dragAccept(Consumer<Dragging.TransferAccepter<R, C, C>> accepter) {
 			if (theDragAccepter == null)
-				theDragAccepter = new Dragging.SimpleTransferAccepter<>(theType);
+				theDragAccepter = new Dragging.SimpleTransferAccepter<>();
 			accepter.accept(theDragAccepter);
 			return this;
 		}
@@ -349,7 +354,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	private String theName;
 	private Object theIdentifier;
-	private final TypeToken<C> theType;
+	private final Class<C> theType;
 	private final Function<? super R, ? extends C> theAccessor;
 	private final CategoryMutationStrategy theMutator;
 	private ListenerList<CategoryMouseListener<? super R, ? super C>> theMouseListeners;
@@ -370,7 +375,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	private boolean isFilterable;
 
-	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
+	public CategoryRenderStrategy(String name, Class<C> type, Function<? super R, ? extends C> accessor) {
 		theName = name;
 		theType = type;
 		theAccessor = accessor;
@@ -402,7 +407,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		return this;
 	}
 
-	public TypeToken<C> getType() {
+	public Class<C> getType() {
 		return theType;
 	}
 
@@ -686,7 +691,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	public CategoryRenderStrategy<R, C> dragSource(Consumer<Dragging.TransferSource<C>> source) {
 		if (theDragSource == null)
-			theDragSource = new Dragging.SimpleTransferSource<>(theType);
+			theDragSource = new Dragging.SimpleTransferSource<>();
 		source.accept(theDragSource);
 		return this;
 	}

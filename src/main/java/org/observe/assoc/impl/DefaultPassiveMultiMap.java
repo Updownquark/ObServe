@@ -6,6 +6,7 @@ import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
@@ -99,6 +100,11 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	@Override
 	protected PassiveCollectionManager<V0, ?, V> getValueManager() {
 		return theValueManager;
+	}
+
+	@Override
+	public CoreChangeSources getChangeSources() {
+		return theKeyManager.getChangeSources().union(theValueManager.getChangeSources());
 	}
 
 	@Override
@@ -245,7 +251,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 					oldValue = valueMap.apply(sourceEvt.getOldValue());
 				break;
 			}
-			ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(sourceEvt.getKeyElement(), sourceEvt.getElementId(), //
+			ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent.Default<>(sourceEvt.getKeyElement(), sourceEvt.getElementId(), //
 				sourceEvt.getKeyIndex(), sourceEvt.getIndex(), sourceEvt.getType(), //
 				theKeyManager.map().get().apply(sourceEvt.getKey()), theKeyManager.map().get().apply(sourceEvt.getOldKey()), //
 				oldValue, newValue, sourceEvt, sourceEvt.getMovement());
@@ -496,6 +502,12 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 				init(theValueFlow.apply(theSourceEntry.flow()).collectPassive());
 			else
 				init(ObservableCollection.of());
+		}
+
+		@Override
+		public PassivelyDerivedMultiEntry alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override

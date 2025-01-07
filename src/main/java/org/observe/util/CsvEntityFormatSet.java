@@ -2,6 +2,7 @@ package org.observe.util;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,7 @@ import com.google.common.reflect.TypeToken;
 /** Allows dynamic field formatting */
 public class CsvEntityFormatSet {
 	private final Map<TypeToken<?>, Format<?>> theFormatCache;
-	
+
 	/** Creates the format set */
 	public CsvEntityFormatSet() {
 		theFormatCache = new ConcurrentHashMap<>();
@@ -61,7 +62,7 @@ public class CsvEntityFormatSet {
 			return (Format<T>) Format.flexibleDate("ddMMMyyyy", TimeZone.getTimeZone("GMT"));
 		} else if (raw.isAssignableFrom(List.class)) {
 			Format<?> elementFormat = getFormat(fieldType.resolveType(Collection.class.getTypeParameters()[0]));
-			return (Format<T>) new Format.ListFormat<>(elementFormat, ",", null);
+			return (Format<T>) new Format.CollectionFormat<>(elementFormat, ",", null, null, ArrayList::new);
 		} else {
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 		}

@@ -24,6 +24,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.ListCellRenderer;
 import javax.swing.UIDefaults;
@@ -44,12 +45,15 @@ import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickKeyListener;
 import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickTextWidget;
+import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.quick.base.ValueAction;
+import org.observe.quick.base.ValueAction.Multi;
+import org.observe.quick.base.ValueAction.Single;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
@@ -68,40 +72,45 @@ import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.ObservableTextField;
 import org.observe.util.swing.PanelPopulation;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
+import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
 import org.observe.util.swing.PanelPopulation.ComboEditor;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
-import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
 import org.observe.util.swing.Shading;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.Transformer;
+import org.qommons.TriConsumer;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.io.Format;
 
 /** Code to populate Quick-sourced tables in Java swing */
 class QuickSwingTablePopulation {
-	static class InterpretedSwingTableColumn<R, C> {
+	static class InterpretedSwingTableColumn<R, R2, C> {
 		private final QuickTableColumn<R, C> theColumn;
-		final CategoryRenderStrategy<R, C> theCRS;
-		private ObservableCollection<InterpretedSwingTableColumn<R, ?>> theColumns;
+		private final Function<R2, R> theReverse;
+		final CategoryRenderStrategy<R2, C> theCRS;
+		private ObservableCollection<InterpretedSwingTableColumn<R, R2, ?>> theColumns;
 		private ElementId theElementId;
 
-		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
-			Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
+		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column,
+			TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse, TabularContext<R> context, Observable<?> until,
+			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
 			theColumn = column;
-			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
+			theReverse = reverse;
+			theCRS = new CategoryRenderStrategy<>(column.getName().get(), TypeTokens.getRawType(column.getType()), row -> {
 				try (Transaction t = QuickCoreSwing.rendering()) {
-					context.getActiveValue().set(row, null);
+					context.getActiveValue().set(theReverse.apply(row), null);
 					return column.getValue().get();
 				}
 			});
@@ -114,8 +123,8 @@ class QuickSwingTablePopulation {
 				theCRS.withHeaderTooltip(evt.getNewValue());
 				refresh();
 			});
-			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, parent, swingRenderer,
-				swingEditor);
+			QuickSwingTableColumn<R, R2, C> renderer = new QuickSwingTableColumn<>(update, theReverse, quickParent, column, context, parent,
+				swingRenderer, swingEditor);
 			Observable.onRootFinish(theColumn.getRenderStyleChanges()).takeUntil(until).act(evt -> {
 				refresh();
 			});
@@ -134,7 +143,7 @@ class QuickSwingTablePopulation {
 				theCRS.withWidth("max", width);
 
 			theCRS.withRenderer(renderer);
-			theCRS.withValueTooltip(renderer::getTooltip);
+			theCRS.withValueTooltip((r, c) -> renderer.getTooltip(r, c));
 			// The listeners may take a performance hit, so only add listening if they're there
 			boolean[] mouseKey = new boolean[2];
 			if (column.getRenderer() != null) {
@@ -155,14 +164,20 @@ class QuickSwingTablePopulation {
 				theCRS.withKeyListener(null);
 			if (column.getEditing() != null)
 				theCRS.withMutation(renderer::mutation);
+			if (!column.getTransferSources().isEmpty())
+				column.getTransferSources().get(0).reporting().warn("Not implemented");
 		}
 
-		public void init(ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns, ElementId id) {
+		public void init(ObservableCollection<InterpretedSwingTableColumn<R, R2, ?>> columns, ElementId id) {
 			theColumns = columns;
 			theElementId = id;
 		}
 
-		public CategoryRenderStrategy<R, C> getCRS() {
+		public QuickTableColumn<R, C> getColumn() {
+			return theColumn;
+		}
+
+		public CategoryRenderStrategy<R2, C> getCRS() {
 			return theCRS;
 		}
 
@@ -172,26 +187,30 @@ class QuickSwingTablePopulation {
 		}
 	}
 
-	static class QuickSwingRenderer<R, C> extends AbstractObservableCellRenderer<R, C> {
+	static class QuickSwingRenderer<R, R2, C> extends AbstractObservableCellRenderer<R2, C> {
+		final TriConsumer<R2, R, QuickWidget> theUpdate;
+		final Function<R2, R> theReverse;
 		private final QuickWidget theQuickParent;
 		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
 		private final QuickWidget theRenderer;
 		private final SimpleObservable<Void> theRenderUntil;
 		private final QuickWithBackground.BackgroundContext theRendererContext;
 		protected final TabularWidget.TabularContext<R> theRenderTableContext;
-		private ObservableCellRenderer<R, C> theDelegate;
-		private AbstractComponentEditor<?, ?> theComponent;
+		private ObservableCellRenderer<R2, C> theDelegate;
+		private SimpleComponentEditor<?, ?> theComponent;
 		private Runnable thePreRender;
 		private final Supplier<C> theValue;
 
 		private ObservableValue<String> theTooltip;
-		private Function<ModelCell<? extends R, ? extends C>, String> isEnabled;
+		private Function<ModelCell<? extends R2, ? extends C>, String> isEnabled;
 
 		private boolean isUpdating;
 
-		QuickSwingRenderer(QuickWidget quickParent, Supplier<C> value, QuickWidget renderer,
-			TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
+		QuickSwingRenderer(TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse, QuickWidget quickParent,
+			Supplier<C> value, QuickWidget renderer, TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
 				QuickSwingPopulator<QuickWidget> swingRenderer) throws ModelInstantiationException {
+			theUpdate = update;
+			theReverse = reverse;
 			theQuickParent = quickParent;
 			theParent = parent;
 			theValue = value;
@@ -199,7 +218,7 @@ class QuickSwingTablePopulation {
 			theRenderTableContext = ctx;
 			theRenderUntil = new SimpleObservable<>();
 
-			SwingCellPopulator<R, C> renderPopulator;
+			SwingCellPopulator<R, R2, C> renderPopulator;
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
 				theRendererContext = new QuickWithBackground.BackgroundContext.Default();
@@ -239,15 +258,19 @@ class QuickSwingTablePopulation {
 			return theParent.get();
 		}
 
+		public QuickWidget getQuickParent() {
+			return theQuickParent;
+		}
+
 		public TabularWidget.TabularContext<R> getContext() {
 			return theRenderTableContext;
 		}
 
-		void delegateTo(ObservableCellRenderer<R, C> delegate) {
+		void delegateTo(ObservableCellRenderer<R2, C> delegate) {
 			theDelegate = delegate;
 		}
 
-		void renderWith(AbstractComponentEditor<?, ?> component, Runnable preRender) {
+		void renderWith(SimpleComponentEditor<?, ?> component, Runnable preRender) {
 			theComponent = component;
 			thePreRender = preRender;
 		}
@@ -260,12 +283,12 @@ class QuickSwingTablePopulation {
 			theTooltip = tooltip;
 		}
 
-		public void setEnabled(Function<ModelCell<? extends R, ? extends C>, String> enabled) {
+		public void setEnabled(Function<ModelCell<? extends R2, ? extends C>, String> enabled) {
 			isEnabled = enabled;
 		}
 
 		@Override
-		public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
+		public String renderAsText(ModelCell<? extends R2, ? extends C> cell) {
 			setCellContext(cell, theRenderTableContext, false);
 			if (theRenderer instanceof QuickTextWidget) {
 				if (thePreRender != null)
@@ -280,7 +303,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+		protected Component renderCell(Component parent, ModelCell<? extends R2, ? extends C> cell, CellRenderContext ctx) {
 			isUpdating = true;
 			try {
 				setCellContext(cell, theRenderTableContext, false);
@@ -304,11 +327,19 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx,
+		void setCellContext(ModelCell<? extends R2, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx,
 			boolean withValue) {
 			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
-				if (withValue || tableCtx.getActiveValue().get() != cell.getModelValue())
-					tableCtx.getActiveValue().set(cell.getModelValue(), null);
+				R reversed = theReverse.apply(cell.getModelValue());
+				if (withValue || tableCtx.getActiveValue().get() != reversed) {
+					// Had an issue with trees where the path was actually the same, but not identical.
+					// If the active value is eventing, that almost certainly means it's being populated with the same value currently.
+					if (tableCtx.getActiveValue().isEventing()) {
+						if (!Objects.equals(tableCtx.getActiveValue().get(), reversed))
+							theQuickParent.reporting().error("Got some mixed up observables");
+					} else
+						tableCtx.getActiveValue().set(reversed, null);
+				}
 				tableCtx.isSelected().set(cell.isSelected(), cause);
 				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
 				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
@@ -329,11 +360,28 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		String getTooltip(R modelValue, C columnValue) {
+		String getTooltip(R2 modelValue, C columnValue) {
 			if (theTooltip == null)
 				return null;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				theRenderTableContext.getActiveValue().set(modelValue, null);
+				if (theRenderTableContext.getActiveValue().get() != modelValue) {
+					// Had an issue with trees where the path was actually the same, but not identical.
+					// If the active value is eventing, that almost certainly means it's being populated with the same value currently.
+					if (theRenderTableContext.getActiveValue().isEventing()) {
+						if (!Objects.equals(theRenderTableContext.getActiveValue().get(), modelValue))
+							theQuickParent.reporting().error("Got some mixed up observables");
+					} else
+						theRenderTableContext.getActiveValue().set(theReverse.apply(modelValue), null);
+				}
+				String enabled = null;
+				if (isEnabled != null) {
+					enabled = isEnabled.apply(new ModelCell.Default<>(() -> modelValue, columnValue, 0, 0, //
+						false, false, true, true, false, false));
+				}
+				if (enabled == null && theRenderer instanceof QuickValueWidget)
+					enabled = ((QuickValueWidget<?>) theRenderer).getDisabled().get();
+				if (enabled != null)
+					return enabled;
 				return theTooltip.get();
 			}
 		}
@@ -347,21 +395,23 @@ class QuickSwingTablePopulation {
 		}
 	}
 
-	static class QuickSwingTableColumn<R, C> extends QuickSwingRenderer<R, C>
-	implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
+	static class QuickSwingTableColumn<R, R2, C> extends QuickSwingRenderer<R, R2, C>
+	implements CategoryMouseListener<R2, C>, CategoryKeyListener<R2, C> {
 		private final QuickTableColumn<R, C> theColumn;
 
 		private final QuickTableColumn.ColumnEditContext<R, C> theEditContext;
-		private ObservableCellEditor<R, C> theCellEditor;
+		private ObservableCellEditor<R2, C> theCellEditor;
 
 		private final QuickMouseListener.MouseButtonListenerContext theMouseContext;
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
+		QuickSwingTableColumn(TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse, QuickWidget quickParent,
+			QuickTableColumn<R, C> column,
+			TabularWidget.TabularContext<R> ctx,
 			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
-			super(quickParent, column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
+			super(update, reverse, quickParent, column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
 			theColumn = column;
 
 			if (theColumn.getEditing() != null) {
@@ -400,57 +450,42 @@ class QuickSwingTablePopulation {
 			return theColumn;
 		}
 
-		void withEditor(ObservableCellEditor<R, C> editor) {
+		void withEditor(ObservableCellEditor<R2, C> editor) {
 			theCellEditor = editor;
 		}
 
 		@Override
-		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+		protected Component renderCell(Component parent, ModelCell<? extends R2, ? extends C> cell, CellRenderContext ctx) {
 			Component rendered = super.renderCell(parent, cell, ctx);
 			onOwner(o -> o.setCursor(rendered.getCursor()));
 			return rendered;
 		}
 
-		void mutation(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation) {
+		void mutation(CategoryRenderStrategy<R2, C>.CategoryMutationStrategy mutation) {
 			if (theColumn.getEditing() != null) {
 				if (theColumn.getEditing().isEditable() != null) {
 					mutation.editableIf((rowValue, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theRenderTableContext.getActiveValue().set(rowValue, null);
-							theRenderTableContext.getRowIndex().set(0, null);
-							theRenderTableContext.getColumnIndex().set(0, null);
-							theRenderTableContext.isSelected().set(false, null);
+						try (Transaction t = render(rowValue, colValue, theRenderTableContext)) {
 							return theColumn.getEditing().isEditable().get() == null;
 						}
 					});
 				} else {
 					mutation.editableIf((rowValue, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theRenderTableContext.getActiveValue().set(rowValue, null);
-							theRenderTableContext.getRowIndex().set(0, null);
-							theRenderTableContext.getColumnIndex().set(0, null);
-							theRenderTableContext.isSelected().set(false, null);
+						try (Transaction t = render(rowValue, colValue, theRenderTableContext)) {
 							return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
 						}
 					});
 				}
 				if (theColumn.getEditing().isAcceptable() != null) {
 					mutation.filterAccept((rowEl, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getActiveValue().set(rowEl.get(), null);
+						try (Transaction t = render(rowEl.get(), colValue, theEditContext)) {
 							theEditContext.getEditColumnValue().set(colValue, null);
-							theEditContext.getRowIndex().set(0, null);
-							theEditContext.getColumnIndex().set(0, null);
 							return theColumn.getEditing().isAcceptable().get();
 						}
 					});
 				} else {
 					mutation.filterAccept((rowEl, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theRenderTableContext.getActiveValue().set(rowEl.get(), null);
-							theRenderTableContext.getRowIndex().set(0, null);
-							theRenderTableContext.getColumnIndex().set(0, null);
-							theRenderTableContext.isSelected().set(false, null);
+						try (Transaction t = render(rowEl.get(), colValue, theRenderTableContext)) {
 							return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
 						}
 					});
@@ -459,8 +494,7 @@ class QuickSwingTablePopulation {
 					QuickTableColumn.ColumnEditType.RowModifyEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowModifyEditType<R, C>) theColumn
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getActiveValue().set(rowValue, null);
+						try (Transaction t = render(rowValue, colValue, theEditContext)) {
 							theEditContext.getEditColumnValue().set(colValue, null);
 							editType.getCommit().act(null);
 						}
@@ -469,13 +503,24 @@ class QuickSwingTablePopulation {
 				} else if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowReplaceEditType) {
 					QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C>) theColumn
 						.getEditing().getType();
-					mutation.withRowValueSwitch((rowValue, colValue) -> {
-						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getActiveValue().set(rowValue, null);
-							theEditContext.getEditColumnValue().set(colValue, null);
-							return editType.getReplacement().get();
-						}
-					});
+					if (LambdaUtils.isTrivial(theReverse)) {
+						mutation.withRowValueSwitch((rowValue, colValue) -> {
+							try (Transaction t = render(rowValue, colValue, theEditContext)) {
+								theEditContext.getEditColumnValue().set(colValue, null);
+								return (R2) editType.getReplacement().get();
+							}
+						});
+					} else if (theUpdate != null) {
+						mutation.mutateAttribute((rowValue, colValue) -> {
+							try (Transaction t = render(rowValue, colValue, theEditContext)) {
+								theEditContext.getEditColumnValue().set(colValue, null);
+								theUpdate.accept(rowValue, editType.getReplacement().get(), getQuickParent());
+							}
+						});
+					} else {
+						theColumn.getEditing().reporting().error("Cannot support edit type " + theColumn.getEditing().getType()
+							+ " for a mapped table without an update scheme");
+					}
 				} else
 					theColumn.getEditing().reporting().error("Unhandled column edit type: " + theColumn.getEditing().getType());
 				if (theCellEditor != null)
@@ -486,17 +531,42 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		String isEditAcceptable(ModelCell<R, C> cell, C editValue) {
+		Transaction render(R2 rowValue, C colValue, TabularWidget.TabularContext<R> ctx) {
+			Transaction t = QuickCoreSwing.rendering();
+			boolean success = false;
+			try {
+				R rv = theReverse.apply(rowValue);
+				if (ctx.getActiveValue().get() != rv)
+					ctx.getActiveValue().set(rv, null);
+				if (ctx.getRowIndex().get().intValue() != 0)
+					ctx.getRowIndex().set(0, null);
+				if (ctx.getColumnIndex().get().intValue() != 0)
+					ctx.getColumnIndex().set(0, null);
+				if (ctx.isSelected().get())
+					ctx.isSelected().set(false, null);
+				success = true;
+				return t;
+			} finally {
+				if (!success)
+					t.close();
+			}
+		}
+
+		void setEditCell(ModelCell<? extends R2, ? extends C> cell) {
+			setCellContext(cell, theRenderTableContext, false);
+			theEditContext.getActiveValue().set(theReverse.apply(cell.getModelValue()), null);
+		}
+
+		String isEditAcceptable(ModelCell<R2, C> cell, C editValue) {
 			if (cell == null)
 				return "Nothing being edited";
-			setCellContext(cell, theRenderTableContext, false);
-			theEditContext.getActiveValue().set(cell.getModelValue(), null);
+			setEditCell(cell);
 			theEditContext.getEditColumnValue().set(editValue, null);
 			return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(editValue);
 		}
 
 		@Override
-		public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+		public void keyPressed(ModelCell<? extends R2, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -523,7 +593,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+		public void keyReleased(ModelCell<? extends R2, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -550,7 +620,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+		public void keyTyped(ModelCell<? extends R2, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -584,7 +654,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mouseClicked(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -615,7 +685,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mousePressed(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -644,7 +714,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mouseReleased(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -673,7 +743,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mouseEntered(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -698,7 +768,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mouseExited(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -723,7 +793,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+		public void mouseMoved(ModelCell<? extends R2, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
@@ -748,9 +818,10 @@ class QuickSwingTablePopulation {
 		}
 	}
 
-	static class SwingCellPopulator<R, C> implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, C>> {
-		private final QuickSwingRenderer<R, C> theRenderer;
-		private final QuickSwingTableColumn<R, C> theEditor;
+	static class SwingCellPopulator<R, R2, C>
+	implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, R2, C>> {
+		private final QuickSwingRenderer<R, R2, C> theRenderer;
+		private final QuickSwingTableColumn<R, R2, C> theEditor;
 		private final boolean isRenderer;
 
 		Color nonSelectionBG;
@@ -758,13 +829,13 @@ class QuickSwingTablePopulation {
 		Color selectionBG;
 		Color selectionFG;
 
-		public SwingCellPopulator(QuickSwingRenderer<R, C> cell, boolean renderer) {
+		public SwingCellPopulator(QuickSwingRenderer<R, R2, C> cell, boolean renderer) {
 			theRenderer = cell;
 			isRenderer = renderer;
 			if (!renderer) {
 				if (!(cell instanceof QuickSwingTableColumn))
 					throw new IllegalStateException("Editing unsupported for this type");
-				theEditor = (QuickSwingTableColumn<R, C>) cell;
+				theEditor = (QuickSwingTableColumn<R, R2, C>) cell;
 			} else
 				theEditor = null;
 
@@ -775,14 +846,14 @@ class QuickSwingTablePopulation {
 			selectionFG = uiValues.getColor("Table.selectionForeground");
 		}
 
-		SwingCellPopulator<R, C> unsupported(String message) {
+		SwingCellPopulator<R, R2, C> unsupported(String message) {
 			theRenderer.getRenderer().reporting()
 			.warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
 			return this;
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+		public SwingCellPopulator<R, R2, C> withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
 			return unsupported("Glass pane");
 		}
 
@@ -802,7 +873,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withShading(Shading shading) {
+		public SwingCellPopulator<R, R2, C> withShading(Shading shading) {
 			return unsupported("Shading");
 		}
 
@@ -812,17 +883,33 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withFieldName(ObservableValue<String> fieldName) {
+		public SwingCellPopulator<R, R2, C> withFieldName(ObservableValue<String> fieldName) {
 			return unsupported("Field name");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> modifyFieldLabel(Consumer<FontAdjuster> font) {
+		public SwingCellPopulator<R, R2, C> modifyFieldLabel(Consumer<FontAdjuster> font) {
 			return unsupported("Field label");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withFont(Consumer<FontAdjuster> font) {
+		public SwingCellPopulator<R, R2, C> withPostLabel(ObservableValue<String> postLabel) {
+			return unsupported("Post label");
+		}
+
+		@Override
+		public SwingCellPopulator<R, R2, C> withPostButton(String buttonText, ObservableAction action,
+			Consumer<ButtonEditor<JButton, ?>> modify) {
+			return unsupported("Post button");
+		}
+
+		@Override
+		public SwingCellPopulator<R, R2, C> withPostContent(Consumer<PanelPopulator<JPanel, ?>> content) {
+			return unsupported("Post content");
+		}
+
+		@Override
+		public SwingCellPopulator<R, R2, C> withFont(Consumer<FontAdjuster> font) {
 			return unsupported("Font");
 		}
 
@@ -832,47 +919,47 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> disableWith(ObservableValue<String> disabled) {
+		public SwingCellPopulator<R, R2, C> disableWith(ObservableValue<String> disabled) {
 			return unsupported("Visibility");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> visibleWhen(ObservableValue<Boolean> visible) {
+		public SwingCellPopulator<R, R2, C> visibleWhen(ObservableValue<Boolean> visible) {
 			return unsupported("Visibility");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> fill() {
+		public SwingCellPopulator<R, R2, C> fill() {
 			return unsupported("Fill");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> fillV() {
+		public SwingCellPopulator<R, R2, C> fillV() {
 			return unsupported("Fill");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> decorate(Consumer<ComponentDecorator> decoration) {
+		public SwingCellPopulator<R, R2, C> decorate(Consumer<ComponentDecorator> decoration) {
 			return unsupported("Decorate");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> repaintOn(Observable<?> repaint) {
+		public SwingCellPopulator<R, R2, C> repaintOn(Observable<?> repaint) {
 			return unsupported("Repaint");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> modifyEditor(Consumer<? super Container> modify) {
+		public SwingCellPopulator<R, R2, C> modifyEditor(Consumer<? super Container> modify) {
 			return unsupported("General editor modifier");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> modifyComponent(Consumer<Component> component) {
+		public SwingCellPopulator<R, R2, C> modifyComponent(Consumer<Component> component) {
 			return unsupported("General component modifier");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> modifyAssociatedComponents(Consumer<Component> component) {
+		public SwingCellPopulator<R, R2, C> modifyAssociatedComponents(Consumer<Component> component) {
 			return unsupported("General component modifier");
 		}
 
@@ -885,27 +972,27 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withLayoutConstraints(Object constraints) {
+		public SwingCellPopulator<R, R2, C> withLayoutConstraints(Object constraints) {
 			return unsupported("Layout constraints for cell renderer holder");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
+		public SwingCellPopulator<R, R2, C> withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
 			return unsupported("Popup menu");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> onMouse(Consumer<MouseEvent> onMouse) {
+		public SwingCellPopulator<R, R2, C> onMouse(Consumer<MouseEvent> onMouse) {
 			return unsupported("Mouse events");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withName(String name) {
+		public SwingCellPopulator<R, R2, C> withName(String name) {
 			return unsupported("Name");
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> withTooltip(ObservableValue<String> tooltip) {
+		public SwingCellPopulator<R, R2, C> withTooltip(ObservableValue<String> tooltip) {
 			return unsupported("Tooltip");
 		}
 
@@ -916,11 +1003,14 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public Observable<?> getUntil() {
-			return theRenderer.getRenderer().onDestroy();
+			if (theRenderer.getRenderer() != null)
+				return theRenderer.getRenderer().onDestroy();
+			else
+				return Observable.empty();
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (isRenderer)
 				theRenderer.renderWith(field, field::reset);
 			else
@@ -936,7 +1026,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <F> SwingCellPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+		public <F> SwingCellPopulator<R, R2, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<LabelEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				LabelRenderEditor editor = new LabelRenderEditor(theRenderer);
@@ -949,15 +1039,15 @@ class QuickSwingTablePopulation {
 					label[0] = tf.getEditor();
 				});
 
-				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
+				ObservableCellRenderer<R2, C> delegate = new AbstractObservableCellRenderer<R2, C>() {
 					@Override
-					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+					public String renderAsText(ModelCell<? extends R2, ? extends C> cell) {
+						theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 						return format.apply(field.get());
 					}
 
 					@Override
-					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+					protected Component renderCell(Component parent, ModelCell<? extends R2, ? extends C> cell, CellRenderContext ctx) {
 						if (!isManaged(label[0], "background")) {
 							if (cell.getRowIndex() >= 0) {
 								label[0].setOpaque(true);
@@ -967,12 +1057,15 @@ class QuickSwingTablePopulation {
 						}
 						if (!isManaged(label[0], "foreground"))
 							label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
-						label[0].setEnabled(cell.isEnabled() == null);
-						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+						theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 						F fieldV = field.get();
 						label[0].setText(format.apply(fieldV));
-						editor.decorate(label[0]);
+						String enabled = cell.isEnabled();
+						if (enabled == null && theRenderer.getRenderer() instanceof QuickValueWidget)
+							enabled = ((QuickValueWidget<?>) theRenderer.getRenderer()).getDisabled().get();
+						label[0].setEnabled(enabled == null);
 						cell.setEnabled(null); // Don't let the super class muck with our style
+						editor.decorate(label[0]);
 						return label[0];
 					}
 				};
@@ -983,10 +1076,11 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify) {
+		public SwingCellPopulator<R, R2, C> addIcon(String fieldName, ObservableValue<Icon> icon,
+			Consumer<ComponentEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.<R, C> formatted(c -> "").setIcon(cell -> {
-					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+				ObservableCellRenderer<R2, C> delegate = ObservableCellRenderer.<R2, C> formatted(c -> "").setIcon(cell -> {
+					theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 					return icon.get();
 				});
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
@@ -999,18 +1093,18 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <F> SwingCellPopulator<R, C> addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-			Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
+		public <F> SwingCellPopulator<R, R2, C> addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+			Consumer<Object> action, Consumer<ComponentEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				JLabel[] label = new JLabel[1];
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
+				ObservableCellRenderer<R2, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
 					label[0].setOpaque(true);
 					if (!isManaged(label[0], "background"))
 						label[0].setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
 					if (!isManaged(label[0], "foreground"))
 						label[0].setForeground(cell.isSelected() ? selectionFG : nonSelectionFG);
 					label[0].setEnabled(cell.isEnabled() == null);
-					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+					theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 					F fieldValue = field.get();
 					cell.setEnabled(null); // Don't let the super class muck with our style
 					return format.apply(fieldValue);
@@ -1026,11 +1120,11 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> addCheckField(String fieldName, SettableValue<Boolean> field,
+		public SwingCellPopulator<R, R2, C> addCheckField(String fieldName, SettableValue<Boolean> field,
 			Consumer<ButtonEditor<JCheckBox, ?>> modify) {
 			if (isRenderer) {
 				JCheckBox check = new JCheckBox();
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(check, cell -> {
+				ObservableCellRenderer<R2, C> delegate = ObservableCellRenderer.checkRenderer(check, cell -> {
 					check.setOpaque(true);
 					if (!isManaged(check, "background"))
 						check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
@@ -1065,11 +1159,12 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
+		public SwingCellPopulator<R, R2, C> addButton(String buttonText, ObservableAction action,
+			Consumer<ButtonEditor<JButton, ?>> modify) {
 			ButtonRenderEditor<JButton, ?>[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 			if (isRenderer) {
 				JButton button = new JButton();
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(button, cell -> {
+				ObservableCellRenderer<R2, C> delegate = ObservableCellRenderer.buttonRenderer(button, cell -> {
 					if (!isManaged(button, "background"))
 						button.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
 					if (!isManaged(button, "foreground"))
@@ -1103,8 +1198,8 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <F> SwingCellPopulator<R, C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
-			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
+		public <F> SwingCellPopulator<R, R2, C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<ComponentEditor<ObservableTextField<F>, ?>> modify) {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
 			else {
@@ -1112,15 +1207,15 @@ class QuickSwingTablePopulation {
 				ObservableCellEditor<R, C> cellEditor = ObservableCellEditor.createTextEditor((Format<C>) format, tf -> textField[0] = tf);
 				FieldRenderEditor<ObservableTextField<C>> fieldEditor = new FieldRenderEditor<>(cellEditor, textField[0]);
 				if (modify != null)
-					modify.accept((FieldEditor<ObservableTextField<F>, ?>) (FieldEditor<?, ?>) fieldEditor);
+					modify.accept((ComponentEditor<ObservableTextField<F>, ?>) (ComponentEditor<?, ?>) fieldEditor);
 				theEditor.withEditor(fieldEditor.getCellEditor());
 			}
 			return this;
 		}
 
 		@Override
-		public <F> SwingCellPopulator<R, C> addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
-			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+		public <F> SwingCellPopulator<R, R2, C> addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
+			Consumer<ComponentEditor<ObservableTextArea<F>, ?>> modify) {
 			if (isRenderer) {
 				FieldRenderEditor<ObservableTextArea<F>> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
@@ -1134,16 +1229,16 @@ class QuickSwingTablePopulation {
 				});
 				textArea[0].setMargin(new Insets(0, 0, 0, 0));
 
-				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
+				ObservableCellRenderer<R2, C> delegate = new AbstractObservableCellRenderer<R2, C>() {
 					@Override
-					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+					public String renderAsText(ModelCell<? extends R2, ? extends C> cell) {
+						theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 						return doc.toString();
 					}
 
 					@Override
-					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
+					protected Component renderCell(Component parent, ModelCell<? extends R2, ? extends C> cell, CellRenderContext ctx) {
+						theRenderer.getContext().getActiveValue().set(theRenderer.theReverse.apply(cell.getModelValue()), null);
 						editor.decorate(textArea[0]);
 						doc.refresh(null);
 						ObservableStyledDocument.synchronize(doc, ((StyledDocument) textArea[0].getDocument()), renderUntil);
@@ -1159,7 +1254,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> addSlider(String fieldName, SettableValue<Double> value,
+		public SwingCellPopulator<R, R2, C> addSlider(String fieldName, SettableValue<Double> value,
 			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
@@ -1170,7 +1265,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <F> SwingCellPopulator<R, C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+		public <F> SwingCellPopulator<R, R2, C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
 			Consumer<ComboEditor<F, ?>> modify) {
 			ObservableCollection<C> values;
 			if (availableValues instanceof ObservableCollection)
@@ -1182,7 +1277,10 @@ class QuickSwingTablePopulation {
 			else {
 				JComboBox<C> combo = new JComboBox<>();
 				ComboRenderEditor editor = new ComboRenderEditor(
-					ObservableCellEditor.createComboEditor(String::valueOf, combo, (v, until) -> values), combo);
+					ObservableCellEditor.createComboEditor(String::valueOf, combo, (editCell, until) -> {
+						theEditor.setEditCell(editCell);
+						return values;
+					}), combo);
 				if (modify != null)
 					modify.accept((ComboEditor<F, ?>) editor);
 				theEditor.withEditor(editor.getCellEditor());
@@ -1191,28 +1289,28 @@ class QuickSwingTablePopulation {
 		}
 
 		abstract class AbstractFieldRenderEditor<COMP extends Component, E extends AbstractFieldRenderEditor<COMP, E>>
-		implements FieldEditor<COMP, E> {
-			private final ObservableCellRenderer<R, C> theCellRenderer;
-			private final ObservableCellEditor<R, C> theCellEditor;
+		implements ComponentEditor<COMP, E> {
+			private final ObservableCellRenderer<R2, C> theCellRenderer;
+			private final ObservableCellEditor<R2, C> theCellEditor;
 			private final COMP theEditorComponent;
 
-			protected AbstractFieldRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+			protected AbstractFieldRenderEditor(ObservableCellRenderer<R2, C> cellRenderer) {
 				theCellRenderer = cellRenderer;
 				theCellEditor = null;
 				theEditorComponent = null;
 			}
 
-			protected AbstractFieldRenderEditor(ObservableCellEditor<R, C> cellEditor, COMP component) {
+			protected AbstractFieldRenderEditor(ObservableCellEditor<R2, C> cellEditor, COMP component) {
 				theCellRenderer = null;
 				theCellEditor = cellEditor;
 				theEditorComponent = component;
 			}
 
-			public ObservableCellRenderer<R, C> getCellRenderer() {
+			public ObservableCellRenderer<R2, C> getCellRenderer() {
 				return theCellRenderer;
 			}
 
-			public ObservableCellEditor<R, C> getCellEditor() {
+			public ObservableCellEditor<R2, C> getCellEditor() {
 				return theCellEditor;
 			}
 
@@ -1388,14 +1486,19 @@ class QuickSwingTablePopulation {
 			public E withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 				return unsupported("Post button");
 			}
+
+			@Override
+			public E withPostContent(Consumer<PanelPopulator<JPanel, ?>> content) {
+				return unsupported("Post content");
+			}
 		}
 
 		class FieldRenderEditor<COMP extends Component> extends AbstractFieldRenderEditor<COMP, FieldRenderEditor<COMP>> {
-			FieldRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+			FieldRenderEditor(ObservableCellRenderer<R2, C> cellRenderer) {
 				super(cellRenderer);
 			}
 
-			FieldRenderEditor(ObservableCellEditor<R, C> cellEditor, COMP editorComponent) {
+			FieldRenderEditor(ObservableCellEditor<R2, C> cellEditor, COMP editorComponent) {
 				super(cellEditor, editorComponent);
 			}
 		}
@@ -1404,11 +1507,11 @@ class QuickSwingTablePopulation {
 		implements LabelEditor<JLabel, LabelRenderEditor> {
 			private ObservableValue<? extends Icon> theIcon;
 
-			LabelRenderEditor(ObservableCellEditor<R, C> cellEditor, JLabel editorComponent) {
+			LabelRenderEditor(ObservableCellEditor<R2, C> cellEditor, JLabel editorComponent) {
 				super(cellEditor, editorComponent);
 			}
 
-			LabelRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+			LabelRenderEditor(ObservableCellRenderer<R2, C> cellRenderer) {
 				super(cellRenderer);
 			}
 
@@ -1421,7 +1524,17 @@ class QuickSwingTablePopulation {
 			@Override
 			public Component decorate(Component c) {
 				super.decorate(c);
-				((JLabel) c).setIcon(theIcon == null ? null : theIcon.get());
+				Icon icon;
+				try {
+					icon = theIcon == null ? null : theIcon.get();
+				} catch (RuntimeException e) {
+					theRenderer.getRenderer().reporting().error(e.toString(), e);
+					icon = null;
+				}
+				if (icon != null && !c.isEnabled()) {
+					icon = UIManager.getLookAndFeel().getDisabledIcon((JLabel) c, icon);
+				}
+				((JLabel) c).setIcon(icon);
 				return c;
 			}
 		}
@@ -1432,12 +1545,12 @@ class QuickSwingTablePopulation {
 			private ObservableValue<? extends Icon> theIcon;
 			private ObservableValue<String> theDisabled;
 
-			ButtonRenderEditor(String buttonText, ObservableCellRenderer<R, C> cellRenderer) {
+			ButtonRenderEditor(String buttonText, ObservableCellRenderer<R2, C> cellRenderer) {
 				super(cellRenderer);
 				theButtonText = ObservableValue.of(buttonText);
 			}
 
-			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor, B editorComponent) {
+			ButtonRenderEditor(String buttonText, ObservableCellEditor<R2, C> cellEditor, B editorComponent) {
 				super(cellEditor, editorComponent);
 				theButtonText = ObservableValue.of(buttonText);
 			}
@@ -1484,7 +1597,7 @@ class QuickSwingTablePopulation {
 			private Function<? super C, String> theValueTooltip;
 			private IntSupplier theHoveredItem;
 
-			public ComboRenderEditor(ObservableCellEditor<R, C> cellEditor, JComboBox<C> editorComponent) {
+			public ComboRenderEditor(ObservableCellEditor<R2, C> cellEditor, JComboBox<C> editorComponent) {
 				super(cellEditor, editorComponent);
 			}
 
@@ -1526,95 +1639,103 @@ class QuickSwingTablePopulation {
 
 	static <R> QuickSwingTableAction<R, ValueAction.Single<R>> interpretValueAction(ValueAction.Single.Interpreted<R, ?> interpreted,
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		return (table, action) -> {
-			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>();
-			action.setActionContext(ctx);
-			long[] lastUpdate = new long[1];
-			table.withAction(null, LambdaUtils.printableConsumer(v -> {
-				if (!Objects.equals(v, ctx.getActionValue().get()))
-					ctx.getActionValue().set(v, null);
-				action.getAction().act(null);
-			}, () -> action.getAction().toString(), null), ta -> {
-				ta.allowForEmpty(false);
-				ta.allowForMultiple(action.allowForMultiple());
-				ta.displayAsButton(action.isButton());
-				ta.displayAsPopup(action.isPopup());
-				ta.allowWhen(v -> {
-					/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
-					 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
-					 * so the stamp isn't changed, so the out-of-date cached enablement was used.
-					 *
-					 * However, the if here serves the purpose that setting this value many times can be costly.
-					 * So here's my solution.
-					 */
-					long now = System.currentTimeMillis();
-					if (now - lastUpdate[0] > 3 || !Objects.equals(v, ctx.getActionValue().get())) {
-						lastUpdate[0] = now;
-						ctx.getActionValue().set(v, null);
-					}
-					return action.getAction().isEnabled().get();
-				}, null);
-				ta.disableWith(action.getAction().isEnabled());
-				ta.modifyButton(btn -> {
-					btn.withText(action.getName());
-					btn.withIcon(action.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
-					btn.withTooltip(action.getTooltip());
+		return new QuickSwingTableAction<R, ValueAction.Single<R>>() {
+			@Override
+			public <R2> void addAction(CollectionWidgetBuilder<R2, ?, ?> table, Function<R2, R> reverse, Single<R> action)
+				throws ModelInstantiationException {
+				ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>();
+				action.setActionContext(ctx);
+				long[] lastUpdate = new long[1];
+				table.withAction(null, LambdaUtils.printableConsumer(v -> {
+					if (!Objects.equals(v, ctx.getActionValue().get()))
+						ctx.getActionValue().set(reverse.apply(v), null);
+					action.getAction().act(null);
+				}, () -> action.getAction().toString(), null), ta -> {
+					ta.allowForEmpty(false);
+					ta.allowForMultiple(action.allowForMultiple());
+					ta.displayAsButton(action.isButton());
+					ta.displayAsPopup(action.isPopup());
+					ta.allowWhen(v -> {
+						/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
+						 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
+						 * so the stamp isn't changed, so the out-of-date cached enablement was used.
+						 *
+						 * However, the if here serves the purpose that setting this value many times can be costly.
+						 * So here's my solution.
+						 */
+						long now = System.currentTimeMillis();
+						if (now - lastUpdate[0] > 3 || !Objects.equals(v, ctx.getActionValue().get())) {
+							lastUpdate[0] = now;
+							ctx.getActionValue().set(reverse.apply(v), null);
+						}
+						return action.getAction().isEnabled().get();
+					}, null);
+					ta.disableWith(action.getAction().isEnabled());
+					ta.modifyButton(btn -> {
+						btn.withText(action.getName());
+						btn.withIcon(action.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
+						btn.withTooltip(action.getTooltip());
+					});
 				});
-			});
+			}
 		};
 	}
 
 	static <R> QuickSwingTableAction<R, ValueAction.Multi<R>> interpretMultiValueAction(ValueAction.Multi.Interpreted<R, ?> interpreted,
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		return (table, action) -> {
-			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>();
-			action.setActionContext(ctx);
-			Supplier<List<R>>[] actionValues = new Supplier[1];
-			long[] lastUpdate = new long[1];
-			table.withMultiAction(null, LambdaUtils.<List<? extends R>> printableConsumer(values -> {
-				if (!ctx.getActionValues().equals(values)) {
-					try (Transaction t = ctx.getActionValues().lock(true, null)) {
-						CollectionUtils.synchronize(ctx.getActionValues(), values)//
-						.simple(v -> v)//
-						.rightOrder()//
-						.adjust();
-					}
-				}
-				action.getAction().act(null);
-				CollectionUtils.synchronize(ctx.getActionValues(), actionValues[0].get()).simple(r -> r).adjust();
-			}, () -> action.getAction().toString(), null), ta -> {
-				actionValues[0] = ta::getActionItems;
-				ta.allowForEmpty(action.allowForEmpty());
-				ta.allowForMultiple(true);
-				ta.displayAsButton(action.isButton());
-				ta.displayAsPopup(action.isPopup());
-				ta.allowWhenMulti(values -> {
-					/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
-					 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
-					 * so the stamp isn't changed, so the out-of-date cached enablement was used.
-					 *
-					 * However, the if here serves the purpose that setting this value many times can be costly.
-					 * So here's my solution.
-					 */
-					long now = System.currentTimeMillis();
-					if (now - lastUpdate[0] > 3 || !ctx.getActionValues().equals(values)) {
-						lastUpdate[0] = now;
+		return new QuickSwingTableAction<R, ValueAction.Multi<R>>() {
+			@Override
+			public <R2> void addAction(CollectionWidgetBuilder<R2, ?, ?> table, Function<R2, R> reverse, Multi<R> action)
+				throws ModelInstantiationException {
+				ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>();
+				action.setActionContext(ctx);
+				Supplier<List<R>>[] actionValues = new Supplier[1];
+				long[] lastUpdate = new long[1];
+				table.withMultiAction(null, LambdaUtils.<List<? extends R2>> printableConsumer(values -> {
+					if (!ctx.getActionValues().equals(values)) {
 						try (Transaction t = ctx.getActionValues().lock(true, null)) {
-							CollectionUtils.synchronize(ctx.getActionValues(), values)//
-							.simple(v -> v)//
+							CollectionUtils.synchronize(ctx.getActionValues(), values, (av, v) -> Objects.equals(av, reverse.apply(v)))//
+							.simple(reverse)//
 							.rightOrder()//
 							.adjust();
 						}
 					}
-					return action.isEnabled().get();
-				}, null);
-				ta.disableWith(action.getAction().isEnabled());
-				ta.modifyButton(btn -> {
-					btn.withText(action.getName());
-					btn.withIcon(action.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
-					btn.withTooltip(action.getTooltip());
+					action.getAction().act(null);
+					CollectionUtils.synchronize(ctx.getActionValues(), actionValues[0].get()).simple(r -> r).adjust();
+				}, () -> action.getAction().toString(), null), ta -> {
+					actionValues[0] = () -> QommonsUtils.map(ta.getActionItems(), reverse, true);
+					ta.allowForEmpty(action.allowForEmpty());
+					ta.allowForMultiple(true);
+					ta.displayAsButton(action.isButton());
+					ta.displayAsPopup(action.isPopup());
+					ta.allowWhenMulti(values -> {
+						/* Had a problem here where updates to selection, e.g. via a model change, weren't updating action enablement.
+						 * This was because the equals call in the if below didn't trigger, so the action value isn't updated,
+						 * so the stamp isn't changed, so the out-of-date cached enablement was used.
+						 *
+						 * However, the if here serves the purpose that setting this value many times can be costly.
+						 * So here's my solution.
+						 */
+						long now = System.currentTimeMillis();
+						if (now - lastUpdate[0] > 3 || !ctx.getActionValues().equals(values)) {
+							lastUpdate[0] = now;
+							try (Transaction t = ctx.getActionValues().lock(true, null)) {
+								CollectionUtils.synchronize(ctx.getActionValues(), values, (av, v) -> Objects.equals(av, reverse.apply(v)))//
+								.simple(reverse)//
+								.rightOrder()//
+								.adjust();
+							}
+						}
+						return action.isEnabled().get();
+					}, null);
+					ta.disableWith(action.getAction().isEnabled());
+					ta.modifyButton(btn -> {
+						btn.withText(action.getName());
+						btn.withIcon(action.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
+						btn.withTooltip(action.getTooltip());
+					});
 				});
-			});
+			}
 		};
 	}
 }

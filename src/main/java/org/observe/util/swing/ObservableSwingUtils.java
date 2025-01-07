@@ -7,6 +7,7 @@ import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.MediaTracker;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
@@ -45,6 +46,7 @@ import javax.swing.JFrame;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
@@ -132,7 +134,8 @@ public class ObservableSwingUtils {
 				if (checkBox.isEnabled())
 					checkBox.setEnabled(false);
 				checkBox.setToolTipText(enDesc[0]);
-			} else {
+				// A radio button can't be de-selected in the UI, so don't disable it if "false" is unacceptable
+			} else if (!(checkBox instanceof JRadioButton && ((JRadioButton) checkBox).isSelected())) {
 				String acceptable = safeSelected.isAcceptable(!checkBox.isSelected());
 				if (acceptable != null) {
 					if (checkBox.isEnabled())
@@ -257,7 +260,8 @@ public class ObservableSwingUtils {
 			for (int i = 0; i < buttons.length; i++) {
 				String enabled_i = enabled;
 				if (enabled_i == null) {
-					enabled_i = safeSelected.isAcceptable(options[i]);
+					if (!(buttons[i] instanceof JRadioButton) || !buttons[i].isSelected())
+						enabled_i = safeSelected.isAcceptable(options[i]);
 				}
 				buttons[i].setEnabled(enabled_i == null);
 				if (enabled != null) {
@@ -324,9 +328,11 @@ public class ObservableSwingUtils {
 		Consumer<String> checkEnabled = enabled -> {
 			for (int i = 0; i < buttons.size(); i++) {
 				String bEnabled = enabled;
-				if (bEnabled == null)
-					bEnabled = selected.isAcceptable(availableValues.get(i));
 				TB button = buttons.get(i);
+				if (bEnabled == null) {
+					if (!(button instanceof JRadioButton) || !button.isSelected())
+						bEnabled = selected.isAcceptable(availableValues.get(i));
+				}
 				button.setEnabled(bEnabled == null);
 				if (bEnabled != null)
 					button.setToolTipText(bEnabled);
@@ -780,9 +786,14 @@ public class ObservableSwingUtils {
 						searchUrl = new URL(location);
 				} catch (MalformedURLException e) {}
 			}
-			icon = searchUrl != null ? new ImageIcon(searchUrl) : null;
-			iconRef = new WeakReference<>(icon);
-			CACHED_ICONS.put(key, iconRef);
+			if (searchUrl != null) {
+				ImageIcon imgIcon = new ImageIcon(searchUrl);
+				if (imgIcon.getImageLoadStatus() != MediaTracker.ERRORED) {
+					icon = imgIcon;
+					iconRef = new WeakReference<>(icon);
+					CACHED_ICONS.put(key, iconRef);
+				}
+			}
 		}
 		return icon;
 	}

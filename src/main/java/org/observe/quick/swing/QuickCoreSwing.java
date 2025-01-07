@@ -9,7 +9,6 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.IllegalComponentStateException;
-import java.awt.Image;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -47,6 +46,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
@@ -94,11 +94,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 	}
 
 	private static class QuickSwingComponentData {
-		final QuickWidget widget;
+		// final QuickWidget widget; //For debugging
 		final ComponentPropertyManager<Component> propertyMgr;
 
 		QuickSwingComponentData(QuickWidget widget, Component c) {
-			this.widget = widget;
+			// this.widget = widget;
 			propertyMgr = new ComponentPropertyManager<>(c);
 		}
 	}
@@ -107,11 +107,17 @@ public class QuickCoreSwing implements QuickInterpretation {
 
 	private static int isRendering;
 
+	/**
+	 * Tells this architecture that some component using erasure is rendering a value
+	 *
+	 * @return The transaction to close when the rendering ends
+	 */
 	public static Transaction rendering() {
 		isRendering++;
 		return () -> isRendering--;
 	}
 
+	/** @return Whether some component using erasure is currently {@link #rendering() rendering} */
 	public static boolean isRendering() {
 		return isRendering > 0;
 	}
@@ -146,11 +152,14 @@ public class QuickCoreSwing implements QuickInterpretation {
 				for (QuickDialog.Interpreted<?> dialog : ((QuickWidget.Interpreted<?>) qw).getDialogs())
 					dialogs.put(dialog.getIdentity(), tx2.transform(dialog, QuickSwingDialog.class));
 			}
+			Object id = qw.getIdentity();
 			qsp.addModifier((comp, w) -> {
 				FontAdjuster pmDecorator = new FontAdjuster();
 				List<ComponentPropertyManager<Component>> propertyManagers = new ArrayList<>();
 				ObservableValue<String> name = w.getName();
-				comp.withName(name.get());
+				String n = name.get();
+				comp.withName(n);
+				boolean debugBG = PanelPopulation.isDebugging(n, "bg");
 				name.noInitChanges().takeUntil(comp.getUntil()).act(evt -> {
 					comp.withName(evt.getNewValue());
 					for (ComponentPropertyManager<?> pm : propertyManagers)
@@ -198,6 +207,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 								// if (c instanceof JLabel) { // DEBUGGING
 								// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
 								// }
+								if (debugBG)
+									System.out.println("BG of " + id + " is " + bg);
 								pm.setBackground(bg);
 								pm.setOpaque(bg == null ? null : true);
 							}
@@ -207,7 +218,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 							});
 							scd.propertyMgr.setFont(pmDecorator::adjust);
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
-							scd.propertyMgr.setBackground(color.get());
+							Color bg = color.get();
+							if (debugBG)
+								System.out.println("BG of " + id + " is " + bg);
+							scd.propertyMgr.setBackground(bg);
+							scd.propertyMgr.setOpaque(bg == null ? null : true);
 							try {
 								w.setContext(new QuickWidget.BackgroundContext.Default(//
 									new MouseValueSupport(c, "hovered", null), //
@@ -273,6 +288,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							pm.setFont(pmDecorator::adjust);
 							pm.setForeground(pmDecorator.getForeground());
 							Color bg = color.get();
+							if (debugBG)
+								System.out.println("BG of " + id + " is " + bg);
 							pm.setBackground(bg);
 							pm.setOpaque(bg == null ? null : true);
 						}
@@ -619,13 +636,18 @@ public class QuickCoreSwing implements QuickInterpretation {
 				window.withTitle(quick.getTitle());
 			if (quick.isVisible() != null)
 				window.withVisible(quick.isVisible());
+			window.withRePack(quick.getRePack());
 			applyIcon(window, quick);
 		}
 	}
 
+	/**
+	 * @param window The window populator to apply the icon to
+	 * @param quckWindow The quick window to help determine the icon to apply
+	 */
 	public static void applyIcon(WindowBuilder<?, ?> window, QuickWindow quckWindow) {
 		if (quckWindow.getWindowIcon().get() != null)
-			applyIcon(window, quckWindow.getWindowIcon());
+			window.withIcon(quckWindow.getWindowIcon());
 		else {
 			ExElement parent = quckWindow.getElement().getParentElement();
 			QuickWindow parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
@@ -634,47 +656,27 @@ public class QuickCoreSwing implements QuickInterpretation {
 				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
 			}
 			if (parentWindow != null && parentWindow.getWindowIcon().get() != null)
-				applyIcon(window, parentWindow.getWindowIcon());
+				window.withIcon(parentWindow.getWindowIcon());
 		}
 	}
 
-	public static void applyIcon(WindowBuilder<?, ?> window, SettableValue<Image> windowIcon) {
-		window.withIcon(windowIcon);
-	}
-
-	public static void applyIcon(Window window, QuickWindow quckWindow, Observable<?> until) {
-		if (quckWindow.getWindowIcon().get() != null)
-			applyIcon(window, quckWindow.getWindowIcon(), until);
-		else {
-			ExElement parent = quckWindow.getElement().getParentElement();
-			QuickWindow parentWindow = parent.getAddOn(QuickWindow.class);
-			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon().get() == null)) {
-				parent = parent.getParentElement();
-				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
-			}
-			if (parentWindow != null && parentWindow.getWindowIcon().get() != null)
-				applyIcon(window, parentWindow.getWindowIcon(), until);
-		}
-	}
-
-	public static void applyIcon(Window window, SettableValue<Image> windowIcon, Observable<?> until) {
-		windowIcon.changes().takeUntil(until).act(evt -> {
-			Image img = evt.getNewValue();
-			if (img == null)
-				window.setIconImages(Collections.emptyList());
-			window.setIconImage(img);
-		});
-	}
-
+	/**
+	 * @param component The component to get the text offset for
+	 * @return A function that, for a given screen point relative to the component's position, provides the character offset at that
+	 *         position
+	 */
 	public static ToIntFunction<Point> getTextOffset(Component component) {
 		return getTextOffset(component, null, component::getWidth, component::getGraphics);
 	}
 
-	public static ToIntFunction<Point> getTextOffset(Component component, Supplier<String> textGetter, IntSupplier width,
-		Graphics graphics) {
-		return getTextOffset(component, textGetter, width, () -> graphics);
-	}
-
+	/**
+	 * @param component The component to get the text offset for
+	 * @param textGetter Supplies the current text of the widget
+	 * @param width Supplies the current width of the widget
+	 * @param graphics Supplies the component's graphics
+	 * @return A function that, for a given screen point relative to the component's position, provides the character offset at that
+	 *         position
+	 */
 	public static ToIntFunction<Point> getTextOffset(Component component, Supplier<String> textGetter, IntSupplier width,
 		Supplier<Graphics> graphics) {
 		if (component instanceof JTextComponent)
@@ -742,25 +744,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		return pos;
 	}
 
-	private static int getPositionFromEnd(int x, Font font, String text, FontRenderContext ctx) {
-		int min = 0, max = text.length() - 1;
-		int mid = text.length() / 2;
-		int pos = mid;
-		while (min < max) {
-			int width = (int) Math.round(font.getStringBounds(text, mid, text.length(), ctx).getWidth());
-			if (width < x) {
-				max = mid - 1;
-				pos = max;
-			} else if (width > x) {
-				min = mid + 1;
-				pos = mid;
-			} else
-				return mid;
-			mid = (max + min) / 2;
-		}
-		return pos;
-	}
-
+	/**
+	 * @param evt The mouse event to get the Quick button type for
+	 * @param listenerButton The button configured on the mouse listener
+	 * @return The Quick button type corresponding to the mouse event, or null if the mouse event does not have a corresponding Quick mouse
+	 *         button type OR the button type does not match that configured on the listener
+	 */
 	public static QuickMouseListener.MouseButton checkMouseEventType(MouseEvent evt, QuickMouseListener.MouseButton listenerButton) {
 		QuickMouseListener.MouseButton eventButton;
 		if (SwingUtilities.isLeftMouseButton(evt))
@@ -1063,6 +1052,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
+	/**
+	 * @param font The font adjuster to configure
+	 * @param style The Quick text style to configure the font for
+	 */
 	public static void adjustFont(FontAdjuster font, QuickTextStyle style) {
 		Color color = style.getFontColor().get();
 		if (color != null)
@@ -1129,10 +1122,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
+	/** @return Whether the left mouse button is currently pressed */
 	public static boolean isLeftPressed() {
 		return isLeftPressed;
 	}
 
+	/** @return Whether the right mouse button is currently pressed */
 	public static boolean isRightPressed() {
 		return isRightPressed;
 	}
@@ -1185,6 +1180,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public MouseValueSupport alias(String alias) {
+			return this; // Aliasing not supported for this constant
+		}
+
+		@Override
 		protected Boolean getSpontaneous() {
 			if (theParent == null)
 				return false;
@@ -1231,6 +1231,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.core(noInitChanges());
+		}
+
+		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Transaction.NONE;
 		}
@@ -1251,7 +1256,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
-		public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public Boolean set(Boolean value) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
@@ -1390,6 +1395,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
+		public FocusSupport alias(String alias) {
+			return this; // Aliasing not supported for this constant
+		}
+
+		@Override
 		protected Boolean getSpontaneous() {
 			return theComponent.isFocusOwner();
 		}
@@ -1399,6 +1409,11 @@ public class QuickCoreSwing implements QuickInterpretation {
 			theListener = listener;
 			setListening(true);
 			return () -> setListening(false);
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.core(noInitChanges());
 		}
 
 		@Override
@@ -1422,7 +1437,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 
 		@Override
-		public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public Boolean set(Boolean value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (value.booleanValue()) {
 				if (theComponent.isFocusable())
 					throw new IllegalArgumentException("This component cannot be focused");
@@ -1475,6 +1490,10 @@ public class QuickCoreSwing implements QuickInterpretation {
 		}
 	}
 
+	/**
+	 * @param component The component to scroll
+	 * @param bounds The bounds in the component to make visible to the user
+	 */
 	public static void scrollTo(Component component, Rectangle bounds) {
 		Container parent = component.getParent();
 		while (parent != null && component.isVisible()) {

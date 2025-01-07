@@ -20,6 +20,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -115,7 +117,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 
 			@Override
-			protected QuickBackgroundStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public QuickBackgroundStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new QuickBackgroundStyle.Def.Default(parentStyle, this, style);
 			}
 		}
@@ -356,8 +358,8 @@ public interface QuickWithBackground extends QuickStyledElement {
 				 * @param wrapped The generic compiled style that this style class wraps
 				 */
 				public Default(QuickInstanceStyle.Def parent, QuickWithBackground.Def<?> styledElement, QuickCompiledStyle wrapped) {
-					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
+					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-background");
 					theColor = addApplicableAttribute(typeStyle.getAttribute("color"));
 					theMouseCursor = addApplicableAttribute(typeStyle.getAttribute("mouse-cursor"));
@@ -391,7 +393,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 			QuickElementStyleAttribute<MouseCursor> getMouseCursor();
 
 			@Override
-			QuickBackgroundStyle create(QuickStyledElement styledElement);
+			QuickBackgroundStyle create(QuickStyled styled);
 
 			/** Default {@link QuickBackgroundStyle} interpretation implementation */
 			public class Default extends QuickInstanceStyle.Interpreted.Abstract implements QuickBackgroundStyle.Interpreted {
@@ -406,7 +408,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				 */
 				public Default(Def definition, QuickWithBackground.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
-					super(definition, styledElement, parent, wrapped);
+					super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}
 
 				@Override
@@ -434,7 +436,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickBackgroundStyle create(QuickStyledElement styledElement) {
+				public QuickBackgroundStyle create(QuickStyled styled) {
 					return new QuickBackgroundStyle.Default();
 				}
 			}
@@ -464,9 +466,9 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 				throws ModelInstantiationException {
-				super.update(interpreted, styledElement);
+				super.update(interpreted, styled);
 
 				QuickBackgroundStyle.Interpreted myInterpreted = (QuickBackgroundStyle.Interpreted) interpreted;
 
@@ -478,8 +480,8 @@ public interface QuickWithBackground extends QuickStyledElement {
 			}
 
 			@Override
-			public Default copy(QuickStyledElement styledElement) {
-				Default copy = (Default) super.copy(styledElement);
+			public Default copy(QuickStyled styled) {
+				Default copy = (Default) super.copy(styled);
 
 				copy.theColor = copy.getApplicableAttribute(theColorAttr);
 				copy.theMouseCursor = copy.getApplicableAttribute(theMouseCursorAttr);

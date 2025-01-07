@@ -165,9 +165,10 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		 */
 		protected CompiledModelValue<?> getElementValue(String elementValueName) throws QonfigInterpretationException {
 			CompiledModelValue<?> value = theElementValues.get(elementValueName);
-			if (value == null)
+			if (value == null) {
 				throw new QonfigInterpretationException("No such element value '" + elementValueName + "'",
 					getElement().reporting().getPosition(), 0);
+			}
 			return value;
 		}
 
@@ -196,7 +197,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			try {
 				if (value.getModelType(null) != modelType)
 					throw new QonfigInterpretationException(
-						"Element value '" + elementValueId + "' is not a " + value.getModelType(null) + ", not a " + modelType,
+						"Element value '" + elementValueId + "' is a " + value.getModelType(null) + ", not a " + modelType,
 						getElement().reporting().getPosition(), 0);
 			} catch (ExpressoCompilationException e) {
 				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
@@ -224,7 +225,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 
 		@Override
-		public abstract Interpreted<? extends E, ? extends AO> interpret(ExElement.Interpreted<?> element);
+		public abstract <E2 extends E> Interpreted<? super E2, ? extends AO> interpret(ExElement.Interpreted<E2> element);
 
 		void setCurrentInterpreting(ExElement.Interpreted<? extends E> interpreting) {
 			theCurrentInterpreting = interpreting;
@@ -432,13 +433,15 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			throws ExpressoInterpretationException {
 			ModelInstanceType<M, MV> type;
 			if (theType != null) {
-				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get(), env);
+				// Get the primary element for the type function
+				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get().as(ExElement.Interpreted.class, null), env);
 				for (int t = 0; t < getModelType().getTypeCount(); t++) {
 					TypeToken<?> pt = targetType.getType(t);
-					if (!TypeTokens.get().isAssignable(defaultType.getType(t), pt))
+					if (!TypeTokens.get().isAssignable(defaultType.getType(t), pt)) {
 						throw new ExpressoInterpretationException(
 							"Dynamic model value '" + this + "' (" + defaultType + ") satisfied with " + targetType,
 							env.reporting().getPosition(), 0);
+					}
 				}
 				type = (ModelInstanceType<M, MV>) targetType;
 			} else {

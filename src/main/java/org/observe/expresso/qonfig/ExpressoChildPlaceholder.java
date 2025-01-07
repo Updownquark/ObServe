@@ -143,8 +143,8 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		}
 
 		@Override
-		public void setExternalExpressoEnv(InterpretedExpressoEnv env) {
-			theExtExpressoEnv = env;
+		public void setParentEnv(InterpretedExpressoEnv env) {
+			// Don't need it?
 		}
 
 		@Override

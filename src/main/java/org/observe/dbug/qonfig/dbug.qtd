@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Dbug" version="0.1" xmlns:expresso="Expresso-Base v0.1">
+	<value-types>
+	</value-types>
+
+	<add-ons>
+		<add-on name="dbug-value" requires="model-value">
+			<child-def name="tag" type="dbug-tag" min="0" max="inf" />
+			<child-def name="watch" type="dbug-anchor" inherits="sub-anchor-watch" min="0" max="inf" />
+		</add-on>
+
+		<add-on name="sub-anchor-watch" requires="dbug-anchor">
+			<attr-mod name="dbug-anchor.type" default="" specify="forbidden" />
+			<attribute name="watch" type="expression" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="dbug-tag">
+			<value type="string" />
+		</element-def>
+
+		<element-def name="dbug-anchor" inherits="with-element-model">
+			<element-model>
+				<value name-attribute="as" />
+			</element-model>
+			<attribute name="type" type="string" />
+			<attribute name="if" type="expression" specify="optional" />
+			<attribute name="tag" type="string" specify="optional"/>
+			<attribute name="tag-matches" type="string" specify="optional"/>
+			<attribute name="as" type="identifier" default="anchor" />
+			<child-def name="action" type="dbug-action" min="0" max="inf" />
+			<child-def name="event" type="dbug-event" min="0" max="inf" />
+			<child-def name="sub-watch" type="dbug-anchor" inherits="sub-anchor-watch" min="0" max="inf"/>
+		</element-def>
+		<element-def name="dbug-event" inherits="with-element-model">
+			<element-model>
+				<value name-attribute="event-as" />
+			</element-model>
+			<attribute name="name" type="string" />
+			<attribute name="event-as" type="identifier" default="event" />
+			<attribute name="if" type="expression" specify="optional" />
+			<child-def name="action" type="dbug-action" min="0" max="inf" />
+		</element-def>
+		<element-def name="dbug-action" abstract="true" />
+		<element-def name="log" extends="dbug-action">
+			<?DOC The message to log?>
+			<value type="expression" />
+		</element-def>
+		<element-def name="break" extends="dbug-action" />
+		<element-def name="do" extends="dbug-action">
+			<value type="expression" />
+		</element-def>
+	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="dbug-value">
+			<target role="model.value" />
+		</auto-inherit>
+	</auto-inheritance>
+</qonfig-def>

@@ -27,8 +27,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.QuickStyledElement;
-import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -321,7 +321,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 
 			@Override
-			protected TextStyle.Def wrap(QuickStyledElement.QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public TextStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new TextStyle.Def(parentStyle, this, style);
 			}
 
@@ -396,7 +396,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			 */
 			public Def(QuickInstanceStyle.Def parent, TextStyleElement.Def styledElement, QuickCompiledStyle wrapped) {
 				super(parent, styledElement, wrapped);
-				QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
+				QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
 					QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE);
 				theColor = addApplicableAttribute(typeStyle.getAttribute("color"));
 				theMouseCursor = addApplicableAttribute(typeStyle.getAttribute("mouse-cursor"));
@@ -462,7 +462,7 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 
 			@Override
-			public TextStyle create(QuickStyledElement styledElement) {
+			public TextStyle create(QuickStyled styled) {
 				return new TextStyle();
 			}
 		}
@@ -472,11 +472,6 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 
 		private ObservableValue<Color> theColor;
 		private ObservableValue<MouseCursor> theMouseCursor;
-
-		@Override
-		public TextStyleElement getStyledElement() {
-			return (TextStyleElement) super.getStyledElement();
-		}
 
 		@Override
 		public ObservableValue<Color> getColor() {
@@ -489,9 +484,9 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 
 		@Override
-		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 			throws ModelInstantiationException {
-			super.update(interpreted, styledElement);
+			super.update(interpreted, styled);
 
 			TextStyle.Interpreted myInterpreted = (TextStyle.Interpreted) interpreted;
 
@@ -503,8 +498,8 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 
 		@Override
-		public TextStyle copy(QuickStyledElement styledElement) {
-			TextStyle copy = (TextStyle) super.copy(styledElement);
+		public TextStyle copy(QuickStyled styled) {
+			TextStyle copy = (TextStyle) super.copy(styled);
 
 			copy.theColor = copy.getApplicableAttribute(theColorAttr);
 			copy.theMouseCursor = copy.getApplicableAttribute(theMouseCursorAttr);

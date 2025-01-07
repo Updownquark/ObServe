@@ -4,7 +4,18 @@ import java.awt.EventQueue;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -17,7 +28,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
@@ -369,7 +379,7 @@ public interface TableContentControl {
 	 *        enter or de-focuses the field
 	 * @return The field
 	 */
-	public static <F extends PanelPopulation.FieldEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
+	public static <F extends PanelPopulation.ComponentEditor<ObservableTextField<TableContentControl>, ?>> F configureSearchField(F field,
 		boolean commitOnType) {
 		if (field.getEditor().getValue().get() == null)
 			field.getEditor().getValue().set(TableContentControl.DEFAULT, null);
@@ -2546,31 +2556,31 @@ public interface TableContentControl {
 		}, Duration.ofSeconds(1), false).onEDT();
 		updating.changes().act(evt -> updateHandle.setActive(evt.getNewValue()));
 		EventQueue.invokeLater(() -> {
-			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", TypeTokens.get().STRING, map -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", String.class, map -> {
 				return map.get("A");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150).withMutation(mut -> mut.mutateAttribute((map, a) -> map.put("A", a)).asText(Format.TEXT)));
-			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", TypeTokens.get().STRING, map -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", String.class, map -> {
 				return map.get("B");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("B", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
-			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("C", TypeTokens.get().STRING, map -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("C", String.class, map -> {
 				return map.get("C");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("C", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 150, 550));
-			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", TypeTokens.get().STRING, map -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("D", String.class, map -> {
 				return map.get("D");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("D", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
-			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("OneSAF Type", TypeTokens.get().STRING, map -> {
+			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("OneSAF Type", String.class, map -> {
 				return map.get("OneSAF Type");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {

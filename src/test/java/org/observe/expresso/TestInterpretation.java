@@ -190,6 +190,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<StatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
+				instantiate(models);
 				StatefulTestStructure structure = new StatefulTestStructure(theDerivedState.get(models));
 				ExFlexibleElementModelAddOn.satisfyElementValue(theInternalStateVariable, models, structure.getInternalState());
 				return SettableValue.<StatefulTestStructure> of(structure, "Not Settable");
@@ -353,6 +354,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
+				instantiate(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
 				return SettableValue.<DynamicTypeStatefulTestStructure> of(structure, "Not Settable");
@@ -506,6 +508,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
+				instantiate(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
 				return SettableValue.<DynamicTypeStatefulTestStructure> of(structure, "Not Settable");

@@ -32,7 +32,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.QuickStyledElement;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -136,7 +137,7 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 		}
 
 		@Override
-		protected BarChartStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+		public BarChartStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 			return new BarChartStyle.Def(parentStyle, this, style);
 		}
 
@@ -258,7 +259,7 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 
 			Def(QuickInstanceStyle.Def parent, QuickBarChart.Def styledElement, QuickCompiledStyle wrapped) {
 				super(parent, styledElement, wrapped);
-				QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(), QuickXInterpretation.NAME,
+				QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(), QuickXInterpretation.NAME,
 					QuickXInterpretation.VERSION, BAR_CHART);
 				theBarColor = addApplicableAttribute(typeStyle.getAttribute("bar-color"));
 				theOutlineColor = addApplicableAttribute(typeStyle.getAttribute("outline-color"));
@@ -336,7 +337,7 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 			}
 
 			@Override
-			public BarChartStyle create(QuickStyledElement styledElement) {
+			public BarChartStyle create(QuickStyled styled) {
 				return new BarChartStyle();
 			}
 		}
@@ -364,9 +365,9 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 		}
 
 		@Override
-		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 			throws ModelInstantiationException {
-			super.update(interpreted, styledElement);
+			super.update(interpreted, styled);
 
 			BarChartStyle.Interpreted myInterpreted = (BarChartStyle.Interpreted) interpreted;
 
@@ -380,8 +381,8 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 		}
 
 		@Override
-		public BarChartStyle copy(QuickStyledElement styledElement) {
-			BarChartStyle copy = (BarChartStyle) super.copy(styledElement);
+		public BarChartStyle copy(QuickStyled styled) {
+			BarChartStyle copy = (BarChartStyle) super.copy(styled);
 
 			copy.theBarColor = copy.getApplicableAttribute(theBarColorAttr);
 			copy.theOutlineColor = copy.getApplicableAttribute(theOutlineColorAttr);

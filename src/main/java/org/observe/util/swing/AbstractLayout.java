@@ -6,7 +6,11 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import org.qommons.BreakpointHere;
 
 /**
  * A swing layout that:
@@ -15,9 +19,9 @@ import java.util.List;
  * <li>Does not require the actual children, but may be called with {@link AbstractLayout.LayoutChild} instances instead.
  * </ol>
  */
-public interface AbstractLayout extends ScrollableSwingLayout {
+public abstract class AbstractLayout implements ScrollableSwingLayout {
 	/** A substitute for a component in a layout container */
-	interface LayoutChild {
+	public interface LayoutChild {
 		/**
 		 * @param type The type of the size to get:
 		 *        <ul>
@@ -29,11 +33,22 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 		 */
 		Dimension getSize(int type);
 
-		public static class ComponentLayoutChild implements LayoutChild {
-			private final Component component;
+		/** @return The layout constraints with which the component was added to its parent */
+		Object getConstraints();
 
-			public ComponentLayoutChild(Component component) {
+		/** A {@link LayoutChild} sourced from an AWT component */
+		public static class ComponentLayoutChild implements LayoutChild {
+			/** The component backing this layout child */
+			protected final Component component;
+			private final Object constraints;
+
+			/**
+			 * @param component The component to get size information from
+			 * @param constraints The layout constraints with which the component was added to the parent
+			 */
+			public ComponentLayoutChild(Component component, Object constraints) {
 				this.component = component;
+				this.constraints = constraints;
 			}
 
 			@Override
@@ -45,16 +60,28 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 				else
 					return component.getMaximumSize();
 			}
+
+			@Override
+			public Object getConstraints() {
+				return constraints;
+			}
 		}
 
+		/**
+		 * A {@link LayoutChild} that extracts information from another {@link LayoutChild} and caches it, discarding the reference to the
+		 * source.
+		 */
 		public static class ExtractedLayoutChild implements LayoutChild {
 			private final Dimension[] theSizes;
+			private final Object constraints;
 
+			/** @param toExtract The layout child to extract the layout information from */
 			public ExtractedLayoutChild(ComponentLayoutChild toExtract) {
 				theSizes = new Dimension[] { //
 					toExtract.getSize(-1), //
 					toExtract.getSize(0), //
 					toExtract.getSize(1) };
+				this.constraints = toExtract.getConstraints();
 			}
 
 			@Override
@@ -66,29 +93,36 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 				else
 					return theSizes[2];
 			}
+
+			@Override
+			public Object getConstraints() {
+				return constraints;
+			}
 		}
 	}
 
+	private final Map<Component, Object> theConstraints = new HashMap<>();
+
 	/** @return Whether this layout allocates space to invisible components */
-	boolean isShowingInvisible();
+	public abstract boolean isShowingInvisible();
 
 	@Override
-	default Dimension minimumLayoutSize(Container parent) {
+	public Dimension minimumLayoutSize(Container parent) {
 		return minimumLayoutSize(parent.getSize(), parent.getInsets(), layoutChildren(parent, isShowingInvisible()));
 	}
 
 	@Override
-	default Dimension preferredLayoutSize(Container parent) {
+	public Dimension preferredLayoutSize(Container parent) {
 		return preferredLayoutSize(parent.getSize(), parent.getInsets(), layoutChildren(parent, isShowingInvisible()));
 	}
 
 	@Override
-	default Dimension maximumLayoutSize(Container parent) {
+	public Dimension maximumLayoutSize(Container parent) {
 		return maximumLayoutSize(parent.getSize(), parent.getInsets(), layoutChildren(parent, isShowingInvisible()));
 	}
 
 	@Override
-	default void layoutContainer(Container parent) {
+	public void layoutContainer(Container parent) {
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;
@@ -99,9 +133,12 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 			Component comp = parent.getComponent(c);
 			if (isShowingInvisible() || comp.isVisible()) {
 				components.add(comp);
-				layoutComponents.add(new AbstractLayout.LayoutChild.ComponentLayoutChild(comp));
+				layoutComponents.add(layoutChild(comp));
 			}
 		}
+		String name = parent.getName();
+		if (PanelPopulation.isDebugging(name, "abstract-layout"))
+			BreakpointHere.breakpoint();
 		Rectangle[] componentBounds = layoutContainer(parentSize, parent.getInsets(), layoutComponents);
 		for (int c = 0; c < componentBounds.length; c++)
 			components.get(c).setBounds(componentBounds[c]);
@@ -114,7 +151,7 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 	 * @param components The components to lay out
 	 * @return The size of the given type for the container
 	 */
-	default Dimension layoutSize(int type, Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
+	public Dimension layoutSize(int type, Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
 		if (type < 0)
 			return minimumLayoutSize(containerSize, parentInsets, components);
 		else if (type == 0)
@@ -129,7 +166,7 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 	 * @param components The components to lay out
 	 * @return The minimum size for the container
 	 */
-	Dimension minimumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
+	public abstract Dimension minimumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
 	/**
 	 * @param containerSize The container's size
@@ -137,7 +174,7 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 	 * @param components The components to lay out
 	 * @return The preferred size for the container
 	 */
-	Dimension preferredLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
+	public abstract Dimension preferredLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
 	/**
 	 * @param containerSize The container's size
@@ -145,7 +182,7 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 	 * @param components The components to lay out
 	 * @return The maximum size for the container
 	 */
-	Dimension maximumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
+	public abstract Dimension maximumLayoutSize(Dimension containerSize, Insets parentInsets, List<LayoutChild> components);
 
 	/**
 	 * @param containerSize The container's size
@@ -153,62 +190,75 @@ public interface AbstractLayout extends ScrollableSwingLayout {
 	 * @param components The components to lay out
 	 * @return The bounds for each of the given components
 	 */
-	Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<AbstractLayout.LayoutChild> components);
+	public abstract Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<AbstractLayout.LayoutChild> components);
 
 	/**
 	 * @param container The container whose children to lay out
 	 * @param showInvisible Whether to allocate size to invisible children
 	 * @return A {@link LayoutChild} for each child to be laid out in the container
 	 */
-	static List<LayoutChild> layoutChildren(Container container, boolean showInvisible) {
+	public List<LayoutChild> layoutChildren(Container container, boolean showInvisible) {
 		List<LayoutChild> children = new ArrayList<>(container.getComponentCount());
 		for (int c = 0; c < container.getComponentCount(); c++) {
 			Component comp = container.getComponent(c);
 			if (!showInvisible && !comp.isVisible())
 				continue;
-			children.add(new LayoutChild.ComponentLayoutChild(comp));
+			children.add(layoutChild(comp));
 		}
 		return children;
 	}
 
-	@Override
-	default void addLayoutComponent(Component comp, Object constraints) {
+	/**
+	 * @param component The component to create the layout child for
+	 * @return The layout child for the given component
+	 */
+	public LayoutChild layoutChild(Component component) {
+		return new LayoutChild.ComponentLayoutChild(component, theConstraints.get(component));
 	}
 
 	@Override
-	default void invalidateLayout(Container target) {
+	public void addLayoutComponent(Component comp, Object constraints) {
+		if (constraints == null)
+			theConstraints.remove(comp);
+		else
+			theConstraints.put(comp, constraints);
 	}
 
 	@Override
-	default void addLayoutComponent(String name, Component comp) {
+	public void invalidateLayout(Container target) {
 	}
 
 	@Override
-	default void removeLayoutComponent(Component comp) {
+	public void addLayoutComponent(String name, Component comp) {
 	}
 
 	@Override
-	default float getLayoutAlignmentX(Container target) {
+	public void removeLayoutComponent(Component comp) {
+		theConstraints.remove(comp);
+	}
+
+	@Override
+	public float getLayoutAlignmentX(Container target) {
 		return 0;
 	}
 
 	@Override
-	default float getLayoutAlignmentY(Container target) {
+	public float getLayoutAlignmentY(Container target) {
 		return 0;
 	}
 
 	@Override
-	default Dimension getPreferredScrollableViewportSize(Container parent) {
+	public Dimension getPreferredScrollableViewportSize(Container parent) {
 		return preferredLayoutSize(parent);
 	}
 
 	@Override
-	default int getScrollableUnitIncrement(Container parent, Rectangle visibleRect, int orientation, int direction) {
+	public int getScrollableUnitIncrement(Container parent, Rectangle visibleRect, int orientation, int direction) {
 		return 10;
 	}
 
 	@Override
-	default int getScrollableBlockIncrement(Container parent, Rectangle visibleRect, int orientation, int direction) {
+	public int getScrollableBlockIncrement(Container parent, Rectangle visibleRect, int orientation, int direction) {
 		return 100;
 	}
 }

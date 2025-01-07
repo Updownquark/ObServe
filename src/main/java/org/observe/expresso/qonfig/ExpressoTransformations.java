@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -21,8 +22,8 @@ import org.observe.Transformation.TransformReverse;
 import org.observe.Transformation.TransformationValues;
 import org.observe.XformOptions.XformDef;
 import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -40,7 +41,6 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ExElement.Def;
-import org.observe.expresso.qonfig.ExElement.Void;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
@@ -63,27 +63,29 @@ public class ExpressoTransformations {
 	}
 
 	/**
-	 * A &lt;transform> element, which produces a model value that uses another model value as a source and processes it through multiple
-	 * dynamic transformations.
+	 * An abstract implementation for a &lt;transform> element, which produces a model value that uses another model value as a source and
+	 * processes it through multiple dynamic transformations.
 	 *
 	 * @param <M1> The model type of the source value to transform
+	 * @param <IM1> The internal souce model type
 	 * @param <M2> The model type of the transformed value
+	 * @param <IM2> The internal target model type
 	 */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "transform",
 		interpretation = ExpressoTransformedElement.Interpreted.class)
-	public static class ExpressoTransformedElement<M1, M2> extends ExElement.Def.Abstract<ModelValueElement<?>>
+	public static abstract class AbstractExpressoTransformedElement<M1, IM1, M2, IM2> extends ExElement.Def.Abstract<ModelValueElement<?>>
 	implements ModelValueElement.CompiledSynth<M2, ModelValueElement<?>> {
 		private String theModelPath;
-		private CompiledExpression theSource;
 		private final List<Operation<?, ?, ?>> theOperations;
+		private ModelType<IM2> theTargetType;
 		private boolean isPrepared;
 
 		/**
 		 * @param parent The parent element of this transform
 		 * @param qonfigType The Qonfig type of this element
 		 */
-		public ExpressoTransformedElement(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		protected AbstractExpressoTransformedElement(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theOperations = new ArrayList<>();
 		}
@@ -93,21 +95,36 @@ public class ExpressoTransformations {
 			return theModelPath;
 		}
 
-		@Override
-		public ModelType<M2> getModelType(CompiledExpressoEnv env) {
-			return (ModelType<M2>) theOperations.get(theOperations.size() - 1).getTargetModelType();
+		/**
+		 * @return The internal source model type
+		 * @throws ExpressoCompilationException If the model type could not be determined
+		 */
+		protected abstract ModelType<IM1> getInternalSourceModelType() throws ExpressoCompilationException;
+
+		/**
+		 * @param env The expresso environment for expressions
+		 * @return The internal target model type
+		 * @throws ExpressoCompilationException If this transformation cannot be compiled
+		 */
+		protected ModelType<IM2> getInternalModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
+			if (theOperations.isEmpty())
+				return (ModelType<IM2>) getInternalSourceModelType();
+			return (ModelType<IM2>) theOperations.get(theOperations.size() - 1).getTargetModelType();
 		}
 
 		/** @return The source value to transform */
 		@QonfigAttributeGetter("source")
-		public CompiledExpression getSource() {
-			return theSource;
-		}
+		public abstract CompiledExpression getSource();
 
 		/** @return The transformation operations to process the source value into the transformed value */
 		@QonfigChildGetter("op")
 		public List<Operation<?, ?, ?>> getOperations() {
 			return Collections.unmodifiableList(theOperations);
+		}
+
+		/** @return The internal target model type */
+		protected ModelType<IM2> getInternalTargetType() {
+			return theTargetType;
 		}
 
 		@Override
@@ -119,21 +136,21 @@ public class ExpressoTransformations {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
-			theSource = getAttributeExpression("source", session);
 			isPrepared = false;
 		}
 
-		@Override
-		public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {
+		/**
+		 * Fills this transformation from parsed Qonfig data
+		 *
+		 * @param session The session containing the data for this transformation
+		 * @param sourceType The internal source model type
+		 * @throws QonfigInterpretationException If this transformation could not be compiled
+		 */
+		protected void prepareModelValue(ExpressoQIS session, ModelType<IM1> sourceType) throws QonfigInterpretationException {
 			if (isPrepared)
 				return;
 			isPrepared = true;
-			ModelType<?> modelType;
-			try {
-				modelType = theSource.getModelType();
-			} catch (ExpressoCompilationException e) {
-				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-			}
+			ModelType<?> modelType = sourceType;
 			int i = 0;
 			for (ExpressoQIS op : session.forChildren("op")) {
 				@SuppressWarnings("rawtypes")
@@ -174,6 +191,7 @@ public class ExpressoTransformations {
 				modelType = next.getTargetModelType();
 				i++;
 			}
+			theTargetType = (ModelType<IM2>) modelType;
 		}
 
 		/**
@@ -193,43 +211,50 @@ public class ExpressoTransformations {
 			else if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set || modelType == ModelTypes.SortedCollection
 				|| modelType == ModelTypes.SortedSet)
 				return (Class<? extends Operation<M, ?, ?>>) CollectionTransform.class;
+			else if (modelType == ModelTypes.Map || modelType == ModelTypes.SortedMap)
+				return (Class<? extends Operation<M, ?, ?>>) MapTransform.class;
+			else if (modelType == ModelTypes.MultiMap || modelType == ModelTypes.SortedMultiMap)
+				return (Class<? extends Operation<M, ?, ?>>) MultiMapTransform.class;
 			else
 				return null;
 		}
 
 		@Override
-		public Interpreted<M1, ?, M2, ?> interpretValue(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
-		}
+		public abstract Interpreted<M1, ?, IM1, ?, M2, ?, IM2, ?> interpretValue(ExElement.Interpreted<?> parent);
 
 		/**
 		 * Interpretation for {@link Transformation}
 		 *
 		 * @param <M1> The model type of the source value
 		 * @param <MV1> The instance type of the source value
+		 * @param <IM1> The internal source model type
+		 * @param <IMV1> The internal source instance type
 		 * @param <M2> The model type of the transformed value
 		 * @param <MV2> The instance type of the transformed value
+		 * @param <IM2> The internal target model type
+		 * @param <IMV2> The internal target instance type
 		 */
-		public static class Interpreted<M1, MV1 extends M1, M2, MV2 extends M2>
+		public static abstract class Interpreted<M1, MV1 extends M1, IM1, IMV1 extends IM1, M2, MV2 extends M2, IM2, IMV2 extends IM2>
 		extends ExElement.Interpreted.Abstract<ModelValueElement<MV2>>
 		implements ModelValueElement.InterpretedSynth<M2, MV2, ModelValueElement<MV2>> {
-			private InterpretedValueSynth<M1, MV1> theSource;
 			private final List<Operation.Interpreted<?, ?, ?, ?, ?>> theOperations;
 
-			Interpreted(ExpressoTransformedElement<M1, M2> definition, ExElement.Interpreted<?> parent) {
+			/**
+			 * @param definition The definition of this transform
+			 * @param parent The parent element of this transform
+			 */
+			protected Interpreted(AbstractExpressoTransformedElement<M1, IM1, M2, IM2> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theOperations = new ArrayList<>();
 			}
 
 			@Override
-			public ExpressoTransformedElement<M1, M2> getDefinition() {
-				return (ExpressoTransformedElement<M1, M2>) super.getDefinition();
+			public AbstractExpressoTransformedElement<M1, IM1, M2, IM2> getDefinition() {
+				return (AbstractExpressoTransformedElement<M1, IM1, M2, IM2>) super.getDefinition();
 			}
 
 			/** @return The source value to transform */
-			public InterpretedValueSynth<M1, MV1> getSource() {
-				return theSource;
-			}
+			public abstract InterpretedValueSynth<IM1, IMV1> getSource();
 
 			/** @return The operations to perform on the source value to produce the transformed value */
 			public List<Operation.Interpreted<?, ?, ?, ?, ?>> getOperations() {
@@ -242,27 +267,21 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public Interpreted<M1, MV1, M2, MV2> setParentElement(ExElement.Interpreted<?> parent) {
+			public Interpreted<M1, MV1, IM1, IMV1, M2, MV2, IM2, IMV2> setParentElement(ExElement.Interpreted<?> parent) {
 				super.setParentElement(parent);
 				return this;
 			}
 
-			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
-			}
-
-			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				try {
-					theSource = interpret(getDefinition().getSource(),
-						((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs());
-				} catch (ExpressoCompilationException e) {
-					throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-				}
-
-				ModelInstanceType<?, ?> sourceType = theSource.getType();
+			/**
+			 * Updates this transformation
+			 *
+			 * @param sourceType The internal source instance type
+			 * @param env The interpreted environment for interpreting expressions
+			 * @throws ExpressoInterpretationException If this transformation cannot be interpreted
+			 */
+			protected void doUpdateValue(ModelInstanceType<IM1, IMV1> sourceType, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException {
+				ModelInstanceType<?, ?> type = sourceType;
 				int i = 0;
 				for (Operation<?, ?, ?> op : getDefinition().getOperations()) {
 					Operation.Interpreted<?, ?, ?, ?, ?> interpOp;
@@ -279,27 +298,16 @@ public class ExpressoTransformations {
 						interpOp = op.interpret(this);
 						theOperations.add(interpOp);
 					}
-					((Operation.Interpreted<Object, Object, ?, ?, ?>) interpOp).update((ModelInstanceType<Object, Object>) sourceType,
+					((Operation.Interpreted<Object, Object, ?, ?, ?>) interpOp).update((ModelInstanceType<Object, Object>) type,
 						getExpressoEnv());
-					sourceType = interpOp.getTargetType();
+					type = interpOp.getTargetType();
 					i++;
 				}
 			}
 
-			@Override
-			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList
-					.of(Stream.concat(Stream.of(theSource), theOperations.stream().flatMap(op -> op.getComponents().stream())));
-			}
-
-			@Override
-			public ModelInstanceType<M2, MV2> getType() {
-				return (ModelInstanceType<M2, MV2>) theOperations.get(theOperations.size() - 1).getTargetType();
-			}
-
-			@Override
-			public ModelValueElement<MV2> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(this);
+			/** @return The internal target instance type */
+			protected ModelInstanceType<IM2, IMV2> getInternalType() {
+				return (ModelInstanceType<IM2, IMV2>) theOperations.get(theOperations.size() - 1).getTargetType();
 			}
 
 			@Override
@@ -308,15 +316,14 @@ public class ExpressoTransformations {
 			}
 		}
 
-		static class Instantiator<MV1, MV2> extends ModelValueElement.Abstract<MV2> {
-			private final ModelValueInstantiator<MV1> theSource;
+		static abstract class Instantiator<MV1, IMV1, MV2, IMV2> extends ModelValueElement.Abstract<MV2> {
 			private final List<Operation.Instantiator<?, ?>> theOperations;
 			private final boolean isEfficientCopy;
-			private final TransformInstantiator<MV1, MV2> theFullTransform;
+			private final TransformInstantiator<IMV1, IMV2> theFullTransform;
 
-			public Instantiator(ExpressoTransformedElement.Interpreted<?, MV1, ?, MV2> interpreted) throws ModelInstantiationException {
+			protected Instantiator(AbstractExpressoTransformedElement.Interpreted<?, MV1, ?, IMV1, ?, MV2, ?, IMV2> interpreted)
+				throws ModelInstantiationException {
 				super(interpreted);
-				theSource = interpreted.getSource().instantiate();
 				List<Operation.Instantiator<?, ?>> operations = new ArrayList<>(interpreted.getOperations().size());
 				boolean efficientCopy = true;
 				TransformInstantiator<MV1, ?> fullTransform = TransformInstantiator.unity();
@@ -330,52 +337,207 @@ public class ExpressoTransformations {
 				}
 				theOperations = operations;
 				isEfficientCopy = efficientCopy;
-				theFullTransform = (TransformInstantiator<MV1, MV2>) fullTransform;
+				theFullTransform = (TransformInstantiator<IMV1, IMV2>) fullTransform;
+			}
+
+			protected List<Operation.Instantiator<?, ?>> getOperations() {
+				return Collections.unmodifiableList(theOperations);
+			}
+
+			public boolean isEfficientCopy() {
+				return isEfficientCopy;
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theSource.instantiate();
 				for (Operation.Instantiator<?, ?> op : theOperations)
 					op.instantiate();
 			}
 
+			public IMV2 transformInternal(IMV1 source, ModelSetInstance models) throws ModelInstantiationException {
+				return theFullTransform.transform(source, models);
+			}
+
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				for (Operation.Instantiator<?, ?> op : theOperations)
+					if (op.isDifferent(sourceModels, newModels))
+						return true;
+				return false;
+			}
+		}
+	}
+
+	/**
+	 * A &lt;transform> element, which produces a model value that uses another model value as a source and processes it through multiple
+	 * dynamic transformations.
+	 *
+	 * @param <M1> The model type of the source value to transform
+	 * @param <M2> The model type of the transformed value
+	 */
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "transform",
+		interpretation = ExpressoTransformedElement.Interpreted.class)
+	public static class ExpressoTransformedElement<M1, M2> extends AbstractExpressoTransformedElement<M1, M1, M2, M2> {
+		private CompiledExpression theSource;
+
+		/**
+		 * @param parent The parent element of this transform
+		 * @param qonfigType The Qonfig type of this element
+		 */
+		public ExpressoTransformedElement(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public CompiledExpression getSource() {
+			return theSource;
+		}
+
+		@Override
+		protected ModelType<M1> getInternalSourceModelType() throws ExpressoCompilationException {
+			return (ModelType<M1>) theSource.getModelType();
+		}
+
+		@Override
+		public ModelType<M2> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
+			return getInternalModelType(env);
+		}
+
+		@Override
+		public CompiledExpression getElementValue() {
+			return null;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+			theSource = getAttributeExpression("source", session);
+		}
+
+		@Override
+		public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {
+			ModelType<M1> modelType;
+			try {
+				modelType = (ModelType<M1>) theSource.getModelType();
+			} catch (ExpressoCompilationException e) {
+				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
+			prepareModelValue(session, modelType);
+		}
+
+		@Override
+		public Interpreted<M1, ?, M2, ?> interpretValue(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		/**
+		 * Interpretation for {@link Transformation}
+		 *
+		 * @param <M1> The model type of the source value
+		 * @param <MV1> The instance type of the source value
+		 * @param <M2> The model type of the transformed value
+		 * @param <MV2> The instance type of the transformed value
+		 */
+		public static class Interpreted<M1, MV1 extends M1, M2, MV2 extends M2>
+		extends AbstractExpressoTransformedElement.Interpreted<M1, MV1, M1, MV1, M2, MV2, M2, MV2> {
+			private InterpretedValueSynth<M1, MV1> theSource;
+
+			Interpreted(ExpressoTransformedElement<M1, M2> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public ExpressoTransformedElement<M1, M2> getDefinition() {
+				return (ExpressoTransformedElement<M1, M2>) super.getDefinition();
+			}
+
+			@Override
+			public InterpretedValueSynth<M1, MV1> getSource() {
+				return theSource;
+			}
+
+			@Override
+			public ModelInstanceType<M2, MV2> getType() {
+				return getInternalType();
+			}
+
+			@Override
+			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+				try {
+					theSource = interpret(getDefinition().getSource(),
+						((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs());
+				} catch (ExpressoCompilationException e) {
+					throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+				}
+				doUpdateValue(theSource.getType(), env);
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList
+					.of(Stream.concat(Stream.of(theSource), getOperations().stream().flatMap(op -> op.getComponents().stream())));
+			}
+
+			@Override
+			public ModelValueElement<MV2> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<MV1, MV2> extends AbstractExpressoTransformedElement.Instantiator<MV1, MV1, MV2, MV2> {
+			private final ModelValueInstantiator<MV1> theSource;
+
+			public Instantiator(ExpressoTransformedElement.Interpreted<?, MV1, ?, MV2> interpreted) throws ModelInstantiationException {
+				super(interpreted);
+				theSource = interpreted.getSource().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				super.instantiate();
+				theSource.instantiate();
+			}
+
 			@Override
 			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				MV1 sourceValue = theSource.get(models);
-				return theFullTransform.transform(sourceValue, models);
+				return transformInternal(sourceValue, models);
 			}
 
 			@Override
 			public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				if (isEfficientCopy) {
-					Object[] chain = new Object[theOperations.size() + 1];
-					chain[theOperations.size()] = value;
+				if (isEfficientCopy()) {
+					Object[] chain = new Object[getOperations().size() + 1];
+					chain[getOperations().size()] = value;
 					Object target = value;
-					for (int i = theOperations.size() - 1; i >= 0; i--) {
-						chain[i] = ((Operation.EfficientCopyingInstantiator<?, Object>) theOperations.get(i)).getSource(target);
+					for (int i = getOperations().size() - 1; i >= 0; i--) {
+						chain[i] = ((Operation.EfficientCopyingInstantiator<?, Object>) getOperations().get(i)).getSource(target);
 						target = chain[i];
 					}
-					target = chain[0];
-					for (int i = 0; i < theOperations.size(); i++) {
+					target = theSource.forModelCopy((MV1) chain[0], sourceModels, newModels);
+					for (int i = 0; i < getOperations().size(); i++) {
 						Object sourceValue = target;
 						target = chain[i + 1];
-						target = ((Operation.EfficientCopyingInstantiator<Object, Object>) theOperations.get(i)).forModelCopy(target,
+						target = ((Operation.EfficientCopyingInstantiator<Object, Object>) getOperations().get(i)).forModelCopy(target,
 							sourceValue, sourceModels, newModels);
 					}
 
 					return (MV2) target;
 				} else {
-					boolean different = false;
-					for (Operation.Instantiator<?, ?> op : theOperations) {
-						if (op.isDifferent(sourceModels, newModels)) {
-							different = true;
+					MV1 oldSource = theSource.get(sourceModels);
+					MV1 newSource = theSource.forModelCopy(oldSource, sourceModels, newModels);
+					boolean different = newSource != oldSource;
+					for (Operation.Instantiator<?, ?> op : getOperations()) {
+						if (different)
 							break;
-						}
+						if (op.isDifferent(sourceModels, newModels))
+							different = true;
 					}
 					if (different)
-						return get(newModels);
+						return transformInternal(newSource, newModels);
 					else
 						return value;
 				}
@@ -591,7 +753,7 @@ public class ExpressoTransformations {
 	}
 
 	/**
-	 * A transformer capable of transforming an {@link ObservableCollection}
+	 * A transformer capable of transforming an {@link ObservableCollection} into another observable structure
 	 *
 	 * @param <M1> The model type of the source collection
 	 * @param <M2> The model type of the target observable structure
@@ -601,105 +763,23 @@ public class ExpressoTransformations {
 	}
 
 	/**
-	 * A transformer capable of transforming an {@link ObservableCollection} into another {@link ObservableCollection}
+	 * A transformer capable of transforming an {@link ObservableMap} into another observable structure
 	 *
-	 * @param <MV1> The model instance type of the target collection
-	 * @param <S> The type of the source collection
-	 * @param <T> The type of the target collection
-	 * @param <MV2> The type of the target observable structure
+	 * @param <M1> The model type of the source map
+	 * @param <M2> The model type of the target observable structure
+	 * @param <E> The type of element produced
 	 */
-	public interface FlowTransformInstantiator<MV1 extends ObservableCollection<?>, MV2 extends ObservableCollection<?>, S, T>
-	extends Operation.Instantiator<MV1, MV2>, FlowTransform2<MV1, MV2, S, T> {
-		/**
-		 * Transforms a collection flow
-		 *
-		 * @param source The source flow
-		 * @param models The models to do the transformation
-		 * @return The transformed flow
-		 * @throws ModelInstantiationException If the transformation fails
-		 */
-		@Override
-		CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
-			throws ModelInstantiationException;
-
-		/**
-		 * Transforms a source observable structure into a transformed flow
-		 *
-		 * @param source The source observable structure
-		 * @param models The models to do the transformation
-		 * @return The transformed flow
-		 * @throws ModelInstantiationException If the transformation fails
-		 */
-		@Override
-		CollectionDataFlow<?, ?, T> transformToFlow(MV1 source, ModelSetInstance models) throws ModelInstantiationException;
+	public interface MapTransform<M1 extends ObservableMap<?, ?>, M2, E extends ExElement> extends Operation<M1, M2, E> {
 	}
 
 	/**
-	 * An operation capable of transforming a collection to another collection. This type contains added capabilities so that when multiple
-	 * flow operations are stacked, the intermediate collections don't need to be instantiated.
+	 * A transformer capable of transforming an {@link ObservableMultiMap} into another observable structure
 	 *
-	 * @param <M1> The model type (collection sub-type) of the source value
-	 * @param <M2> The model type of the transformed value
-	 * @param <S> The type of the source collection elements
-	 * @param <T> The type of the transformed collection elements
+	 * @param <M1> The model type of the source multi-map
+	 * @param <M2> The model type of the target observable structure
+	 * @param <E> The type of element produced
 	 */
-	public interface FlowTransform2<M1 extends ObservableCollection<?>, M2 extends ObservableCollection<?>, S, T>
-	extends TransformInstantiator<M1, M2> {
-		/**
-		 * Transforms a collection flow
-		 *
-		 * @param source The source flow
-		 * @param models The models to do the transformation
-		 * @return The transformed flow
-		 * @throws ModelInstantiationException If the transformation fails
-		 */
-		CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
-			throws ModelInstantiationException;
-
-		/**
-		 * Transforms a source observable structure into a transformed flow
-		 *
-		 * @param source The source observable structure
-		 * @param models The models to do the transformation
-		 * @return The transformed flow
-		 * @throws ModelInstantiationException If the transformation fails
-		 */
-		CollectionDataFlow<?, ?, T> transformToFlow(M1 source, ModelSetInstance models) throws ModelInstantiationException;
-
-		@Override
-		default M2 transform(M1 source, ModelSetInstance models) throws ModelInstantiationException {
-			ObservableCollection.CollectionDataFlow<?, ?, T> flow = transformToFlow(source, models);
-			return (M2) flow.collect();
-		}
-
-		@Override
-		default <S0> TransformInstantiator<S0, M2> after(TransformInstantiator<S0, ? extends M1> before) {
-			if (before instanceof FlowTransform2) {
-				FlowTransform2<ObservableCollection<?>, ? extends M1, Object, S> flowBefore = (FlowTransform2<ObservableCollection<?>, ? extends M1, Object, S>) before;
-				FlowTransform2<M1, M2, S, T> next = this;
-				return (TransformInstantiator<S0, M2>) new FlowTransform2<ObservableCollection<?>, M2, Object, T>() {
-					@Override
-					public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, Object> source, ModelSetInstance models)
-						throws ModelInstantiationException {
-						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformFlow(source, models);
-						return next.transformFlow(sourceFlow, models);
-					}
-
-					@Override
-					public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<?> source, ModelSetInstance models)
-						throws ModelInstantiationException {
-						CollectionDataFlow<?, ?, S> sourceFlow = flowBefore.transformToFlow(source, models);
-						return next.transformFlow(sourceFlow, models);
-					}
-
-					@Override
-					public String toString() {
-						return flowBefore + "->" + next;
-					}
-				};
-			} else
-				return TransformInstantiator.super.after(before);
-		}
+	public interface MultiMapTransform<M1 extends ObservableMultiMap<?, ?>, M2, E extends ExElement> extends Operation<M1, M2, E> {
 	}
 
 	/**
@@ -708,7 +788,7 @@ public class ExpressoTransformations {
 	 * @param interpreter The interpreter builder to configure
 	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("transform", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoTransformedElement::new));
+		interpreter.createWith("transform", ExpressoTransformedElement.class, ExElement.creator(ExpressoTransformedElement::new));
 
 		ObservableTransformations.configureTransformation(interpreter);
 
@@ -717,6 +797,10 @@ public class ExpressoTransformations {
 		ObservableValueTransformations.configureTransformation(interpreter);
 
 		ObservableCollectionTransformations.configureTransformation(interpreter);
+
+		ObservableMapTransformations.configureTransformation(interpreter);
+
+		ObservableMultiMapTransformations.configureTransformation(interpreter);
 
 		interpreter.createWith("map-with", MapWith.class, session -> {
 			ExElement.Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
@@ -847,16 +931,20 @@ public class ExpressoTransformations {
 			if (preferMessage)
 				test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			else {
+				String uModMsg = element.reporting().getFileLocation().getPosition(0).toShortString()
+					+ "boolean->String filter not reversible";
 				test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 					.mapValue(ModelTypes.Value.forType(String.class),
-						bv -> SettableValue.asSettable(bv.map(b -> b ? null : "Not allowed"), __ -> "Not settable"));
+						bv -> SettableValue.asSettable(bv.map(b -> b ? null : uModMsg), __ -> uModMsg));
 			}
 		} catch (ExpressoInterpretationException e) {
 			try {
 				if (preferMessage) {
+					String uModMsg = element.reporting().getFileLocation().getPosition(0).toShortString()
+						+ "boolean->String filter not reversible";
 					test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 						.mapValue(ModelTypes.Value.forType(String.class),
-							bv -> SettableValue.asSettable(bv.map(b -> b ? null : "Not allowed"), __ -> "Not settable"));
+							bv -> SettableValue.asSettable(bv.map(b -> b ? null : uModMsg), __ -> uModMsg));
 				} else
 					test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			} catch (ExpressoInterpretationException e2) {
@@ -1237,8 +1325,7 @@ public class ExpressoTransformations {
 			@Override
 			public void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<S>) sourceType.getType(0);
-				theEvaluatedTargetType = getDefinition().getType() == null ? null
-					: (TypeToken<T>) getDefinition().getType().getType(getExpressoEnv());
+				theEvaluatedTargetType = getDefinition().getType() == null ? null : (TypeToken<T>) getDefinition().getType().getType(env);
 				super.update(env);
 				// ??? We need to do the combined values first, because the map-with may (and most likely does) use the combined value
 				// variables
@@ -1271,11 +1358,6 @@ public class ExpressoTransformations {
 				if (theReverse != null)
 					components.addAll(theReverse.getComponents());
 				return BetterList.of(components);
-			}
-
-			@Override
-			public String toString() {
-				return "map(" + theMapWith.getMap() + ")";
 			}
 		}
 
@@ -2887,6 +2969,7 @@ public class ExpressoTransformations {
 			private final ModelValueInstantiator<SettableValue<T>> theValue;
 			private final List<ModelValueInstantiator<SettableValue<Boolean>>> theIfConditions;
 			private final List<ScalarOp.Instantiator<S, T>> theIfs;
+			private final String theAlias;
 
 			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -2897,6 +2980,7 @@ public class ExpressoTransformations {
 					theIfConditions.add(iff.getAddOn(IfOp.Interpreted.class).getIf().instantiate());
 					theIfs.add(iff.instantiate());
 				}
+				theAlias = interpreted.reporting().toString();
 			}
 
 			@Override
@@ -2914,14 +2998,21 @@ public class ExpressoTransformations {
 					SettableValue<Boolean> ifCondition = theIfConditions.get(i).get(models);
 					SettableValue<T> iff = theIfs.get(i).get(source, models);
 					ifs.add(ifCondition.map(LambdaUtils.printableFn(b -> new ConditionalValue<>(Boolean.TRUE.equals(b), iff),
-						() -> "condition(" + iff + ")", null)));
+						() -> "if(" + ifCondition + ", " + iff + ")", null)));
 				}
 				SettableValue<T> value = theValue.get(models);
 				ifs.add(ObservableValue.of(new ConditionalValue<>(true, value)));
 				ObservableValue<ConditionalValue<T>> firstTrue = ObservableValue.<ConditionalValue<T>> firstValue(//
 					LambdaUtils.printablePred(cv -> cv.condition, "condition", null), null, ifs.toArray(new ObservableValue[ifs.size()]));
 				return SettableValue
-					.flatten(firstTrue.map(LambdaUtils.printableFn(cv -> cv == null ? null : cv.value, "value", null)));
+					.flatten(firstTrue.map(LambdaUtils.printableFn(cv -> {
+						if (cv == null) {
+							System.err.println("Null condition value?");
+							return null;
+						}
+						return cv.value;
+					}, "value", null)))//
+					.alias(theAlias);
 			}
 
 			@Override
@@ -2931,6 +3022,10 @@ public class ExpressoTransformations {
 					return true;
 				for (ScalarOp.Instantiator<S, T> iff : theIfs) {
 					if (iff.isDifferent(sourceModels, models))
+						return true;
+				}
+				for (ModelValueInstantiator<SettableValue<Boolean>> ifC : theIfConditions) {
+					if (ifC.get(sourceModels) != ifC.get(models))
 						return true;
 				}
 				return false;
@@ -2955,7 +3050,7 @@ public class ExpressoTransformations {
 
 	/** Add-on for a conditional operation, like a collection filter */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = IfOp.IF_OP, interpretation = IfOp.Interpreted.class)
-	public static class IfOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+	public static class IfOp extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Void<ExElement>> {
 		/** The XML name of this operation */
 		public static final String IF_OP = "if-op";
 
@@ -2969,6 +3064,11 @@ public class ExpressoTransformations {
 			super(type, element);
 		}
 
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
 		/** @return The condition to apply to the source value */
 		@QonfigAttributeGetter("if")
 		public CompiledExpression getIf() {
@@ -2976,19 +3076,19 @@ public class ExpressoTransformations {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends Void> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 
 			theIf = getElement().getAttributeExpression("if", session);
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 
 		/** {@link IfOp} interpretation */
-		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExAddOn.Void<ExElement>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theIf;
 
 			Interpreted(IfOp definition, ExElement.Interpreted<?> element) {
@@ -3006,19 +3106,19 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ExElement.Interpreted<? extends Void> element) throws ExpressoInterpretationException {
+			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 				super.update(element);
 
 				theIf = getElement().interpret(getDefinition().getIf(), ModelTypes.Value.BOOLEAN);
 			}
 
 			@Override
-			public Class<ExAddOn.Void<ExElement.Void>> getInstanceType() {
-				return (Class<ExAddOn.Void<ExElement.Void>>) (Class<?>) ExAddOn.Void.class;
+			public Class<ExAddOn.Void<ExElement>> getInstanceType() {
+				return (Class<ExAddOn.Void<ExElement>>) (Class<?>) ExAddOn.Void.class;
 			}
 
 			@Override
-			public ExAddOn.Void<Void> create(Void element) {
+			public ExAddOn.Void<ExElement> create(ExElement element) {
 				return null;
 			}
 		}
@@ -3132,6 +3232,7 @@ public class ExpressoTransformations {
 			private final ModelValueInstantiator<SettableValue<T>> theDefault;
 			private final List<ModelValueInstantiator<SettableValue<S>>> theCaseValues;
 			private final List<ScalarOp.Instantiator<S, T>> theCases;
+			private final String theAlias;
 
 			Instantiator(Interpreted<S, T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -3142,6 +3243,7 @@ public class ExpressoTransformations {
 					theCaseValues.add(caase.getAddOn(CaseOp.Interpreted.class).getCase().instantiate());
 					theCases.add(caase.instantiate());
 				}
+				theAlias = interpreted.reporting().toString();
 			}
 
 			@Override
@@ -3172,7 +3274,7 @@ public class ExpressoTransformations {
 				SettableValue<T> def = theDefault.get(models);
 				ObservableValue<SettableValue<T>> caseOrDefault = ObservableValue.firstValue(sv -> sv != null, null,
 					ObservableValue.flatten(mapValue), ObservableValue.of(def));
-				return SettableValue.flatten(caseOrDefault);
+				return SettableValue.flatten(caseOrDefault).alias(theAlias);
 			}
 
 			@Override
@@ -3206,7 +3308,7 @@ public class ExpressoTransformations {
 
 	/** A case in a {@link Switch} operation */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = CaseOp.CASE_OP, interpretation = CaseOp.Interpreted.class)
-	public static class CaseOp extends ExAddOn.Def.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+	public static class CaseOp extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Void<ExElement>> {
 		/** The XML name of this element */
 		public static final String CASE_OP = "case-op";
 
@@ -3227,14 +3329,19 @@ public class ExpressoTransformations {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ExElement.Def<? extends Void> element) throws QonfigInterpretationException {
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 
 			theCase = getElement().getAttributeExpression("case", session);
 		}
 
 		@Override
-		public Interpreted<?> interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ExElement> Interpreted<?> interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted<>(this, element);
 		}
 
@@ -3243,7 +3350,7 @@ public class ExpressoTransformations {
 		 *
 		 * @param <S> The source type of the operation
 		 */
-		public static class Interpreted<S> extends ExAddOn.Interpreted.Abstract<ExElement.Void, ExAddOn.Void<ExElement.Void>> {
+		public static class Interpreted<S> extends ExAddOn.Interpreted.Abstract<ExElement, ExAddOn.Void<ExElement>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<S>> theCase;
 
 			Interpreted(CaseOp definition, ExElement.Interpreted<?> element) {
@@ -3261,7 +3368,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ExElement.Interpreted<? extends Void> element) throws ExpressoInterpretationException {
+			public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 				super.update(element);
 
 				theCase = getElement().interpret(getDefinition().getCase(),
@@ -3269,12 +3376,12 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public Class<ExAddOn.Void<ExElement.Void>> getInstanceType() {
-				return (Class<ExAddOn.Void<ExElement.Void>>) (Class<?>) ExAddOn.Void.class;
+			public Class<ExAddOn.Void<ExElement>> getInstanceType() {
+				return (Class<ExAddOn.Void<ExElement>>) (Class<?>) ExAddOn.Void.class;
 			}
 
 			@Override
-			public ExAddOn.Void<Void> create(Void element) {
+			public ExAddOn.Void<ExElement> create(ExElement element) {
 				return null;
 			}
 		}

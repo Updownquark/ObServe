@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import org.observe.util.TypeTokens;
 import org.qommons.IdentityKey;
 import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -20,7 +21,8 @@ public class DbugAnchorType<A> {
 	private final Class<A> theType;
 	private final Map<String, DbugFieldType<A, ?>> theFields;
 	private final Map<String, DbugEventType<A>> theEvents;
-	private WeakHashMap<IdentityKey<A>, DbugAnchor<A>> theInstances;
+	private WeakHashMap<IdentityKey<A>, DbugAnchor.Impl<A>> theInstances;
+	private final ListenerList<DbugAnchorObserver<? super A>> theObservers;
 	private final AtomicInteger isActive;
 
 	private DbugAnchorType(Dbug dbug, Class<A> type, Map<String, DbugFieldType<A, ?>> fields, Map<String, DbugEventType<A>> events) {
@@ -28,6 +30,7 @@ public class DbugAnchorType<A> {
 		theType = type;
 		theFields = fields;
 		theEvents = events;
+		theObservers = ListenerList.build().build();
 		isActive = new AtomicInteger();
 	}
 
@@ -71,14 +74,14 @@ public class DbugAnchorType<A> {
 	public DbugAnchor<A> instance(A value, Consumer<DbugAnchor<A>> configure) {
 		if (!isActive())
 			return (DbugAnchor<A>) DbugAnchor.VOID;
-		DbugAnchor<A> anchor;
+		DbugAnchor.Impl<A> anchor;
 		synchronized (this) {
 			if (theInstances == null)
 				theInstances = new WeakHashMap<>();
 			Set<DbugToken>[] tokens = new Set[1];
 			anchor = theInstances.computeIfAbsent(new IdentityKey<>(value), __ -> {
 				tokens[0] = new LinkedHashSet<>();
-				return new DbugAnchor<>(this, value, Collections.unmodifiableSet(tokens[0]));
+				return new DbugAnchor.Impl<>(this, value, tokens[0]);
 			});
 			if (tokens[0] != null) { // Created just now
 				if (configure != null)
@@ -96,6 +99,14 @@ public class DbugAnchorType<A> {
 		synchronized (this) {
 			return theInstances.get(new IdentityKey<>(value));
 		}
+	}
+
+	public Runnable observe(DbugAnchorObserver<? super A> observer) {
+		return theObservers.add(observer, true);
+	}
+
+	void forEachObserver(Consumer<DbugAnchorObserver<? super A>> action) {
+		theObservers.forEach(action);
 	}
 
 	@Override

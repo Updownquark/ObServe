@@ -46,6 +46,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
+		interpreter.createWith(QuickStyled.STYLED, QuickStyled.Def.class, ExAddOn.creator(QuickStyled.Def::new));
 		interpreter.modifyWith("styled", Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
@@ -84,7 +85,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickStyleSheet.IMPORT_STYLE_SHEET, QuickStyleSheet.StyleSheetRef.class,
 			ExElement.creator(QuickStyleSheet.class, QuickStyleSheet.StyleSheetRef::new));
 		interpreter.createWith(ExStyleModelValue.STYLE_MODEL_VALUE, ExStyleModelValue.Def.class,
-			ExAddOn.creator(ExtModelValueElement.Def.class, ExStyleModelValue.Def::new));
+			ExAddOn.creator((Class<ExtModelValueElement.Def<?>>) (Class<?>) ExtModelValueElement.Def.class, ExStyleModelValue.Def::new));
 		return interpreter;
 	}
 }

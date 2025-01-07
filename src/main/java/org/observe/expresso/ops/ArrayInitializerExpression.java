@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
@@ -29,10 +30,12 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -126,13 +129,14 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			else if (TypeTokens.getRawType(collectionType).isAssignableFrom(ObservableCollection.class))
 				elementType = collectionType.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			else {
-				exHandler
-				.handle1(new ExpressoInterpretationException("An array initializer expression can only be evaluated as a collection",
-					env.reporting().getPosition(), getExpressionLength()));
+				exHandler.handle1(
+					() -> new ExpressoInterpretationException("An array initializer expression can only be evaluated as a collection",
+						env.reporting().getPosition(), getExpressionLength()));
 				return null;
 			}
 		} else {
-			exHandler.handle1(new ExpressoInterpretationException("An array initializer expression can only be evaluated as a collection",
+			exHandler
+			.handle1(() -> new ExpressoInterpretationException("An array initializer expression can only be evaluated as a collection",
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
@@ -146,24 +150,25 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> elModelType = ModelTypes.Value.forType(elType);
 		int addlOffset = 1;
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
-			.holder2();
+			.holder2(exHandler.isInstantiating());
 		for (ObservableExpression value : theValues) {
 			EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaldValue = value.evaluate(elModelType, env.at(addlOffset),
-				expressionOffset + addlOffset, tce);
+				expressionOffset + addlOffset, tce.use());
 			if (evaldValue == null) {
-				if (tce.get1() != null)
-					exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(),
+				if (tce.hasException1())
+					exHandler.handle1(() -> new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(),
 						value.getExpressionLength(), tce.get1()));
 				else
-					exHandler.handle1(
-						new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(), getExpressionLength(),
-							tce.get2()));
+					exHandler.handle1(() -> new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(),
+						getExpressionLength(), tce.get2()));
 				return null;
 			}
 			values.add(evaldValue);
 		}
-		elType = (TypeToken<T>) TypeTokens.get()
-			.getCommonType(values.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
+		if (!values.isEmpty()) {
+			elType = (TypeToken<T>) TypeTokens.get()
+				.getCommonType(values.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
+		}
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			new Interpreted<>(ModelTypes.Collection.forType(elType), values), null, values);
 	}
@@ -253,7 +258,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 	}
 
-	static class Instance<T> implements ObservableCollection<T> {
+	static class Instance<T> extends AbstractIdentifiable implements ObservableCollection<T> {
 		class Element implements CollectionElement<T> {
 			protected final CollectionElement<SettableValue<T>> theValueElement;
 
@@ -326,11 +331,9 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			return valueElement == null ? null : new Element(valueElement);
 		}
 
-		private final Object theId;
 		private final BetterList<SettableValue<T>> theValues;
 
 		Instance(BetterList<SettableValue<T>> values) {
-			theId = Identifiable.baseId("ArrayInitializer", this);
 			theValues = values;
 		}
 
@@ -433,8 +436,14 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return theId;
+		protected Object createIdentity() {
+			return Identifiable.baseId("ArrayInitializer", this);
+		}
+
+		@Override
+		public Instance<T> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -487,18 +496,13 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.of(theValues, SettableValue::noInitChanges);
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
-			ThreadConstraint constraint = null;
-			for (SettableValue<T> value : theValues) {
-				ThreadConstraint vConstraint = value.getThreadConstraint();
-				if (vConstraint == ThreadConstraint.NONE)
-					continue;
-				else if (constraint == null)
-					constraint = vConstraint;
-				else if (vConstraint != constraint)
-					return ThreadConstraint.ANY;
-			}
-			return constraint == null ? ThreadConstraint.NONE : constraint;
+			return ThreadConstrained.getThreadConstraint(theValues);
 		}
 
 		@Override
@@ -529,7 +533,8 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public void clear() {}
+		public void clear() {
+		}
 
 		@Override
 		public Equivalence<? super T> equivalence() {

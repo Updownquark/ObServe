@@ -6,6 +6,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -34,6 +35,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExNamed;
 import org.observe.expresso.qonfig.ExpressoDocument;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -48,6 +50,7 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QommonsConfig;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 import org.qommons.io.BetterFile;
@@ -215,6 +218,10 @@ public abstract class QuickOsgiComponent {
 				error("Could not parse Quick file " + theQuickApp.getAppFile(), e);
 				return;
 			}
+			// We've successfully parsed the document as Qonfig.
+			// Now go through the whole structure and add refresh files for all the toolkits and documents
+			if (theRefreshFiles != null)
+				monitorDocument(docSession.get().getElement(), new HashSet<>());
 
 			try {
 				quickDocDef.update(docSession.get().as(ExpressoQIS.class));
@@ -223,11 +230,6 @@ public abstract class QuickOsgiComponent {
 				return;
 			}
 			docSession.clear(); // Free up memory
-
-			try {
-				addRefreshFile(FileUtils.ofUrl(new URL(quickDocDef.reporting().getPosition().getFileLocation())));
-			} catch (MalformedURLException e) {
-			}
 
 			InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
 			ClassView.Builder classView = quickDocDef.getHead().getClassViewElement().configureClassView(env.getClassView().copy());
@@ -252,7 +254,7 @@ public abstract class QuickOsgiComponent {
 									relLoc = quickFileDir.substring(path.length());
 							}
 						}
-						if (relLoc != null) {
+						if (relLoc != null && !relLoc.isEmpty()) {
 							classView.withWildcardImport(relLoc//
 								.substring(1) // Take off the file separator
 								.replace("/", "."));
@@ -262,6 +264,7 @@ public abstract class QuickOsgiComponent {
 				}
 			}
 			env = env.with(classView.build());
+			env = augmentEnvironment(env);
 			ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 			try {
 				ExpressoDocument.Def<?, ?> expressoDoc = quickDocDef.getAddOn(ExpressoDocument.Def.class);
@@ -318,6 +321,33 @@ public abstract class QuickOsgiComponent {
 		}
 	}
 
+	private void monitorDocument(QonfigElement element, Set<String> files) {
+		if (files.add(element.getPositionInFile().getFileLocation())) {
+			try {
+				addRefreshFile(FileUtils.ofUrl(new URL(element.getPositionInFile().getFileLocation())));
+			} catch (MalformedURLException e) {
+			}
+		}
+		if (files.add(element.getType().getDeclarer().getLocationString())) {
+			try {
+				addRefreshFile(FileUtils.ofUrl(new URL(element.getType().getDeclarer().getLocationString())));
+			} catch (MalformedURLException e) {
+			}
+		}
+		for (QonfigElement child : element.getChildren())
+			monitorDocument(child, files);
+	}
+
+	/**
+	 * Provides subclasses with a chance to augment the expresso environment in which this component's models are interpreted
+	 *
+	 * @param env The expresso environment to augment
+	 * @return The augmented environment
+	 */
+	protected InterpretedExpressoEnv augmentEnvironment(InterpretedExpressoEnv env) {
+		return env;
+	}
+
 	private void installDocInstance() {
 		QuickDocument.Interpreted interpretedDoc = theWaitingDoc;
 		theWaitingDoc = null;
@@ -338,7 +368,10 @@ public abstract class QuickOsgiComponent {
 
 				doc.instantiated();
 
-				doc.instantiate(getUntil());
+				ModelSetInstanceBuilder runtimeModels = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getModels()
+					.createInstance(getUntil());
+				configureRuntimeModels(runtimeModels);
+				doc.instantiate(runtimeModels.build());
 			} catch (ModelInstantiationException e) {
 				System.err.println("Could not instantiate Quick UI for " + theQuickApp.getAppFile());
 				e.printStackTrace();
@@ -359,6 +392,14 @@ public abstract class QuickOsgiComponent {
 		} catch (RuntimeException | Error e) {
 			error("Could not interpret Quick component", e);
 		}
+	}
+
+	/**
+	 * Configures runtime models for this component
+	 *
+	 * @param runtimeModels The runtime model builder to configure
+	 */
+	protected void configureRuntimeModels(ModelSetInstanceBuilder runtimeModels) {
 	}
 
 	/**

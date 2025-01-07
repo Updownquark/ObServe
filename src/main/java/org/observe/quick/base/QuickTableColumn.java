@@ -1,8 +1,15 @@
 package org.observe.quick.base;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
+import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -11,19 +18,34 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
-import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.*;
+import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExModelAugmentation;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
+import org.observe.expresso.qonfig.ExWithElementModel;
+import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoTransformations;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.base.QuickDragging.TransferSource;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.qommons.Causable;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
+import org.qommons.collect.ElementId;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -73,9 +95,6 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			Def<? super CC> getDefinition();
 
-			@Override
-			ValueTyped.Interpreted<R, ?> getParentElement();
-
 			/** @return The renderer to represent the column value to the user when they are not interacting with it */
 			QuickWidget.Interpreted<?> getRenderer();
 
@@ -93,9 +112,6 @@ public interface QuickTableColumn<R, C> {
 			/** @return The column set */
 			CC create();
 		}
-
-		@Override
-		ValueTyped<R> getParentElement();
 
 		/** @return The columns for the table */
 		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
@@ -149,6 +165,9 @@ public interface QuickTableColumn<R, C> {
 
 	/** @return The strategy for editing values in this column */
 	ColumnEditing<R, C> getEditing();
+
+	/** @return Transfer sources for column values */
+	List<QuickDragging.TransferSource<C, ?>> getTransferSources();
 
 	/** Updates or initializes this column */
 	void update();
@@ -220,13 +239,15 @@ public interface QuickTableColumn<R, C> {
 			private CompiledExpression isEditable;
 			private CompiledExpression isAcceptable;
 			private Integer theClicks;
+			private final List<QuickDragging.TransferAccept.Def> theTransferAccepters;
 
 			/**
 			 * @param parent The column set this editing is for
 			 * @param type The Qonfig type of this element
 			 */
-			public Def(TableColumnSet.Def<?> parent, QonfigElementOrAddOn type) {
+			public Def(ExElement.Def<? extends TableColumnSet<?>> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
+				theTransferAccepters = new ArrayList<>();
 			}
 
 			@Override
@@ -270,6 +291,12 @@ public interface QuickTableColumn<R, C> {
 				return theClicks;
 			}
 
+			/** @return Transfer accepters for column values */
+			@QonfigChildGetter("transfer-accept")
+			public List<QuickDragging.TransferAccept.Def> getTransferAccepters() {
+				return Collections.unmodifiableList(theTransferAccepters);
+			}
+
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
@@ -282,14 +309,15 @@ public interface QuickTableColumn<R, C> {
 				theColumnEditValueVariable = elModels.getElementValueModelId(columnEditValueName);
 				elModels.satisfyElementValueType(theColumnEditValueVariable, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getColumnType()));
+				syncChildren(QuickDragging.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
 			}
 
 			/**
 			 * @param parent The parent element for the interpreted editing
 			 * @return The interpreted editing
 			 */
-			public Interpreted<?, ?> interpret(TableColumnSet.Interpreted<?, ?> parent) {
-				return new Interpreted<>(this, parent);
+			public Interpreted<?, ?> interpret(ExElement.Interpreted<? extends TableColumnSet<?>> parent) {
+				return new Interpreted<>(this, (ExElement.Interpreted<TableColumnSet<Object>>) parent);
 			}
 		}
 
@@ -305,13 +333,15 @@ public interface QuickTableColumn<R, C> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEditable;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isAcceptable;
 			private QuickWidget.Interpreted<?> theEditor;
+			private final List<QuickDragging.TransferAccept.Interpreted<C, ?>> theTransferAccepters;
 
 			/**
 			 * @param definition The definition to interpret
 			 * @param parent The parent element for the editing
 			 */
-			protected Interpreted(Def definition, TableColumnSet.Interpreted<R, ?> parent) {
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends TableColumnSet<R>> parent) {
 				super(definition, parent);
+				theTransferAccepters = new ArrayList<>();
 			}
 
 			@Override
@@ -365,6 +395,11 @@ public interface QuickTableColumn<R, C> {
 				}
 			}
 
+			/** @return Transfer accepters for column values */
+			public List<QuickDragging.TransferAccept.Interpreted<C, ?>> getTransferAccepters() {
+				return Collections.unmodifiableList(theTransferAccepters);
+			}
+
 			/**
 			 * Updates or initializes this editing strategy
 			 *
@@ -388,6 +423,9 @@ public interface QuickTableColumn<R, C> {
 				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), this, true);
 				theEditor = syncChild(getDefinition().getEditor(), theEditor, def -> def.interpret(this),
 					(e, eEnv) -> e.updateElement(eEnv));
+				syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
+					ta -> (QuickDragging.TransferAccept.Interpreted<C, ?>) ta.interpret(this),
+					(ta, env2) -> ta.updateTransferAccepter(env2, theColumnType));
 			}
 
 			/** @return The editing strategy */
@@ -411,6 +449,7 @@ public interface QuickTableColumn<R, C> {
 		private SettableValue<SettableValue<String>> isEditable;
 		private SettableValue<SettableValue<String>> isAcceptable;
 		private QuickWidget theEditor;
+		private List<QuickDragging.TransferAccept<C, ?>> theTransferAccepters;
 
 		/** @param id The element ID for the editing */
 		protected ColumnEditing(Object id) {
@@ -432,6 +471,7 @@ public interface QuickTableColumn<R, C> {
 					return accept == null ? null : accept.get();
 				});
 			theEditColumnValue = SettableValue.<SettableValue<C>> build().build();
+			theTransferAccepters = new ArrayList<>();
 		}
 
 		@Override
@@ -474,6 +514,11 @@ public interface QuickTableColumn<R, C> {
 			return theClicks;
 		}
 
+		/** @return Transfer accepters for column values */
+		public List<QuickDragging.TransferAccept<C, ?>> getTransferAccepters() {
+			return Collections.unmodifiableList(theTransferAccepters);
+		}
+
 		/** @param ctx The model context for this editing */
 		public void setEditorContext(ColumnEditContext<R, C> ctx) {
 			theEditRowValue.set(ctx.getActiveValue(), null);
@@ -499,6 +544,8 @@ public interface QuickTableColumn<R, C> {
 				theEditor = myInterpreted.getEditor().create();
 			if (theEditor != null)
 				theEditor.update(myInterpreted.getEditor(), this);
+			syncChildren(myInterpreted.getTransferAccepters(), theTransferAccepters, ta -> ta.create(),
+				QuickDragging.TransferAccept::update);
 		}
 
 		@Override
@@ -512,6 +559,8 @@ public interface QuickTableColumn<R, C> {
 
 			if (theEditor != null)
 				theEditor.instantiated();
+			for (QuickDragging.TransferAccept<C, ?> ta : theTransferAccepters)
+				ta.instantiated();
 		}
 
 		@Override
@@ -522,18 +571,24 @@ public interface QuickTableColumn<R, C> {
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
 
 			MultiValueRenderable<R> owner = getOwner(getParentElement());
-			ModelSetInstance editorModels = copyTableModels(myModels.copy(), owner).build();
+			if (owner == null) {
+				reporting().error("This class needs to be contained by a <multi-value-renderable>");
+				return;
+			}
+			ModelSetInstance editorModels = QuickCoreInterpretation
+				.copyModels(myModels, owner.getActiveValueVariable(), Observable.or(myModels.getUntil(), onDestroy())).build();
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, editorModels,
 				SettableValue.flatten(theEditColumnValue));
 			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
-			if (owner != null)
-				replaceTableValues(editorModels, owner, SettableValue.flatten(theEditRowValue), SettableValue.flatten(isSelected),
-					SettableValue.flatten(theRowIndex), SettableValue.flatten(theColumnIndex));
+			replaceTableValues(editorModels, owner, SettableValue.flatten(theEditRowValue), SettableValue.flatten(isSelected),
+				SettableValue.flatten(theRowIndex), SettableValue.flatten(theColumnIndex));
 			if (theEditor != null)
 				theEditor.instantiate(editorModels);
 			if (editing != null)
 				editing.instantiateEditor(editorModels);
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
+			for (QuickDragging.TransferAccept<C, ?> ta : theTransferAccepters)
+				ta.instantiate(editorModels);
 		}
 
 		@Override
@@ -560,6 +615,10 @@ public interface QuickTableColumn<R, C> {
 
 			copy.theEditor = theEditor.copy(copy);
 
+			copy.theTransferAccepters = new ArrayList<>();
+			for (QuickDragging.TransferAccept<C, ?> ta : theTransferAccepters)
+				copy.theTransferAccepters.add(ta.copy(copy));
+
 			return copy;
 		}
 	}
@@ -574,38 +633,6 @@ public interface QuickTableColumn<R, C> {
 		while (parent != null && !(parent instanceof MultiValueRenderable))
 			parent = parent.getParentElement();
 		return (MultiValueRenderable<R>) parent;
-	}
-
-	/**
-	 * @param columnModels The models of the table column
-	 * @param owner The models of the table or widget that the columns are for
-	 * @return A model instance containing copies of the column and row values to be used independently of the model context of the widget
-	 *         and the column
-	 * @throws ModelInstantiationException If the models could not be copied
-	 */
-	static ModelSetInstanceBuilder copyTableModels(ModelSetInstanceBuilder columnModels, MultiValueRenderable<?> owner)
-		throws ModelInstantiationException {
-		if (owner == null)
-			return columnModels;
-		ExWithElementModel ownerElModels = owner.getAddOn(ExWithElementModel.class);
-		ModelInstantiator ownerModels = ownerElModels.getElement().getModels();
-		ModelComponentId ownerModelId;
-		if (ownerModels.getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity())
-			ownerModelId = ownerModels.getIdentity();
-		else {
-			ownerModelId = null;
-			for (ModelComponentId inh : ownerModels.getInheritance()) {
-				if (ownerModels.getInheritance(inh).getLocalTagValue(ExModelAugmentation.ELEMENT_MODEL_TAG) == owner.getIdentity()) {
-					ownerModelId = inh;
-					break;
-				}
-			}
-		}
-		ModelSetInstanceBuilder columnModelBuilder = columnModels;
-		if (ownerModelId != null)
-			columnModelBuilder.withAll(columnModels.getInherited(ownerModelId).copy(columnModels.getUntil()).build());
-
-		return columnModelBuilder;
 	}
 
 	/**
@@ -652,8 +679,13 @@ public interface QuickTableColumn<R, C> {
 			 * @param type The Qonfig type of this add-on
 			 * @param element The column editing to define
 			 */
-			protected Def(QonfigAddOn type, ColumnEditing.Def element) {
+			protected Def(QonfigAddOn type, ExElement.Def<? extends ColumnEditing<?, ?>> element) {
 				super(type, element);
+			}
+
+			@Override
+			public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+				return Collections.singleton((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExModelAugmentation.Def.class);
 			}
 
 			@Override
@@ -662,7 +694,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public abstract Interpreted<?, ?, ? extends CET> interpret(ExElement.Interpreted<?> element);
+			public abstract <E2 extends ColumnEditing<?, ?>> Interpreted<?, ?, ? extends CET> interpret(ExElement.Interpreted<E2> element);
 		}
 
 		/**
@@ -678,7 +710,7 @@ public interface QuickTableColumn<R, C> {
 			 * @param definition The definition to interpret
 			 * @param element The column editing to define
 			 */
-			protected Interpreted(Def<? super CET> definition, ColumnEditing.Interpreted<R, C> element) {
+			protected Interpreted(Def<? super CET> definition, ExElement.Interpreted<? extends ColumnEditing<R, C>> element) {
 				super(definition, element);
 			}
 
@@ -700,7 +732,7 @@ public interface QuickTableColumn<R, C> {
 		public abstract void instantiateEditor(ModelSetInstance editorModels) throws ModelInstantiationException;
 
 		/** @param element The column editing to define */
-		protected ColumnEditType(ColumnEditing<R, C> element) {
+		protected ColumnEditType(ExElement element) {
 			super(element);
 		}
 
@@ -727,7 +759,7 @@ public interface QuickTableColumn<R, C> {
 				 * @param type The Qonfig type of this add-on
 				 * @param element The column editing to define
 				 */
-				public Def(QonfigAddOn type, QuickTableColumn.ColumnEditing.Def element) {
+				public Def(QonfigAddOn type, ExElement.Def<? extends ColumnEditing<?, ?>> element) {
 					super(type, element);
 				}
 
@@ -752,8 +784,8 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
-					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
+				public <E2 extends ColumnEditing<?, ?>> Interpreted<?, ?> interpret(ExElement.Interpreted<E2> element) {
+					return new Interpreted<>(this, (ExElement.Interpreted<ColumnEditing<Object, Object>>) element);
 				}
 			}
 
@@ -770,7 +802,7 @@ public interface QuickTableColumn<R, C> {
 				 * @param definition The definition to interpret
 				 * @param element The column editing to define
 				 */
-				protected Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
+				protected Interpreted(Def definition, ExElement.Interpreted<? extends ColumnEditing<R, C>> element) {
 					super(definition, element);
 				}
 
@@ -796,7 +828,7 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public RowModifyEditType<R, C> create(ColumnEditing<R, C> element) {
+				public RowModifyEditType<R, C> create(ExElement element) {
 					return new RowModifyEditType<>(element);
 				}
 			}
@@ -806,7 +838,7 @@ public interface QuickTableColumn<R, C> {
 			private boolean isRowUpdate;
 
 			/** @param element The column editing to define */
-			protected RowModifyEditType(ColumnEditing<R, C> element) {
+			protected RowModifyEditType(ExElement element) {
 				super(element);
 				theCommit = SettableValue.<ObservableAction> build().build();
 			}
@@ -827,7 +859,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element)
+			public void update(ExAddOn.Interpreted<? super ColumnEditing<R, C>, ?> interpreted, ExElement element)
 				throws ModelInstantiationException {
 				super.update(interpreted, element);
 				RowModifyEditType.Interpreted<R, C> myInterpreted = (RowModifyEditType.Interpreted<R, C>) interpreted;
@@ -842,7 +874,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public RowModifyEditType<R, C> copy(ColumnEditing<R, C> element) {
+			public RowModifyEditType<R, C> copy(ExElement element) {
 				RowModifyEditType<R, C> copy = (RowModifyEditType<R, C>) super.copy(element);
 
 				copy.theCommit = SettableValue.<ObservableAction> build().build();
@@ -873,7 +905,7 @@ public interface QuickTableColumn<R, C> {
 				 * @param type The Qonfig type of this add-on
 				 * @param element The column editing to define
 				 */
-				public Def(QonfigAddOn type, ColumnEditing.Def element) {
+				public Def(QonfigAddOn type, ExElement.Def<? extends ColumnEditing<?, ?>> element) {
 					super(type, element);
 				}
 
@@ -891,8 +923,8 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<?, ?> interpret(ExElement.Interpreted<?> element) {
-					return new Interpreted<>(this, (ColumnEditing.Interpreted<?, ?>) element);
+				public <E2 extends ColumnEditing<?, ?>> Interpreted<?, ?> interpret(ExElement.Interpreted<E2> element) {
+					return new Interpreted<>(this, (ExElement.Interpreted<? extends ColumnEditing<Object, Object>>) element);
 				}
 			}
 
@@ -909,7 +941,7 @@ public interface QuickTableColumn<R, C> {
 				 * @param definition The definition to interpret
 				 * @param element The column editing to define
 				 */
-				protected Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
+				protected Interpreted(Def definition, ExElement.Interpreted<? extends ColumnEditing<R, C>> element) {
 					super(definition, element);
 				}
 
@@ -936,7 +968,7 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public RowReplaceEditType<R, C> create(ColumnEditing<R, C> element) {
+				public RowReplaceEditType<R, C> create(ExElement element) {
 					return new RowReplaceEditType<>(element);
 				}
 			}
@@ -945,7 +977,7 @@ public interface QuickTableColumn<R, C> {
 			private SettableValue<SettableValue<R>> theReplacement;
 
 			/** @param element The column editing to define */
-			protected RowReplaceEditType(ColumnEditing<R, C> element) {
+			protected RowReplaceEditType(ExElement element) {
 				super(element);
 				theReplacement = SettableValue.<SettableValue<R>> build().build();
 			}
@@ -961,7 +993,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ExAddOn.Interpreted<? extends ColumnEditing<R, C>, ?> interpreted, ColumnEditing<R, C> element)
+			public void update(ExAddOn.Interpreted<? super ColumnEditing<R, C>, ?> interpreted, ExElement element)
 				throws ModelInstantiationException {
 				super.update(interpreted, element);
 				RowReplaceEditType.Interpreted<R, C> myInterpreted = (RowReplaceEditType.Interpreted<R, C>) interpreted;
@@ -975,7 +1007,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public RowReplaceEditType<R, C> copy(ColumnEditing<R, C> element) {
+			public RowReplaceEditType<R, C> copy(ExElement element) {
 				RowReplaceEditType<R, C> copy = (RowReplaceEditType<R, C>) super.copy(element);
 
 				copy.theReplacement = SettableValue.<SettableValue<R>> build().build();
@@ -986,16 +1018,20 @@ public interface QuickTableColumn<R, C> {
 	}
 
 	/**
-	 * The &lt;column> element, a single table column
+	 * Abstract class for a &lt;column> element
 	 *
 	 * @param <R> The row type of the tabular widget
 	 * @param <C> The value type of the table
 	 */
-	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
+	public abstract class AbstractSingleColumn<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		/** The XML name of this element */
 		public static final String COLUMN = "column";
 
-		/** {@link SingleColumnSet} definition */
+		/**
+		 * {@link AbstractSingleColumn} definition
+		 *
+		 * @param <SCS> The sub-type of {@link AbstractSingleColumn} this definition creates
+		 */
 		@ExMultiElementTraceable({
 			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 				qonfigType = COLUMN,
@@ -1005,8 +1041,8 @@ public interface QuickTableColumn<R, C> {
 			qonfigType = "rendering",
 			interpretation = Interpreted.class,
 			instance = SingleColumnSet.class) })
-		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
-		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
+		public static abstract class Def<SCS extends AbstractSingleColumn<?, ?>> extends QuickStyledElement.Def.Abstract<SCS>
+		implements TableColumnSet.Def<SCS> {
 			private CompiledExpression theName;
 			private ModelComponentId theColumnValueVariable;
 			private CompiledExpression theValue;
@@ -1017,58 +1053,55 @@ public interface QuickTableColumn<R, C> {
 			private Integer theWidth;
 			private QuickWidget.Def<?> theRenderer;
 			private ColumnEditing.Def theEditing;
+			private List<QuickDragging.TransferSource.Def> theTransferSources;
 
 			/**
 			 * @param parent The parent of the column
 			 * @param type The Qonfig type of the element
 			 */
-			public Def(ValueTyped.Def<?> parent, QonfigElementOrAddOn type) {
+			protected Def(ExElement.Def<? extends ValueTyped<?>> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
-			}
-
-			@Override
-			public ValueTyped.Def<?> getParentElement() {
-				return (ValueTyped.Def<?>) super.getParentElement();
+				theTransferSources = new ArrayList<>();
 			}
 
 			/** @return The name of the column--the text for the column's header */
-			@QonfigAttributeGetter(asType = "column", value = "name")
+			@QonfigAttributeGetter(asType = COLUMN, value = "name")
 			public CompiledExpression getName() {
 				return theName;
 			}
 
 			/** @return The model ID of the variable by which the active column value will be available to expressions */
-			@QonfigAttributeGetter(asType = "column", value = "column-value-name")
+			@QonfigAttributeGetter(asType = COLUMN, value = "column-value-name")
 			public ModelComponentId getColumnValueVariable() {
 				return theColumnValueVariable;
 			}
 
 			/** @return The current value of this column */
-			@QonfigAttributeGetter(asType = "column", value = "value")
+			@QonfigAttributeGetter(asType = COLUMN, value = "value")
 			public CompiledExpression getValue() {
 				return theValue;
 			}
 
 			/** @return The tooltip for this column's header */
-			@QonfigAttributeGetter(asType = "column", value = "header-tooltip")
+			@QonfigAttributeGetter(asType = COLUMN, value = "header-tooltip")
 			public CompiledExpression getHeaderTooltip() {
 				return theHeaderTooltip;
 			}
 
 			/** @return The minimum width of this column, in pixels */
-			@QonfigAttributeGetter(asType = "column", value = "min-width")
+			@QonfigAttributeGetter(asType = COLUMN, value = "min-width")
 			public Integer getMinWidth() {
 				return theMinWidth;
 			}
 
 			/** @return The preferred width of this column, in pixels */
-			@QonfigAttributeGetter(asType = "column", value = "pref-width")
+			@QonfigAttributeGetter(asType = COLUMN, value = "pref-width")
 			public Integer getPrefWidth() {
 				return thePrefWidth;
 			}
 
 			/** @return The maximum width of this column, in pixels */
-			@QonfigAttributeGetter(asType = "column", value = "max-width")
+			@QonfigAttributeGetter(asType = COLUMN, value = "max-width")
 			public Integer getMaxWidth() {
 				return theMaxWidth;
 			}
@@ -1077,7 +1110,7 @@ public interface QuickTableColumn<R, C> {
 			 * @return The width of this column, in pixels. Overrides {@link #getMinWidth() min}, {@link #getPrefWidth() preferred}, and
 			 *         {@link #getMaxWidth() max} widths
 			 */
-			@QonfigAttributeGetter(asType = "column", value = "width")
+			@QonfigAttributeGetter(asType = COLUMN, value = "width")
 			public Integer getWidth() {
 				return theWidth;
 			}
@@ -1090,10 +1123,16 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			/** @return The strategy for editing values in this column */
-			@QonfigChildGetter(asType = "column", value = "edit")
+			@QonfigChildGetter(asType = COLUMN, value = "edit")
 			@Override
 			public ColumnEditing.Def getEditing() {
 				return theEditing;
+			}
+
+			/** @return Transfer sources for column values */
+			@QonfigChildGetter(asType = COLUMN, value = "transfer-source")
+			public List<QuickDragging.TransferSource.Def> getTransferSources() {
+				return Collections.unmodifiableList(theTransferSources);
 			}
 
 			@Override
@@ -1120,52 +1159,54 @@ public interface QuickTableColumn<R, C> {
 				theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
 				theEditing = syncChild(ColumnEditing.Def.class, theEditing, session, "edit");
 				elModels.satisfyElementValueType(theColumnValueVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getType()));
+					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?, ?>) interp).getType(env)));
+				syncChildren(QuickDragging.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
 			}
 
 			@Override
-			protected ColumnStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public ColumnStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new ColumnStyle.Def(parentStyle, this, style);
 			}
 
 			@Override
-			public <R> Interpreted<R, ?> interpret(ExElement.Interpreted<?> parent) {
-				return new Interpreted<>(this, (ValueTyped.Interpreted<R, ?>) parent);
-			}
+			public abstract <R> Interpreted<R, ?, ? extends SCS> interpret(ExElement.Interpreted<?> parent);
 		}
 
 		/**
-		 * {@link SingleColumnSet} interpretation
+		 * {@link AbstractSingleColumn} interpretation
 		 *
 		 * @param <R> The row type of the tabular widget
 		 * @param <C> The value type of the table
+		 * @param <SCS> The sub-type of {@link AbstractSingleColumn} this definition creates
 		 */
-		public static class Interpreted<R, C> extends QuickStyledElement.Interpreted.Abstract<SingleColumnSet<R, C>>
-		implements TableColumnSet.Interpreted<R, SingleColumnSet<R, C>> {
+		public static abstract class Interpreted<R, C, SCS extends AbstractSingleColumn<R, C>>
+		extends QuickStyledElement.Interpreted.Abstract<SCS> implements TableColumnSet.Interpreted<R, SCS> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<C>> theValue;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theHeaderTooltip;
 			private QuickWidget.Interpreted<?> theRenderer;
 			private ColumnEditing.Interpreted<R, C> theEditing;
+			private final List<QuickDragging.TransferSource.Interpreted<C, ?>> theTransferSources;
 
 			/**
 			 * @param definition The definition to interpret
 			 * @param parent The parent element
 			 */
-			protected Interpreted(SingleColumnSet.Def definition, ValueTyped.Interpreted<R, ?> parent) {
+			protected Interpreted(AbstractSingleColumn.Def<? super SCS> definition, ExElement.Interpreted<? extends ValueTyped<R>> parent) {
 				super(definition, parent);
 				if (!(parent instanceof MultiValueWidget.Interpreted))
 					throw new IllegalStateException("The parent of a column must be a multi-value-widget");
+				theTransferSources = new ArrayList<>();
 			}
 
 			@Override
-			public SingleColumnSet.Def getDefinition() {
-				return (SingleColumnSet.Def) super.getDefinition();
+			public AbstractSingleColumn.Def<? super SCS> getDefinition() {
+				return (AbstractSingleColumn.Def<? super SCS>) super.getDefinition();
 			}
 
 			@Override
-			public MultiValueWidget.Interpreted<R, ?> getParentElement() {
-				return (MultiValueWidget.Interpreted<R, ?>) super.getParentElement();
+			public ExElement.Interpreted<? extends MultiValueWidget<R>> getParentElement() {
+				return (ExElement.Interpreted<? extends MultiValueWidget<R>>) super.getParentElement();
 			}
 
 			/** @return The name of the column--the text for the column's header */
@@ -1195,9 +1236,20 @@ public interface QuickTableColumn<R, C> {
 				return theEditing;
 			}
 
+			/** @return Transfer sources for column values */
+			public List<QuickDragging.TransferSource.Interpreted<C, ?>> getTransferSources() {
+				return Collections.unmodifiableList(theTransferSources);
+			}
+
 			@Override
 			public TypeToken<R> getValueType() throws ExpressoInterpretationException {
 				return ((ValueTyped.Interpreted<R, ?>) getParentElement()).getValueType();
+			}
+
+			TypeToken<C> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				if (theValue == null)
+					theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAsV());
+				return getType();
 			}
 
 			/** @return The value type of the column */
@@ -1212,8 +1264,8 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.<C> anyAsV());
 				super.doUpdate(env);
+				getType(env); // Ensure the value is interpreted
 				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
 				theHeaderTooltip = interpret(getDefinition().getHeaderTooltip(), ModelTypes.Value.STRING);
 
@@ -1221,6 +1273,9 @@ public interface QuickTableColumn<R, C> {
 					(r, rEnv) -> r.updateElement(rEnv));
 				theEditing = syncChild(getDefinition().getEditing(), theEditing,
 					def -> (ColumnEditing.Interpreted<R, C>) def.interpret(this), (e, eEnv) -> e.update(getType(), eEnv));
+				syncChildren(getDefinition().getTransferSources(), theTransferSources,
+					def -> (QuickDragging.TransferSource.Interpreted<C, ?>) def.interpret(this),
+					(interp, env2) -> interp.updateTransferSource(env2, getType()));
 			}
 
 			@Override
@@ -1237,39 +1292,34 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public SingleColumnSet<R, C> create() {
-				return new SingleColumnSet<>(getIdentity());
-			}
+			public abstract SCS create();
 		}
 
-		private ObservableCollection<SingleColumn> theColumn;
 		private TypeToken<C> theColumnType;
 
-		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
-		private ModelValueInstantiator<SettableValue<C>> theValueInstantiator;
-		private ModelValueInstantiator<SettableValue<String>> theHeaderTooltipInstantiator;
+		/** Model value instantiator for this column's name */
+		protected ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
+		/** Model value instantiator for this column's value */
+		protected ModelValueInstantiator<SettableValue<C>> theValueInstantiator;
+		/** Model value instantiator for this column's header tooltip. May be null */
+		protected ModelValueInstantiator<SettableValue<String>> theHeaderTooltipInstantiator;
 
 		private Integer theMinWidth;
 		private Integer thePrefWidth;
 		private Integer theMaxWidth;
 		private Integer theWidth;
 
-		private SettableValue<SettableValue<String>> theName;
 		private ModelComponentId theColumnValueVariable;
-		private SettableValue<SettableValue<C>> theValue;
-		private SettableValue<SettableValue<String>> theHeaderTooltip;
 		private QuickWidget theRenderer;
 		private ColumnEditing<R, C> theEditing;
+		private List<QuickDragging.TransferSource<C, ?>> theTransferSources;
 
 		private Observable<? extends Causable> theRenderStyleChanges;
 
 		/** @param id The element ID for the column */
-		protected SingleColumnSet(Object id) {
+		protected AbstractSingleColumn(Object id) {
 			super(id);
-			theName = SettableValue.<SettableValue<String>> build().build();
-			theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
-			theValue = SettableValue.<SettableValue<C>> build().build();
-			theColumn = ObservableCollection.of(new SingleColumn());
+			theTransferSources = new ArrayList<>();
 		}
 
 		@Override
@@ -1277,29 +1327,9 @@ public interface QuickTableColumn<R, C> {
 			return (ValueTyped<R>) super.getParentElement();
 		}
 
-		/** @return The name of the column--the text for the column's header */
-		public SettableValue<String> getName() {
-			return SettableValue.flatten(theName);
-		}
-
 		/** @return The model ID of the variable by which the active column value will be available to expressions */
 		public ModelComponentId getColumnValueVariable() {
 			return theColumnValueVariable;
-		}
-
-		@Override
-		public ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns() {
-			return theColumn;
-		}
-
-		/** @return The current value of this column */
-		public SettableValue<C> getValue() {
-			return SettableValue.flatten(theValue);
-		}
-
-		/** @return The tooltip for this column's header */
-		public SettableValue<String> getHeaderTooltip() {
-			return SettableValue.flatten(theHeaderTooltip);
 		}
 
 		/** @return The renderer to represent the column value to the user when they are not interacting with it */
@@ -1312,10 +1342,45 @@ public interface QuickTableColumn<R, C> {
 			return theEditing;
 		}
 
+		/** @return The type of this column's value */
+		public TypeToken<C> getColumnType() {
+			return theColumnType;
+		}
+
+		/** @return The minimum width for the column, if configured */
+		public Integer getMinWidth() {
+			return theMinWidth;
+		}
+
+		/** @return The preferred width for the column, if configured */
+		public Integer getPrefWidth() {
+			return thePrefWidth;
+		}
+
+		/** @return The maximum width for the column, if configured */
+		public Integer getMaxWidth() {
+			return theMaxWidth;
+		}
+
+		/** @return The constant width for the column, if configured */
+		public Integer getWidth() {
+			return theWidth;
+		}
+
+		/** @return Transfer source configurations for tree nodes by path */
+		public List<QuickDragging.TransferSource<C, ?>> getTransferSources() {
+			return Collections.unmodifiableList(theTransferSources);
+		}
+
+		/** @return An observable informing the UI to refresh this column's rendered cells */
+		protected Observable<? extends Causable> getRenderStyleChanges() {
+			return theRenderStyleChanges;
+		}
+
 		@Override
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 			super.doUpdate(interpreted);
-			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
+			AbstractSingleColumn.Interpreted<R, C, ?> myInterpreted = (AbstractSingleColumn.Interpreted<R, C, ?>) interpreted;
 			theColumnType = myInterpreted.getType();
 			theNameInstantiator = myInterpreted.getName().instantiate();
 			theColumnValueVariable = myInterpreted.getDefinition().getColumnValueVariable();
@@ -1327,50 +1392,30 @@ public interface QuickTableColumn<R, C> {
 			theMaxWidth = myInterpreted.getDefinition().getMaxWidth();
 			theWidth = myInterpreted.getDefinition().getWidth();
 
-			if (myInterpreted.getRenderer() == null)
-				theRenderer = null;
-			else if (theRenderer == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getIdentity()) {
-				try {
-					theRenderer = myInterpreted.getRenderer().create();
-				} catch (RuntimeException | Error e) {
-					myInterpreted.getRenderer().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
-				}
-			}
-			if (theRenderer != null) {
-				try {
-					theRenderer.update(myInterpreted.getRenderer(), this);
-				} catch (RuntimeException | Error e) {
-					myInterpreted.getRenderer().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
-				}
-			}
-
-			if (myInterpreted.getEditing() == null)
-				theEditing = null;
-			else if (theEditing == null || theEditing.getIdentity() != myInterpreted.getEditing().getIdentity())
-				theEditing = myInterpreted.getEditing().create();
-			if (theEditing != null)
-				theEditing.update(myInterpreted.getEditing(), this);
+			theRenderer = syncChild(myInterpreted.getRenderer(), theRenderer, QuickWidget.Interpreted::create, QuickWidget::update);
+			theEditing = syncChild(myInterpreted.getEditing(), theEditing, ColumnEditing.Interpreted::create, ColumnEditing::update);
+			syncChildren(myInterpreted.getTransferSources(), theTransferSources, ts -> ts.create(), QuickDragging.TransferSource::update);
 		}
 
 		@Override
 		public void instantiated() throws ModelInstantiationException {
 			super.instantiated();
+
+			theNameInstantiator.instantiate();
+			theValueInstantiator.instantiate();
+			if (theHeaderTooltipInstantiator != null)
+				theHeaderTooltipInstantiator.instantiate();
 			if (theRenderer != null)
 				theRenderer.instantiated();
 			if (theEditing != null)
 				theEditing.instantiated();
+			for (QuickDragging.TransferSource<C, ?> ts : theTransferSources)
+				ts.instantiated();
 		}
 
 		@Override
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
-			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnValueVariable, myModels, getValue(),
-				ExFlexibleElementModelAddOn.ActionIfSatisfied.Ignore);
-			theName.set(theNameInstantiator.get(myModels), null);
-			theValue.set(theValueInstantiator.get(myModels), null);
-			theHeaderTooltip.set(theHeaderTooltipInstantiator == null ? null : theHeaderTooltipInstantiator.get(myModels), null);
 
 			if (theRenderer != null) {
 				// TODO
@@ -1402,100 +1447,27 @@ public interface QuickTableColumn<R, C> {
 				theRenderStyleChanges = Observable.empty();
 			if (theEditing != null)
 				theEditing.instantiate(myModels);
+			for (QuickDragging.TransferSource<C, ?> ts : theTransferSources)
+				ts.instantiate(myModels);
 		}
 
 		@Override
-		public SingleColumnSet<R, C> copy(ExElement parent) {
-			SingleColumnSet<R, C> copy = (SingleColumnSet<R, C>) super.copy(parent);
+		public AbstractSingleColumn<R, C> copy(ExElement parent) {
+			AbstractSingleColumn<R, C> copy = (AbstractSingleColumn<R, C>) super.copy(parent);
 
-			copy.theName = SettableValue.<SettableValue<String>> build().build();
-			copy.theValue = SettableValue.<SettableValue<C>> build().build();
-			copy.theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
-
-			copy.theColumn.clear();
-			copy.theColumn.add(copy.new SingleColumn());
 			if (theRenderer != null)
 				copy.theRenderer = theRenderer.copy(copy);
 			if (theEditing != null)
 				copy.theEditing = theEditing.copy(copy);
+			copy.theTransferSources = new ArrayList<>();
+			for (QuickDragging.TransferSource<C, ?> ts : theTransferSources)
+				copy.theTransferSources.add(ts.copy(copy));
 
 			return copy;
 		}
 
-		/** The {@link QuickTableColumn column} of a {@link SingleColumnSet} */
-		public class SingleColumn implements QuickTableColumn<R, C> {
-			@Override
-			public TableColumnSet<R> getColumnSet() {
-				return SingleColumnSet.this;
-			}
-
-			@Override
-			public SettableValue<String> getName() {
-				return SingleColumnSet.this.getName();
-			}
-
-			@Override
-			public TypeToken<C> getType() {
-				return theColumnType;
-			}
-
-			@Override
-			public SettableValue<C> getValue() {
-				return SettableValue.flatten(theValue);
-			}
-
-			@Override
-			public SettableValue<String> getHeaderTooltip() {
-				return SingleColumnSet.this.getHeaderTooltip();
-			}
-
-			@Override
-			public Integer getMinWidth() {
-				return theMinWidth;
-			}
-
-			@Override
-			public Integer getPrefWidth() {
-				return thePrefWidth;
-			}
-
-			@Override
-			public Integer getMaxWidth() {
-				return theMaxWidth;
-			}
-
-			@Override
-			public Integer getWidth() {
-				return theWidth;
-			}
-
-			@Override
-			public QuickWidget getRenderer() {
-				return theRenderer;
-			}
-
-			@Override
-			public Observable<? extends Causable> getRenderStyleChanges() {
-				return theRenderStyleChanges;
-			}
-
-			@Override
-			public ColumnEditing<R, C> getEditing() {
-				return theEditing;
-			}
-
-			@Override
-			public void update() {
-			}
-
-			@Override
-			public String toString() {
-				return SingleColumnSet.this.toString();
-			}
-		}
-
-		/** Style for a {@link SingleColumnSet &lt;column>} */
-		public static class ColumnStyle extends QuickStyledElement.QuickInstanceStyle.Abstract {
+		/** Style for a {@link AbstractSingleColumn &lt;column>} */
+		public static class ColumnStyle extends QuickInstanceStyle.Abstract {
 			/** {@link ColumnStyle} definition */
 			public static class Def extends QuickInstanceStyle.Def.Abstract {
 				/**
@@ -1503,15 +1475,15 @@ public interface QuickTableColumn<R, C> {
 				 * @param styledElement The column element to style
 				 * @param wrapped The compiled style to wrap
 				 */
-				public Def(QuickInstanceStyle.Def parent, SingleColumnSet.Def styledElement, QuickCompiledStyle wrapped) {
-					super(parent, styledElement, wrapped);
+				public Def(QuickInstanceStyle.Def parent, AbstractSingleColumn.Def<?> styledElement, QuickCompiledStyle wrapped) {
+					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
 				}
 
 				@Override
 				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 					throws ExpressoInterpretationException {
-					return new Interpreted(this, (SingleColumnSet.Interpreted<?, ?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+					return new Interpreted(this, (AbstractSingleColumn.Interpreted<?, ?, ?>) parentEl,
+						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent, env));
 				}
 			}
 
@@ -1523,9 +1495,9 @@ public interface QuickTableColumn<R, C> {
 				 * @param parent The parent style to inherit from
 				 * @param wrapped The interpreted style to wrap
 				 */
-				public Interpreted(Def compiled, SingleColumnSet.Interpreted<?, ?> styledElement, QuickInstanceStyle.Interpreted parent,
-					QuickInterpretedStyle wrapped) {
-					super(compiled, styledElement, parent, wrapped);
+				public Interpreted(Def compiled, AbstractSingleColumn.Interpreted<?, ?, ?> styledElement,
+					QuickInstanceStyle.Interpreted parent, QuickInterpretedStyle wrapped) {
+					super(compiled, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}
 
 				@Override
@@ -1534,14 +1506,525 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public QuickInstanceStyle create(QuickStyledElement styled) {
+				public QuickInstanceStyle create(QuickStyled styled) {
 					return new ColumnStyle();
 				}
 			}
+		}
+
+		/** A {@link QuickTableColumn} for an {@link AbstractSingleColumn} */
+		protected abstract class Column implements QuickTableColumn<R, C> {
+			@Override
+			public TableColumnSet<R> getColumnSet() {
+				return AbstractSingleColumn.this;
+			}
 
 			@Override
-			public SingleColumnSet<?, ?> getStyledElement() {
-				return (SingleColumnSet<?, ?>) super.getStyledElement();
+			public TypeToken<C> getType() {
+				return getColumnType();
+			}
+
+			@Override
+			public Integer getMinWidth() {
+				return AbstractSingleColumn.this.getMinWidth();
+			}
+
+			@Override
+			public Integer getPrefWidth() {
+				return AbstractSingleColumn.this.getPrefWidth();
+			}
+
+			@Override
+			public Integer getMaxWidth() {
+				return AbstractSingleColumn.this.getMaxWidth();
+			}
+
+			@Override
+			public Integer getWidth() {
+				return AbstractSingleColumn.this.getWidth();
+			}
+
+			@Override
+			public Observable<? extends Causable> getRenderStyleChanges() {
+				return AbstractSingleColumn.this.getRenderStyleChanges();
+			}
+
+			@Override
+			public void update() {
+			}
+
+			@Override
+			public String toString() {
+				return AbstractSingleColumn.this.toString();
+			}
+		}
+	}
+
+	/**
+	 * The &lt;column> element, a single table column
+	 *
+	 * @param <R> The row type of the tabular widget
+	 * @param <C> The value type of the table
+	 */
+	public class SingleColumnSet<R, C> extends AbstractSingleColumn<R, C> {
+		/** {@link SingleColumnSet} definition */
+		public static class Def extends AbstractSingleColumn.Def<SingleColumnSet<?, ?>> {
+			/**
+			 * @param parent The parent of the column
+			 * @param type The Qonfig type of the element
+			 */
+			public Def(ExElement.Def<? extends ValueTyped<?>> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
+			}
+
+			@Override
+			public <R> Interpreted<R, ?> interpret(ExElement.Interpreted<?> parent) {
+				return new Interpreted<>(this, (ExElement.Interpreted<? extends ValueTyped<R>>) parent);
+			}
+		}
+
+		/**
+		 * {@link SingleColumnSet} interpretation
+		 *
+		 * @param <R> The row type of the tabular widget
+		 * @param <C> The value type of the table
+		 */
+		public static class Interpreted<R, C> extends AbstractSingleColumn.Interpreted<R, C, SingleColumnSet<R, C>> {
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element
+			 */
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends ValueTyped<R>> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			@Override
+			public SingleColumnSet<R, C> create() {
+				return new SingleColumnSet<>(getIdentity());
+			}
+		}
+
+		private ObservableCollection<SingleColumn> theColumn;
+
+		private SettableValue<SettableValue<String>> theName;
+		private SettableValue<C> theValue;
+		private SettableValue<SettableValue<String>> theHeaderTooltip;
+
+		/** @param id The element ID for the column */
+		protected SingleColumnSet(Object id) {
+			super(id);
+			theName = SettableValue.<SettableValue<String>> build().build();
+			theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
+			theColumn = ObservableCollection.of(new SingleColumn());
+		}
+
+		@Override
+		public ValueTyped<R> getParentElement() {
+			return super.getParentElement();
+		}
+
+		/** @return The name of the column--the text for the column's header */
+		public SettableValue<String> getName() {
+			return SettableValue.flatten(theName);
+		}
+
+		@Override
+		public ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns() {
+			return theColumn;
+		}
+
+		/** @return The current value of this column */
+		public SettableValue<C> getValue() {
+			return theValue;
+		}
+
+		/** @return The tooltip for this column's header */
+		public SettableValue<String> getHeaderTooltip() {
+			return SettableValue.flatten(theHeaderTooltip);
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			theValue = theValueInstantiator.get(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(getColumnValueVariable(), myModels, getValue(),
+				ExFlexibleElementModelAddOn.ActionIfSatisfied.Ignore);
+			theName.set(theNameInstantiator.get(myModels), null);
+			theHeaderTooltip.set(theHeaderTooltipInstantiator == null ? null : theHeaderTooltipInstantiator.get(myModels), null);
+		}
+
+		@Override
+		public SingleColumnSet<R, C> copy(ExElement parent) {
+			SingleColumnSet<R, C> copy = (SingleColumnSet<R, C>) super.copy(parent);
+
+			copy.theName = SettableValue.<SettableValue<String>> build().build();
+			copy.theHeaderTooltip = SettableValue.<SettableValue<String>> build().build();
+
+			copy.theColumn.clear();
+			copy.theColumn.add(copy.new SingleColumn());
+
+			return copy;
+		}
+
+		/** The {@link QuickTableColumn column} of a {@link SingleColumnSet} */
+		public class SingleColumn extends AbstractSingleColumn<R, C>.Column {
+			@Override
+			public SettableValue<String> getName() {
+				return SingleColumnSet.this.getName();
+			}
+
+			@Override
+			public SettableValue<C> getValue() {
+				return theValue;
+			}
+
+			@Override
+			public SettableValue<String> getHeaderTooltip() {
+				return SingleColumnSet.this.getHeaderTooltip();
+			}
+
+			@Override
+			public QuickWidget getRenderer() {
+				return SingleColumnSet.this.getRenderer();
+			}
+
+			@Override
+			public ColumnEditing<R, C> getEditing() {
+				return SingleColumnSet.this.getEditing();
+			}
+
+			@Override
+			public List<TransferSource<C, ?>> getTransferSources() {
+				return SingleColumnSet.this.getTransferSources();
+			}
+		}
+	}
+
+	/**
+	 * The &lt;variable-columns> element, with the ability to create a variable number of table columns based on values in a collection
+	 *
+	 * @param <R> The type of rows in the table
+	 * @param <E> The type of values in the collection
+	 * @param <C> The type of the column values
+	 */
+	public class VariableColumns<R, E, C> extends AbstractSingleColumn<R, C> {
+		/** The XML name of this element */
+		public static final String VARIABLE_COLUMNS = "variable-columns";
+
+		/** {@link VariableColumns} definition */
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = VARIABLE_COLUMNS,
+			interpretation = Interpreted.class,
+			instance = VariableColumns.class)
+		public static class Def extends AbstractSingleColumn.Def<VariableColumns<?, ?, ?>> {
+			private ModelComponentId theColumnElementVariable;
+			private CompiledExpression theValues;
+
+			/**
+			 * @param parent The parent of the column
+			 * @param qonfigType The Qonfig type of the element
+			 */
+			public Def(ExElement.Def<? extends ValueTyped<?>> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
+			}
+
+			/** @return The expression for the collection, for each element of which a column will be added to the table */
+			@QonfigAttributeGetter("for-each")
+			public CompiledExpression getValues() {
+				return theValues;
+			}
+
+			/**
+			 * @return The ID of the variable for the name by which to refer to the active element in the {@link #getValues() values}
+			 *         collection
+			 */
+			@QonfigAttributeGetter("column-element-name")
+			public ModelComponentId getColumnElementVariable() {
+				return theColumnElementVariable;
+			}
+
+			@Override
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				super.doUpdate(session);
+
+				theValues = getAttributeExpression("for-each", session);
+				String columnValueName = session.getAttributeText("column-element-name");
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theColumnElementVariable = elModels.getElementValueModelId(columnValueName);
+				elModels.satisfyElementValueType(theColumnElementVariable, ModelTypes.Value,
+					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?, ?>) interp).getColumnElementType()));
+			}
+
+			@Override
+			public <R> Interpreted<R, ?, ?> interpret(ExElement.Interpreted<?> parent) {
+				return new Interpreted<>(this, (ExElement.Interpreted<? extends ValueTyped<R>>) parent);
+			}
+		}
+
+		/**
+		 * {@link VariableColumns} interpretation
+		 *
+		 * @param <R> The type of rows in the table
+		 * @param <E> The type of values in the collection
+		 * @param <C> The type of the column values
+		 */
+		public static class Interpreted<R, E, C> extends AbstractSingleColumn.Interpreted<R, C, VariableColumns<R, E, C>> {
+			private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<E>> theValues;
+
+			/**
+			 * @param definition The definition to interpret
+			 * @param parent The parent element
+			 */
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends ValueTyped<R>> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			TypeToken<E> getColumnElementType() {
+				return (TypeToken<E>) theValues.getType().getType(0);
+			}
+
+			/** @return The expression for the collection, for each element of which a column will be added to the table */
+			public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<E>> getValues() {
+				return theValues;
+			}
+
+			@Override
+			public void updateColumns(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.anyAs());
+				super.doUpdate(expressoEnv);
+			}
+
+			@Override
+			public VariableColumns<R, E, C> create() {
+				return new VariableColumns<>(getIdentity());
+			}
+		}
+
+		private ModelValueInstantiator<ObservableCollection<E>> theValuesInstantiator;
+
+		private ModelComponentId theColumnElementVariable;
+
+		private SettableValue<ObservableCollection<E>> theValuesHolder;
+		private SettableValue<ObservableCollection<VariableColumn>> theColumns;
+
+		VariableColumns(Object id) {
+			super(id);
+			theValuesHolder = SettableValue.create();
+			theColumns = SettableValue.create();
+		}
+
+		/** @return The ID of the variable for the name by which to refer to the active element in the values collection */
+		public ModelComponentId getColumnElementVariable() {
+			return theColumnElementVariable;
+		}
+
+		@Override
+		public ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns() {
+			return ObservableCollection.flattenValue(theColumns);
+		}
+
+		@Override
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
+			super.doUpdate(interpreted);
+
+			Interpreted<R, E, C> myInterpreted = (Interpreted<R, E, C>) interpreted;
+
+			theValuesInstantiator = myInterpreted.getValues().instantiate();
+			theColumnElementVariable = myInterpreted.getDefinition().getColumnElementVariable();
+		}
+
+		@Override
+		public void instantiated() throws ModelInstantiationException {
+			super.instantiated();
+
+			theValuesInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			theValuesHolder.set(theValuesInstantiator.get(myModels), null);
+
+			ObservableCollection<E> values = ObservableCollection.flattenValue(theValuesHolder);
+			ObservableCollection<VariableColumn> columns = ObservableCollection.<VariableColumn> build()//
+				.withThreadConstraint(values.getThreadConstraint())//
+				.build();
+			ThreadConstraint threading = values.getThreadConstraint();
+			CollectionSubscription valueSub = values.subscribe(evt -> {
+				try (Transaction t = columns.lock(true, evt)) {
+					switch (evt.getType()) {
+					case add:
+						SimpleObservable<Void> elementModelUntil = SimpleObservable.build()//
+						.withThreadConstraint(threading)//
+						.build();
+						SettableValue.Builder<E> elementValueBuilder = SettableValue.<E> build()//
+							.withValue(evt.getNewValue());
+						if (threading != ThreadConstraint.ANY)
+							elementValueBuilder.withThreadConstraint(threading);
+						SettableValue<E> elementValue = elementValueBuilder.build();
+						ModelSetInstance elementModelCopy;
+						try {
+							elementModelCopy = QuickCoreInterpretation.copyModels(myModels, theColumnElementVariable, elementModelUntil)
+								.build();
+							ExFlexibleElementModelAddOn.satisfyElementValue(theColumnElementVariable, elementModelCopy, elementValue);
+							columns.add(evt.getIndex(),
+								new VariableColumn(values, evt.getElementId(), elementValue, elementModelCopy, elementModelUntil));
+						} catch (ModelInstantiationException e) {
+							reporting().error("Could not add column for " + evt.getElementId() + ": " + evt.getNewValue(), e);
+							elementModelUntil.onNext(null);
+							// Put in a placeholder for bookkeeping and filter it out later
+							columns.add(evt.getIndex(), null);
+						}
+						break;
+					case remove:
+						VariableColumn column = columns.remove(evt.getIndex());
+						if (column != null)
+							column.destroy();
+						break;
+					case set:
+						column = columns.get(evt.getIndex());
+						if (column != null)
+							column.update(evt.getNewValue(), evt);
+						break;
+					}
+				}
+			}, true);
+			Observable.or(myModels.getUntil(), onDestroy()).take(1).act(__ -> {
+				valueSub.unsubscribe(true);
+				threading.invoke(() -> {
+					for (VariableColumn column : columns) {
+						if (column != null)
+							column.destroy();
+					}
+				});
+			});
+			theColumns.set(columns, null);
+		}
+
+		@Override
+		public VariableColumns<R, E, C> copy(ExElement parent) {
+			VariableColumns<R, E, C> copy = (VariableColumns<R, E, C>) super.copy(parent);
+
+			copy.theValuesHolder = SettableValue.create();
+			copy.theColumns = SettableValue.create();
+
+			return copy;
+		}
+
+		class VariableColumn extends AbstractSingleColumn<R, C>.Column {
+			private final SettableValue<E> theColumnElement;
+			private final SettableValue<C> theColumnValue;
+			private final SettableValue<String> theName;
+			private final SettableValue<String> theHeaderTooltip;
+			private final QuickWidget theRenderer;
+			private final ColumnEditing<R, C> theEditing;
+			private final List<QuickDragging.TransferSource<C, ?>> theTransferSources;
+			private final SimpleObservable<Void> theUntil;
+			private boolean theCallbackLock;
+
+			VariableColumn(ObservableCollection<E> columnValues, ElementId element, SettableValue<E> elementValue, ModelSetInstance models,
+				SimpleObservable<Void> elementUntil) throws ModelInstantiationException {
+				theColumnElement = elementValue;
+				theUntil = elementUntil;
+				theName = theNameInstantiator.get(models);
+				theColumnValue = theValueInstantiator.get(models);
+				ExFlexibleElementModelAddOn.satisfyElementValue(getColumnValueVariable(), models, theColumnValue,
+					ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				theHeaderTooltip = theHeaderTooltipInstantiator == null ? SettableValue.of(null, "Constant")
+					: theHeaderTooltipInstantiator.get(models);
+				if (VariableColumns.this.getRenderer() != null) {
+					theRenderer = VariableColumns.this.getRenderer().copy(VariableColumns.this);
+					theRenderer.instantiate(models);
+				} else
+					theRenderer = null;
+				if (VariableColumns.this.getEditing() != null) {
+					theEditing = VariableColumns.this.getEditing().copy(VariableColumns.this);
+					theEditing.instantiate(models);
+				} else
+					theEditing = null;
+				theTransferSources = new ArrayList<>(VariableColumns.this.getTransferSources().size());
+				for (QuickDragging.TransferSource<C, ?> ts : VariableColumns.this.getTransferSources()) {
+					ts = ts.copy(VariableColumns.this);
+					ts.instantiate(models);
+					theTransferSources.add(ts);
+				}
+
+				theColumnElement.noInitChanges().act(evt -> {
+					if (theCallbackLock)
+						return;
+					theCallbackLock = true;
+					try (Transaction t = columnValues.lock(true, evt)) {
+						columnValues.mutableElement(element).set(evt.getNewValue());
+					} finally {
+						theCallbackLock = false;
+					}
+				});
+			}
+
+			void update(E newValue, Object cause) {
+				if (theCallbackLock)
+					return;
+				theCallbackLock = true;
+				try {
+					theColumnElement.set(newValue, cause);
+				} finally {
+					theCallbackLock = false;
+				}
+			}
+
+			void destroy() {
+				theUntil.onNext(null);
+			}
+
+			@Override
+			public SettableValue<String> getName() {
+				return theName;
+			}
+
+			@Override
+			public SettableValue<C> getValue() {
+				return theColumnValue;
+			}
+
+			@Override
+			public SettableValue<String> getHeaderTooltip() {
+				return theHeaderTooltip;
+			}
+
+			@Override
+			public QuickWidget getRenderer() {
+				return theRenderer;
+			}
+
+			@Override
+			public ColumnEditing<R, C> getEditing() {
+				return theEditing;
+			}
+
+			@Override
+			public List<TransferSource<C, ?>> getTransferSources() {
+				return Collections.unmodifiableList(theTransferSources);
+			}
+
+			@Override
+			public String toString() {
+				return super.toString() + " for " + theColumnElement.get();
 			}
 		}
 	}

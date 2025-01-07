@@ -88,8 +88,8 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		}
 
 		@Override
-		public Interpreted<? extends B, BD> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
+		public <E2 extends ExElement> Interpreted<B, BD> interpret(ExElement.Interpreted<E2> element) {
+			return new Interpreted<>(this, element);
 		}
 	}
 
@@ -167,7 +167,7 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted<?, ?> myInterpreted = (Interpreted<?, ?>) interpreted;

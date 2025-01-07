@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.Component;
 import java.awt.Dialog;
 import java.awt.Dialog.ModalityType;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Frame;
 import java.awt.Image;
@@ -11,6 +12,7 @@ import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -41,6 +43,7 @@ import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
 import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.threading.QommonsTimer;
 
 /** Utility class for building windows */
 public class WindowPopulation {
@@ -80,6 +83,7 @@ public class WindowPopulation {
 		private SettableValue<Integer> theY;
 		private SettableValue<Integer> theWidth;
 		private SettableValue<Integer> theHeight;
+		private Observable<?> theRePack;
 		private SettableValue<Boolean> isVisible;
 
 		private int theCloseAction;
@@ -147,6 +151,12 @@ public class WindowPopulation {
 		@Override
 		public P withHeight(SettableValue<Integer> height) {
 			theHeight = height;
+			return (P) this;
+		}
+
+		@Override
+		public P withRePack(Observable<?> rePack) {
+			theRePack = rePack;
 			return (P) this;
 		}
 
@@ -389,6 +399,27 @@ public class WindowPopulation {
 					}
 				});
 				theWindow.addComponentListener(boundsListener);
+				getUntil().act(__ -> theWindow.removeComponentListener(boundsListener));
+			}
+			if (theRePack != null) {
+				// Delay this so computations can finish
+				theRePack.takeUntil(getUntil()).act(__ -> {
+					QommonsTimer.getCommonInstance().build(() -> {
+						Dimension prefSize = theWindow.getPreferredSize();
+						Rectangle bounds = theWindow.getBounds();
+						if (prefSize.width == bounds.width && prefSize.height == bounds.height)
+							return;
+						int wDiff = prefSize.width - bounds.width;
+						int hDiff = prefSize.height - bounds.height;
+						Rectangle newBounds = new Rectangle(bounds.x - wDiff / 2, bounds.y - hDiff / 2, prefSize.width, prefSize.height);
+						newBounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(newBounds.x, newBounds.y, newBounds.width, newBounds.height,
+							ObservableSwingUtils.getGraphicsBounds());
+						if (!bounds.equals(newBounds))
+							theWindow.setBounds(newBounds);
+					}, null, false)//
+					.onEDT()//
+					.runNextIn(Duration.ofMillis(50));
+				});
 			}
 			SettableValue<Boolean> visible = isVisible;
 			boolean disposeOnClose, exitOnClose;
@@ -407,14 +438,24 @@ public class WindowPopulation {
 			theWindow.addComponentListener(new ComponentAdapter() {
 				@Override
 				public void componentShown(ComponentEvent e) {
-					if (visible != null && !visible.get())
-						visible.set(true, e);
+					if (visible != null && !visible.get()) {
+						String msg = visible.isAcceptable(true);
+						if (msg == null)
+							visible.set(true, e);
+						// else
+						// System.err.println("Visibility variable for window " + theTitle.get() + " could not accept true: " + msg);
+					}
 				}
 
 				@Override
 				public void componentHidden(ComponentEvent e) {
-					if (visible != null && visible.get())
-						visible.set(false, e);
+					if (visible != null && visible.get()) {
+						String msg = visible.isAcceptable(false);
+						if (msg == null)
+							visible.set(false, e);
+						// else
+						// System.err.println("Visibility variable for window " + theTitle.get() + " could not accept false: " + msg);
+					}
 					if (disposeOnClose) {
 						if (theDispose != null)
 							theDispose.onNext(e);

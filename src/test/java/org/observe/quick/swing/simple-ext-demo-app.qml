@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <quick-app xmlns:app="Quick-App v0.1" app-file="simple-ext-demo.qml">
-	<toolkit def="/org/qommons/config/simple-qonfig-reference.qtd" />
+	<toolkit def="/org/qommons/config/qonfig-reference.qtd" />
 	<promise-fulfillment>org.qommons.config.QonfigExternalRefPromise</promise-fulfillment>
 	<promise-fulfillment>org.qommons.config.QonfigChildPlaceholderPromise</promise-fulfillment>
 	<toolkit def="/org/observe/expresso/qonfig/expresso-core.qtd">

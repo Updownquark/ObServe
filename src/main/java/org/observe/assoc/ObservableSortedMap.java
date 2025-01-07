@@ -1,14 +1,17 @@
 package org.observe.assoc;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -48,6 +51,9 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	default ObservableSortedSet<Entry<K, V>> entrySet() {
 		return new ObservableSortedEntrySet<>(this);
 	}
+
+	@Override
+	ObservableSortedMap<K, V> alias(String alias);
 
 	@Override
 	default ObservableSortedMap<K, V> descendingMap() {
@@ -241,6 +247,12 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public ObservableSortedEntrySet<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public CollectionElement<Map.Entry<K, V>> search(Comparable<? super Map.Entry<K, V>> search,
 			BetterSortedList.SortedSearchFilter filter) {
 			MapEntryHandle<K, V> entry = getMap().searchEntries(search, filter);
@@ -287,8 +299,19 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public ReversedObservableSortedMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return theWrapped.isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theWrapped.getChangeSources();
 		}
 
 		@Override
@@ -388,7 +411,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 					int index = size[0] - evt.getIndex() - 1;
 					if (evt.getType() == CollectionChangeType.remove)
 						size[0]--;
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId().reverse(), index, evt.getType(),
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId().reverse(), index, evt.getType(),
 						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
@@ -425,8 +448,19 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public ObservableSubMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getSource().isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getSource().getChangeSources();
 		}
 
 		@Override
@@ -448,7 +482,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getSource().onChange(evt -> {
 				int index = keySet().getElementsBefore(evt.getElementId());
-				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldKey(),
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId(), index, evt.getType(),
+					evt.getOldKey(),
 					evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
@@ -466,6 +501,12 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	class DefaultObservableSortedMap<K, V> extends DefaultObservableMap<K, V> implements ObservableSortedMap<K, V> {
 		public DefaultObservableSortedMap(Comparator<? super K> sorting, ObservableSortedCollection<java.util.Map.Entry<K, V>> entries) {
 			super(Equivalence.DEFAULT.sorted(sorting, true), entries);
+		}
+
+		@Override
+		public DefaultObservableSortedMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -507,6 +548,12 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public UnmodifiableSortedObservableMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public ObservableSortedSet<K> keySet() {
 			return (ObservableSortedSet<K>) super.keySet();
 		}
@@ -533,6 +580,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		public EmptyOSM(Comparator<? super K> sorting) {
 			theKeySet = ObservableSortedSet.of(sorting);
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.empty();
 		}
 
 		@Override
@@ -589,6 +641,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public Object getIdentity() {
 			return Identifiable.baseId("EmptySortedMap", this);
+		}
+
+		@Override
+		public EmptyOSM<K, V> alias(String alias) {
+			return this; // Cannot alias this constant
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override

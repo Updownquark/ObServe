@@ -2,6 +2,7 @@ package org.observe.assoc;
 
 import java.util.Collection;
 import java.util.Objects;
+import java.util.Set;
 
 import org.observe.Eventable;
 import org.observe.Observable;
@@ -53,6 +54,17 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
+				public Node<N, E> alias(String alias) {
+					source.alias(alias);
+					return this;
+				}
+
+				@Override
+				public Set<String> getAliases() {
+					return source.getAliases();
+				}
+
+				@Override
 				public boolean isLockSupported() {
 					return source.isLockSupported();
 				}
@@ -83,12 +95,12 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
-				public <V extends N> String isAcceptable(V value) {
+				public String isAcceptable(N value) {
 					return StdMsg.UNSUPPORTED_OPERATION;
 				}
 
 				@Override
-				public <V extends N> N set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				public N set(N value) throws IllegalArgumentException, UnsupportedOperationException {
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 
@@ -159,6 +171,17 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
+				public Edge<N, E> alias(String alias) {
+					source.alias(alias);
+					return this;
+				}
+
+				@Override
+				public Set<String> getAliases() {
+					return source.getAliases();
+				}
+
+				@Override
 				public boolean isLockSupported() {
 					return source.isLockSupported();
 				}
@@ -189,12 +212,12 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
-				public <V extends E> String isAcceptable(V value) {
+				public String isAcceptable(E value) {
 					return StdMsg.UNSUPPORTED_OPERATION;
 				}
 
 				@Override
-				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 

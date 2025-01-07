@@ -1,5 +1,6 @@
 package org.observe.quick;
 
+import java.io.File;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -220,6 +221,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			defaultFormat = (Format<T>) DEFAULT_INSTANT_FORMAT;
 		else if (raw == Duration.class)
 			defaultFormat = (Format<T>) DEFAULT_DURATION_FORMAT;
+		else if (raw == File.class)
+			defaultFormat = (Format<T>) new Format.FileFormat(true);
 		else if (editRequired)
 			throw new ExpressoInterpretationException("No format specified and no default available for type " + valueType, position, 0);
 		else

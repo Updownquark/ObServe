@@ -1,9 +1,13 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
+
 import javax.swing.Box;
 
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 
@@ -24,7 +28,12 @@ public interface QuickLayout extends ExAddOn<QuickWidget> {
 		}
 
 		@Override
-		public abstract Interpreted<L> interpret(ExElement.Interpreted<?> element);
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
+		@Override
+		public abstract <E2 extends QuickWidget> Interpreted<L> interpret(ExElement.Interpreted<E2> element);
 	}
 
 	/**
@@ -37,7 +46,7 @@ public interface QuickLayout extends ExAddOn<QuickWidget> {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		protected Interpreted(Def<L> definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(Def<L> definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -50,7 +59,7 @@ public interface QuickLayout extends ExAddOn<QuickWidget> {
 	/** {@link QuickLayout} abstract implementation */
 	public abstract class Abstract extends ExAddOn.Abstract<QuickWidget> implements QuickLayout {
 		/** @param element The container widget whose contents to manage */
-		protected Abstract(QuickWidget element) {
+		protected Abstract(ExElement element) {
 			super(element);
 		}
 	}

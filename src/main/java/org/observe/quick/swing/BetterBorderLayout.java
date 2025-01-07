@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.Insets;
 import java.awt.LayoutManager2;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,6 +18,8 @@ import java.util.function.ToIntFunction;
 import org.observe.quick.base.QuickBorderLayout;
 import org.observe.quick.base.QuickBorderLayout.Region;
 import org.observe.quick.base.QuickSize;
+import org.observe.util.swing.PanelPopulation;
+import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 
 /**
@@ -173,9 +176,13 @@ public class BetterBorderLayout implements LayoutManager2 {
 	}
 
 	Dimension layoutSize(Container parent, int type, IntFunction<Dimension> componentSize) {
+		if (PanelPopulation.isDebugging(parent.getName(), "border-layout", "size"))
+			BreakpointHere.breakpoint();
 		List<QuickSize> hStacks = new ArrayList<>();
 		List<QuickSize> vStacks = new ArrayList<>();
 		QuickSize width = QuickSize.ZERO, height = QuickSize.ZERO;
+		int largestMinW = 0, largestMinH = 0;
+		int smallestMaxW = Integer.MAX_VALUE, smallestMaxH = Integer.MAX_VALUE;
 		int centerIdx = -1;
 		int compIdx = 0;
 		for (Component c : parent.getComponents()) {
@@ -204,6 +211,16 @@ public class BetterBorderLayout implements LayoutManager2 {
 				int cross = cs.width;
 				hStacks.add(width.plus(cross));
 				height = height.plus(size);
+				if (type >= 0) {
+					int minW = width.plus(c.getMinimumSize().width).resolveExponential();
+					if (minW > largestMinW)
+						largestMinW = minW;
+				}
+				if (type <= 0) {
+					int maxW = width.plus(c.getMaximumSize().width).resolveExponential();
+					if (maxW < smallestMaxW)
+						smallestMaxW = maxW;
+				}
 				break;
 			case East:
 			case West:
@@ -213,12 +230,23 @@ public class BetterBorderLayout implements LayoutManager2 {
 				cross = cs.height;
 				vStacks.add(height.plus(cross));
 				width = width.plus(size);
+				if (type >= 0) {
+					int minH = height.plus(c.getMinimumSize().height).resolveExponential();
+					if (minH > largestMinH)
+						largestMinH = minH;
+				}
+				if (type <= 0) {
+					int maxH = height.plus(c.getMaximumSize().height).resolveExponential();
+					if (maxH < smallestMaxH)
+						smallestMaxH = maxH;
+				}
 				break;
 			default:
 				if (centerIdx >= 0) {
 					System.out.println("Multiple components found fulfulling center role--only the first will be used");
 					break;
 				}
+				centerIdx = compIdx;
 				break; // Handle center last
 			}
 			compIdx++;
@@ -238,16 +266,38 @@ public class BetterBorderLayout implements LayoutManager2 {
 			maxH = height.resolveExponential();
 		} else
 			maxW = maxH = 0;
-		for (QuickSize w : hStacks)
-			maxW = Math.max(maxW, w.resolveExponential());
-		for (QuickSize h : vStacks)
-			maxH = Math.max(maxH, h.resolveExponential());
+		if (type <= 0) {
+			for (QuickSize w : hStacks)
+				maxW = Math.max(maxW, w.resolveExponential());
+			for (QuickSize h : vStacks)
+				maxH = Math.max(maxH, h.resolveExponential());
+		} else {
+			for (QuickSize w : hStacks)
+				maxW = Math.min(maxW, w.resolveExponential());
+			for (QuickSize h : vStacks)
+				maxH = Math.min(maxH, h.resolveExponential());
+		}
 		if (type > 0) {
 			if (maxW == 0)
 				maxW = Integer.MAX_VALUE;
 			if (maxH == 0)
 				maxH = Integer.MAX_VALUE;
 		}
+		if (maxW < largestMinW)
+			maxW = largestMinW;
+		else if (maxW > smallestMaxW)
+			maxW = smallestMaxW;
+		if (maxH < largestMinH)
+			maxH = largestMinH;
+		else if (maxH > smallestMaxH)
+			maxH = smallestMaxH;
+		Insets insets = parent.getInsets();
+		maxW += insets.left + insets.right;
+		if (maxW < 0)
+			maxW = Integer.MAX_VALUE;
+		maxH += insets.top + insets.bottom;
+		if (maxH < 0)
+			maxH = Integer.MAX_VALUE;
 		return new Dimension(maxW, maxH);
 	}
 
@@ -256,6 +306,11 @@ public class BetterBorderLayout implements LayoutManager2 {
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;
+		Insets insets = parent.getInsets();
+		parentSize.width -= insets.left - insets.right;
+		parentSize.height -= insets.top - insets.bottom;
+		if (parent != null && PanelPopulation.isDebugging(parent.getName(), "border-layout", "layout"))
+			BreakpointHere.breakpoint();
 		Component[] components = parent.getComponents();
 
 		// First, compile all the relevante component sizes
@@ -314,16 +369,22 @@ public class BetterBorderLayout implements LayoutManager2 {
 
 		// Now determine how much we need to stretch or squish in each dimension
 		Dimension pref = layoutSize(parent, 0, ci -> compSizes[ci][1]);
+		pref.width -= insets.left - insets.right;
+		pref.height -= insets.top - insets.bottom;
 		Dimension min = null, max = null;
 		double wStretch;
 		if (parentSize.width < pref.width) {
 			min = layoutSize(parent, -1, ci -> compSizes[ci][0]);
+			min.width = Math.max(0, min.width - insets.left - insets.right);
+			min.height = Math.max(0, min.height - insets.top - insets.bottom);
 			if (parentSize.width <= min.width)
 				wStretch = -1;
 			else
 				wStretch = -(parentSize.width - min.width) * 1.0 / (pref.width - min.width);
 		} else if (parentSize.width > pref.width) {
 			max = layoutSize(parent, 1, ci -> compSizes[ci][2]);
+			max.width -= insets.left - insets.right;
+			max.height -= insets.top - insets.bottom;
 			if (parentSize.width > max.width)
 				wStretch = 1;
 			else
@@ -359,12 +420,12 @@ public class BetterBorderLayout implements LayoutManager2 {
 		if (hStretch == 0) {
 			compHeight = ci -> compSizes[ci][1].height;
 		} else if (hStretch < 0) {
-			compHeight = ci -> (int) Math.round(compSizes[ci][0].height + (compSizes[ci][1].height - compSizes[ci][0].height) * wStretch);
+			compHeight = ci -> (int) Math.round(compSizes[ci][0].height + (compSizes[ci][1].height - compSizes[ci][0].height) * hStretch);
 		} else {
-			compHeight = ci -> (int) Math.round(compSizes[ci][1].height + (compSizes[ci][2].height - compSizes[ci][1].height) * wStretch);
+			compHeight = ci -> (int) Math.round(compSizes[ci][1].height + (compSizes[ci][2].height - compSizes[ci][1].height) * hStretch);
 		}
 		compIdx = 0;
-		int left = 0, right = parentSize.width, top = 0, bottom = parentSize.height;
+		int left = insets.left, right = parentSize.width - insets.right, top = insets.top, bottom = parentSize.height - insets.bottom;
 		Component center = null;
 		for (int c = 0; c < components.length; c++) {
 			if (!components[c].isVisible()) {

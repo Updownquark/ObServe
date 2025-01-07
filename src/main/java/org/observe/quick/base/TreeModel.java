@@ -15,15 +15,12 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -46,21 +43,8 @@ public interface TreeModel<N> extends ExElement {
 	 * @param <M> The sub-type of model to create
 	 */
 	public interface Def<M extends TreeModel<?>> extends ExElement.Def<M> {
-		/**
-		 * Updates or initializes the tree model
-		 *
-		 * @param session The session containing the environment to interpret the tree in
-		 * @param activePath The name of the variable where the active node path will be available to expressions
-		 * @param activeNode The name of the variable where the active node value will be available to expressions
-		 * @throws QonfigInterpretationException
-		 */
-		void update(ExpressoQIS session, String activePath, String activeNode) throws QonfigInterpretationException;
-
 		/** @return The ID of the variable where the active node path will be available to expressions */
 		ModelComponentId getActivePathVariable();
-
-		/** @return The ID of the variable where the active node value will be available to expressions */
-		ModelComponentId getActiveNodeVariable();
 
 		/**
 		 * @param <N> The type of node in the tree
@@ -76,7 +60,6 @@ public interface TreeModel<N> extends ExElement {
 		 */
 		public static abstract class Abstract<M extends TreeModel<?>> extends ExElement.Def.Abstract<M> implements Def<M> {
 			private ModelComponentId theActivePathVariable;
-			private ModelComponentId theActiveNodeVariable;
 			private Interpreted<?, ?> theCurrentInterpreting;
 
 			/**
@@ -88,43 +71,21 @@ public interface TreeModel<N> extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session, String activePath, String activeNode) throws QonfigInterpretationException {
-				ObservableModelSet.Builder builder = ExModelAugmentation.augmentElementModel(session.getExpressoEnv().getModels(), this);
-				boolean newBuilder = builder != session.getExpressoEnv().getModels();
-				if (newBuilder)
-					session.setExpressoEnv(session.getExpressoEnv().with(builder));
-				builder.withMaker(activePath,
-					new CompiledTreeModelValue(activePath){
-					@Override
-					protected <N, T> TypeToken<T> getValueType(Interpreted<N, ?> interpreted, InterpretedExpressoEnv env)
-						throws ExpressoInterpretationException {
-						return (TypeToken<T>) TypeTokens.get().keyFor(BetterList.class).parameterized(interpreted.getNodeType(env));
-					}
-				}, null);
-				builder.withMaker(activeNode, new CompiledTreeModelValue(activePath) {
-					@Override
-					protected <N, T> TypeToken<T> getValueType(Interpreted<N, ?> interpreted, InterpretedExpressoEnv env)
-						throws ExpressoInterpretationException {
-						return (TypeToken<T>) interpreted.getNodeType(env);
-					}
-				}, null);
-				theActivePathVariable = builder.getLocalComponent(activePath).getIdentity();
-				theActiveNodeVariable = builder.getLocalComponent(activeNode).getIdentity();
-				update(session);
-				if (newBuilder && getExpressoEnv().getModels() == builder) {
-					setExpressoEnv(getExpressoEnv().with(builder.build()));
-					session.setExpressoEnv(getExpressoEnv());
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				super.doUpdate(session);
+				ExElement.Def<?> parent = getParentElement();
+				while (parent != null && !(parent instanceof MultiValueRenderable.Def)) {
+					parent = parent.getParentElement();
 				}
+				if (parent == null)
+					throw new QonfigInterpretationException("This class must be used as a descendant of a <multi-value-renderable>",
+						reporting().getFileLocation());
+				theActivePathVariable = ((MultiValueRenderable.Def<?>) parent).getActiveValueVariable();
 			}
 
 			@Override
 			public ModelComponentId getActivePathVariable() {
 				return theActivePathVariable;
-			}
-
-			@Override
-			public ModelComponentId getActiveNodeVariable() {
-				return theActiveNodeVariable;
 			}
 
 			@Override

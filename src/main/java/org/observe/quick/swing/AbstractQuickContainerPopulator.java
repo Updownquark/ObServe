@@ -43,7 +43,7 @@ import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComboButtonBuilder;
 import org.observe.util.swing.PanelPopulation.ComboEditor;
-import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -127,7 +127,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public <S> AbstractQuickContainerPopulator addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify) {
+	public <S> AbstractQuickContainerPopulator addComponent(String fieldName, S component, Consumer<ComponentEditor<S, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addComponent(fieldName, component, modify));
 	}
@@ -141,21 +141,21 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addTextField(String fieldName, SettableValue<F> field, Format<F> format,
-		Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
+		Consumer<ComponentEditor<ObservableTextField<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addTextField(fieldName, field, format, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
-		Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+		Consumer<ComponentEditor<ObservableTextArea<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addTextArea(fieldName, field, format, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
-		Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+		Consumer<ComponentEditor<ObservableTextArea<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addStyledTextArea(fieldName, doc, modify));
 	}
@@ -169,14 +169,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator addIcon(String fieldName, ObservableValue<Icon> icon,
-		Consumer<FieldEditor<JLabel, ?>> modify) {
+		Consumer<ComponentEditor<JLabel, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addIcon(fieldName, icon, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-		Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
+		Consumer<Object> action, Consumer<ComponentEditor<JLabel, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addLink(fieldName, field, format, action, modify));
 	}
@@ -212,7 +212,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	@Override
 	public <F> AbstractQuickContainerPopulator addSpinnerField(String fieldName, SettableValue<F> value, Format<F> format,
 		Function<? super F, ? extends F> previousValue, Function<? super F, ? extends F> nextValue,
-		Consumer<FieldEditor<ObservableSpinner<F>, ?>> modify) {
+		Consumer<ComponentEditor<ObservableSpinner<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addSpinnerField(fieldName, value, format, previousValue, nextValue, modify));
 	}
@@ -254,7 +254,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator addFileField(String fieldName, SettableValue<File> value, boolean open,
-		Consumer<FieldEditor<ObservableFileButton, ?>> modify) {
+		Consumer<ComponentEditor<ObservableFileButton, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addFileField(fieldName, value, open, modify));
 	}
@@ -309,6 +309,22 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator modifyFieldLabel(Consumer<FontAdjuster> font) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator withPostLabel(ObservableValue<String> postLabel) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator withPostButton(String buttonText, ObservableAction action,
+		Consumer<ButtonEditor<JButton, ?>> modify) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator withPostContent(Consumer<PanelPopulator<JPanel, ?>> content) {
 		throw new UnsupportedOperationException("Should not call this here");
 	}
 

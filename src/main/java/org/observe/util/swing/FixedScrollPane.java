@@ -4,8 +4,12 @@ import java.awt.AWTEvent;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.EventQueue;
 import java.awt.Point;
+import java.awt.event.ContainerEvent;
+import java.awt.event.ContainerListener;
 import java.awt.event.MouseWheelEvent;
+import java.beans.PropertyChangeListener;
 
 import javax.swing.BoundedRangeModel;
 import javax.swing.JComponent;
@@ -23,7 +27,7 @@ import javax.swing.plaf.LayerUI;
  * scroll pane will NEVER see that event, even if the inner scroll pane is already scrolled to the end.
  * </p>
  * <p>
- * This can cause a sitation where an inner scroll pane which dominates the view port of the outer pane prevents the user from scrolling
+ * This can cause a situation where an inner scroll pane which dominates the view port of the outer pane prevents the user from scrolling
  * down or up past it, forcing them to use the scroll bar itself.
  * </p>
  * <p>
@@ -38,6 +42,10 @@ import javax.swing.plaf.LayerUI;
  * This class also addresses some other annoying behavior of JScrollPane with the {@link #scrollable(boolean, boolean)} method, which is
  * that even when a scroll pane is set to never display a horizontal scroll bar, the scroll pane gives no resistance to being resized below
  * the minimum size of its view, eclipsing part of it such that it cannot be displayed.
+ * </p>
+ * <p>
+ * This class also performs the same function as {@link ConformingPanel}, monitoring the scroll pane's content for invalidation and layout
+ * size changes, so the component hierarchy can be resized and re-layed out accordingly.
  * </p>
  */
 public class FixedScrollPane {
@@ -85,6 +93,39 @@ public class FixedScrollPane {
 				if (dispatch)
 					l.getView().dispatchEvent(SwingUtilities.convertMouseEvent(child, e, l.getView()));
 			}
+		});
+		// Monitor the scroll pane's content for invalidation and layout size changes so we can resize as needed.
+		// Can't believe I have to do this myself, seems like it should be part of Swing.
+		// But then, I guess the whole premise of this class is that Swing isn't doing what I need it to do.
+		PropertyChangeListener invalidateListener = evt -> {
+			scroll.invalidate();
+			theLayer.invalidate();
+			theLayer.firePropertyChange("invalidate", 0, 0);
+			EventQueue.invokeLater(theLayer::revalidate);
+		};
+		ContainerListener containerListener = new ContainerListener() {
+			@Override
+			public void componentRemoved(ContainerEvent e) {
+				e.getChild().removePropertyChangeListener("invalidate", invalidateListener);
+				e.getChild().removePropertyChangeListener("minimumSize", invalidateListener);
+				e.getChild().removePropertyChangeListener("preferredSize", invalidateListener);
+				e.getChild().removePropertyChangeListener("maximumSize", invalidateListener);
+			}
+
+			@Override
+			public void componentAdded(ContainerEvent e) {
+				e.getChild().addPropertyChangeListener("invalidate", invalidateListener);
+				e.getChild().addPropertyChangeListener("minimumSize", invalidateListener);
+				e.getChild().addPropertyChangeListener("preferredSize", invalidateListener);
+				e.getChild().addPropertyChangeListener("maximumSize", invalidateListener);
+			}
+		};
+		scroll.getViewport().addContainerListener(containerListener);
+		scroll.addPropertyChangeListener("viewport", evt -> {
+			if (evt.getOldValue() != null)
+				((JViewport) evt.getOldValue()).removeContainerListener(containerListener);
+			if (evt.getNewValue() != null)
+				((JViewport) evt.getNewValue()).addContainerListener(containerListener);
 		});
 	}
 

@@ -118,10 +118,12 @@ public abstract class Invocation implements ObservableExpression {
 		/**
 		 * @param arg The index of the argument to check
 		 * @param paramType The type of the input parameter
+		 * @param exHandler The handler for exceptions evaluating the argument's type
 		 * @return Null if the given parameter can be matched to the given argument, or the type conversion error if it can't
 		 * @throws ExpressoInterpretationException If the argument cannot be evaluated
 		 */
-		ExpressoInterpretationException matchesType(int arg, TypeToken<?> paramType) throws ExpressoInterpretationException;
+		<EX extends Throwable> boolean matchesType(int arg, TypeToken<?> paramType,
+			ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX;
 
 		/**
 		 * @param <EX> The type of exception that the handler may throw
@@ -165,7 +167,8 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public ExpressoInterpretationException matchesType(int arg, TypeToken<?> paramType) throws ExpressoInterpretationException {
+		public <EX extends Throwable> boolean matchesType(int arg, TypeToken<?> paramType,
+			ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
@@ -174,24 +177,27 @@ public abstract class Invocation implements ObservableExpression {
 					// Move to the beginning
 					args[arg].remove(i);
 					args[arg].add(0, c);
-					return null;
+					return true;
 				}
 			}
 			// Not found, try to evaluate it
 			int argOffset = getInitialArgOffset();
 			for (int i = 0; i < arg; i++)
 				argOffset += theArguments.get(i).getExpressionLength() + 1;
-			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
-				.holder2();
+			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> tce = exHandler
+				.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg).evaluate(//
 				ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset, tce);
-			if (tce.get1() != null)
-				return tce.get1();
-			else if (tce.get2() != null)
-				return new ExpressoInterpretationException(tce.get2().getMessage(), theEnv.reporting().at(argOffset).getPosition(), 0);
-			else {
+			if (tce.hasException1())
+				return false;
+			else if (tce.hasException2()) {
+				int fOffset = argOffset;
+				exHandler.handle1(
+					() -> new ExpressoInterpretationException(tce.get2().getMessage(), theEnv.reporting().at(fOffset).getPosition(), 0));
+				return false;
+			} else {
 				args[arg].add(0, c);
-				return null;
+				return true;
 			}
 		}
 
@@ -199,7 +205,7 @@ public abstract class Invocation implements ObservableExpression {
 		public <EX extends Throwable> TypeToken<?> resolve(int arg, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws EX, ExpressoInterpretationException {
 			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-				.stack(ExceptionHandler.holder());
+				.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 			if (resolved[arg] == null) {
 				if (args[arg].isEmpty()) {
 					int argOffset = 0;
@@ -210,9 +216,10 @@ public abstract class Invocation implements ObservableExpression {
 					}
 					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv.at(argOffset),
 						theExpressionOffset + argOffset, doubleX);
-					if (doubleX.get2() != null) {
-						exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
-							theEnv.reporting().at(argOffset).getPosition(), 0));
+					if (doubleX.hasException2()) {
+						int fOffset = argOffset;
+						exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
+							theEnv.reporting().at(fOffset).getPosition(), 0));
 						return null;
 					} else if (resolved[arg] == null)
 						return null;
@@ -373,8 +380,23 @@ public abstract class Invocation implements ObservableExpression {
 		ModelInstanceType<M, MV> targetType, InterpretedExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation,
 		int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
+		MethodResult<X, MV> result = _findMethod(methods, methodName, contextType, arg0Context, argOptions, targetType, env, impl,
+			invocation, expressionOffset, exHandler, false);
+		if (result != null)
+			return result;
+		_findMethod(methods, methodName, contextType, arg0Context, argOptions, targetType, env, impl, invocation, expressionOffset,
+			exHandler, true);
+		return null;
+	}
+
+	private static <X extends Executable, M, MV extends M, EX extends Throwable> MethodResult<X, MV> _findMethod(X[] methods,
+		String methodName, TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions,
+		ModelInstanceType<M, MV> targetType, InterpretedExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation,
+		int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler, boolean secondPass)
+			throws ExpressoInterpretationException, EX {
 		Map<X, ExpressoInterpretationException> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
+		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> typeHandler = ExceptionHandler.holder(secondPass);
 		for (X m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
 				continue;
@@ -390,6 +412,7 @@ public abstract class Invocation implements ObservableExpression {
 					paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 					specificity += TypeTokens.get().getTypeSpecificity(paramTypes[p].getType());
 				}
+				specificity += TypeTokens.get().getTypeSpecificity(impl.getReturnType(m));
 				if (specificity < bestResult.specificity)
 					continue; // Current result is better than this even if it matches
 			}
@@ -403,7 +426,7 @@ public abstract class Invocation implements ObservableExpression {
 				int methodArgStart;
 				if (isStatic) {
 					// No context, all arguments are parameters
-					tvaResolver = null;
+					tvaResolver = contextType;
 					methodArgStart = 0;
 					if (paramTypes == null) {
 						paramTypes = new TypeToken[m.getParameterTypes().length];
@@ -412,14 +435,25 @@ public abstract class Invocation implements ObservableExpression {
 					}
 				} else if (arg0Context) {
 					// Use the first argument as context
-					ExpressoInterpretationException ex = option.matchesType(0, contextType);
-					if (ex != null) {
-						if (methodErrors == null)
-							methodErrors = new LinkedHashMap<>();
-						methodErrors.put(m, ex);
+					if (!option.matchesType(0, contextType, typeHandler)) {
+						if (secondPass) {
+							if (methodErrors == null)
+								methodErrors = new LinkedHashMap<>();
+							methodErrors.put(m, typeHandler.get1());
+						}
+						typeHandler.clear();
 						continue;
 					}
 					tvaResolver = option.resolve(0, exHandler);
+					if (exHandler.hasException1()) {
+						if (secondPass && exHandler.get1() != null) {
+							if (methodErrors == null)
+								methodErrors = new LinkedHashMap<>();
+							methodErrors.put(m, exHandler.get1());
+						}
+						exHandler.clear1();
+						continue;
+					}
 					methodArgStart = 1;
 					if (paramTypes == null) {
 						paramTypes = new TypeToken[m.getParameterTypes().length];
@@ -452,54 +486,79 @@ public abstract class Invocation implements ObservableExpression {
 					if (p == paramTypes.length - 1 && m.isVarArgs()) {
 						// Test var-args invocation first
 						TypeToken<?> ptComp = paramType.getComponentType();
-						varArgs = option.matchesType(a, ptComp) == null;
+						varArgs = option.matchesType(a, ptComp, ExceptionHandler.placeHolder());
 						if (varArgs && !tva.accumulate(ptComp, option.resolve(a, exHandler))) {
-							if (methodErrors == null)
-								methodErrors = new LinkedHashMap<>();
-							methodErrors.put(m,
-								new ExpressoInterpretationException(
-									option.resolve(a, exHandler).getType() + " is not valid for var arg parameter "
-										+ (paramTypes.length - 1) + ". Expected type " + tva.resolve(ptComp.getType()),
-										env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+							if (secondPass) {
+								if (methodErrors == null)
+									methodErrors = new LinkedHashMap<>();
+								if (exHandler.get1() != null) {
+									methodErrors.put(m, exHandler.get1());
+								} else {
+									methodErrors.put(m,
+										new ExpressoInterpretationException(
+											option.resolve(a, exHandler).getType() + " is not valid for var arg parameter "
+												+ (paramTypes.length - 1) + ". Expected type " + tva.resolve(ptComp.getType()),
+												env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+								}
+							}
+							exHandler.clear1();
 							ok = false;
 							break;
 						}
 						if (!varArgs && option.size() == paramTypes.length) { // Check for non-var-args invocation
-							ExpressoInterpretationException ex = option.matchesType(a, paramType);
-							if (ex == null) {
+							if (option.matchesType(a, paramType, typeHandler)) {
 								if (!tva.accumulate(paramType, option.resolve(a, exHandler))) {
-									if (methodErrors == null)
-										methodErrors = new LinkedHashMap<>();
-									methodErrors.put(m,
-										new ExpressoInterpretationException(
-											option.resolve(a, exHandler).getType() + " is not valid for parameter " + a + ". Expected type "
-												+ tva.resolve(paramType.getType()),
-												env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+									if (secondPass) {
+										if (methodErrors == null)
+											methodErrors = new LinkedHashMap<>();
+										if (exHandler.get1() != null) {
+											methodErrors.put(m, exHandler.get1());
+										} else {
+											methodErrors.put(m,
+												new ExpressoInterpretationException(
+													option.resolve(a, exHandler).getType() + " is not valid for parameter " + a
+													+ ". Expected type " + tva.resolve(ptComp.getType()),
+													env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+										}
+									}
+									exHandler.clear1();
 									ok = false;
 								}
 							} else {
-								if (methodErrors == null)
-									methodErrors = new LinkedHashMap<>();
-								methodErrors.put(m, ex);
+								if (secondPass) {
+									if (methodErrors == null)
+										methodErrors = new LinkedHashMap<>();
+									methodErrors.put(m, typeHandler.get1());
+								}
+								typeHandler.clear();
 								ok = false;
 								break;
 							}
 						}
 					} else {
-						ExpressoInterpretationException ex = option.matchesType(a, paramType);
-						if (ex != null) {
-							if (methodErrors == null)
-								methodErrors = new LinkedHashMap<>();
-							methodErrors.put(m, ex);
+						if (!option.matchesType(a, paramType, typeHandler)) {
+							if (secondPass) {
+								if (methodErrors == null)
+									methodErrors = new LinkedHashMap<>();
+								methodErrors.put(m, typeHandler.get1());
+							}
+							typeHandler.clear();
 							ok = false;
 						} else if (!tva.accumulate(paramType, option.resolve(a, exHandler))) {
-							if (methodErrors == null)
-								methodErrors = new LinkedHashMap<>();
-							methodErrors.put(m,
-								new ExpressoInterpretationException(
-									option.resolve(a, exHandler).getType() + " is not valid for parameter " + a + ". Expected type "
-										+ tva.resolve(paramType.getType()),
-										env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+							if (secondPass) {
+								if (methodErrors == null)
+									methodErrors = new LinkedHashMap<>();
+								if (exHandler.get1() != null) {
+									methodErrors.put(m, exHandler.get1());
+								} else {
+									methodErrors.put(m,
+										new ExpressoInterpretationException(
+											option.resolve(a, exHandler).getType() + " is not valid for parameter " + a + ". Expected type "
+												+ tva.resolve(paramType.getType()),
+												env.reporting().at(expressionOffset + option.getArgOffset(a)).getPosition(), 0));
+								}
+							}
+							exHandler.clear1();
 							ok = false;
 						}
 					}
@@ -510,18 +569,21 @@ public abstract class Invocation implements ObservableExpression {
 
 					ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
 					if (converter == null) {
-						if (methodErrors == null)
-							methodErrors = new LinkedHashMap<>();
-						methodErrors
-						.put(m,
-							new ExpressoInterpretationException("Return type " + returnType + " of method "
-								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType,
-								env.reporting().getPosition(), 0));
+						if (secondPass) {
+							if (methodErrors == null)
+								methodErrors = new LinkedHashMap<>();
+							methodErrors.put(m,
+								new ExpressoInterpretationException("Return type " + returnType + " of method "
+									+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType,
+									env.reporting().getPosition(), 0));
+						}
 					} else {
 						if (specificity < 0) {
 							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
 								specificity += TypeTokens.get().getTypeSpecificity(pt.getType());
+							// So bizarre, the methods call includes overridden methods, e.g. Comparable.compareTo() and String.compareTo()
+							specificity += TypeTokens.get().getTypeSpecificity(returnType.getType());
 						}
 						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
 							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
@@ -532,7 +594,7 @@ public abstract class Invocation implements ObservableExpression {
 		if (bestResult == null && methodErrors != null) {
 			if (methodErrors.size() == 1) {
 				ExpressoInterpretationException ex = methodErrors.values().iterator().next();
-				exHandler.handle1(ex);
+				exHandler.handle1(() -> ex);
 				return null;
 			}
 			String exMsg = methodErrors.values().iterator().next().getMessage();
@@ -540,7 +602,8 @@ public abstract class Invocation implements ObservableExpression {
 			for (ExpressoInterpretationException ex : methodErrors.values())
 				sameMsg &= exMsg.equals(ex.getMessage());
 			if (sameMsg) {
-				exHandler.handle1(methodErrors.values().iterator().next());
+				ExpressoInterpretationException ex = methodErrors.values().iterator().next();
+				exHandler.handle1(() -> ex);
 				return null;
 			}
 			StringBuilder msg = new StringBuilder("Could not find a match for ").append(invocation).append(':');
@@ -549,7 +612,8 @@ public abstract class Invocation implements ObservableExpression {
 			ExpressoInterpretationException tce = new ExpressoInterpretationException(msg.toString(), env.reporting().getPosition(), 0);
 			for (ExpressoInterpretationException ex : methodErrors.values())
 				tce.addSuppressed(ex);
-			exHandler.handle1(tce);
+			exHandler.handle1(() -> tce);
+			return null;
 		}
 		return bestResult;
 	}
@@ -585,11 +649,13 @@ public abstract class Invocation implements ObservableExpression {
 			theType = type;
 			if (impl.isStatic(theMethod.method)) {
 				if (context != null)
-					System.out.println("Info: " + method + " should be called statically");
+					reporting.info(method + " should be called statically");
 				theContext = null;
 			} else {
-				if (context == null)
-					throw new IllegalStateException(method + " cannot be called without context");
+				if (context == null) {
+					reporting.error(method + " is not static--cannot be called without context");
+					throw new IllegalStateException(method + " is not static--cannot be called without context");
+				}
 				theContext = context;
 			}
 			theImpl = impl;
@@ -737,6 +803,7 @@ public abstract class Invocation implements ObservableExpression {
 				SettableValue<?> newArg = theArguments.get(i).get(newModels);
 				different |= sourceArg != newArg;
 				argVs[i] = newArg;
+				changeSources[i] = argVs[i].noInitChanges();
 			}
 
 			if (!different)
@@ -792,11 +859,27 @@ public abstract class Invocation implements ObservableExpression {
 				return theCachedValue;
 			Object ctx = theContext == null ? null : theContext.get();
 			if (ctx == null && theContext != null) {
-				String msg = theContext + " is null, cannot call " + theMethod;
-				if (isTesting)
+				/* This would seem to be a problem, but actually it's pretty much entirely unavoidable
+				 * due to the way the observable system works.
+				 * It's possible to eliminate this almost entirely using conditionals ("value==null ? null : value.something()"),
+				 * but actually there are cases when this is impossible.
+				 *
+				 * E.g. for a collection like "value==null ? {} : value.getFieldValues()".
+				 * When "value" becomes null, the flattened collection needs to lock the previous collection ("values.getFieldValues()"),
+				 * in order to depopulate any potential values it contains from the result.
+				 * Since values.getFieldValues() is invalid (entering this block) before the event gets to it,
+				 * we really can't avoid this condition.
+				 * So the best thing is to just ignore it.  Don't even warn.
+				 *
+				 * This makes apps easier to construct, since you don't have to worry so much about what's null and what's not.
+				 *
+				 * The only exception is during testing.  Be rigorous then.
+				 */
+				if (isTesting) {
+					String msg = theContext + " is null, cannot call " + theMethod;
 					throw new NullPointerException(msg);
-				theReporting.error(msg);
-				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
+				}
+				// theReporting.warn(msg);
 				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
 				return theDefaultValue;
 			}
@@ -839,9 +922,10 @@ public abstract class Invocation implements ObservableExpression {
 				else
 					return Stamped.compositeStamp(Arrays.asList(argVs));
 			}, changes, () -> this);
+			String location = theReporting.getFileLocation().getPosition(0).toShortString();
 			if (isCaching) {
 				return SettableValue.asSettable(backing.cached(), //
-					__ -> theImpl + "s are not reversible");
+					__ -> location + ": " + theImpl + "s are not reversible");
 			} else {
 				long[] stamp = new long[1];
 				return SettableValue.asSettable(ObservableValue.of(//
@@ -850,7 +934,7 @@ public abstract class Invocation implements ObservableExpression {
 						return backing.get();
 					}, () -> Stamped.compositeStamp(backing.getStamp(), stamp[0]), //
 					changes, () -> this), //
-					__ -> theImpl + "s are not reversible");
+					__ -> location + ": " + theImpl + "s are not reversible");
 			}
 		}
 

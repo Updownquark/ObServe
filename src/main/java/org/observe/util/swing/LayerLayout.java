@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /** Simple layout that positions all components to the full size of the parent container */
-public class LayerLayout implements AbstractLayout {
+public class LayerLayout extends AbstractLayout {
 	@Override
 	public boolean getScrollableTracksViewportWidth(Container parent) {
 		return false;
@@ -34,6 +34,8 @@ public class LayerLayout implements AbstractLayout {
 			maxMinW = Math.min(maxMinW, sz.width);
 			maxMinH = Math.min(maxMinH, sz.height);
 		}
+		maxMinW += parentInsets.left + parentInsets.right;
+		maxMinH += parentInsets.top + parentInsets.bottom;
 		return new Dimension(maxMinW, maxMinH);
 	}
 
@@ -67,6 +69,8 @@ public class LayerLayout implements AbstractLayout {
 			prefH = maxMinH;
 		else if (prefH > minMaxH && minMaxH >= maxMinH)
 			prefH = minMaxH;
+		prefW += parentInsets.left + parentInsets.right;
+		prefH += parentInsets.top + parentInsets.bottom;
 		return new Dimension(prefW, prefH);
 	}
 
@@ -80,13 +84,17 @@ public class LayerLayout implements AbstractLayout {
 			minMaxW = Math.max(minMaxW, sz.width);
 			minMaxH = Math.max(minMaxH, sz.height);
 		}
+		minMaxW = Math.max(minMaxW, minMaxW + parentInsets.left + parentInsets.right);
+		minMaxH = Math.max(minMaxH, minMaxH + parentInsets.top + parentInsets.bottom);
 		return new Dimension(minMaxW, minMaxH);
 	}
 
 	@Override
 	public Rectangle[] layoutContainer(Dimension containerSize, Insets parentInsets, List<LayoutChild> components) {
 		Rectangle[] bounds = new Rectangle[components.size()];
-		Arrays.fill(bounds, new Rectangle(0, 0, containerSize.width, containerSize.height));
+		int w = containerSize.width - parentInsets.left - parentInsets.right;
+		int h = containerSize.height - parentInsets.top - parentInsets.bottom;
+		Arrays.fill(bounds, new Rectangle(parentInsets.left, parentInsets.top, w, h));
 		return bounds;
 	}
 }

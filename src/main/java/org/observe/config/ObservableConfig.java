@@ -24,6 +24,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.CausableChanging;
 import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -49,6 +50,8 @@ import org.qommons.Nameable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
@@ -60,6 +63,8 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.RRWLockingStrategy;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.config.MutableConfig;
 import org.qommons.config.QommonsConfig;
 import org.qommons.ex.ExFunction;
@@ -87,7 +92,7 @@ import com.google.common.reflect.TypeToken;
  * configurable collections of child configurations as standard observable structures.
  * </p>
  */
-public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventable {
+public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventable, CausableChanging {
 	/** Fired from {@link ObservableConfig#watch(ObservableConfigPath)} when content at or beneath the watched config is modified */
 	public static class ObservableConfigEvent extends Causable.AbstractCausable {
 		/**
@@ -190,6 +195,11 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		 * @throws E If persistence fails
 		 */
 		void persist(ObservableConfig config) throws E;
+	}
+
+	@Override
+	default Observable<ObservableConfigEvent> simpleChanges() {
+		return watch((ObservableConfigPath) null);
 	}
 
 	/**
@@ -1414,6 +1424,36 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 	 */
 	public static ObservableConfig createRoot(String name, String value, Function<Object, CollectionLockingStrategy> locking) {
 		return DefaultObservableConfig.createRoot(name, value, locking);
+	}
+
+	/**
+	 * @param name The name of the root config
+	 * @param value The initial value for the root config
+	 * @param configuration Optional configuration for the config's transactable nature (locking)
+	 * @return The root element
+	 */
+	public static ObservableConfig createRoot2(String name, String value, Consumer<TransactableBuilder<?>> configuration) {
+		class Configuration extends TransactableBuilder.Default<Configuration> {
+			Configuration(String defaultDescrip) {
+				super(defaultDescrip);
+			}
+
+			@Override
+			protected Function<Object, Transactable> getLocker() {
+				return super.getLocker();
+			}
+		}
+		Configuration config = new Configuration(name)//
+			.withLocking(obj -> new StampedLockingStrategy(obj, ThreadConstraint.ANY));
+		configuration.accept(config);
+		Function<Object, Transactable> lock = config.getLocker();
+		return createRoot(name, value, owner -> {
+			Transactable lockValue = lock.apply(owner);
+			if (lockValue instanceof CollectionLockingStrategy)
+				return (CollectionLockingStrategy) lockValue;
+			else
+				return new RRWLockingStrategy(lockValue);
+		});
 	}
 
 	/**

@@ -5,17 +5,23 @@ import java.text.ParseException;
 import java.util.Set;
 import java.util.function.BiFunction;
 
+import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.QuickStyleUtils;
+import org.observe.quick.style.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -95,7 +101,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
 			ExElement.creator(QuickBorder.TitledBorder.Def::new));
-		interpreter.createWith(Iconized.ICONIZED, Iconized.Def.class, ExAddOn.creator(Iconized.Def::new));
+		interpreter.createWith(Iconized.ICONIZED, Iconized.Def.class, ExAddOn.creator(QuickStyledElement.Def.class, Iconized.Def::new));
 
 		interpreter.createWith(QuickEventListener.EventFilter.EVENT_FILTER, QuickEventListener.EventFilter.Def.class,
 			ExElement.creator(QuickEventListener.EventFilter.Def::new));
@@ -166,6 +172,8 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 */
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> evaluateIcon(CompiledExpression expression,
 		ExElement.Interpreted<?> element, String sourceDocument) throws ExpressoInterpretationException {
+		if (expression == null)
+			return null;
 		return QuickStyleUtils.evaluateIcon(expression, element.getEnvironmentFor(expression));
 	}
 
@@ -195,5 +203,45 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	public static <E extends ExElement, AO extends ExAddOn<E>, D extends ExAddOn.Def<E, AO>> D interpretAddOn(AbstractQIS<?> session,
 		BiFunction<ExElement.Def<?>, QonfigAddOn, D> addOn) {
 		return addOn.apply((ExElement.Def<?>) session.getElementRepresentation(), (QonfigAddOn) session.getFocusType());
+	}
+
+	/**
+	 * @param modelModels The expresso models to copy
+	 * @param targetVariable A variable belonging to the highest-level model to copy
+	 * @param until The observable to dismantle the model copy
+	 * @return A model instance containing copies of the given model and all other models with the given variable in scope
+	 * @throws ModelInstantiationException If the models could not be copied
+	 */
+	public static ModelSetInstanceBuilder copyModels(ModelSetInstance modelModels, ModelComponentId targetVariable, Observable<?> until)
+		throws ModelInstantiationException {
+		return copyModels(modelModels, null, targetVariable, until);
+	}
+
+	private static ModelSetInstanceBuilder copyModels(ModelSetInstance models, ModelSetInstanceBuilder rootCopy,
+		ModelComponentId targetVariable, Observable<?> until) throws ModelInstantiationException {
+		ModelSetInstanceBuilder copy = models.copy(until);
+		if (rootCopy == null)
+			rootCopy = copy;
+		Iterable<ModelComponentId> components;
+		if (models.getTopLevelModels().size() == 1)
+			components = models.getInheritance();
+		else
+			components = models.getTopLevelModels();
+		for (ModelComponentId modelId : components) {
+			ModelSetInstance model = models.getInherited(modelId);
+			ModelSetInstance inheritedCopy = rootCopy.getInherited(modelId);
+			if (inheritedCopy != model) { // Already copied
+				if (!copy.isSatisfied(modelId) || copy.getInherited(modelId) != inheritedCopy)
+					copy.withAll(inheritedCopy);
+			} else if (modelId == targetVariable.getOwnerId()) {
+				ModelSetInstance componentCopy = model.copy(until).build();
+				copy.with(componentCopy);
+				if (copy != rootCopy)
+					rootCopy.with(componentCopy);
+			} else if (model.getInheritance().contains(targetVariable.getOwnerId())) {
+				copy.with(copyModels(model, rootCopy, targetVariable, until).build());
+			}
+		}
+		return copy;
 	}
 }

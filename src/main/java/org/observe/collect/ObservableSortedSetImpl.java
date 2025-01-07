@@ -69,6 +69,12 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ObservableSubSet<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence.SortedEquivalence<? super E> equivalence() {
 			return (SortedEquivalence<? super E>) super.equivalence();
 		}
@@ -181,6 +187,12 @@ public class ObservableSortedSetImpl {
 		@Override
 		protected ObservableSortedSet<E> getWrapped() {
 			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSortedSetImpl.ReversedSortedSet<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -618,6 +630,12 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public PassiveDerivedSortedSet<E, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence.SortedEquivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -680,6 +698,12 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveDerivedSortedSet<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence.SortedEquivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -723,6 +747,12 @@ public class ObservableSortedSetImpl {
 		@Override
 		protected ObservableValue<? extends ObservableSortedSet<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSortedSet<E>>) super.getWrapped();
+		}
+
+		@Override
+		public FlattenedValueSortedSet<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -828,6 +858,12 @@ public class ObservableSortedSetImpl {
 		@Override
 		protected ObservableSortedSet<E> getWrapped() throws IllegalStateException {
 			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSortedSetImpl<E, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override

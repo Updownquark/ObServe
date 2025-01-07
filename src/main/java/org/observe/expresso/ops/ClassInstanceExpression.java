@@ -84,7 +84,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 		}
 		TypeToken<Class<?>> classType = TypeTokens.get().keyFor(Class.class).parameterized(clazz);
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType)) {
-			exHandler.handle1(new ExpressoInterpretationException(theType + ".class cannot be evaluated as a " + type.getType(0),
+			exHandler.handle1(() -> new ExpressoInterpretationException(theType + ".class cannot be evaluated as a " + type.getType(0),
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}

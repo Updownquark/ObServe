@@ -73,7 +73,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		 * @param parent The parent style sheet importing this style sheet
 		 * @param type The Qonfig type of this import reference
 		 */
-		public StyleSheetRef(QuickStyleSheet parent, QonfigElementOrAddOn type) {
+		public StyleSheetRef(ExElement.Def<? extends ExElement.Void> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 

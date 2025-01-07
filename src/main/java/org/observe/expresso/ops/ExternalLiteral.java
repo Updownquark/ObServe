@@ -83,7 +83,7 @@ public class ExternalLiteral implements ObservableExpression {
 		Class<T> rawType = TypeTokens.getRawType(asType);
 		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
 		if (parsers.isEmpty()) {
-			exHandler.handle1(new ExpressoInterpretationException("No literal parsers available for type " + rawType.getName(),
+			exHandler.handle1(() -> new ExpressoInterpretationException("No literal parsers available for type " + rawType.getName(),
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
@@ -95,9 +95,9 @@ public class ExternalLiteral implements ObservableExpression {
 			}
 		}
 		if (parser == null) {
-			exHandler
-			.handle1(new ExpressoInterpretationException("No literal parsers for value `" + theText + "` as type " + rawType.getName(),
-				env.reporting().getPosition(), getExpressionLength()));
+			exHandler.handle1(
+				() -> new ExpressoInterpretationException("No literal parsers for value `" + theText + "` as type " + rawType.getName(),
+					env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		parserUsed[0] = parser;
@@ -106,7 +106,7 @@ public class ExternalLiteral implements ObservableExpression {
 			value = parser.parse(asType, theText, env);
 		} catch (ParseException e) {
 			exHandler.handle1(
-				new ExpressoInterpretationException("Literal parsing failed for value `" + theText + "` as type " + rawType.getName(),
+				() -> new ExpressoInterpretationException("Literal parsing failed for value `" + theText + "` as type " + rawType.getName(),
 					env.reporting().at(e.getErrorOffset()).getPosition(), e.getErrorOffset() == 0 ? getExpressionLength() : 0, e));
 			return null;
 		}

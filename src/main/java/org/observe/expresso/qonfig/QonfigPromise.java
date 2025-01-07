@@ -51,7 +51,7 @@ public interface QonfigPromise extends ExElement {
 		InterpretedExpressoEnv getExternalExpressoEnv();
 
 		/** @param env The expresso environment of the fulfilled content */
-		void setExternalExpressoEnv(InterpretedExpressoEnv env);
+		void setParentEnv(InterpretedExpressoEnv env);
 
 		/**
 		 * Initializes or updates this promise

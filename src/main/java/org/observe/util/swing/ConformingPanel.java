@@ -22,7 +22,6 @@ public class ConformingPanel extends JPanel {
 
 	/** Creates a panel */
 	public ConformingPanel() {
-		super();
 		addContainerListener(new ContainerListener() {
 			@Override
 			public void componentRemoved(ContainerEvent e) {

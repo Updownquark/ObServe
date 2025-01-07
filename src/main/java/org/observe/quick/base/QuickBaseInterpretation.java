@@ -2,9 +2,9 @@ package org.observe.quick.base;
 
 import java.util.Set;
 
+import org.observe.expresso.BinaryOperatorSet;
 import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ops.BinaryOperatorSet;
-import org.observe.expresso.ops.UnaryOperatorSet;
+import org.observe.expresso.UnaryOperatorSet;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -120,7 +120,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class,
 			ExElement.creator(DynamicStyledDocument.Def::new));
 		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
-			ExElement.creator(StyledDocument.Def.class, StyledDocument.TextStyleElement.Def::new));
+			ExElement.creator(StyledDocument.TextStyleElement.Def::new));
 		interpreter.createWith(QuickSpacer.SPACER, QuickSpacer.Def.class, ExElement.creator(QuickSpacer.Def::new));
 		interpreter.createWith(QuickSeparator.SEPARATOR, QuickSeparator.Def.class, ExElement.creator(QuickSeparator.Def::new));
 		interpreter.createWith(QuickCustomComponent.CUSTOM_COMPONENT, QuickCustomComponent.Def.class,
@@ -129,8 +129,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		// Containers
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));
 		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, ExElement.creator(QuickFieldPanel.Def::new));
-		interpreter.createWith(QuickField.FIELD, QuickField.Def.class,
-			ExAddOn.creator((Class<QuickWidget.Def<?>>) (Class<?>) QuickWidget.Def.class, QuickField.Def::new));
+		interpreter.createWith(QuickField.FIELD, QuickField.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickField.Def::new));
+		interpreter.createWith(QuickPostField.POST_FIELD, QuickPostField.Def.class, ExElement.creator(QuickPostField.Def::new));
 		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, ExElement.creator(QuickSplit.Def::new));
 		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, ExElement.creator(QuickScrollPane.Def::new));
 
@@ -159,9 +159,15 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		// Table
 		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, ExElement.creator(QuickTable.Def::new));
 		interpreter.createWith(QuickTableColumn.SingleColumnSet.COLUMN, QuickTableColumn.SingleColumnSet.Def.class,
-			ExElement.creator(ValueTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
+			ExElement.<ValueTyped<?>, ValueTyped.Def<?>, QuickTableColumn.SingleColumnSet.Def> creator(
+				(Class<ValueTyped.Def<?>>) (Class<?>) ValueTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
+		interpreter.createWith(QuickTableColumn.VariableColumns.VARIABLE_COLUMNS, QuickTableColumn.VariableColumns.Def.class,
+			ExElement.<ValueTyped<?>, ValueTyped.Def<?>, QuickTableColumn.VariableColumns.Def> creator(
+				(Class<ValueTyped.Def<?>>) (Class<?>) ValueTyped.Def.class, QuickTableColumn.VariableColumns.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
-			ExElement.creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
+			ExElement.<QuickTableColumn.TableColumnSet<?>, QuickTableColumn.TableColumnSet.Def<?>, QuickTableColumn.ColumnEditing.Def> creator(
+				(Class<QuickTableColumn.TableColumnSet.Def<?>>) (Class<?>) QuickTableColumn.TableColumnSet.Def.class,
+				QuickTableColumn.ColumnEditing.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditType.RowModifyEditType.MODIFY,
 			QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
@@ -203,6 +209,14 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickCheckBoxMenuItem.CHECK_BOX_MENU_ITEM, QuickCheckBoxMenuItem.Def.class,
 			ExElement.creator(QuickCheckBoxMenuItem.Def::new));
 
+		// Dragging
+		interpreter.createWith(QuickDragging.TRANSFER_SOURCE, QuickDragging.TransferSource.Def.class,
+			ExElement.creator(QuickDragging.TransferSource.Def::new));
+		interpreter.createWith(QuickDragging.TRANSFER_ACCEPT, QuickDragging.TransferAccept.Def.class,
+			ExElement.creator(QuickDragging.TransferAccept.Def::new));
+		interpreter.createWith(QuickDragging.AS_OBJECT, QuickDragging.AsObject.Def.class,
+			ExElement.creator(QuickDragging.AsObject.Def::new));
+		interpreter.createWith(QuickDragging.AS_TEXT, QuickDragging.AsText.Def.class, ExElement.creator(QuickDragging.AsText.Def::new));
 		return interpreter;
 	}
 

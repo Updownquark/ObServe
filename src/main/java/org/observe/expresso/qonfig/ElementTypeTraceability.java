@@ -1500,6 +1500,8 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				try {
 					ret = theInterpretedGetter.invoke(interp);
 				} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+					System.err.println("Could not invoke " + theInterpretedGetter.getDeclaringClass() + "." + theInterpretedGetter.getName()
+					+ "() on instance " + interp + " of type " + (interp == null ? "null" : interp.getClass().getName()));
 					e.printStackTrace();
 					return Collections.emptyList();
 				}
@@ -1529,6 +1531,8 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				try {
 					ret = theElementGetter.invoke(element);
 				} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+					System.err.println("Could not invoke " + theInterpretedGetter.getDeclaringClass() + "." + theInterpretedGetter.getName()
+						+ "() on instance " + element + " of type " + (element == null ? "null" : element.getClass().getName()));
 					e.printStackTrace();
 					return Collections.emptyList();
 				}

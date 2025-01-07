@@ -17,6 +17,7 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.qommons.Causable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterHashMap;
@@ -264,7 +265,7 @@ class DefaultTesting implements InteractiveTesting {
 			}
 		}
 
-		class WrappedValue<T> implements SettableValue<T> {
+		class WrappedValue<T> extends AbstractIdentifiable implements SettableValue<T> {
 			private final String theName;
 			private final SettableValue<T> theWrappedValue;
 
@@ -284,10 +285,15 @@ class DefaultTesting implements InteractiveTesting {
 			}
 
 			@Override
-			public Object getIdentity() {
+			protected Object createIdentity() {
 				return theWrappedValue.getIdentity();
 			}
 
+			@Override
+			public WrappedValue<T> alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
@@ -315,13 +321,13 @@ class DefaultTesting implements InteractiveTesting {
 			}
 
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 				thePreviousValues.computeIfAbsent(theName, __ -> theWrappedValue.get());
 				return theWrappedValue.get();
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value) {
+			public String isAcceptable(T value) {
 				return theWrappedValue.isAcceptable(value);
 			}
 

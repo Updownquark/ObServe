@@ -267,6 +267,7 @@ public abstract class ConfigModelValue<T, MV> extends ModelValueElement.Abstract
 			builder.withFormat(format);
 		} else
 			builder.withFormatSet(theFormatSet);
+		instantiate(models);
 		return create(builder, models);
 	}
 

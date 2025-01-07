@@ -34,7 +34,7 @@ public class ExComplexOperation extends ExAddOn.Def.Abstract<ExElement, ExAddOn<
 	}
 
 	@Override
-	public Interpreted<?, ExAddOn<ExElement>> interpret(ExElement.Interpreted<? extends ExElement> element) {
+	public <E2 extends ExElement> Interpreted<? super E2, ? extends ExAddOn<ExElement>> interpret(ExElement.Interpreted<E2> element) {
 		return null;
 	}
 }

@@ -30,6 +30,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Eventable;
+import org.observe.LightWeightObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -713,7 +714,7 @@ public class EntityReflector<E> {
 		 * @return The subscription to use to cease listening
 		 */
 		default Subscription watchField(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
-			return getHandler(entity).addFieldListener(entity, fieldIndex, listener);
+			return getHandler(entity).getFieldChanges(entity, fieldIndex).act(listener::accept);
 		}
 
 		/**
@@ -900,8 +901,14 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock(true, cause)) {
+		public ObservableFieldImpl<E, F> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public F set(F value) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = lock(true, null)) {
 				F oldValue = get();
 				theField.set(theEntity, value);
 				return oldValue;
@@ -909,7 +916,7 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public <V extends F> String isAcceptable(V value) {
+		public String isAcceptable(F value) {
 			return getBacking().isAcceptable(theField.getFieldIndex(), value);
 		}
 
@@ -957,14 +964,21 @@ public class EntityReflector<E> {
 			}
 
 			@Override
+			public CoreChangeSources getChangeSources() {
+				return getHandler(theEntity).getFieldChanges(theEntity, theField.getFieldIndex()).getChangeSources();
+			}
+
+			@Override
 			public boolean isEventing() {
 				return theField.theReflector.isFieldEventing(theEntity, theField.getFieldIndex());
 			}
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<F>> observer) {
-				return theField.theReflector.watchField(theEntity, theField.getFieldIndex(),
-					event -> observer.onNext((EntityFieldChangeEvent<E, F>) event));
+				return theField.theReflector.watchField(theEntity, theField.getFieldIndex(), event -> {
+					if (event.getEntity() == theEntity)
+						observer.onNext((EntityFieldChangeEvent<E, F>) event);
+				});
 			}
 		};
 	}
@@ -975,7 +989,7 @@ public class EntityReflector<E> {
 	 * @param <E> The type of the entity that owns the method
 	 * @param <F> The return type of the method
 	 */
-	public static class DefaultedField<E, F> implements ObservableField<E, F> {
+	public static class DefaultedField<E, F> extends AbstractIdentifiable implements ObservableField<E, F> {
 		private final E theEntity;
 		private final Method theMethod;
 
@@ -990,12 +1004,12 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public F set(F value) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException("The getter for this field is defaulted and cannot be set");
 		}
 
 		@Override
-		public <V extends F> String isAcceptable(V value) {
+		public String isAcceptable(F value) {
 			return "The getter for this field is defaulted and cannot be set";
 		}
 
@@ -1010,8 +1024,14 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return null;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theEntity, theMethod.getName());
+		}
+
+		@Override
+		public DefaultedField<E, F> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -2743,7 +2763,7 @@ public class EntityReflector<E> {
 	private class ProxyMethodHandler implements InvocationHandler {
 		private final EntityInstanceBacking theBacking;
 		private IdentityHashMap<Object, Object> theAssociated;
-		private ListenerList<Consumer<? super EntityFieldChangeEvent<E, ?>>>[] theListeners;
+		private LightWeightObservable<EntityFieldChangeEvent<E, ?>>[] theFieldChanges;
 
 		ProxyMethodHandler(EntityInstanceBacking backing) {
 			theBacking = backing;
@@ -2763,42 +2783,47 @@ public class EntityReflector<E> {
 			return theAssociated == null ? null : theAssociated.get(key);
 		}
 
-		Subscription addFieldListener(E entity, int fieldIndex, Consumer<? super EntityFieldChangeEvent<E, ?>> listener) {
+		Observable<EntityFieldChangeEvent<E, ?>> getFieldChanges(E entity, int fieldIndex) {
 			if (!(theBacking instanceof ObservableEntityInstanceBacking))
 				throw new UnsupportedOperationException("Backing does not support observation");
-			if (theListeners == null)
-				theListeners = new ListenerList[theFields.keySize()];
-			if (theListeners[fieldIndex] == null) {
-				theListeners[fieldIndex] = ListenerList.build().withInUse(new ListenerList.InUseListener() {
-					private Subscription fieldSub;
+			if (theFieldChanges == null)
+				theFieldChanges = new LightWeightObservable[theFields.keySize()];
+			if (theFieldChanges[fieldIndex] == null) {
+				theFieldChanges[fieldIndex] = new LightWeightObservable<EntityFieldChangeEvent<E, ?>>(//
+					ListenerList.build().withInUse(new ListenerList.InUseListener() {
+						private Subscription fieldSub;
 
-					@Override
-					public void inUseChanged(boolean inUse) {
-						if (inUse) {
-							fieldSub = ((ObservableEntityInstanceBacking<E>) theBacking).addListener(entity, fieldIndex,
-								change -> fieldChanged(entity, fieldIndex, change));
-						} else {
-							fieldSub.unsubscribe();
-							fieldSub = null;
+						@Override
+						public void inUseChanged(boolean inUse) {
+							if (inUse) {
+								fieldSub = ((ObservableEntityInstanceBacking<E>) theBacking).addListener(entity, fieldIndex,
+									change -> fieldChanged(entity, fieldIndex, change));
+							} else {
+								fieldSub.unsubscribe();
+								fieldSub = null;
+							}
 						}
+					}).build()) {
+					@Override
+					protected boolean isInternalState() {
+						return true;
 					}
-				}).build();
+				};
 			}
-			return theListeners[fieldIndex].add(listener, true)::run;
+			return theFieldChanges[fieldIndex];
 		}
 
 		<F> void fieldChanged(E entity, int fieldIndex, FieldChange<F> change) {
-			if (theListeners == null)
+			if (theFieldChanges == null)
 				return;
 			ReflectedField<E, F> field = (ReflectedField<E, F>) theFields.get(fieldIndex);
-			ListenerList<Consumer<? super EntityFieldChangeEvent<E, ?>>> listeners = theListeners[field.getFieldIndex()];
-			if (listeners == null || listeners.isEmpty())
+			LightWeightObservable<EntityFieldChangeEvent<E, ?>> changes = theFieldChanges[field.getFieldIndex()];
+			if (changes == null || !changes.isAnyoneListening())
 				return;
 			EntityFieldChangeEvent<E, F> event = ((ObservableEntityInstanceBacking<E>) theBacking).createFieldChangeEvent(entity, field,
 				change.oldValue, change.newValue, change.cause);
 			try (Transaction t = event.use()) {
-				listeners.forEach(//
-					l -> l.accept(event));
+				changes.onNext(event);
 			}
 		}
 

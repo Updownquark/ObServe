@@ -5,9 +5,12 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import org.observe.Equivalence;
+import org.observe.LightWeightObservable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -24,7 +27,7 @@ import org.qommons.collect.ValueStoredCollection;
  *
  * @param <E> The type for the collection
  */
-public class DefaultObservableCollection<E> implements ObservableCollection<E> {
+public class DefaultObservableCollection<E> extends AbstractIdentifiable implements ObservableCollection<E> {
 	/** @return A builder to build a new ObservableCollection */
 	public static <E> ObservableCollectionBuilder<E, ?> build() {
 		return new ObservableCollectionBuilder.CollectionBuilderImpl<>("observable-collection");
@@ -32,7 +35,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	private final BetterList<E> theValues;
 	private final CausalLock theLock;
-	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
+	private final LightWeightObservable<ObservableCollectionEvent<E>> theChanges;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementsBySource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
@@ -59,7 +62,13 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
 		theLock = list;
-		theObservers = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
+		theChanges = new LightWeightObservable<ObservableCollectionEvent<E>>(
+			ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build()) {
+			@Override
+			protected boolean isInternalState() {
+				return true;
+			}
+		};
 		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
@@ -71,8 +80,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Object getIdentity() {
+	protected Object createIdentity() {
 		return theValues.getIdentity();
+	}
+
+	@Override
+	public DefaultObservableCollection<E> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	@Override
@@ -82,7 +97,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public boolean isEventing() {
-		return theObservers.isFiring();
+		return theChanges.isEventing();
 	}
 
 	@Override
@@ -212,7 +227,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
 				return null;
-			if (!theObservers.isEmpty()) {
+			if (theChanges.isAnyoneListening()) {
 				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
 					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
 					null, value, theLock.getUnfinishedCauses());
@@ -236,7 +251,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElementMove move = new CollectionElementMove();
 			try (Transaction moveT = lock(true, move)) {
 				el = theValues.move(valueEl, after, before, first, () -> {
-					if (!theObservers.isEmpty()) {
+					if (theChanges.isAnyoneListening()) {
 						ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(valueEl,
 							theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
 						fire(event);
@@ -247,7 +262,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				move.moved();
 				if (el.getElementId().equals(valueEl))
 					return getElement(valueEl);
-				if (!theObservers.isEmpty()) {
+				if (theChanges.isAnyoneListening()) {
 					ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
 						theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value,
 						theLock.getUnfinishedCauses());
@@ -260,7 +275,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		return theObservers.add(observer, true)::run;
+		return theChanges.act(observer::accept);
 	}
 
 	@Override
@@ -284,10 +299,15 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			mutableElement(el).set(value);
 	}
 
+	@Override
+	public CoreChangeSources getChangeSources() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
 	void fire(ObservableCollectionEvent<E> evt) {
 		try (Transaction t = evt.use()) {
-			theObservers.forEach(//
-				listener -> listener.accept(evt));
+			theChanges.onNext(evt);
 		}
 	}
 
@@ -334,7 +354,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 								if (element.getElementId().equals(valueEl.getElementId()))
 									thisMoved[0] = true;
 								CollectionElementMove move = new CollectionElementMove();
-								if (!theObservers.isEmpty()) {
+								if (theChanges.isAnyoneListening()) {
 									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
 										element.get(), op, move));
@@ -350,7 +370,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 							@Override
 							public void transferred(CollectionElement<E> element, CollectionElementMove data) {
 								data.moved();
-								if (!theObservers.isEmpty()) {
+								if (theChanges.isAnyoneListening()) {
 									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null,
 										element.get(), op, data));
@@ -361,10 +381,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					if (thisMoved[0])
 						return;
 				}
-				if (value == old && theObservers.isFiring())
+				if (value == old && theChanges.isEventing())
 					return; // Don't throw errors on recursive updates
 				valueEl.set(value);
-				if (!theObservers.isEmpty()) {
+				if (theChanges.isAnyoneListening()) {
 					fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
 						CollectionChangeType.set, old, value, theLock.getUnfinishedCauses()));
 				}
@@ -380,7 +400,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				try (Transaction t = lock(true, null)) {
 					E old = get();
 					valueEl.remove();
-					if (!theObservers.isEmpty()) {
+					if (theChanges.isAnyoneListening()) {
 						fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
 							CollectionChangeType.remove, old, old, theLock.getUnfinishedCauses()));
 					}

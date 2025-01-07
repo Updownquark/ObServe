@@ -38,17 +38,16 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.AbstractTableBuilder;
 import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.IntList;
@@ -56,10 +55,8 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 
-import com.google.common.reflect.TypeToken;
-
 public abstract class AbstractSimpleTableBuilder<R, T extends JTable, P extends AbstractSimpleTableBuilder<R, T, P>>
-extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
+extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 	static class DynamicColumnSet<R, C> {
 		final Function<? super R, ? extends Collection<? extends C>> columnValues;
 		final Comparator<? super C> columnSort;
@@ -127,7 +124,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		if (theFlatColumns != null)
 			return theFlatColumns;
 		else if (theSimpleColumns == null)
-			theSimpleColumns = ObservableCollection.create();
+			theSimpleColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> build().onEdt().build();
 		return theSimpleColumns;
 	}
 
@@ -142,7 +139,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	@Override
 	public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
 		if (theComplexColumns == null) {
-			theComplexColumns = ObservableCollection.create();
+			theComplexColumns = ObservableCollection.<ObservableCollection<? extends CategoryRenderStrategy<R, ?>>> build().onEdt().build();
 			theFlatColumns = theComplexColumns.flow()//
 				.flatMap(c -> c.flow())//
 				.collect();
@@ -157,7 +154,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	@Override
 	public P withColumn(CategoryRenderStrategy<R, ?> column) {
 		if (theSimpleColumns == null) {
-			theSimpleColumns = ObservableCollection.create();
+			theSimpleColumns = ObservableCollection.<CategoryRenderStrategy<R, ?>> build().onEdt().build();
 			if (theComplexColumns != null)
 				theComplexColumns.add(theSimpleColumns);
 		}
@@ -187,8 +184,15 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 
 	@Override
 	public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
-		if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
-			throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
+		boolean bad = false;
+		if (minRows >= 0) {
+			bad |= prefRows >= 0 && prefRows < minRows;
+			bad |= maxRows >= 0 && maxRows < minRows;
+		}
+		bad |= prefRows >= 0 && maxRows >= 0 && maxRows < prefRows;
+		if (bad)
+			throw new IllegalArgumentException(
+				"Required: min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows + " except any that are negative (ignore)");
 		theAdaptiveMinRowHeight = minRows;
 		theAdaptivePrefRowHeight = prefRows;
 		theAdaptiveMaxRowHeight = maxRows;
@@ -245,7 +249,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	@Override
 	public P dragSourceRow(Consumer<? super TransferSource<R>> source) {
 		if (theDragSource == null)
-			theDragSource = new SimpleTransferSource<>((TypeToken<R>) TypeTokens.get().OBJECT);
+			theDragSource = new SimpleTransferSource<>();
 		// if (source == null)
 		// throw new IllegalArgumentException("Drag sourcing must be configured");
 		if (source != null)
@@ -256,7 +260,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 	@Override
 	public P dragAcceptRow(Consumer<? super TransferAccepter<R, Object, R>> accept) {
 		if (theDragAccepter == null)
-			theDragAccepter = new SimpleTransferAccepter<>((TypeToken<R>) TypeTokens.get().OBJECT);
+			theDragAccepter = new SimpleTransferAccepter<>();
 		// if (accept == null)
 		// throw new IllegalArgumentException("Drag accepting must be configured");
 		if (accept != null)
@@ -360,7 +364,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		if (theSelectionValue != null)
 			syncSelection(table, model, theSelectionValue, false);
 		// Sync multi-selection so we can control the actions if nothing else
-		ObservableCollection<R> multiSelection = ObservableCollection.<R> build().build().safe(ThreadConstraint.EDT, getUntil());
+		ObservableCollection<R> multiSelection = ObservableCollection.<R> build().onEdt().build();
 		syncMultiSelection(table, model, multiSelection);
 		if (theSelectionValues != null) {
 			// ObservableUtils.link(multiSelection, theSelectionValues);
@@ -454,6 +458,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		private int theResizingColumnOrigWidth;
 		private int theResizingPreColumnWidth;
 		private int theDragStart;
+		private int theMaxSetAdaptiveHeight;
 
 		/**
 		 * This integer is how much the user has resized columns beyond the scroll pane's width.<br />
@@ -465,6 +470,11 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 			this.scroll = scroll;
 			this.table = table;
 			this.model = model;
+			theMaxSetAdaptiveHeight = theAdaptiveMaxRowHeight;
+			if (theMaxSetAdaptiveHeight < 0)
+				theMaxSetAdaptiveHeight = theAdaptivePrefRowHeight;
+			if (theMaxSetAdaptiveHeight < 0)
+				theMaxSetAdaptiveHeight = theAdaptiveMinRowHeight;
 			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns = model.getColumns();
 			theResizingColumn = -1;
 			theColumnWidths = new ArrayList<>();
@@ -689,7 +699,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 
 		@Override
 		public void componentResized(ComponentEvent e) {
-			int newWidth = scroll.getViewport().getWidth();
+			int newWidth = scroll.getWidth();
 			int widthDiff = newWidth - theScrollWidth;
 			// If we're resizing in a way that accommodates the cumulative growth or shrinkage of columns due to user resizing,
 			// modify the extra table width such that we don't grow or shrink columns as a result of the table resize.
@@ -711,7 +721,9 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		void init() {
 			adjustHeight();
 			adjustScrollWidths();
-			theScrollWidth = scroll.getViewport().getWidth();
+			theScrollWidth = scroll.getWidth();
+			if (theScrollWidth <= 0)
+				return;
 			int tableSize = table.getWidth() + (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin();
 			if (tableSize > theScrollWidth)
 				theTableExtraWidth = tableSize - theScrollWidth;
@@ -786,7 +798,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		void layoutColumns() {
 			if (isRecursive)
 				return;
-			int tableSize = scroll.getViewport().getWidth() - (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin()//
+			int tableSize = scroll.getWidth() - (getEditor().getColumnCount() - 1) * table.getColumnModel().getColumnMargin()//
 				+ theTableExtraWidth;
 			if (tableSize <= 0)
 				return;
@@ -983,7 +995,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 		}
 
 		void adjustHeight() {
-			if (theAdaptivePrefRowHeight <= 0)
+			if (theMaxSetAdaptiveHeight <= 0)
 				return; // Not adaptive
 			int insets = table.getInsets().top + table.getInsets().bottom + scroll.getInsets().top + scroll.getInsets().bottom;
 			int spacing = table.getIntercellSpacing().height;
@@ -997,7 +1009,7 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 				useSpacing = true;
 			}
 			int rowCount = table.getRowCount();
-			for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
+			for (int i = 0; i < theMaxSetAdaptiveHeight && i < rowCount; i++) {
 				int rowHeight = table.getRowHeight(i);
 				if (useSpacing)
 					rowHeight += spacing;
@@ -1005,11 +1017,11 @@ extends AbstractComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, 
 					useSpacing = true;
 				if (i > 0)
 					rowHeight += spacing;
-				if (i < theAdaptiveMinRowHeight)
+				if (theAdaptiveMinRowHeight >= 0 && i < theAdaptiveMinRowHeight)
 					minHeight += rowHeight;
-				if (i < theAdaptivePrefRowHeight)
+				if (theAdaptivePrefRowHeight >= 0 && i < theAdaptivePrefRowHeight)
 					prefHeight += rowHeight;
-				if (i < theAdaptiveMaxRowHeight)
+				if (theAdaptiveMaxRowHeight >= 0 && i < theAdaptiveMaxRowHeight)
 					maxHeight += rowHeight;
 			}
 			boolean hsb = scroll.getHorizontalScrollBarPolicy() != JScrollPane.HORIZONTAL_SCROLLBAR_NEVER;

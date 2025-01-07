@@ -180,6 +180,20 @@ public class ObservableTextEditor<E> {
 		ObservableValue<String> getWarningState();
 	}
 
+	/**
+	 * Provides the ability to adjust values in a text editor with arrow key presses
+	 *
+	 * @param <E> The type of value to adjust
+	 */
+	public interface ValueAdjuster<E> {
+		/**
+		 * @param original The current value
+		 * @param adjustUp Whether to adjust the value up or down
+		 * @return The adjusted value
+		 */
+		E getAdjustedValue(E original, boolean adjustUp);
+	}
+
 	private final JTextComponent theComponent;
 	private final Consumer<Boolean> theEnabledSetter;
 	private final Consumer<String> theTooltipSetter;
@@ -190,6 +204,7 @@ public class ObservableTextEditor<E> {
 	private boolean reformatOnCommit;
 	private boolean isInternallyChanging;
 	private boolean isDirty;
+	private boolean isEditable;
 
 	private final Color normal_bg;
 	private final Color disabled_bg;
@@ -213,6 +228,7 @@ public class ObservableTextEditor<E> {
 	private String theCachedText;
 	private long theStateStamp;
 	private SimpleObservable<Void> theStatusChange;
+	private ValueAdjuster<E> theAdjuster;
 
 	/**
 	 * @param component The text component this editor manages
@@ -304,22 +320,20 @@ public class ObservableTextEditor<E> {
 				}
 			}
 		});
-		if (theFormat instanceof SpinnerFormat) {
-			component.getInputMap().put(KeyStroke.getKeyStroke("UP"), "increment");
-			component.getActionMap().put("increment", new AbstractAction("increment") {
-				@Override
-				public void actionPerformed(ActionEvent e) {
-					adjust(true, e);
-				}
-			});
-			component.getInputMap().put(KeyStroke.getKeyStroke("DOWN"), "decrement");
-			component.getActionMap().put("decrement", new AbstractAction("decrement") {
-				@Override
-				public void actionPerformed(ActionEvent e) {
-					adjust(false, e);
-				}
-			});
-		}
+		component.getInputMap().put(KeyStroke.getKeyStroke("UP"), "increment");
+		component.getActionMap().put("increment", new AbstractAction("increment") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				adjust(true, e);
+			}
+		});
+		component.getInputMap().put(KeyStroke.getKeyStroke("DOWN"), "decrement");
+		component.getActionMap().put("decrement", new AbstractAction("decrement") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				adjust(false, e);
+			}
+		});
 	}
 
 	/** @return The value controlled by this text field */
@@ -330,6 +344,24 @@ public class ObservableTextEditor<E> {
 	/** @return The format converting between value and text */
 	public Format<E> getFormat() {
 		return theFormat;
+	}
+
+	/**
+	 * @param editable Whether the text editor should be editable by the user. Unlike the enabled state, this state prevents editing with
+	 *        less effect on the look and feel of the widget
+	 */
+	public void setEditable(boolean editable) {
+		isEditable = editable;
+		setErrorState(theError, theWarningMsg);
+	}
+
+	/**
+	 * @param adjuster The value adjuster for this editor
+	 * @return This editor
+	 */
+	public ObservableTextEditor<E> setAdjuster(ValueAdjuster<E> adjuster) {
+		theAdjuster = adjuster;
+		return this;
 	}
 
 	/**
@@ -676,7 +708,9 @@ public class ObservableTextEditor<E> {
 		boolean prevError = theError != null;
 		theError = error;
 		theWarningMsg = warningMsg;
-		String disabled = theValue.isEnabled().get();
+		// The logic here is that if the text widget is not editable, there's no sense graying it out or showing the disabled message
+		// because they couldn't edit it anyway
+		String disabled = isEditable ? theValue.isEnabled().get() : null;
 		if (theError != null) {
 			if (disabled != null)
 				theComponent.setBackground(error_disabled_bg);
@@ -717,7 +751,8 @@ public class ObservableTextEditor<E> {
 	 * @param cause The cause of the modification (e.g. a key event)
 	 */
 	protected void adjust(boolean up, Object cause) {
-		SpinnerFormat<E> spinnerFormat = (SpinnerFormat<E>) theFormat;
+		if (theAdjuster == null && !(theFormat instanceof SpinnerFormat))
+			return;
 		String text = getText();
 		E toAdjust;
 		if (isDirty) {
@@ -728,6 +763,14 @@ public class ObservableTextEditor<E> {
 			}
 		} else
 			toAdjust = theValue.get();
+		if (theAdjuster != null) {
+			E adjusted = theAdjuster.getAdjustedValue(toAdjust, up);
+			if (adjusted == null || theValue.isAcceptable(adjusted) != null)
+				return;
+			setValue(adjusted);
+			return;
+		}
+		SpinnerFormat<E> spinnerFormat = (SpinnerFormat<E>) theFormat;
 		int selectionStart = theComponent.getSelectionStart();
 		int selectionEnd = theComponent.getSelectionEnd();
 		boolean withContext = selectionStart == selectionEnd;

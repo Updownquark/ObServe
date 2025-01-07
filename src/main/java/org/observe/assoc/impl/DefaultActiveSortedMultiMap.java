@@ -34,6 +34,12 @@ implements ObservableSortedMultiMap<K, V> {
 	}
 
 	@Override
+	public DefaultActiveSortedMultiMap<S, K, V> alias(String alias) {
+		super.alias(alias);
+		return this;
+	}
+
+	@Override
 	protected ObservableSet<K> createKeySet() {
 		return new SortedKeySet();
 	}
@@ -60,6 +66,12 @@ implements ObservableSortedMultiMap<K, V> {
 
 	/** Implements {@link DefaultActiveSortedMultiMap#keySet()} */
 	protected class SortedKeySet extends KeySet implements ObservableSortedSet<K> {
+		@Override
+		public SortedKeySet alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
 		@Override
 		public Equivalence.SortedEquivalence<? super K> equivalence() {
 			return getActiveKeyFlow().equivalence();

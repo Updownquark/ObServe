@@ -8,6 +8,7 @@ import java.util.function.Predicate;
 
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -15,7 +16,18 @@ import org.qommons.ReversedComparator;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.*;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterHashMap;
+import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSet;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -366,11 +378,10 @@ public interface Equivalence<E> {
 	 * @param <T> The type of this set's equivalence
 	 * @param <T2> The type of the set
 	 */
-	class MappedSet<E, E2 extends E, T, T2 extends T> implements BetterSet<T2> {
+	class MappedSet<E, E2 extends E, T, T2 extends T> extends AbstractIdentifiable implements BetterSet<T2> {
 		private final BetterSet<E> theWrapped;
 		private final Function<? super E2, ? extends T> theMap;
 		private final Function<? super T, ? extends E2> theReverse;
-		private Object theIdentity;
 
 		public MappedSet(BetterSet<E> wrapped, Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
 			theWrapped = wrapped;
@@ -379,10 +390,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
 		}
 
 		@Override
@@ -665,11 +674,10 @@ public interface Equivalence<E> {
 	 * @param <T2> The key type of this map
 	 * @param <V> The value type of this map
 	 */
-	class MappedMap<E, E2 extends E, T, T2 extends T, V> implements BetterMap<T2, V> {
+	class MappedMap<E, E2 extends E, T, T2 extends T, V> extends AbstractIdentifiable implements BetterMap<T2, V> {
 		private final BetterMap<E, V> theWrapped;
 		private final Function<? super E2, ? extends T> theMap;
 		private final Function<? super T, ? extends E2> theReverse;
-		private Object theIdentity;
 
 		public MappedMap(BetterMap<E, V> wrapped, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
@@ -679,10 +687,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theWrapped.getIdentity(), "map", theMap);
 		}
 
 		@Override

@@ -105,7 +105,7 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoInterpretationException(e.getMessage(), env.reporting().at(1).getPosition(), theType.length(), e);
 		}
 		if (!TypeTokens.get().isAssignable(type.getType(0), valueType)) {
-			exHandler.handle1(new ExpressoInterpretationException("Cannot assign " + valueType + " to " + type.getType(0),
+			exHandler.handle1(() -> new ExpressoInterpretationException("Cannot assign " + valueType + " to " + type.getType(0),
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
@@ -114,7 +114,7 @@ public class CastExpression implements ObservableExpression {
 		// First, see if we can evaluate the expression as the cast type.
 		// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaldX = theValue.evaluate(ModelTypes.Value.forType(valueType),
-			env.at(theType.length() + 2), valueOffset, ExceptionHandler.holder2());
+			env.at(theType.length() + 2), valueOffset, ExceptionHandler.placeHolder2());
 		if (evaldX != null) {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> synth = InterpretedValueSynth.of(ModelTypes.Value.forType(valueType),
 				() -> evaldX.instantiate()
@@ -123,12 +123,14 @@ public class CastExpression implements ObservableExpression {
 			return ObservableExpression.evEx(0, getExpressionLength(), synth, valueType, evaldX);
 		}
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 		InterpretedExpressoEnv valueEnv = env.at(theType.length() + 2);
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> evald = theValue.evaluate(ModelTypes.Value.anyAsV(), valueEnv, valueOffset,
 			doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), valueEnv.reporting().getPosition(),
+		if (doubleX.hasException1())
+			return null;
+		if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), valueEnv.reporting().getPosition(),
 				theValue.getExpressionLength(), doubleX.get2()));
 			return null;
 		} else if (evald == null)
@@ -142,7 +144,7 @@ public class CastExpression implements ObservableExpression {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 
 		TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter;
-		ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.holder();
+		ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.placeHolder();
 		converter = TypeTokens.get().getCast(valueType, sourceType, true, false, iae);
 		if (converter != null) {
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
@@ -150,7 +152,7 @@ public class CastExpression implements ObservableExpression {
 				valueContainer);
 		} else if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 			&& !TypeTokens.get().isAssignable(valueType, sourceType)) {
-			exHandler.handle1(new ExpressoInterpretationException("Cannot cast value of type " + sourceType + " to " + valueType,
+			exHandler.handle1(() -> new ExpressoInterpretationException("Cannot cast value of type " + sourceType + " to " + valueType,
 				reporting.getPosition(), getExpressionLength() - 1));
 			return null;
 		} else {
@@ -230,7 +232,7 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		private SettableValue<T> transform(SettableValue<S> value) {
-			return value.transformReversible(tx -> tx//
+			return value.transformReversible(tx -> tx.cache(false)//
 				.map(LambdaUtils.printableFn(v -> {
 					if (v == null || theCastClass.isInstance(v))
 						return (T) v;

@@ -28,6 +28,7 @@ import org.observe.Observable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
+import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionElement;
@@ -55,6 +56,7 @@ import org.qommons.collect.ElementId;
 public class TiledPane<T> extends JComponent implements Scrollable {
 	private final ObservableCollection<T> theValues;
 	private ObservableCellRenderer<? super T, ? super T> theRenderer;
+	private boolean isConstantSizing;
 
 	private RenderChild theHover;
 	private RenderChild theFocus;
@@ -79,6 +81,10 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 			switch (evt.getType()) {
 			case add:
 				theValueBounds.add(evt.getIndex(), null);
+				if (theHover.value != null && theHover.value.getElementId().compareTo(evt.getElementId()) > 0)
+					theHover.replace(false, theHover.value, theValues.getElementsBefore(theHover.value.getElementId()), true);
+				if (theFocus.value != null && theFocus.value.getElementId().compareTo(evt.getElementId()) > 0)
+					theFocus.replace(true, theFocus.value, theValues.getElementsBefore(theFocus.value.getElementId()), true);
 				break;
 			case remove:
 				theValueBounds.remove(evt.getIndex());
@@ -94,6 +100,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					theFocus.replace(true, theValues.getElement(evt.getElementId()), evt.getIndex(), true);
 				break; // Just re-validate below
 			}
+			invalidate();
 			revalidate();
 			repaint();
 		});
@@ -235,8 +242,8 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		add(theMidFocus);
 		add(thePostFocus);
 
-		theHover = new RenderChild(null, thePreFocus, theMidFocus);
-		theFocus = new RenderChild(null, theMidFocus, thePostFocus);
+		theHover = new RenderChild("hover", null, thePreFocus, theMidFocus);
+		theFocus = new RenderChild("focus", null, theMidFocus, thePostFocus);
 
 		FocusListener focusManager = new FocusListener() {
 			@Override
@@ -323,8 +330,18 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	public TiledPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> painter,
 		ObservableCellRenderer<? super T, ? super T> renderer2, ObservableCellRenderer<? super T, ? super T> renderer3) {
 		theRenderer = painter;
-		theHover = new RenderChild(renderer2, thePreFocus, theMidFocus);
-		theFocus = new RenderChild(renderer3, theMidFocus, thePostFocus);
+		theHover = new RenderChild("hover", renderer2, thePreFocus, theMidFocus);
+		theFocus = new RenderChild("focus", renderer3, theMidFocus, thePostFocus);
+		return this;
+	}
+
+	/**
+	 * @param constantSizing True if it is known that all values in this tile pane's collection will always be rendered to the same
+	 *        dimensions. Setting this to true can cause significant performance improvements for large collections.
+	 * @return This tiled pane
+	 */
+	public TiledPane<T> setConstantSizing(boolean constantSizing) {
+		isConstantSizing = constantSizing;
 		return this;
 	}
 
@@ -388,14 +405,31 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	private List<AbstractLayout.LayoutChild> layoutChildren() {
 		if (theValues.isEmpty())
 			return Collections.emptyList();
+		if (PanelPopulation.isDebugging(getName(), "layoutChildren"))
+			BreakpointHere.breakpoint();
 		List<AbstractLayout.LayoutChild> children = new ArrayList<>(theValues.size());
-		int row = 0;
-		for (T value : theValues) {
-			ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, row, 0, false,
+		if (theValues.isEmpty())
+			return children;
+		else if (isConstantSizing) {
+			T value = theValues.get(0);
+			ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, 0, 0, false,
 				false, false, false, false, true);
 			Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
-			children
-			.add(new AbstractLayout.LayoutChild.ExtractedLayoutChild(new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer)));
+			renderer.invalidate();
+			AbstractLayout.LayoutChild layoutChild = new AbstractLayout.LayoutChild.ExtractedLayoutChild(
+				new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer, null));
+			for (int i = 0; i < theValues.size(); i++)
+				children.add(layoutChild);
+		} else {
+			int row = 0;
+			for (T value : theValues) {
+				ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, row, 0,
+					false, false, false, false, false, true);
+				Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+				renderer.invalidate();
+				children.add(new AbstractLayout.LayoutChild.ExtractedLayoutChild(
+					new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer, null)));
+			}
 		}
 		return children;
 	}
@@ -457,13 +491,15 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	}
 
 	class RenderChild {
+		private final String theName;
 		final ObservableCellRenderer<? super T, ? super T> renderer;
 		final Component preFocus;
 		final Component postFocus;
 		CollectionElement<T> value;
 		Component component;
 
-		RenderChild(ObservableCellRenderer<? super T, ? super T> renderer, Component preFocus, Component postFocus) {
+		RenderChild(String name, ObservableCellRenderer<? super T, ? super T> renderer, Component preFocus, Component postFocus) {
+			theName = name;
 			this.renderer = renderer;
 			this.preFocus = preFocus;
 			this.postFocus = postFocus;
@@ -527,6 +563,11 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					return i + 1;
 			}
 			throw new IllegalStateException();
+		}
+
+		@Override
+		public String toString() {
+			return theName;
 		}
 	}
 

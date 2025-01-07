@@ -1,6 +1,8 @@
 package org.observe.expresso;
 
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -35,6 +37,7 @@ import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
+import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
@@ -105,11 +108,32 @@ public class ModelTypes {
 		.<ModelType<?>, BiFunction<ModelType.ModelInstanceType<?, ?>, SettableValue<?>, Object>> buildMap(null)//
 		.with(Event, (type, value) -> ObservableValue.flattenObservableValue((SettableValue<Observable<?>>) value))//
 		.with(Action, (type, value) -> {
-			return ObservableAction.of(cause -> {
-				ObservableAction a = (ObservableAction) value.get();
-				if (a != null)
-					a.act(cause);
-			});
+			return new ObservableAction() {
+				@Override
+				public boolean isEventing() {
+					if (value.isEventing())
+						return true;
+					ObservableAction a = (ObservableAction) value.get();
+					return a.isEventing();
+				}
+
+				@Override
+				public void act(Object cause) throws IllegalStateException {
+					ObservableAction a = (ObservableAction) value.get();
+					if (a != null)
+						a.act(cause);
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.flatten(((ObservableValue<ObservableAction>) value).map(a -> a == null ? null : a.isEnabled()));
+				}
+
+				@Override
+				public String toString() {
+					return value.toString();
+				}
+			};
 		})//
 		.with(Value, (type, value) -> {
 			Object defaultV = TypeTokens.get().getDefaultValue(type.getType(0));
@@ -132,6 +156,15 @@ public class ModelTypes {
 		ALL_TYPES.with(SortedMap.class, SortedMap);
 		ALL_TYPES.with(MultiMap.class, MultiMap);
 		ALL_TYPES.with(SortedMultiMap.class, SortedMultiMap);
+	}
+
+	static boolean anyNonTrivial(TypeConverter<?, ?, ?, ?>[] casts) {
+		for (TypeConverter<?, ?, ?, ?> cast : casts) {
+			if (!cast.isTrivial()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	static class NamedUniqueIdentity {
@@ -273,6 +306,11 @@ public class ModelTypes {
 			@Override
 			public Transaction tryLock() {
 				return theFlatObservable.tryLock();
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return theFlatObservable.getChangeSources();
 			}
 		}
 
@@ -432,6 +470,8 @@ public class ModelTypes {
 		@Override
 		protected Function<SettableValue<?>, SettableValue<?>> convertType(ModelInstanceType<SettableValue<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> ((SettableValue<Object>) src).transformReversible(transformReversible(casts[0]));
 		}
 
@@ -442,37 +482,45 @@ public class ModelTypes {
 				public ModelInstanceConverter<SettableValue<?>, Observable<?>> convert(ModelInstanceType<SettableValue<?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest, InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges().map(__ -> null), "changes", null),
-							dest);
+						return ModelType
+							.converter(LambdaUtils.printableFn(src -> src.noInitChanges().map(__ -> null), "valueChanges", null), dest);
 					} else {
-						ModelType<?> holderType = ALL_TYPES.get(TypeTokens.getRawType(source.getType(0)), TypeMatch.SUPER_TYPE);
+						Class<?> rawSourceType = TypeTokens.getRawType(source.getType(0));
+						ModelType<?> holderType = ALL_TYPES.get(rawSourceType, TypeMatch.SUPER_TYPE);
 						if (holderType != null) {
 							TypeToken<?>[] holderParamTypes = new TypeToken[holderType.getTypeCount()];
 							for (int t = 0; t < holderParamTypes.length; t++)
 								holderParamTypes[t] = source.getType(0).resolveType(holderType.modelType.getTypeParameters()[t]);
 							ModelInstanceType<?, ?> holderInstanceType = holderType.forTypes(holderParamTypes);
+							if (!holderType.modelType.isAssignableFrom(rawSourceType)) {
+								return source.convert((ModelInstanceType<Object, Object>) holderInstanceType, env)//
+									.and(((ModelInstanceType<Object, Object>) holderInstanceType).convert(dest, env));
+							}
 							ModelInstanceConverter<Object, Observable<?>> holderConverter = (ModelInstanceConverter<Object, Observable<?>>) holderInstanceType
 								.convert(dest, env);
 							if (holderConverter != null) {
 								ErrorReporting reporting = env.reporting();
-								return ModelType.<SettableValue<?>, Observable<?>> converter(LambdaUtils.printableFn(src -> {
-									if (src == null)
-										return null;
-									return Observable.flatten(src.value().map(v -> {
-										try {
-											return holderConverter.convert(v);
-										} catch (ModelInstantiationException e) {
-											reporting.error(e.getMessage(), e);
+								return (ModelInstanceConverter<SettableValue<?>, Observable<?>>) (ModelInstanceConverter<?, ?>) //
+									ModelType.<ObservableValue<?>, Observable<?>> converter(LambdaUtils.printableFn(src -> {
+										if (src == null)
 											return null;
-										}
-									}));
-								}, "flat" + holderConverter, null), holderConverter.getType());
+										return ObservableValue.flattenObservableValue(src.map(v -> {
+											try {
+												return holderConverter.convert(v);
+											} catch (ModelInstantiationException e) {
+												reporting.error(e.getMessage(), e);
+												return null;
+											}
+										}));
+									}, "flat" + holderConverter, null), holderConverter.getType());
 							}
 						}
 						TypeToken<?> oveType = TypeTokens.get().keyFor(ObservableValueEvent.class).parameterized(source.getType(0));
 						if (TypeTokens.get().isAssignable(dest.getType(0), oveType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges(), "changes", null),
-								dest.getModelType().forTypes(oveType));
+							return (ModelInstanceConverter<SettableValue<?>, Observable<?>>) (ModelInstanceConverter<?, ?>) //
+								ModelType.<ObservableValue<?>, Observable<?>> converter(LambdaUtils
+									.printableFn(src -> src == null ? Observable.empty() : src.noInitChanges(), "valueChanges", null),
+									dest.getModelType().forTypes(oveType));
 						else
 							return SimpleSingleTyped.super.convert(source, dest, env);
 					}
@@ -509,6 +557,8 @@ public class ModelTypes {
 						ModelInstanceType<SettableValue<?>, ?> type = Value.forType(//
 							TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType)
 							.parameterized(valueConverter.getType().getTypeList()));
+						String uModMsg = env.reporting().getFileLocation().getPosition(0).toShortString() + source + "->" + dest
+							+ " wrapping is not reversible";
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
@@ -516,11 +566,13 @@ public class ModelTypes {
 								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
 									// This section creates a value that updates with the contained model value
 									return SettableValue.asSettable(//
-										ObservableValue.of(() -> converted, ((Stamped) converted)::getStamp,
-											((CausableChanging) converted).simpleChanges()),
-										NOT_REVERSIBLE);
+										ObservableValue.of(
+											LambdaUtils.constantSupplier(converted, converted::toString,
+												converted instanceof Identifiable ? ((Identifiable) converted).getIdentity() : null),
+											((Stamped) converted)::getStamp, ((CausableChanging) converted).simpleChanges()),
+										__ -> uModMsg);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of(converted), NOT_REVERSIBLE);
+									return SettableValue.asSettable(ObservableValue.of(converted), __ -> uModMsg);
 								}
 							}
 
@@ -544,6 +596,8 @@ public class ModelTypes {
 						}
 						if (valueConverter == null)
 							return null;
+						String uModMsg = env.reporting().getFileLocation().getPosition(0).toShortString() + source + "->" + dest
+							+ " wrapping is not reversible";
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
@@ -551,11 +605,13 @@ public class ModelTypes {
 								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
 									// This section creates a value that updates with the contained model value
 									container = SettableValue.asSettable(//
-										ObservableValue.of(() -> sourceV, ((Stamped) sourceV)::getStamp,
-											((CausableChanging) sourceV).simpleChanges()),
-										NOT_REVERSIBLE);
+										ObservableValue.of(
+											LambdaUtils.constantSupplier(sourceV, sourceV::toString,
+												sourceV instanceof Identifiable ? ((Identifiable) sourceV).getIdentity() : null),
+											((Stamped) sourceV)::getStamp, ((CausableChanging) sourceV).simpleChanges()),
+										__ -> uModMsg);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of(sourceV), NOT_REVERSIBLE);
+									return SettableValue.asSettable(ObservableValue.of(sourceV), __ -> uModMsg);
 								}
 								return valueConverter.convert(container);
 							}
@@ -631,12 +687,14 @@ public class ModelTypes {
 							}
 						};
 					} else {
+						String uModMsg = env.reporting().getFileLocation().getPosition(0).toShortString() + source + "->" + dest
+							+ " wrapping is not reversible";
 						return new ModelInstanceConverter<SettableValue<?>, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(SettableValue<?> sourceV) {
 								return SettableValue.asSettable(//
 									ObservableValue.flatten((SettableValue<ObservableValue<Object>>) sourceV), //
-									NOT_REVERSIBLE);
+									__ -> uModMsg);
 							}
 
 							@Override
@@ -769,6 +827,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableCollection<?>, ObservableCollection<?>> convertType(
 			ModelInstanceType<ObservableCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> ((ObservableCollection<Object>) src).flow().transform(transformReversible(casts[0])).collectPassive();
 		}
 
@@ -780,12 +840,16 @@ public class ModelTypes {
 					ModelInstanceType<ObservableCollection<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
+						return ModelType.converter(
+							LambdaUtils.printableFn(src -> src == null ? Observable.empty() : src.simpleChanges().map(__ -> null),
+								"collectionChanges", null),
 							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
+							return ModelType.converter(
+								LambdaUtils.printableFn(src -> src == null ? Observable.empty() : src.simpleChanges(), "collectionChanges",
+									null),
 								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -813,21 +877,27 @@ public class ModelTypes {
 				private <T> ModelInstanceConverter<SettableValue<?>, ObservableCollection<?>> convertArrayValue(TypeToken<T> componentType,
 					ModelInstanceType<ObservableCollection<?>, ?> target, InterpretedExpressoEnv env) {
 					ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> collectionType = forType(componentType);
-					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = target
-						.convert(collectionType, env);
+					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = collectionType
+						.convert(target, env);
 					if (collectionConverter == null)
 						return null;
+					String uModText = env.reporting().getFileLocation().getPosition(0).toShortString()
+						+ ": Array->ObservableCollection conversion is not reversible";
 					return ModelType.converter(LambdaUtils.printableFn(arrayValue -> {
-						return ObservableCollection
-							.flattenValue(arrayValue.map(v -> v == null ? null : ObservableCollection.of((T[]) v)));
+						return ObservableCollection.flattenSimpleCollectionValue(//
+							SettableValue
+							.asSettable(
+								arrayValue.map(LambdaUtils.printableFn(
+									a -> a == null ? Collections.emptyList() : Arrays.asList((T[]) a), "asStaticList", null)),
+								__ -> uModText));
 					}, "asCollection", null), collectionConverter.getType());
 				}
 
 				private <T> ModelInstanceConverter<SettableValue<?>, ObservableCollection<?>> convertCollectionValue(Class<?> raw,
 					TypeToken<T> componentType, ModelInstanceType<ObservableCollection<?>, ?> target, InterpretedExpressoEnv env) {
 					ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> collectionType = forType(componentType);
-					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = target
-						.convert(collectionType, env);
+					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = collectionType
+						.convert(target, env);
 					if (collectionConverter == null)
 						return null;
 					return ModelType.converter(LambdaUtils.printableFn(collectionValue -> {
@@ -944,6 +1014,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedCollection<?>, ObservableSortedCollection<?>> convertType(
 			ModelInstanceType<ObservableSortedCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> ((ObservableSortedCollection<Object>) src).flow().transformEquivalent(transformReversible(casts[0]))
 				.collectPassive();
 		}
@@ -960,15 +1032,14 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedCollection<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
-							dest);
+						return ModelType.converter(
+							LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "sortedCollectionChanges", null), dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
-							return ModelType.converter(LambdaUtils
-								.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
-								dest.getModelType().forTypes(oceType));
+							return ModelType.converter(LambdaUtils.printableFn(src -> src == null ? Observable.empty() : src.changes(),
+								"sortedCollectionChanges", null), dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
@@ -1051,6 +1122,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSet<?>, ObservableSet<?>> convertType(ModelInstanceType<ObservableSet<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> ((ObservableSet<Object>) src).flow().transformEquivalent(transformReversible(casts[0])).collectPassive();
 		}
 
@@ -1065,13 +1138,13 @@ public class ModelTypes {
 				public ModelInstanceConverter<ObservableSet<?>, Observable<?>> convert(ModelInstanceType<ObservableSet<?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest, InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "setChanges", null),
 							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "setChanges", null),
 								dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1100,6 +1173,12 @@ public class ModelTypes {
 			@Override
 			public Object getIdentity() {
 				return theId;
+			}
+
+			@Override
+			public HollowSet<T> alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 
 			@Override
@@ -1226,6 +1305,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedSet<?>, ObservableSortedSet<?>> convertType(ModelInstanceType<ObservableSortedSet<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> ((ObservableSortedSet<Object>) src).flow().transformEquivalent(transformReversible(casts[0])).collectPassive();
 		}
 
@@ -1247,13 +1328,13 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedSet<?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null),
-							dest);
+						return ModelType
+							.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "sortedSetChanges", null), dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "sortedSetChanges", null),
 								dest.getModelType().forTypes(oceType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1325,6 +1406,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableValueSet<?>, ObservableValueSet<?>> convertType(ModelInstanceType<ObservableValueSet<?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return null;
 		}
 
@@ -1341,11 +1424,13 @@ public class ModelTypes {
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
 						return ModelType.converter(
-							LambdaUtils.printableFn(src -> src.getValues().simpleChanges().map(__ -> null), "changes", null), dest);
+							LambdaUtils.printableFn(src -> src.getValues().simpleChanges().map(__ -> null), "valueSetChanges", null),
+							dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.getValues().simpleChanges(), "changes", null),
+							return ModelType.converter(
+								LambdaUtils.printableFn(src -> src.getValues().simpleChanges(), "valueSetChanges", null),
 								dest.getModelType().forTypes(oceType));
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1426,6 +1511,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableMap<?, ?>, ObservableMap<?, ?>> convertType(ModelInstanceType<ObservableMap<?, ?>, ?> target,
 			TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return null; // ObservableMap doesn't have flow at the moment at least
 		}
 
@@ -1436,12 +1523,12 @@ public class ModelTypes {
 				public ModelInstanceConverter<ObservableMap<?, ?>, Observable<?>> convert(ModelInstanceType<ObservableMap<?, ?>, ?> source,
 					ModelInstanceType<Observable<?>, ?> dest, InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
+						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "mapChanges", null),
 							dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "mapChanges", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1524,6 +1611,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedMap<?, ?>, ObservableSortedMap<?, ?>> convertType(
 			ModelInstanceType<ObservableSortedMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return null; // ObservableMap doesn't have flow at the moment at least
 		}
 
@@ -1539,12 +1628,12 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
-							dest);
+						return ModelType.converter(
+							LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "sortedMapChanges", null), dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "sortedMapChanges", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1625,6 +1714,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableMultiMap<?, ?>, ObservableMultiMap<?, ?>> convertType(
 			ModelInstanceType<ObservableMultiMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> {
 				ObservableMultiMap.MultiMapFlow<Object, Object> flow = ((ObservableMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
@@ -1645,14 +1736,12 @@ public class ModelTypes {
 					ModelInstanceType<ObservableMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
-							dest);
+						return ModelType
+							.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "multiMapChanges", null), dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(
-								LambdaUtils.printableFn(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null), "changes",
-									null),
+							return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges(), "multiMapChanges", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1733,6 +1822,8 @@ public class ModelTypes {
 		@Override
 		protected Function<ObservableSortedMultiMap<?, ?>, ObservableSortedMultiMap<?, ?>> convertType(
 			ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			if (!anyNonTrivial(casts))
+				return LambdaUtils.identity();
 			return src -> {
 				ObservableSortedMultiMap.SortedMultiMapFlow<Object, Object> flow = ((ObservableSortedMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
@@ -1757,13 +1848,13 @@ public class ModelTypes {
 					ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> source, ModelInstanceType<Observable<?>, ?> dest,
 					InterpretedExpressoEnv env) throws IllegalArgumentException {
 					if (dest.getType(0) == TypeTokens.get().VOID || TypeTokens.getRawType(dest.getType(0)) == void.class) {
-						return ModelType.converter(LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "changes", null),
-							dest);
+						return ModelType.converter(
+							LambdaUtils.printableFn(src -> src.simpleChanges().map(__ -> null), "sortedMultiMapChanges", null), dest);
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().of(Causable.class);
 						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
-							return ModelType.converter(LambdaUtils
-								.printableFn(LambdaUtils.printableFn(src -> src.simpleChanges(), "changes", null), "changes", null),
+							return ModelType.converter(
+								LambdaUtils.printableFn(src -> src.simpleChanges(), "sortedMultiMapChanges", null),
 								dest.getModelType().forTypes(omeType));
 						else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
@@ -1791,7 +1882,7 @@ public class ModelTypes {
 	static Function<Transformation.ReversibleTransformationPrecursor<Object, Object, ?>, Transformation.ReversibleTransformation<Object, Object>> transformReversible(
 		TypeConverter<Object, Object, Object, Object> cast) {
 		TypeConverter<Object, Object, Object, Object> reverse = cast.reverse();
-		return tx -> tx.cache(false).map(cast).replaceSource(reverse, rev -> {
+		return tx -> tx.cache(false).map(cast.getConverter()).replaceSource(reverse.getConverter(), rev -> {
 			if (reverse.getApplicability() == null)
 				return rev;
 			else

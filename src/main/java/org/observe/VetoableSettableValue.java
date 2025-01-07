@@ -27,7 +27,7 @@ import org.qommons.collect.ListenerList;
  *
  * @param <T> The type of the value
  */
-public class VetoableSettableValue<T> implements SettableValue<T> {
+public class VetoableSettableValue<T> extends Identifiable.AbstractIdentifiable implements SettableValue<T> {
 	private final String theDescription;
 	private final boolean isNullable;
 	private final CausalLock theLock;
@@ -36,9 +36,6 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	private volatile T theValue;
 	private volatile long theStamp;
 	private boolean isAlive;
-
-	private Object theIdentity;
-	private Object theChangesIdentity;
 
 	VetoableSettableValue(String description, boolean nullable, ListenerList.Builder listening,
 		Function<Object, Transactable> lock, T initialValue) {
@@ -61,10 +58,14 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public Object getIdentity() {
-		if (theIdentity == null)
-			theIdentity = Identifiable.baseId(theDescription, this);
-		return theIdentity;
+	protected Object createIdentity() {
+		return Identifiable.baseId(theDescription, this);
+	}
+
+	@Override
+	public VetoableSettableValue<T> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -108,11 +109,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+	public T set(T value) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
 		if (accept != null)
 			throw new IllegalArgumentException(accept);
-		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, null)) {
 			if (!isAlive)
 				throw new UnsupportedOperationException("This value is no longer alive");
 			T oldValue = theValue;
@@ -163,7 +164,7 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public <V extends T> String isAcceptable(V value) {
+	public String isAcceptable(T value) {
 		if (value == null && !isNullable)
 			return "Null values not acceptable for this value";
 		return null;
@@ -221,12 +222,10 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		}
 	}
 
-	private class VSVChanges implements Observable<ObservableValueEvent<T>> {
+	private class VSVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 		@Override
-		public Object getIdentity() {
-			if (theChangesIdentity == null)
-				theChangesIdentity = Identifiable.wrap(VSVChanges.this.getIdentity(), "noInitChanges");
-			return theChangesIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(VSVChanges.this.getIdentity(), "noInitChanges");
 		}
 
 		@Override
@@ -267,6 +266,11 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		@Override
 		public CoreId getCoreId() {
 			return theLock == null ? CoreId.EMPTY : theLock.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return CoreChangeSources.core(this);
 		}
 
 		@Override

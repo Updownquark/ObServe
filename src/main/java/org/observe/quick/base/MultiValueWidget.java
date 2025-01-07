@@ -1,11 +1,14 @@
 package org.observe.quick.base;
 
+import java.util.List;
+
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 
 /**
  * A widget that represents multiple values to to the user at once, allowing one or multiple to be selected
@@ -33,6 +36,14 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 		/** @return All currently selected values */
 		@QonfigAttributeGetter("multi-selection")
 		CompiledExpression getMultiSelection();
+
+		/** @return Transfer source configurations for values in the widget */
+		@QonfigChildGetter("transfer-source")
+		List<QuickDragging.TransferSource.Def> getTransferSources();
+
+		/** @return Transfer accept configurations for moving values into the widget */
+		@QonfigChildGetter("transfer-accept")
+		List<QuickDragging.TransferAccept.Def> getTransferAccepters();
 	}
 
 	/**
@@ -52,6 +63,12 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 		/** @return All currently selected values */
 		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();
 
+		/** @return Transfer source configurations for values in the widget */
+		List<QuickDragging.TransferSource.Interpreted<T, ?>> getTransferSources();
+
+		/** @return Transfer accept configurations for moving values into the widget */
+		List<QuickDragging.TransferAccept.Interpreted<T, ?>> getTransferAccepters();
+
 		@Override
 		W create();
 	}
@@ -61,4 +78,10 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 
 	/** @return All currently selected values */
 	ObservableCollection<T> getMultiSelection();
+
+	/** @return Transfer source configurations for values in the widget */
+	List<QuickDragging.TransferSource<T, ?>> getTransferSources();
+
+	/** @return Transfer accept configurations for moving values into the widget */
+	List<QuickDragging.TransferAccept<T, ?>> getTransferAccepters();
 }

@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -405,9 +406,9 @@ public interface OperationResult<T> {
 
 		@Override
 		public Observable<? extends OperationResult<T>> watchStatus() {
-			return new Observable<OperationResult<T>>() {
+			class WatchStatus extends AbstractIdentifiable implements Observable<OperationResult<T>> {
 				@Override
-				public Object getIdentity() {
+				protected Object createIdentity() {
 					return WrapperResult.this;
 				}
 
@@ -466,7 +467,14 @@ public interface OperationResult<T> {
 					OperationResult<? extends S> wrapped = theWrapped;
 					return wrapped == null ? CoreId.EMPTY : wrapped.watchStatus().getCoreId();
 				}
-			};
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					OperationResult<? extends S> wrapped = theWrapped;
+					return wrapped == null ? CoreChangeSources.empty() : wrapped.watchStatus().getChangeSources();
+				}
+			}
+			return new WatchStatus();
 		}
 	}
 

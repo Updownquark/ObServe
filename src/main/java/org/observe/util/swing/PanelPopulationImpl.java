@@ -74,9 +74,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.ActionEnablement;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
@@ -84,13 +82,13 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
 import org.observe.util.swing.PanelPopulation.ComboEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
-import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.ImageControl;
 import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.PartialPanelPopulatorImpl;
 import org.observe.util.swing.PanelPopulation.ProgressEditor;
 import org.observe.util.swing.PanelPopulation.SettingsMenu;
+import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
 import org.observe.util.swing.PanelPopulation.SplitPane;
 import org.observe.util.swing.PanelPopulation.SteppedFieldEditor;
@@ -99,6 +97,7 @@ import org.observe.util.swing.PanelPopulation.TabPaneEditor;
 import org.observe.util.swing.PanelPopulation.ToggleEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.QommonsUtils;
@@ -106,8 +105,11 @@ import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.Format;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -152,7 +154,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends AbstractComponentEditor<C, P>
+	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends SimpleComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
 		private Shading theShading;
 
@@ -206,7 +208,9 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
+				BreakpointHere.breakpoint();
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel, "align right");
 			StringBuilder constraints = new StringBuilder();
@@ -245,7 +249,7 @@ class PanelPopulationImpl {
 			else
 				getContainer().add(component, constraints.toString());
 			if (postLabel != null)
-				getContainer().add(postLabel, "wrap");
+				getContainer().add(postLabel, "growx, wrap");
 			if (field.isVisible() != null)
 				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 		}
@@ -372,60 +376,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleFieldEditor<E, P extends SimpleFieldEditor<E, P>> extends AbstractComponentEditor<E, P>
-	implements FieldEditor<E, P> {
-		private ObservableValue<String> thePostLabel;
-		private SimpleButtonEditor<JButton, ?> thePostButton;
-
-		SimpleFieldEditor(String fieldName, E editor, Observable<?> until) {
-			super(fieldName, editor, until);
-		}
-
-		@Override
-		public P withPostLabel(ObservableValue<String> postLabel) {
-			if (thePostButton != null) {
-				System.err.println("A field can only have one post component");
-				thePostButton = null;
-			}
-			thePostLabel = postLabel;
-			return (P) this;
-		}
-
-		@Override
-		public P withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
-			if (thePostLabel != null) {
-				System.err.println("A field can only have one post component");
-				thePostLabel = null;
-			}
-			thePostButton = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, true, getUntil());
-			if (modify != null)
-				modify.accept(thePostButton);
-			return (P) this;
-		}
-
-		@Override
-		protected Component createPostLabel(Observable<?> until) {
-			if (thePostLabel != null) {
-				JLabel postLabel = new JLabel(thePostLabel.get());
-				thePostLabel.changes().takeUntil(until).act(evt -> postLabel.setText(evt.getNewValue()));
-				if (theFont != null)
-					new FontAdjuster().configure(theFont).adjust(postLabel);
-				return postLabel;
-			} else if (thePostButton != null)
-				return thePostButton.getComponent();
-			else
-				return null;
-		}
-
-		@Override
-		public Component decorate(Component c) {
-			if (theFont != null)
-				new FontAdjuster().configure(theFont).adjust(c);
-			return super.decorate(c);
-		}
-	}
-
-	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleFieldEditor<C, P>
+	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
 		private Shading theShading;
 
@@ -472,7 +423,9 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
+				BreakpointHere.breakpoint();
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel);
 			Component component = field.getComponent();
@@ -504,8 +457,14 @@ class PanelPopulationImpl {
 
 		@Override
 		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify) {
-			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), fieldName,
-				ObservableAction.DO_NOTHING, false, getUntil());
+			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox() {
+				@Override
+				public void setEnabled(boolean enabled) {
+					// BreakpointHere.breakpoint();
+					super.setEnabled(enabled);
+				}
+			}, fieldName,
+				null, false, getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
@@ -519,7 +478,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleLabelEditor<L extends JLabel, P extends SimpleLabelEditor<L, P>> extends SimpleFieldEditor<L, P>
+	static class SimpleLabelEditor<L extends JLabel, P extends SimpleLabelEditor<L, P>> extends SimpleComponentEditor<L, P>
 	implements LabelEditor<L, P> {
 		private ObservableValue<? extends Icon> theIcon;
 
@@ -612,7 +571,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleButtonEditor<B extends AbstractButton, P extends SimpleButtonEditor<B, P>> extends SimpleFieldEditor<B, P>
+	static class SimpleButtonEditor<B extends AbstractButton, P extends SimpleButtonEditor<B, P>> extends SimpleComponentEditor<B, P>
 	implements ButtonEditor<B, P> {
 		private final ObservableAction theAction;
 		private ObservableValue<String> theText;
@@ -684,7 +643,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleSteppedFieldEditor<E, F, P extends SimpleSteppedFieldEditor<E, F, P>> extends SimpleFieldEditor<E, P>
+	static class SimpleSteppedFieldEditor<E, F, P extends SimpleSteppedFieldEditor<E, F, P>> extends SimpleComponentEditor<E, P>
 	implements SteppedFieldEditor<E, F, P> {
 		private final Consumer<F> theStepSizeChange;
 
@@ -700,7 +659,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleMultiSliderEditor<P extends SimpleMultiSliderEditor<P>> extends SimpleFieldEditor<MultiRangeSlider, P>
+	static class SimpleMultiSliderEditor<P extends SimpleMultiSliderEditor<P>> extends SimpleComponentEditor<MultiRangeSlider, P>
 	implements SliderEditor<MultiRangeSlider, P> {
 		private SettableValue<ObservableValue<Double>> theMinValue;
 		private SettableValue<ObservableValue<Double>> theMaxValue;
@@ -821,7 +780,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleFieldEditor<JComboBox<F>, P>
+	static class SimpleComboEditor<F, P extends SimpleComboEditor<F, P>> extends SimpleComponentEditor<JComboBox<F>, P>
 	implements ComboEditor<F, P> {
 		private Function<? super F, String> theValueTooltip;
 		private IntSupplier theHoveredItem;
@@ -873,7 +832,7 @@ class PanelPopulationImpl {
 	}
 
 	static class SimpleToggleButtonPanel<F, TB extends JToggleButton, P extends SimpleToggleButtonPanel<F, TB, P>>
-	extends SimpleFieldEditor<Map<F, TB>, P> implements ToggleEditor<F, TB, P> {
+	extends SimpleComponentEditor<Map<F, TB>, P> implements ToggleEditor<F, TB, P> {
 		private final JPanel thePanel;
 		private final ObservableCollection<? extends F> theValues;
 		private final SettableValue<F> theValue;
@@ -954,7 +913,7 @@ class PanelPopulationImpl {
 
 		static <F> ComboButton<F> createButton(ObservableCollection<F> values, BiConsumer<? super F, Object> action, String buttonText,
 			Observable<?> until) {
-			return new ComboButton<>(values, ComboButton.createDefaultComboBoxColumn((TypeToken<F>) TypeTokens.get().WILDCARD), until)//
+			return new ComboButton<>(values, ComboButton.createDefaultComboBoxColumn((Class<F>) Object.class), until)//
 				.addListener(action)//
 				;
 		}
@@ -966,7 +925,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleProgressEditor<P extends SimpleProgressEditor<P>> extends SimpleFieldEditor<JProgressBar, P>
+	static class SimpleProgressEditor<P extends SimpleProgressEditor<P>> extends SimpleComponentEditor<JProgressBar, P>
 	implements ProgressEditor<P> {
 		private ObservableValue<Integer> theTaskLength;
 		private ObservableValue<Integer> theProgress;
@@ -1024,6 +983,7 @@ class PanelPopulationImpl {
 				Observable.or(theTaskLength.noInitChanges(), theProgress.noInitChanges(), //
 					isIndeterminate == null ? Observable.empty() : isIndeterminate.noInitChanges(), //
 						theText == null ? Observable.empty() : theText.noInitChanges())//
+				.safe(ThreadConstraint.EDT)//
 				.takeUntil(getUntil())//
 				.act(__ -> updateProgress());
 				updateProgress();
@@ -1048,25 +1008,28 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleTabPaneEditor<P extends SimpleTabPaneEditor<P>> extends AbstractComponentEditor<JTabbedPane, P>
+	static class SimpleTabPaneEditor<P extends SimpleTabPaneEditor<P>> extends SimpleComponentEditor<JTabbedPane, P>
 	implements TabPaneEditor<JTabbedPane, P> {
 		static class Tab {
-			final Object id;
+			final CollectionElement<Object> id;
 			final SimpleTabEditor<?> tab;
 			Component component;
 			SimpleObservable<Void> tabEnd;
 			boolean isRemovable;
 			ObservableValue<String> theName;
+			String theCurrentName;
 			ObservableValue<Image> theIcon;
+			Image theCurrentIcon;
 			Observable<?> until;
 			Consumer<Object> onRemove;
 
-			Tab(Object id, SimpleTabEditor<?> tab) {
+			Tab(CollectionElement<Object> id, SimpleTabEditor<?> tab) {
 				this.id = id;
 				this.tab = tab;
 			}
 		}
 
+		private final BetterList<Object> theTabOrder;
 		private final Map<Object, Tab> theTabs;
 		private final Map<Component, Tab> theTabsByComponent;
 		private final SettableValue<Object> theSelectedTabId;
@@ -1075,6 +1038,7 @@ class PanelPopulationImpl {
 
 		SimpleTabPaneEditor(Observable<?> until) {
 			super(null, new JTabbedPane(), until);
+			theTabOrder = BetterTreeList.create();
 			theTabs = new LinkedHashMap<>();
 			theTabsByComponent = new IdentityHashMap<>();
 			theSelectedTabId = SettableValue.build().build();
@@ -1084,6 +1048,10 @@ class PanelPopulationImpl {
 		@Override
 		public int getTabCount() {
 			return getEditor().getTabCount();
+		}
+
+		private boolean isDebug() {
+			return PanelPopulation.isDebugging(getName(), "tabs");
 		}
 
 		@Override
@@ -1109,12 +1077,15 @@ class PanelPopulationImpl {
 		}
 
 		P withTabImpl(Object tabID, int tabIndex, Component tabComponent, Consumer<TabEditor<?>> tabModifier,
-			AbstractComponentEditor<?, ?> panel) {
+			SimpleComponentEditor<?, ?> panel) {
 			if (tabID == null)
 				throw new NullPointerException();
+			if (isDebug())
+				System.out.println("Adding tab " + tabID + "@" + tabIndex);
 			SimpleTabEditor<?> t = new SimpleTabEditor<>(this, tabID, tabComponent);
 			tabModifier.accept(t);
-			Tab tab = new Tab(tabID, t);
+			CollectionElement<Object> tabOrder = theTabOrder.addElement(tabIndex, tabID);
+			Tab tab = new Tab(tabOrder, t);
 			tab.onRemove = t.onRemove;
 			Tab oldTab = theTabs.put(tabID, tab);
 			if (oldTab != null) {
@@ -1144,12 +1115,22 @@ class PanelPopulationImpl {
 			tab.theName = t.getName();
 			if (tab.theName != null)
 				t.theName.changes().takeUntil(tabUntil).act(evt -> {
-					getEditor().setTitleAt(getTabIndex(tabID), evt.getNewValue());
+					if (evt.getNewValue().equals(tab.theCurrentName))
+						return;
+					tab.theCurrentName = evt.getNewValue();
+					int index = getTabIndex(tab);
+					if (isDebug())
+						System.out.println("Tab " + tabID + " @" + index + " name=" + evt.getNewValue());
+
+					getEditor().setTitleAt(index, evt.getNewValue());
 				});
 			tab.theIcon = t.getIcon();
 			if (tab.theIcon != null)
 				t.theIcon.changes().takeUntil(tabUntil).act(evt -> {
-					getEditor().setIconAt(getTabIndex(tabID), evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
+					if (evt.getNewValue() == tab.theCurrentIcon)
+						return;
+					tab.theCurrentIcon = evt.getNewValue();
+					getEditor().setIconAt(getTabIndex(tab), evt.getNewValue() == null ? null : new ImageIcon(evt.getNewValue()));
 				});
 			if (t.getSelection() != null) {
 				t.getSelection().takeUntil(tabUntil).act(__ -> ObservableSwingUtils.onEQ(() -> {
@@ -1192,16 +1173,11 @@ class PanelPopulationImpl {
 			return null;
 		}
 
-		private int getTabIndex(Object tabId) {
-			int t = 0;
-			for (Object tabId2 : theTabs.keySet()) {
-				if (tabId2.equals(tabId))
-					break;
-				t++;
-			}
-			if (t == theTabs.size())
+		private int getTabIndex(Tab tab) {
+			if (tab.id.getElementId().isPresent())
+				return theTabOrder.getElementsBefore(tab.id.getElementId());
+			else
 				return -1;
-			return t;
 		}
 
 		@Override
@@ -1227,7 +1203,7 @@ class PanelPopulationImpl {
 						if (theSelectedTab != null && theSelectedTab.tab.getOnSelect() != null)
 							theSelectedTab.tab.getOnSelect().set(false, evt);
 						theSelectedTab = selectedTab;
-						Object selectedTabId = selectedTab == null ? null : selectedTab.id;
+						Object selectedTabId = selectedTab == null ? null : selectedTab.id.get();
 						if (!Objects.equals(theSelectedTabId.get(), selectedTabId))
 							theSelectedTabId.set(selectedTabId, evt);
 						if (selectedTab != null && selectedTab.tab.getOnSelect() != null)
@@ -1241,12 +1217,14 @@ class PanelPopulationImpl {
 					if (evt.getNewValue() == null) {
 						if (theSelectedTab == null)
 							return;
-						getEditor().setSelectedIndex(-1);
+						// Nah, don't do this. Looks bad.
+						// getEditor().setSelectedIndex(-1);
 					} else {
 						Tab tab = theTabs.get(evt.getNewValue());
 						if (theSelectedTab == tab)
 							return;
-						getEditor().setSelectedComponent(tab.component);
+						if (getEditor().getSelectedComponent() != tab.component)
+							getEditor().setSelectedComponent(tab.component);
 					}
 				});
 				Component selected = getEditor().getSelectedComponent();
@@ -1265,6 +1243,7 @@ class PanelPopulationImpl {
 			Tab found = theTabs.remove(tabId);
 			if (found == null)
 				return false;
+			theTabOrder.mutableElement(found.id.getElementId()).remove();
 			getEditor().remove(found.component);
 			found.tabEnd.onNext(null);
 			if (found.onRemove != null)
@@ -1287,7 +1266,7 @@ class PanelPopulationImpl {
 			if (found.isRemovable == removable)
 				return;
 			found.isRemovable = removable;
-			int t = getTabIndex(tabId);
+			int t = getTabIndex(found);
 			if (t < 0)
 				return; // Maybe removed already
 			if (getEditor().getTabCount() <= t)
@@ -1425,7 +1404,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleSplitEditor<P extends SimpleSplitEditor<P>> extends AbstractComponentEditor<JSplitPane, P> implements SplitPane<P> {
+	static class SimpleSplitEditor<P extends SimpleSplitEditor<P>> extends SimpleComponentEditor<JSplitPane, P> implements SplitPane<P> {
 		private IntFunction<Integer> theSplitFunction;
 		private BiPredicate<Integer, Integer> theSplitOnChange;
 		private Observable<?> theSplitChanges;
@@ -1595,7 +1574,7 @@ class PanelPopulationImpl {
 		}
 	}
 
-	static class SimpleScrollEditor<P extends SimpleScrollEditor<P>> extends SimpleFieldEditor<JScrollPane, P>
+	static class SimpleScrollEditor<P extends SimpleScrollEditor<P>> extends SimpleComponentEditor<JScrollPane, P>
 	implements PanelPopulation.ScrollPane<P> {
 		private final FixedScrollPane theFixedScroll;
 		private boolean isContentSet;
@@ -1698,28 +1677,38 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		protected Dimension getMinSize(Component component) {
-			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
-				return super.getMinSize(((JXCollapsiblePane) component).getContentPane());
-			return super.getMinSize(component);
+		public LayoutChild layoutChild(Component component) {
+			if (component instanceof JXCollapsiblePane)
+				return new CPLayoutChild((JXCollapsiblePane) component);
+			else
+				return super.layoutChild(component);
 		}
 
-		@Override
-		protected Dimension getPrefSize(Component component) {
-			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
-				return super.getPrefSize(((JXCollapsiblePane) component).getContentPane());
-			return super.getPrefSize(component);
-		}
+		static class CPLayoutChild extends LayoutChild.ComponentLayoutChild {
+			CPLayoutChild(JXCollapsiblePane cp) {
+				super(cp, null);
+			}
 
-		@Override
-		protected Dimension getMaxSize(Component component) {
-			if (component instanceof JXCollapsiblePane && !((JXCollapsiblePane) component).isCollapsed())
-				return super.getMaxSize(((JXCollapsiblePane) component).getContentPane());
-			return super.getMaxSize(component);
+			@Override
+			public Dimension getSize(int type) {
+				JXCollapsiblePane cp = (JXCollapsiblePane) component;
+				if (cp.isCollapsed())
+					return super.getSize(type);
+				else {
+					Dimension d;
+					if (type < 0)
+						d = cp.getContentPane().getMinimumSize();
+					else if (type == 0)
+						d = cp.getContentPane().getPreferredSize();
+					else
+						d = cp.getContentPane().getMaximumSize();
+					return d;
+				}
+			}
 		}
 	}
 
-	static class SimpleCollapsePane extends AbstractComponentEditor<JPanel, SimpleCollapsePane>
+	static class SimpleCollapsePane extends SimpleComponentEditor<JPanel, SimpleCollapsePane>
 	implements PartialPanelPopulatorImpl<JPanel, SimpleCollapsePane>, CollapsePanel<JXCollapsiblePane, JPanel, SimpleCollapsePane> {
 		private final JXCollapsiblePane theCollapsePane;
 		private final PartialPanelPopulatorImpl<JPanel, ?> theOuterContainer;
@@ -1819,8 +1808,8 @@ class PanelPopulationImpl {
 			if (theExposedHeaderPanel == null)
 				theHeaderPanel.addHPanel(null, new JustifiedBoxLayout(false).mainCenter().crossJustified(),
 					p -> theExposedHeaderPanel = p.withLayoutConstraints(BorderLayout.CENTER));
-			theExposedHeaderPanel.modifyAssociatedComponent(theHeaderPanel.getEditor());
 			header.accept(theExposedHeaderPanel);
+			theExposedHeaderPanel.modifyAssociatedComponent(theHeaderPanel.getEditor());
 			return this;
 		}
 
@@ -1830,7 +1819,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			theContentPanel.doAdd(field, fieldLabel, postLabel, scrolled);
 		}
 
@@ -2302,6 +2291,12 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public SwitchableFilterValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public T get() {
 			return theWrapped.get();
 		}
@@ -2337,7 +2332,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (theFilter != null) {
 				String msg = theFilter.apply(value);
 				if (StdMsg.UNSUPPORTED_OPERATION.equals(msg))
@@ -2345,11 +2340,11 @@ class PanelPopulationImpl {
 				else if (msg != null)
 					throw new IllegalArgumentException(msg);
 			}
-			return theWrapped.set(value, cause);
+			return theWrapped.set(value);
 		}
 
 		@Override
-		public <V extends T> String isAcceptable(V value) {
+		public String isAcceptable(T value) {
 			String msg = theFilter == null ? null : theFilter.apply(value);
 			if (msg == null)
 				msg = theWrapped.isAcceptable(value);

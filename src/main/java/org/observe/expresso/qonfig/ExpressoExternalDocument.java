@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -33,10 +34,12 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueType;
@@ -53,7 +56,7 @@ import com.google.common.reflect.TypeToken;
 public class ExpressoExternalDocument extends QonfigExternalDocument {
 	/** The XML name of this element */
 	public static final String EXPRESSO_EXTERNAL_DOCUMENT = "expresso-external-document";
-	private static final String CONTENT_ENV_PROPERTY = "Expresso$Content";
+	private static final String REFERENCE_ENV_PROPERTY = "Expresso$Reference$Env";
 
 	/** A satisfier for an externally-specified model value in external content */
 	public interface AttributeValueSatisfier {
@@ -160,12 +163,12 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			theContentModelModel = ObservableModelSet.build(CONTENT_ENV_PROPERTY, ObservableModelSet.JAVA_NAME_CHECKER)//
-				.with(CONTENT_ENV_PROPERTY, ModelTypes.Value.forType(ModelSetInstance.class),
+			theContentModelModel = ObservableModelSet.build(REFERENCE_ENV_PROPERTY, ObservableModelSet.JAVA_NAME_CHECKER)//
+				.with(REFERENCE_ENV_PROPERTY, ModelTypes.Value.forType(ModelSetInstance.class),
 					ModelValueInstantiator.of(msi -> new ContentModelHolder()), null)//
 				.withAll(CompiledExpressoEnv.STANDARD_JAVA.getModels())//
 				.build();
-			theContentModelVariable = theContentModelModel.getLocalComponent(CONTENT_ENV_PROPERTY).getIdentity();
+			theContentModelVariable = theContentModelModel.getLocalComponent(REFERENCE_ENV_PROPERTY).getIdentity();
 
 			theAttributeValues.clear();
 			initFulfills(session);
@@ -328,6 +331,21 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(), TypeTokens.get().INT, 0, null);
 			else if (attr.getType() == QonfigValueType.BOOLEAN)
 				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(), TypeTokens.get().BOOLEAN, false, null);
+			else if (attr.getType() == QonfigValueType.QONFIG_TYPE)
+				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(),
+					TypeTokens.get().keyFor(QonfigValueType.QonfigTypeReference.class).parameterized(QonfigElementOrAddOn.class), null,
+					null);
+			else if (attr.getType() == QonfigValueType.QONFIG_ELEMENT_TYPE)
+				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(),
+					TypeTokens.get().keyFor(QonfigValueType.QonfigTypeReference.class).parameterized(QonfigElementDef.class), null, null);
+			else if (attr.getType() == QonfigValueType.QONFIG_ADD_ON)
+				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(),
+					TypeTokens.get().keyFor(QonfigValueType.QonfigTypeReference.class).parameterized(QonfigAddOn.class), null, null);
+			else if (attr.getType() == QonfigValueType.QONFIG_ADD_ON_SET)
+				return new AttributeValueSatisfier.Literal<>(attr.getType().getName(),
+					TypeTokens.get().keyFor(Set.class).parameterized(
+						TypeTokens.get().keyFor(QonfigValueType.QonfigTypeReference.class).parameterized(QonfigElementOrAddOn.class)),
+					null, null);
 			else
 				reporting.error(
 					prefix + attr.getType().getName() + "-typed attributes must be required or defaulted to be supported model values");
@@ -385,7 +403,7 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 			theContentModelModel = getDefinition().getContentModelModel().createInterpreted(env);
 			theContentModelModel.interpret(env);
 
-			env.put(CONTENT_ENV_PROPERTY, getContent().getExpressoEnv());
+			env.put(REFERENCE_ENV_PROPERTY, getReferenceEnv());
 			super.doUpdate(env);
 		}
 
@@ -465,9 +483,9 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 
 		@Override
 		public InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			InterpretedExpressoEnv contentEnv = env.get(CONTENT_ENV_PROPERTY, InterpretedExpressoEnv.class);
+			InterpretedExpressoEnv contentEnv = env.get(REFERENCE_ENV_PROPERTY, InterpretedExpressoEnv.class);
 			if (contentEnv == null)
-				throw new IllegalStateException("No " + CONTENT_ENV_PROPERTY + " found");
+				throw new IllegalStateException("No " + REFERENCE_ENV_PROPERTY + " found");
 			InterpretedValueSynth<M, ?> attrValueSynth = theExpression.interpret(theSpec.getType(env), contentEnv);
 			InterpretedValueSynth<?, ContentModelHolder> contentModel = (InterpretedValueSynth<?, ContentModelHolder>) env.getModels()
 				.getComponent(theContentModelVariable);
@@ -509,7 +527,7 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		}
 	}
 
-	static class ContentModelHolder implements SettableValue<ModelSetInstance> {
+	static class ContentModelHolder extends AbstractIdentifiable implements SettableValue<ModelSetInstance> {
 		private ModelSetInstance theContentModels;
 
 		void setContentModels(ModelSetInstance contentModels) {
@@ -532,8 +550,14 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return Identifiable.baseId(CONTENT_ENV_PROPERTY, this);
+		protected Object createIdentity() {
+			return Identifiable.baseId(REFERENCE_ENV_PROPERTY, this);
+		}
+
+		@Override
+		public ContentModelHolder alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -557,13 +581,12 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		}
 
 		@Override
-		public <V extends ModelSetInstance> ModelSetInstance set(V value, Object cause)
-			throws IllegalArgumentException, UnsupportedOperationException {
+		public ModelSetInstance set(ModelSetInstance value) throws IllegalArgumentException, UnsupportedOperationException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override
-		public <V extends ModelSetInstance> String isAcceptable(V value) {
+		public String isAcceptable(ModelSetInstance value) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
 

@@ -1,11 +1,15 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.config.QonfigAddOn;
@@ -32,6 +36,11 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
 		/** @return The menu bar to display above the container */
 		@QonfigChildGetter("menu-bar")
 		public QuickMenuBar.Def getMenuBar() {
@@ -53,7 +62,7 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -112,12 +121,12 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public Class<? extends ExAddOn.Interpreted<?, ?>> getInterpretationType() {
+	public Class<? extends ExAddOn.Interpreted<ExElement, ?>> getInterpretationType() {
 		return Interpreted.class;
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;

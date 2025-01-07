@@ -11,8 +11,8 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC Pattern for a floating-point decimal number?>
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
 
-		<?DOC Used by the &lt;size> operation, defining whether to evaluate the number of keys or values in a map?>
-		<one-of name="size-type">
+		<?DOC Used by some multi-map operations, defining whether to evaluate the number of keys or values in a map?>
+		<one-of name="map-value-type">
 			<literal>key</literal>
 			<literal>value</literal>
 		</one-of>
@@ -64,8 +64,11 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="sort" type="sort" min="0" />
 		</add-on>
 
+		<?DOC An operation for a &lt;transformation>?>
+		<add-on name="operation" abstract="true" />
+
 		<?DOC An mapping operation in which the source value of the operation can be referred to by some expressions?>
-		<add-on name="complex-operation" requires="operation" inherits="with-element-model">
+		<add-on name="complex-operation" inherits="operation,with-element-model">
 			<element-model>
 				<?DOC The variable in which the source value will be made available?>
 				<value name-attribute="source-as" />
@@ -74,7 +77,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="source-as" type="identifier" />
 		</add-on>
 		<?DOC Options for a mapping operation?>
-		<add-on name="abst-map-op" requires="operation" abstract="true" >
+		<add-on name="abst-map-op" abstract="true" inherits="operation">
 			<?DOC Whether the mapping operation should be cached.<br>
 				Cached operations keep the mapped value in memory and only re-evaluate the mapping operation when any of the sources have changed.<br>
 				Un-cached operations don't keep the mapped value around and must re-evaluate the mapping operation each time the value is needed.?>
@@ -171,10 +174,17 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<?DOC An action that can be invoked?>
 		<element-def name="action" extends="model-value" inherits="allow-ext-model,with-local-model">
-			<?DOC Whether the action should be executed asynchronously.<br>
-				If true, the action will be queued for execution on a different thread
-				and the thread that initiated the action execution will be released to continue doing its work.?>
-			<attribute name="async" type="boolean" default="false" />
+			<?DOC If this action should NOT be executed inline (immediately on invocation, blocking until the action finishes),<br>
+				Then this should be a reference to the threading strategy to use. Typical values are 'ANY' and 'EDT'.?>
+			<attribute name="on-thread" type="expression" specify="optional" />
+			<?DOC By default, an action will use the value expression to determine whether it is enabled.<br>
+				For example, an assignment will be enabled if the evaluated right side is acceptable as a value for the left side.<br>
+				Sometimes, such as when the result of a long method call is assigned to a simple variable, this feature is undesirable,
+				as it requires the invocation of the long method each time one of the parameters changes to determine whether the result
+				is assignable to the right side.<br>
+				If this attribute is true, the action will report that it is always enabled.<br>
+				In this case, errors thrown by invoking the action when the expression will be ignored. ?>
+			<attribute name="always-enabled" type="boolean" default="false" />
 		</element-def>
 		<?DOC An action that invokes a list of actions?>
 		<element-def name="action-group" extends="model-value" inherits="with-local-model">
@@ -252,12 +262,9 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<?DOC Operations to perform in succession on the source value?>
 			<child-def name="op" type="operation" min="1" max="inf" />
 		</element-def>
-		<?DOC An operation for a &lt;transformation>?>
-		<element-def name="operation" abstract="true" />
-		<?DOC Causes a model value or action to become unmodifiable or uninvokable on an expression?>
 
 		<?DOC Prevents modification to a transformed result depending on a condition?>
-		<element-def name="disable" extends="operation" inherits="complex-operation">
+		<element-def name="disable" inherits="complex-operation">
 			<attr-mod name="complex-operation.source-as" default="$SOURCE$" />
 			<?DOC The expression to disable the value or action with.  May be a boolean or a String.<br>
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
@@ -265,14 +272,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC Prevents some modifications to a transformed result?>
-		<element-def name="filter-accept" extends="operation" inherits="complex-operation">
+		<element-def name="filter-accept" inherits="complex-operation">
 			<?DOC The test to apply to determine if the operation is acceptable. May be a boolean or a String.<br>
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="test" type="expression" />
 		</element-def>
 
 		<?DOC A mapping operation, producing a value as the result of some function on each element of the source structure?>
-		<element-def name="map-to" extends="operation" inherits="abst-map-op, complex-operation, typed">
+		<element-def name="map-to" inherits="abst-map-op, complex-operation, typed">
 			<element-model>
 				<value name-attribute="combined-value/name" />
 			</element-model>
@@ -311,7 +318,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC A "simple" operation that returns a value?>
-		<element-def name="scalar-operation" extends="operation" abstract="true" />
+		<element-def name="scalar-operation" inherits="operation" abstract="true" />
 
 		<?DOC A simple scalar operation that just returns the given value?>
 		<element-def name="return" extends="scalar-operation">
@@ -336,7 +343,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC A filter operation on a model structure with multiple values?>
-		<element-def name="filter" extends="operation" inherits="complex-operation">
+		<element-def name="filter" inherits="complex-operation">
 			<?DOC The test to apply to a source value in a model structure, determining whether it will exist in the result. May be a boolean or a String.<br>
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="test" type="expression" />
@@ -344,17 +351,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 		<?DOC Filters an event such that only values which are instances of the given class are reported from this event.<br>
 			The type of this event is the same as that of the source event.  One may then map this event with a cast to produce an event of the target type.?>
-		<element-def name="filter-by-type" extends="operation">
-			<?DOC The name of the class to filter on. Parameterized types are not permitted.?>
-			<attribute name="type" type="string" />
-		</element-def>
+		<element-def name="filter-by-type" inherits="operation,type-required" />
 
 		<?DOC Operation to reverse a model structure with multiple elements.  The result will have all the same elements as the source, but ordered oppositely.?>
-		<element-def name="reverse" extends="operation" />
+		<element-def name="reverse" inherits="operation" />
 
 		<?DOC Causes update events on all elements in a model structure as a result of an external event.<br>
 			The resulting structure be identical to the source, but will fire extra update events when the target event fires.?>
-		<element-def name="refresh" extends="operation">
+		<element-def name="refresh" inherits="operation">
 			<?DOC The event that will cause an update on each element in the source structure.?>
 			<attribute name="on" type="expression" />
 		</element-def>
@@ -362,7 +366,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC Causes update events elements in a model structure as a result of events.<br>
 			Similar to the &lt;refresh> operation except that the events may be different for each element in the structure.<br>
 			The resulting structure be identical to the source, but will fire extra update events when the target event fires.?>
-		<element-def name="refresh-each" extends="operation" inherits="complex-operation">
+		<element-def name="refresh-each" inherits="complex-operation">
 			<?DOC The event that will cause an update on each element in the source structure.<br>
 				This will be evaluated separately for each element in the structure, and repeatedly each time each element changes.?>
 			<attribute name="on" type="expression" />
@@ -372,7 +376,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			The notion of "equivalent" here may vary by the source structure.<br>
 			E.g. for sorted structures, equivalence will be based on the sorting--elements may have other different properties,
 				but if the properties being sorted are the same, they will be judged as equivalent.?>
-		<element-def name="distinct" extends="operation">
+		<element-def name="distinct" inherits="operation">
 			<?DOC The sorting for the result.  If this is not specified and the source is not sorted, the result will not be sorted.?>
 			<child-def name="sort" type="sort" min="0" />
 			<?DOC Whether, when two elements in the source structure are equivalent, to always use the first instance in the result.<br>
@@ -383,7 +387,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC Produces a sorted structure. The result will have all the same elements as the source structure, but re-ordered in a given way.?>
-		<element-def name="sort" extends="operation" inherits="with-element-model">
+		<element-def name="sort" inherits="operation,with-element-model">
 			<element-model>
 				<value name-attribute="sort-value-as" />
 				<value name-attribute="sort-compare-value-as" />
@@ -412,14 +416,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 		<?DOC Produces a model structure that forbids most modification operations.<br>
 			The result will have all the same elements in the same order as the source, but will not allow most types of modification.?>
-		<element-def name="unmodifiable" extends="operation">
+		<element-def name="unmodifiable" inherits="operation">
 			<?DOC Whether the result will allow elements to be assigned to their current value (i.e. an update)?>
 			<attribute name="allow-updates" type="boolean" default="true" />
 		</element-def>
 
 		<?DOC Produces a model structure that forbids some modification operations.<br>
 			The result will have all the same elements in the same order as the source, but will not allow certain types of modification.?>
-		<element-def name="filter-mod" extends="operation" inherits="complex-operation">
+		<element-def name="filter-mod" inherits="complex-operation">
 			<!-- Obviously, some of these are incompatible -->
 			<?DOC If specified, the result will forbid adding new values.<br>
 				The value of this attribute should be a user-readable message declaring the reason additions are forbidden.?>
@@ -455,7 +459,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 				The result would be a collection containing every element of the collection produced for every element of the source.
 			Another example would be applying this to a collection with the "to" attribute specifying a value.
 				The result would be a collection containing all values produced for every element of the source.?>
-		<element-def name="flatten" extends="operation" inherits="abst-map-op">
+		<element-def name="flatten" inherits="abst-map-op">
 			<?DOC The model structure for each element of the source whose elements to include in the result?>
 			<attribute name="to" type="string" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
@@ -494,7 +498,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC Produces a result containing only elements of the source which are, or are not, contained in a target structure.?>
-		<element-def name="where-contained" extends="operation">
+		<element-def name="where-contained" inherits="operation">
 			<?DOC The structure to use for containment tests determining whether a given source element will be present in the result?>
 			<attribute name="filter" type="expression" />
 			<?DOC If true (the default), the result will contain only elements from the source for which an equivalent element exists in the filter structure.<br>
@@ -503,7 +507,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC A reduction operation on a collection.  Produces a scalar value that is some combination of all the values in a collection.?>
-		<element-def name="reduce" extends="operation" inherits="complex-operation">
+		<element-def name="reduce" inherits="complex-operation">
 			<element-model>
 				<?DOC The variable in which reduced value as accumulated thus far in the operation will be made available?>
 				<value name-attribute="temp-as" />
@@ -517,47 +521,59 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value type="expression" />
 		</element-def>
 
+		<?DOC Transforms a collection into either its first or last value. If the collection is empty, the result will be null.?>
+		<element-def name="terminal" inherits="operation">
+			<?DOC Whether to use the first or last value of the collection?>
+			<attribute name="first" type="boolean" />
+		</element-def>
+
 		<?DOC Groups a collection into a multi-map.  The result will be a multi map containing all elements from the source structure as values.?>
-		<element-def name="group-by" extends="operation" inherits="complex-operation">
+		<element-def name="group-by" inherits="complex-operation">
 			<?DOC Determines the key under which each element from the source will be grouped?>
-			<child-def name="key" type="operation" />
+			<attribute name="key" type="expression" />
+		</element-def>
+
+		<?DOC Performs a transformation on either the keys or values of a multi-map?>
+		<element-def name="map-transform" extends="transform" inherits="operation">
+			<attribute name="type" type="map-value-type" />
+			<attr-mod name="transform.source" specify="forbidden" default="null" />
 		</element-def>
 
 		<?DOC For event structures fire an initial event, this operation produces an event structure that fires all events except this initial event.<br>
 			If the source event does not produce an initial event, this has no effect.?>
-		<element-def name="no-init" extends="operation" />
+		<element-def name="no-init" inherits="operation" />
 		
 		<?DOC Produces an event structure that ignores the first few events?>
-		<element-def name="skip" extends="operation">
+		<element-def name="skip" inherits="operation">
 			<?DOC The number of initial events to skip?>
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
 
 		<?DOC Produces an event structure that stops firing events after the first few?>
-		<element-def name="take" extends="operation">
+		<element-def name="take" inherits="operation">
 			<?DOC The number of events from the source to fire before quitting?>
 			<attribute name="times" type="int" specify="required" />
 		</element-def>
 
 		<?DOC Produces an event structure that stops firing events when another event occurs?>
-		<element-def name="take-until" extends="operation">
+		<element-def name="take-until" inherits="operation">
 			<?DOC The event to cause the cessation of events firing from the result structure?>
 			<attribute name="until" type="expression" specify="required" />
 		</element-def>
 
 		<?DOC Provides the size of a collection, map, or multi-map as a value.  This may not be used with scalar types.?>
-		<element-def name="size" extends="operation">
+		<element-def name="size" inherits="operation">
 			<?DOC Whether this operation provides the number of keys or values in the source structure.<br>
 				This is only effective for multi-maps, for which multiple values may be stored per key.<br>
 				For collections, this must be 'value' (the default).?>
-			<attribute name="type" type="size-type" default="value" />
+			<attribute name="type" type="map-value-type" default="value" />
 		</element-def>
 
 		<?DOC Typically never needed.  This operation causes an intermediate result to be collected in the middle of a &lt;transform>ation.<br>
 			Typically operations in a transform are "stacked" internally into combined operations which are more efficient than producing result model structures after each operation.<br>
 			However, it is conceivable that collecting the results after certain heavyweight operations could produce efficiencies.<br>
 			Specifying this at the beginning or end of a transformation has no effect.?>
-		<element-def name="collect" extends="operation">
+		<element-def name="collect" inherits="operation">
 			<?DOC Whether to collect the model structure as an actively-derived structure or a passive one.
 				Actively-derived structures keep their results in memory, updating them only when needed.  Passive ones re-evaluate their results each time they are needed.<br>
 				The utility may not exist for a passively-colected intermediary, but the option exists.?>

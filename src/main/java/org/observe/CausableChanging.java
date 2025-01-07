@@ -18,4 +18,9 @@ public interface CausableChanging {
 	 * @return An observable that fires when this object changes
 	 */
 	Observable<? extends Causable> simpleChanges();
+
+	/** @return All sources of change that could cause {@link #simpleChanges()} to fire */
+	default Observable.CoreChangeSources getChangeSources() {
+		return simpleChanges().getChangeSources();
+	}
 }

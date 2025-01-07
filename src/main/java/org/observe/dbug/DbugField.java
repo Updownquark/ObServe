@@ -1,5 +1,6 @@
 package org.observe.dbug;
 
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 
 public class DbugField<A, F> {
@@ -47,6 +48,10 @@ public class DbugField<A, F> {
 
 	public boolean isActive() {
 		return isActive;
+	}
+
+	public ObservableValue<F> observe() {
+		return theValue.unsettable();
 	}
 
 	F get() {

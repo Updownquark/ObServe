@@ -35,6 +35,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.IntList;
+import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
 import org.qommons.TriConsumer;
 import org.qommons.collect.ListenerList;
@@ -68,16 +69,16 @@ public abstract class AbstractObservableTableModel<R> {
 		}
 		CategoryRenderStrategy<R, ?>[] columns = new CategoryRenderStrategy[colNames.length];
 		for (int i = 0; i < columns.length; i++) {
-			columns[i] = new CategoryRenderStrategy<>(colNames[i], (TypeToken<Object>) detectColumnClass(columnAccessors[i]),
+			columns[i] = new CategoryRenderStrategy<>(colNames[i], (Class<Object>) detectColumnClass(columnAccessors[i]),
 				columnAccessors[i]);
 		}
 		return ObservableCollection.of(columns);
 	}
 
-	private static TypeToken<?> detectColumnClass(Function<?, ?> accessor) {
+	private static Class<?> detectColumnClass(Function<?, ?> accessor) {
 		// Note that this doesn't work on lambdas, or classes that use a type argument for the function result type
 		// So this will return Object a lot
-		return TypeToken.of(accessor.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+		return TypeTokens.getRawType(TypeToken.of(accessor.getClass()).resolveType(Function.class.getTypeParameters()[1]));
 	}
 
 	/**
@@ -529,17 +530,38 @@ public abstract class AbstractObservableTableModel<R> {
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			boolean rowHovered = theHoveredRow.getAsInt() == row;
 			boolean cellHovered = rowHovered && theHoveredColumn.getAsInt() == column;
-			Supplier<R> rowValue = new Supplier<R>() {
-				private R theCachedValue;
-				private boolean isCached;
+			Supplier<R> rowValue;
+			if (modelRow >= 0) {
+				rowValue = new Supplier<R>() {
+					private R theCachedValue;
+					private boolean isCached;
 
-				@Override
-				public R get() {
-					if (!isCached)
-						theCachedValue = theModel.getRow(modelRow, theTable);
-					return theCachedValue;
-				}
-			};
+					@Override
+					public R get() {
+						if (!isCached) {
+							theCachedValue = theModel.getRow(modelRow, theTable);
+							if (theCachedValue == null) {
+								if (theModel instanceof ObservableTreeTableModel) {
+									// Convert the model value to a path
+									theCachedValue = (R) ((ObservableTreeTableModel<R>) theModel).getTreeModel().getBetterPath(modelValue,
+										false);
+								} else
+									theCachedValue = modelValue;
+							}
+							isCached = true;
+						}
+						return theCachedValue;
+					}
+				};
+			} else {
+				R fModelValue;
+				if (theModel instanceof ObservableTreeTableModel) {
+					// Convert the model value to a path
+					fModelValue = (R) ((ObservableTreeTableModel<R>) theModel).getTreeModel().getBetterPath(modelValue, false);
+				} else
+					fModelValue = modelValue;
+				rowValue = LambdaUtils.constantSupplier(fModelValue, fModelValue::toString, fModelValue);
+			}
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowValue, (C) value, //
 				row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,

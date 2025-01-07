@@ -319,6 +319,7 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 
 	@Override
 	public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+		instantiate(models);
 		return null;
 	}
 

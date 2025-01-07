@@ -3,6 +3,7 @@ package org.observe.quick.swing;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.Insets;
 import java.awt.LayoutManager2;
 import java.awt.Rectangle;
 import java.util.HashMap;
@@ -12,7 +13,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.observe.quick.base.QuickSize;
+import org.observe.util.swing.PanelPopulation;
+import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
+import org.qommons.TriFunction;
 
 /**
  * <p>
@@ -339,7 +343,22 @@ public class SimpleLayout implements LayoutManager2 {
 		}
 	}
 
+	private SimpleConstraints theContainerConstraints;
 	private final Map<Component, SimpleConstraints> theConstraints = new HashMap<>();
+
+	/** @return The size constraints on the container */
+	public SimpleConstraints getContainerConstraints() {
+		return theContainerConstraints;
+	}
+
+	/**
+	 * @param containerConstraints The size constraints for the container
+	 * @return This layout
+	 */
+	public SimpleLayout setContainerConstraints(SimpleConstraints containerConstraints) {
+		theContainerConstraints = containerConstraints;
+		return this;
+	}
 
 	@Override
 	public void addLayoutComponent(String name, Component comp) {
@@ -378,24 +397,57 @@ public class SimpleLayout implements LayoutManager2 {
 	}
 
 	Dimension layoutSize(Container parent, int type) {
+		boolean debugging = PanelPopulation.isDebugging(parent.getName(), "simple-layout", "size");
+		if (debugging && parent.getName().contains(":break"))
+			BreakpointHere.breakpoint();
+		boolean print = debugging && parent.getName().contains("print");
 		Dimension size = new Dimension();
+		Integer cw = null, ch = null;
+		if (theContainerConstraints != null) {
+			int h = getSizeFor(parent, true, type, theContainerConstraints.v, (__, ___, ____) -> -1);
+			if (h >= 0) {
+				ch = h;
+				size.height = h;
+			}
+			int w = getSizeFor(parent, false, type, theContainerConstraints.h, (__, ___, ____) -> -1);
+			if (w >= 0) {
+				cw = w;
+				size.width = w;
+			}
+		}
+		if (print)
+			System.out.println("Simple layout size[" + type + "]:");
+		Insets insets = parent.getInsets();
 		for (Component c : parent.getComponents()) {
 			if (!c.isVisible())
 				continue;
 			SimpleConstraints constraints = theConstraints.get(c);
-			int w = getContainerSizeFor(c, false, type, constraints.h);
-			if (w > size.width)
-				size.width = w;
-			int h = getContainerSizeFor(c, true, type, constraints.v);
-			if (h > size.height)
-				size.height = h;
+			if (cw == null) {
+				int w = getSizeFor(c, false, type, constraints.h, SimpleLayout::getComponentSize);
+				if (w > size.width)
+					size.width = w;
+			}
+			if (ch == null) {
+				int h = getSizeFor(c, true, type, constraints.v, SimpleLayout::getComponentSize);
+				if (h > size.height)
+					size.height = h;
+			}
+			if (print)
+				System.out.println("\t" + c.getClass().getSimpleName() + ": " + constraints + ": [" + size.width + "x" + size.height + "]");
 		}
+		if (cw == null)
+			size.width = PanelPopulation.add(size.width, insets.left + insets.right);
+		if (ch == null)
+			size.height = PanelPopulation.add(size.height, insets.top + insets.bottom);
+		if (print)
+			System.out.println("\tOverall: [" + size.width + "x" + size.height + "]");
 		return size;
 	}
 
-	private int getContainerSizeFor(Component c, boolean vertical, int type, DimensionConstraints constraints) {
+	private int getSizeFor(Component c, boolean vertical, int type, DimensionConstraints constraints,
+		TriFunction<Component, Boolean, Integer, Integer> unconstrained) {
 		if (constraints == null)
-			return getComponentSize(c, vertical, type);
+			return unconstrained.apply(c, vertical, type);
 		QuickSize trail = constraints.getPos(1);
 		if (trail != null && trail.percent == 0.0f)
 			return trail.pixels;
@@ -411,7 +463,7 @@ public class SimpleLayout implements LayoutManager2 {
 		} else {
 			absSize = constraints.getSize(type);
 			if (absSize == null)
-				absSize = getComponentSize(c, vertical, type);
+				absSize = unconstrained.apply(c, vertical, type);
 		}
 		if (lead != null) {
 			absSize += Math.abs(lead.pixels);
@@ -421,11 +473,11 @@ public class SimpleLayout implements LayoutManager2 {
 			absSize += Math.abs(trail.pixels);
 			relSize += 100f - trail.percent;
 		}
-		if (absSize > 0 && relSize != 0)
+		if (absSize.intValue() > 0 && relSize != 0)
 			return new QuickSize(relSize, absSize).resolveExponential();
 		else if (type > 0)
 			return Integer.MAX_VALUE;
-		else if (absSize != 0)
+		else if (absSize.intValue() != 0)
 			return absSize;
 		else
 			return 0;
@@ -449,7 +501,16 @@ public class SimpleLayout implements LayoutManager2 {
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;
+		Insets insets = parent.getInsets();
+		parentSize.width -= insets.left + insets.right;
+		parentSize.height -= insets.top + insets.bottom;
+		boolean debugging = PanelPopulation.isDebugging(parent.getName(), "simple-layout", "layout");
+		if (debugging && parent.getName().contains("break"))
+			BreakpointHere.breakpoint();
 		Rectangle childBounds = new Rectangle();
+		boolean print = debugging && parent.getName().contains("print");
+		if (print)
+			System.out.println("Simple layout: [" + parentSize.width + "x" + parentSize.height + "]");
 		for (Component c : parent.getComponents()) {
 			if (!c.isVisible())
 				continue;
@@ -462,13 +523,16 @@ public class SimpleLayout implements LayoutManager2 {
 					c.setBounds(0, 0, 0, 0);
 				continue;
 			}
-			layoutChild(c, constraints.v, parentSize.height, true, childBounds);
-			layoutChild(c, constraints.h, parentSize.width, false, childBounds);
+			layoutChild(c, constraints.v, parentSize.height, true, insets.top, childBounds);
+			layoutChild(c, constraints.h, parentSize.width, false, insets.left, childBounds);
+			if (print)
+				System.out.println("\t" + childBounds);
 			c.setBounds(childBounds);
 		}
 	}
 
-	private void layoutChild(Component c, DimensionConstraints constraints, int parentSize, boolean vertical, Rectangle childBounds) {
+	private void layoutChild(Component c, DimensionConstraints constraints, int parentSize, boolean vertical, int offset,
+		Rectangle childBounds) {
 		QuickSize lead = constraints.getPos(-1);
 		QuickSize center = constraints.getPos(0);
 		QuickSize trail = constraints.getPos(1);
@@ -477,19 +541,19 @@ public class SimpleLayout implements LayoutManager2 {
 			int absSize = size.evaluate(parentSize);
 			setSize(childBounds, vertical, absSize);
 			if (lead != null)
-				setPos(childBounds, vertical, lead.evaluate(parentSize));
+				setPos(childBounds, vertical, offset + lead.evaluate(parentSize));
 			else if (trail != null) {
 				int absTrail = trail.evaluate(parentSize);
-				setPos(childBounds, vertical, absTrail - absSize);
+				setPos(childBounds, vertical, offset + absTrail - absSize);
 			} else if (center != null) {
 				int absCenter = center.evaluate(parentSize);
-				setPos(childBounds, vertical, absCenter - (absSize + 1) / 2);
+				setPos(childBounds, vertical, offset + absCenter - (absSize + 1) / 2);
 			} else
-				setPos(childBounds, vertical, 0);
+				setPos(childBounds, vertical, offset);
 		} else {
 			if (lead != null) {
 				int absLead = lead.evaluate(parentSize);
-				setPos(childBounds, vertical, absLead);
+				setPos(childBounds, vertical, offset + absLead);
 				if (trail != null) {
 					int absTrail = trail.evaluate(parentSize);
 					setSize(childBounds, vertical, Math.max(0, absTrail - absLead));
@@ -507,17 +571,17 @@ public class SimpleLayout implements LayoutManager2 {
 				if (center != null) {
 					int absCenter = center.evaluate(parentSize);
 					if (absCenter < absTrail) {
-						setPos(childBounds, vertical, (absCenter + absCenter - absTrail));
-						setSize(childBounds, vertical, (absTrail - absCenter) * 2);
+						setPos(childBounds, vertical, offset + (absCenter + absCenter - absTrail));
+						setSize(childBounds, vertical, offset + (absTrail - absCenter) * 2);
 					} else {
-						setPos(childBounds, vertical, absCenter);
+						setPos(childBounds, vertical, offset + absCenter);
 						setSize(childBounds, vertical, 0);
 					}
 				} else {
 					Integer pref = constraints.getSize(0);
 					if (pref == null)
 						pref = getComponentSize(c, vertical, 0);
-					setPos(childBounds, vertical, absTrail - pref);
+					setPos(childBounds, vertical, offset + absTrail - pref);
 					setSize(childBounds, vertical, pref);
 				}
 			} else if (center != null) {
@@ -525,14 +589,14 @@ public class SimpleLayout implements LayoutManager2 {
 				Integer pref = constraints.getSize(0);
 				if (pref == null)
 					pref = getComponentSize(c, vertical, 0);
-				setPos(childBounds, vertical, absCenter - (pref + 1) / 2);
+				setPos(childBounds, vertical, offset + absCenter - (pref + 1) / 2);
 				setSize(childBounds, vertical, pref);
 			} else {
 				Integer pref = constraints.getSize(0);
 				if (pref == null)
 					pref = getComponentSize(c, vertical, 0);
 				setSize(childBounds, vertical, pref);
-				setPos(childBounds, vertical, 0);
+				setPos(childBounds, vertical, offset);
 			}
 		}
 	}
@@ -544,11 +608,11 @@ public class SimpleLayout implements LayoutManager2 {
 			bounds.width = size;
 	}
 
-	private static void setPos(Rectangle bounds, boolean vertical, int size) {
+	private static void setPos(Rectangle bounds, boolean vertical, int pos) {
 		if (vertical)
-			bounds.y = size;
+			bounds.y = pos;
 		else
-			bounds.x = size;
+			bounds.x = pos;
 	}
 
 	@Override

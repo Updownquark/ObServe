@@ -74,12 +74,12 @@ public class AttributeReferenceExpression implements ObservableExpression {
 			throw new ExpressoInterpretationException("'" + theAttributeName + "' is not an available attribute name",
 				env.reporting().at(1).getPosition(), theAttributeName.length());
 		InterpretedModelComponentNode<?, ?> node = env.getModels().getComponent(modelValueName).interpret(env);
-		ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
+		ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder(exHandler.isInstantiating());
 		InterpretedValueSynth<M, MV> value = node.as(type, env, tce);
 		if (value != null)
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, this);
 		else {
-			exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().at(1).getPosition(),
+			exHandler.handle1(() -> new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().at(1).getPosition(),
 				theAttributeName.length()));
 			return null;
 		}

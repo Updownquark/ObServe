@@ -3,10 +3,14 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionImpl;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSetImpl;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -20,8 +24,11 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 
@@ -115,29 +122,35 @@ public class ConditionalExpression implements ObservableExpression {
 				env.reporting().getPosition(), getExpressionLength());
 		}
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
 		EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
 			ModelTypes.Value.forType(boolean.class), env, expressionOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
 				theCondition.getExpressionLength()));
 			return null;
 		} else if (conditionV == null)
 			return null;
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
 		InterpretedExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
+		EvaluatedExpression<M, MV> primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset, doubleX.use());
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
 				env.reporting().at(getComponentOffset(1)).getPosition(), thePrimary.getExpressionLength()));
 			return null;
 		} else if (primaryV == null)
 			return null;
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
 		InterpretedExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
+		EvaluatedExpression<M, MV> secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset, doubleX.use());
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
 				env.reporting().at(getComponentOffset(2)).getPosition(), theSecondary.getExpressionLength()));
 			return null;
 		} else if (secondaryV == null)
@@ -245,26 +258,35 @@ public class ConditionalExpression implements ObservableExpression {
 
 		private MV createValue(SettableValue<Boolean> conditionX, Object primaryX, Object secondaryX) {
 			if (theType.getModelType() == ModelTypes.Value) {
-				return (MV) SettableValue.flattenAsSettable(conditionX.map(LambdaUtils.printableFn(c -> {
-					if (c != null && c)
-						return (SettableValue<Object>) primaryX;
-					else
-						return (SettableValue<Object>) secondaryX;
-				}, () -> "? " + primaryX + ": " + secondaryX, null)), null);
+				return (MV) new ConditionalValue<>(conditionX, (SettableValue<Object>) primaryX, (SettableValue<Object>) secondaryX);
 			} else if (theType.getModelType() == ModelTypes.Collection) {
-				return (MV) ObservableCollection.flattenValue(conditionX.map(LambdaUtils.printableFn(c -> {
+				ObservableValue<? extends ObservableCollection<?>> toFlatten = conditionX.map(LambdaUtils.printableFn(c -> {
 					if (c != null && c)
 						return (ObservableCollection<Object>) primaryX;
 					else
 						return (ObservableCollection<Object>) secondaryX;
-				}, () -> "? " + primaryX + ": " + secondaryX, null)));
+				}, () -> "? " + primaryX + ": " + secondaryX, null));
+				return (MV) new ObservableCollectionImpl.FlattenedValueCollection<Object>(toFlatten, Equivalence.DEFAULT) {
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return ThreadConstrained.getThreadConstraint(conditionX, (ObservableCollection<?>) primaryX,
+							(ObservableCollection<?>) secondaryX);
+					}
+				};
 			} else if (theType.getModelType() == ModelTypes.Set) {
-				return (MV) ObservableSet.flattenValue(conditionX.map(LambdaUtils.printableFn(c -> {
+				ObservableValue<? extends ObservableSet<Object>> toFlatten = conditionX.map(LambdaUtils.printableFn(c -> {
 					if (c != null && c)
 						return (ObservableSet<Object>) primaryX;
 					else
 						return (ObservableSet<Object>) secondaryX;
-				}, () -> "? " + primaryX + ": " + secondaryX, null)));
+				}, () -> "? " + primaryX + ": " + secondaryX, null));
+				return (MV) new ObservableSetImpl.FlattenedValueSet<Object>(toFlatten, Equivalence.DEFAULT) {
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return ThreadConstrained.getThreadConstraint(conditionX, (ObservableCollection<?>) primaryX,
+							(ObservableCollection<?>) secondaryX);
+					}
+				};
 			} else if (theType.getModelType() == ModelTypes.Action) {
 				return (MV) ObservableAction.of(LambdaUtils.printableConsumer(evt -> {
 					if (Boolean.TRUE.equals(conditionX.get()))
@@ -292,6 +314,97 @@ public class ConditionalExpression implements ObservableExpression {
 		@Override
 		public String toString() {
 			return theCondition + "?" + thePrimary + ":" + theSecondary;
+		}
+	}
+
+	static class ConditionalValue<T> extends SettableValue.SettableFlattenedObservableValue<T> {
+		private final SettableValue<Boolean> theCondition;
+		private final SettableValue<T> thePrimary;
+		private final SettableValue<T> theSecondary;
+
+		ConditionalValue(SettableValue<Boolean> condition, SettableValue<T> primary, SettableValue<T> secondary) {
+			super(//
+				condition.map(LambdaUtils.printableFn(c -> {
+					if (Boolean.TRUE.equals(c))
+						return primary;
+					else
+						return secondary;
+				}, () -> "? " + primary + " : " + secondary, null)), null);
+			theCondition = condition;
+			thePrimary = primary;
+			theSecondary = secondary;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			// We can support a prettier print here
+			return Identifiable.buildId()//
+				.append("(")//
+				.withPrintedId(theCondition)//
+				.append(") ? (")//
+				.withPrintedId(thePrimary)//
+				.append(") : (")//
+				.withPrintedId(theSecondary)//
+				.append(")")//
+				.build();
+		}
+
+		@Override
+		public ConditionalValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return super.isEnabled().transform(tx -> tx//
+				.combineWith(theCondition.isEnabled())//
+				.combine((fd, cd) -> {
+					// It may be possible to set this value even when the active conditional value is disabled.
+					if (fd == null || cd == null)
+						return null;
+					// This one's hard. Which message to expose ?.
+					// We'll defer to the conditional value. If they want a different message, they can use a transform <disable with="?">.
+					return fd;
+				}));
+		}
+
+		@Override
+		public String isAcceptable(T value) {
+			String msg = super.isAcceptable(value);
+			if (msg == null)
+				return null;
+			else if (theCondition.isEnabled().get() != null)
+				return msg;
+			if (value == thePrimary.get()) {
+				if (theCondition.isAcceptable(true) == null)
+					return null;
+			} else if (value == theSecondary.get()) {
+				if (theCondition.isAcceptable(false) == null)
+					return null;
+			}
+			return msg;
+		}
+
+		@Override
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			String msg = super.isAcceptable(value);
+			if (msg == null)
+				return super.set(value);
+			else if (value == thePrimary.get()) {
+				if (theCondition.isAcceptable(true) == null) {
+					T prev = get();
+					theCondition.set(true);
+					return prev;
+				}
+			} else if (value == theSecondary.get()) {
+				if (theCondition.isAcceptable(false) == null) {
+					T prev = get();
+					theCondition.set(false);
+					return prev;
+				}
+			}
+			return super.set(value);
 		}
 	}
 }

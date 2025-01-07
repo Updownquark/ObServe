@@ -1,4 +1,4 @@
-package org.observe.expresso.ops;
+package org.observe.expresso;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import org.observe.expresso.ops.UnaryOperator;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
@@ -305,6 +306,16 @@ public class UnaryOperatorSet {
 		return ops == null ? null : (UnaryOp<T, ?>) ops.get(type, TypeMatch.SUPER_TYPE);
 	}
 
+	@Override
+	public boolean equals(Object o) {
+		if (this == o)
+			return true;
+		else if (!(o instanceof UnaryOperatorSet))
+			return false;
+		else
+			return theOperators.equals(((UnaryOperatorSet) o).theOperators);
+	}
+
 	/** @return A builder pre-configured for all of this operator set's operations */
 	public Builder copy() {
 		Builder copy = build();
@@ -424,6 +435,18 @@ public class UnaryOperatorSet {
 		 */
 		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op, String description) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofAction(type, op, description));
+			return this;
+		}
+
+		/**
+		 * @param ops The operator set whose operators to copy into this builder
+		 * @return This builder
+		 */
+		public Builder withAll(UnaryOperatorSet ops) {
+			for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : ops.theOperators.entrySet()) {
+				for (BiTuple<Class<?>, UnaryOp<?, ?>> classOp : op.getValue().getAllEntries())
+					with(op.getKey(), (Class<Object>) classOp.getValue1(), (UnaryOp<Object, ?>) classOp.getValue2());
+			}
 			return this;
 		}
 

@@ -32,10 +32,7 @@ import javax.swing.UIManager;
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.ListenerList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Found this at https://stackoverflow.com/questions/36352707/actions-inside-of-another-action-like-netbeans/66303093#66303093
@@ -97,7 +94,7 @@ public class ComboButton<E> extends JButton {
 
 		theListeners = ListenerList.build().build();
 		configureForToolBar();
-		SettableValue<E> selection = SettableValue.<E> build().build();
+		SettableValue<E> selection = SettableValue.<E> build().onEdt().build();
 		PanelPopulation.populateHPanel(getPopupMenu(), new JustifiedBoxLayout(true).mainJustified().crossJustified(), until)//
 		.addTable(values, table -> table//
 			.withColumnHeader(false)//
@@ -521,11 +518,11 @@ public class ComboButton<E> extends JButton {
 	}
 
 	public static <E> ComboButton<E> create(String text, ObservableCollection<E> available) {
-		return new ComboButton<>(available, createDefaultComboBoxColumn((TypeToken<E>) TypeTokens.get().WILDCARD), Observable.empty())
+		return new ComboButton<>(available, createDefaultComboBoxColumn((Class<E>) Object.class), Observable.empty())
 			.withText(text);
 	}
 
-	public static <E> CategoryRenderStrategy<E, E> createDefaultComboBoxColumn(TypeToken<E> type) {
+	public static <E> CategoryRenderStrategy<E, E> createDefaultComboBoxColumn(Class<E> type) {
 		UIDefaults ui = UIManager.getDefaults();
 		Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
 		Color defaultSelectionForeground = ui.getColor("List.selectionForeground");

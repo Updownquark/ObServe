@@ -59,7 +59,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -120,7 +120,7 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<? extends ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;

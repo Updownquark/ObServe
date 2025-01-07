@@ -85,7 +85,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 			super.doUpdate(session);
 			theValue = getAttributeExpression("value", session);
 			syncChildren(TreeModel.Def.class, theChildren, session.forChildren("child"),
-				(child, s) -> child.update(s, getActivePathVariable().getName(), getActiveNodeVariable().getName()));
+				(child, s) -> child.update(s));
 		}
 
 		@Override

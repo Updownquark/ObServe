@@ -23,7 +23,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		 * @param type The Qonfig type of this add-on
 		 * @param element The model value element
 		 */
-		public Def(QonfigAddOn type, ExElement.Def<?> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends ModelValueElement<?>> element) {
 			super(type, element);
 		}
 
@@ -69,14 +69,14 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends ModelValueElement<?>> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
 
 	/** {@link AttributeBackedModelValue} interpretation */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ModelValueElement<?>, AttributeBackedModelValue> {
-		Interpreted(Def definition, ExElement.Interpreted<?> element) {
+		Interpreted(Def definition, ExElement.Interpreted<? extends ModelValueElement<?>> element) {
 			super(definition, element);
 		}
 
@@ -91,7 +91,7 @@ public class AttributeBackedModelValue extends ExAddOn.Abstract<ModelValueElemen
 		}
 
 		@Override
-		public AttributeBackedModelValue create(ModelValueElement<?> element) {
+		public AttributeBackedModelValue create(ExElement element) {
 			return null;
 		}
 	}

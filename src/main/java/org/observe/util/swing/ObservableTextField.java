@@ -56,6 +56,10 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 			};
 		} else
 			theEditor = null;
+		init();
+	}
+
+	private void init() {
 		Border border = UIManager.getBorder("TextField.border");
 		dummyInsets = border.getBorderInsets(this);
 		asPassword((char) 0);
@@ -73,6 +77,11 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 					repaint();
 			}
 		});
+	}
+
+	/** @return The observable editor for this text field */
+	public ObservableTextEditor<E> getEditor() {
+		return theEditor;
 	}
 
 	/** @return The value controlled by this text area */

@@ -15,6 +15,9 @@ import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationValues;
+import org.observe.expresso.BinaryOperatorSet;
+import org.observe.expresso.BinaryOperatorSet.BinaryOp;
+import org.observe.expresso.BinaryOperatorSet.FirstArgDecisiveBinaryOp;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -27,14 +30,14 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
-import org.observe.expresso.ops.BinaryOperatorSet.FirstArgDecisiveBinaryOp;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.ex.ExceptionHandler;
@@ -130,17 +133,71 @@ public class BinaryOperator implements ObservableExpression {
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() == ModelTypes.Action) {//
+		} else if (type.getModelType() == ModelTypes.Event) {//
+			if (!theOperator.equals("||")) {
+				exHandler.handle1(() -> new ExpressoInterpretationException("Only binary operator '||' may be evaluated as an event",
+					env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
+				return null;
+			}
+			return (EvaluatedExpression<M, MV>) evaluateEvent(type.getType(0), env, expressionOffset, exHandler);
 		} else if (type.getModelType() == ModelTypes.Value) {//
 		} else {
-			exHandler.handle1(
-				new ExpressoInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value or an action",
-					env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
+			exHandler.handle1(() -> new ExpressoInterpretationException(
+				"Binary operator " + theOperator + " can only be evaluated as a value, an action, or an event",
+				env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
 			return null;
 		}
 		return _evaluate(type, env, expressionOffset, exHandler);
 	}
 
-	private <M, MV extends M, S, T, V, R, EX extends Throwable> EvaluatedExpression<M, MV> _evaluate(ModelInstanceType<M, MV> type,
+	private <M, MV extends M, EX extends Throwable, T> EvaluatedExpression<Observable<?>, Observable<T>> evaluateEvent(TypeToken<T> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+			throws ExpressoInterpretationException, EX {
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
+		ModelInstanceType<Observable<?>, Observable<T>> modelType = ModelTypes.Event.forType(type);
+		EvaluatedExpression<Observable<?>, Observable<T>> left = getLeft().evaluate(modelType, env,
+			expressionOffset + getComponentOffset(0), doubleX);
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+				theLeft.getExpressionLength()));
+			return null;
+		} else if (left == null)
+			return null;
+		EvaluatedExpression<Observable<?>, Observable<T>> right = getRight().evaluate(modelType, env,
+			expressionOffset + getComponentOffset(0), doubleX.use());
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+				theLeft.getExpressionLength()));
+			return null;
+		} else if (right == null)
+			return null;
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			new InterpretedValueSynth<Observable<?>, Observable<T>>() {
+			@Override
+			public ModelInstanceType<Observable<?>, Observable<T>> getType() {
+				return modelType;
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Arrays.asList(left, right);
+			}
+
+			@Override
+			public ModelValueInstantiator<Observable<T>> instantiate() throws ModelInstantiationException {
+				ModelValueInstantiator<Observable<T>> leftInst = left.instantiate();
+				ModelValueInstantiator<Observable<T>> rightInst = right.instantiate();
+				return new EventInstantiator<>(leftInst, rightInst);
+			}
+		}, null, left, right);
+	}
+
+	private <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> _evaluate(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
@@ -156,72 +213,141 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		String operator = action ? theOperator.substring(0, theOperator.length() - 1) : theOperator;
 		Class<?> targetType = type.getModelType().getTypeCount() == 0 ? Object.class : TypeTokens.getRawType(type.getType(0));
-		Set<Class<?>> types = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator, targetType);
-		TypeToken<?> targetOpType;
-		switch (types.size()) {
+		Set<Class<?>> primaryTypes = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator, targetType);
+		switch (primaryTypes.size()) {
 		case 0:
-			exHandler.handle1(new ExpressoInterpretationException(
+			exHandler.handle1(() -> new ExpressoInterpretationException(
 				"Unsupported or unimplemented binary operator '" + theOperator + "' targeting type " + targetType.getName(),
 				env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
 			return null;
 		case 1:
-			targetOpType = TypeTokens.get().of(types.iterator().next());
-			break;
+			return evaluatePrimary(type, env, expressionOffset, action, operator, targetType,
+				TypeTokens.get().of(primaryTypes.iterator().next()), exHandler);
 		default:
-			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
+		// Multiple possible primary types
+		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tempHandler = ExceptionHandler.placeHolder();
+		tempHandler.fillStackTrace(false);
+		// First, evaluate without unrolling the stack, hoping we'll get a hit
+		for (Class<?> pt : primaryTypes) {
+			EvaluatedExpression<M, MV> evaluated = evaluatePrimary(type, env, expressionOffset, action, operator, targetType,
+				TypeTokens.get().of(pt), tempHandler.clear());
+			if (evaluated != null)
+				return evaluated;
+		}
+		// Nope, no hits. See if the two arguments evaluate as anything.
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
-			.stack(ExceptionHandler.holder());
-		EvaluatedExpression<SettableValue<?>, SettableValue<S>> left;
-		left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<S>) targetOpType), env, expressionOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
+		EvaluatedExpression<SettableValue<?>, SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset,
+			doubleX);
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
 				theLeft.getExpressionLength()));
 			return null;
 		} else if (left == null)
 			return null;
-		TypeToken<S> leftTypeT = (TypeToken<S>) left.getType().getType(0);
-		Class<S> leftType = TypeTokens.getRawType(leftTypeT);
-		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
-		switch (types.size()) {
-		case 0:
-			exHandler.handle1(new ExpressoInterpretationException(
-				"Binary operator '" + theOperator + "' is not supported or implemented for left operand type " + leftTypeT
-				+ ", target type " + targetType.getName(),
-				env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
-			return null;
-		case 1:
-			targetOpType = TypeTokens.get().of(types.iterator().next());
-			break;
-		default:
-			targetOpType = TypeTokens.get().WILDCARD;
-			break;
-		}
-		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
 		InterpretedExpressoEnv rightEnv = env.at(theLeft.getExpressionLength() + theOperator.length());
-		EvaluatedExpression<SettableValue<?>, SettableValue<T>> right;
-		right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<T>) targetOpType), rightEnv, rightOffset, doubleX);
-		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), rightEnv.reporting().getPosition(),
-				theLeft.getExpressionLength()));
+		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
+		EvaluatedExpression<SettableValue<?>, SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.any(), rightEnv, rightOffset,
+			doubleX.use());
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), rightEnv.reporting().getPosition(),
+				theRight.getExpressionLength()));
 			return null;
 		} else if (right == null)
 			return null;
-		TypeToken<T> rightTypeT = (TypeToken<T>) right.getType().getType(0);
-		BinaryOp<S, T, V> op;
-		op = (BinaryOp<S, T, V>) env.getBinaryOperators()//
-			.getOperator(operator, targetType, leftType, //
-				TypeTokens.getRawType(rightTypeT));
+		exHandler.handle1(() -> new ExpressoInterpretationException(
+			"Binary operator '" + theOperator + "' is not supported for operands " + theLeft + " (" + left.getType().getType(0) + ") and "
+				+ theRight + " (" + right.getType().getType(0) + ") targeting " + targetType,
+				env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
+		return null;
+	}
+
+	private <M, MV extends M, P, S, EX extends Throwable> EvaluatedExpression<M, MV> evaluatePrimary(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, boolean action, String operator, Class<?> targetType, TypeToken<P> primaryType,
+		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
+		EvaluatedExpression<SettableValue<?>, SettableValue<P>> left;
+		left = theLeft.evaluate(ModelTypes.Value.forType(primaryType), env, expressionOffset, doubleX);
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+				theLeft.getExpressionLength()));
+			return null;
+		} else if (left == null)
+			return null;
+		primaryType = (TypeToken<P>) left.getType().getType(0);
+		Class<P> leftType = TypeTokens.getRawType(primaryType);
+		Set<Class<?>> secondaryTypes = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
+		switch (secondaryTypes.size()) {
+		case 0:
+			TypeToken<P> fpt = primaryType;
+			exHandler.handle1(() -> new ExpressoInterpretationException(
+				"Binary operator '" + theOperator + "' is not supported for left operand type " + fpt + ", target type "
+					+ targetType.getName(),
+					env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
+			return null;
+		case 1:
+			return evaluateSecondary(type, env, expressionOffset, action, operator, targetType, primaryType,
+				TypeTokens.get().of(secondaryTypes.iterator().next()), left, exHandler);
+		default:
+			break;
+		}
+		// Multiple possible secondary types
+		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tempHandler = ExceptionHandler.placeHolder();
+		tempHandler.fillStackTrace(false);
+		// First, evaluate without unrolling the stack, hoping we'll get a hit
+		for (Class<?> st : secondaryTypes) {
+			EvaluatedExpression<M, MV> evaluated = evaluateSecondary(type, env, expressionOffset, action, operator, targetType, primaryType,
+				TypeTokens.get().of(st), left, tempHandler.clear());
+			if (evaluated != null)
+				return evaluated;
+		}
+		// Nope, no hits. Throw the exception for the first type.
+		return evaluateSecondary(type, env, expressionOffset, action, operator, targetType, primaryType,
+			TypeTokens.get().of(secondaryTypes.iterator().next()), left, exHandler);
+	}
+
+	private <M, MV extends M, P, S, T, EX extends Throwable> EvaluatedExpression<M, MV> evaluateSecondary(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, boolean action, String operator, Class<T> targetType, TypeToken<P> primaryType,
+		TypeToken<S> secondaryType, EvaluatedExpression<SettableValue<?>, SettableValue<P>> left,
+		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
+		InterpretedExpressoEnv rightEnv = env.at(theLeft.getExpressionLength() + theOperator.length());
+		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> right;
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder(exHandler.isInstantiating()));
+		right = theRight.evaluate(ModelTypes.Value.forType(secondaryType), rightEnv, rightOffset, doubleX);
+		if (doubleX.hasException1())
+			return null;
+		else if (doubleX.hasException2()) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(), rightEnv.reporting().getPosition(),
+				theRight.getExpressionLength()));
+			return null;
+		} else if (right == null)
+			return null;
+		secondaryType = (TypeToken<S>) right.getType().getType(0);
+		BinaryOp<P, S, T> op;
+		op = (BinaryOp<P, S, T>) env.getBinaryOperators()//
+			.getOperator(operator, targetType, TypeTokens.getRawType(primaryType), //
+				TypeTokens.getRawType(secondaryType));
 		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (op == null) {
-			exHandler.handle1(new ExpressoInterpretationException(
-				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + leftTypeT + " and "
-					+ rightTypeT + ", target type " + targetType.getName(),
-					operatorReporting.getPosition(), theOperator.length()));
+			TypeToken<S> fst = secondaryType;
+			exHandler.handle1(() -> new ExpressoInterpretationException("Binary operator '" + theOperator
+				+ "' is not supported for operand types " + primaryType + " and " + fst + ", target type " + targetType.getName(),
+				operatorReporting.getPosition(), theOperator.length()));
 			return null;
 		}
-		TypeToken<V> resultType = op.getTargetType(leftTypeT, rightTypeT, operatorReporting.getPosition(), theOperator.length(), exHandler);
+		TypeToken<T> resultType = op.getTargetType(primaryType, secondaryType, operatorReporting.getPosition(), theOperator.length(),
+			exHandler);
 		if (resultType == null)
 			return null;
 		ErrorReporting reporting = env.reporting();
@@ -260,14 +386,14 @@ public class BinaryOperator implements ObservableExpression {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new ExpressoInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value",
 					operatorReporting.getPosition(), theOperator.length());
-			InterpretedValueSynth<SettableValue<?>, SettableValue<V>> operated = new InterpretedValueSynth<SettableValue<?>, SettableValue<V>>() {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> operated = new InterpretedValueSynth<SettableValue<?>, SettableValue<T>>() {
 				@Override
 				public ModelType<SettableValue<?>> getModelType() {
 					return ModelTypes.Value;
 				}
 
 				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<V>> getType() {
+				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
 					return ModelTypes.Value.forType(resultType);
 				}
 
@@ -277,14 +403,14 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public ModelValueInstantiator<SettableValue<V>> instantiate() throws ModelInstantiationException {
+				public ModelValueInstantiator<SettableValue<T>> instantiate() throws ModelInstantiationException {
 					if (op == BinaryOperatorSet.OR)
-						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new OrValue(
+						return (ModelValueInstantiator<SettableValue<T>>) (ModelValueInstantiator<?>) new OrValue(
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
 							BinaryOperatorSet.OR, reporting);
 					else if (op == BinaryOperatorSet.AND)
-						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new AndValue(
+						return (ModelValueInstantiator<SettableValue<T>>) (ModelValueInstantiator<?>) new AndValue(
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
 							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
 							BinaryOperatorSet.AND, reporting);
@@ -378,14 +504,62 @@ public class BinaryOperator implements ObservableExpression {
 		}
 	}
 
+	static class EventInstantiator<V, S extends V, T extends V> implements ModelValueInstantiator<Observable<V>> {
+		private final ModelValueInstantiator<Observable<S>> theLeft;
+		private final ModelValueInstantiator<Observable<T>> theRight;
+
+		EventInstantiator(ModelValueInstantiator<Observable<S>> left, ModelValueInstantiator<Observable<T>> right) {
+			theLeft = left;
+			theRight = right;
+		}
+
+		@Override
+		public void instantiate() throws ModelInstantiationException {
+			theLeft.instantiate();
+			theRight.instantiate();
+		}
+
+		@Override
+		public Observable<V> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			return new BinaryEvent<>(//
+				theLeft.get(models), //
+				theRight.get(models));
+		}
+
+		@Override
+		public Observable<V> forModelCopy(Observable<V> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			BinaryEvent<V, S, T> binary = (BinaryEvent<V, S, T>) value;
+			Observable<S> newLeft = theLeft.forModelCopy(binary.getLeft(), sourceModels, newModels);
+			Observable<T> newRight = theRight.forModelCopy(binary.getRight(), sourceModels, newModels);
+			if (newLeft == binary.getLeft() && newRight == binary.getRight())
+				return binary;
+			return new BinaryEvent<>(newLeft, newRight);
+		}
+
+		static class BinaryEvent<V, S extends V, T extends V> extends Observable.OrObservable<V> {
+			BinaryEvent(Observable<S> left, Observable<T> right) {
+				super(Arrays.asList(left, right));
+			}
+
+			Observable<S> getLeft() {
+				return (Observable<S>) getComponents().get(0);
+			}
+
+			Observable<T> getRight() {
+				return (Observable<T>) getComponents().get(1);
+			}
+		}
+	}
+
 	static class ValueInstantiator<S, T, V> implements ModelValueInstantiator<SettableValue<V>> {
 		private final ModelValueInstantiator<SettableValue<S>> theLeft;
 		private final ModelValueInstantiator<SettableValue<T>> theRight;
 		private final BinaryOp<S, T, V> theOperator;
 		private final ErrorReporting theReporting;
 
-		ValueInstantiator(ModelValueInstantiator<SettableValue<S>> left,
-			ModelValueInstantiator<SettableValue<T>> right, BinaryOp<S, T, V> operator, ErrorReporting reporting) {
+		ValueInstantiator(ModelValueInstantiator<SettableValue<S>> left, ModelValueInstantiator<SettableValue<T>> right,
+			BinaryOp<S, T, V> operator, ErrorReporting reporting) {
 			theLeft = left;
 			theRight = right;
 			theOperator = operator;
@@ -418,8 +592,7 @@ public class BinaryOperator implements ObservableExpression {
 				}, theOperator::toString, theOperator))//
 				.replaceSourceWith(reverse, rev -> rev.rejectWith(reverse::canReverse, true, true)));
 			if (theOperator instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
-				return new FirstArgDecisiveBinaryValue<>(leftV, rightV, (FirstArgDecisiveBinaryOp<S, T, V>) theOperator,
-					transformedV);
+				return new FirstArgDecisiveBinaryValue<>(leftV, rightV, (FirstArgDecisiveBinaryOp<S, T, V>) theOperator, transformedV);
 			else
 				return transformedV;
 		}
@@ -444,8 +617,8 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	static class OrValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
-		OrValue(ModelValueInstantiator<SettableValue<Boolean>> left,
-			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
+		OrValue(ModelValueInstantiator<SettableValue<Boolean>> left, ModelValueInstantiator<SettableValue<Boolean>> right,
+			BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
 			super(left, right, operator, reporting);
 		}
 
@@ -457,16 +630,15 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	static class AndValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
-		AndValue(ModelValueInstantiator<SettableValue<Boolean>> left,
-			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
+		AndValue(ModelValueInstantiator<SettableValue<Boolean>> left, ModelValueInstantiator<SettableValue<Boolean>> right,
+			BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
 			super(left, right, operator, reporting);
 		}
 
 		@Override
 		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
-			return SettableValue.firstValue(
-				LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false?", null), LambdaUtils.constantSupplier(true, "true", null),
-				leftV, rightV);
+			return SettableValue.firstValue(LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false?", null),
+				LambdaUtils.constantSupplier(true, "true", null), leftV, rightV);
 		}
 	}
 
@@ -585,28 +757,78 @@ public class BinaryOperator implements ObservableExpression {
 		}
 	}
 
-	static class FirstArgDecisiveBinaryValue<S, T, V> implements SettableValue<V> {
+	/**
+	 * <p>
+	 * Some values cannot be compared or printed without being evaluated, and ObServe uses comparisons in the course of normal data flow.
+	 * </p>
+	 * <p>
+	 * Some binary operators have the ability to decide their result based on the value of the primary argument alone in some cases.
+	 * Sometimes, this is useful for preventing the second argument from being evaluated at all.
+	 * </p>
+	 * <p>
+	 * For example, getting a field value from an object whose reference may be null. The expression 'value==null ? null : value.field'
+	 * would be a safe way of accesing the field.
+	 * </p>
+	 * <p>
+	 * This class exists to allow such operators to work in expresso without ever evaluating unsafe expressions.
+	 * </p>
+	 */
+	static class FirstArgDecisiveBinaryValue<S, T, V> extends Identifiable.AbstractIdentifiable implements SettableValue<V> {
 		private final SettableValue<S> theValue1;
 		private final SettableValue<T> theValue2;
 		private final BinaryOperatorSet.FirstArgDecisiveBinaryOp<S, T, V> theOp;
 		private final SettableValue<V> theTransformedValue;
+		private final ObservableValue<V> theListenableValue;
 
-		public FirstArgDecisiveBinaryValue(SettableValue<S> value1, SettableValue<T> value2,
-			FirstArgDecisiveBinaryOp<S, T, V> op, SettableValue<V> transformedValue) {
+		public FirstArgDecisiveBinaryValue(SettableValue<S> value1, SettableValue<T> value2, FirstArgDecisiveBinaryOp<S, T, V> op,
+			SettableValue<V> transformedValue) {
 			theValue1 = value1;
 			theValue2 = value2;
 			theOp = op;
 			theTransformedValue = transformedValue;
+			ObservableValue<ObservableValue<? extends V>> toFlatten = value1.map(v1 -> {
+				V decisiveResult = theOp.getFirstArgDecisiveValue(v1);
+				if (decisiveResult != null)
+					return ObservableValue.of(decisiveResult);
+				else
+					return value2.map(v2 -> theOp.apply(v1, v2));
+			});
+			theListenableValue = new ObservableValue.FlattenedObservableValue<V>(toFlatten, null) {
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstrained.getThreadConstraint(value1, value2);
+				}
+			};
 		}
 
 		@Override
-		public Object getIdentity() {
-			return theTransformedValue.getIdentity();
+		protected Object createIdentity() {
+			// In some cases, values cannot be printed or compared without evaluating them,
+			// and the whole reason for this class is to prevent the evaluation of value2 if value1 is decisive
+			return Identifiable.buildId()//
+				.withPrintedId(theValue1)//
+				.withPrintedId(theOp)//
+				.withPrintedIdS(() -> {
+					if (theOp.getFirstArgDecisiveValue(theValue1.get()) == null)
+						return theValue2;
+					else
+						return "(precluded)";
+				})//
+				.build();
+		}
+
+		@Override
+		public FirstArgDecisiveBinaryValue<S, T, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(Arrays.asList(theValue1, theValue2));
+			if (theOp.getFirstArgDecisiveValue(theValue1.get()) != null)
+				return theValue1.getStamp();
+			else
+				return Stamped.compositeStamp(Arrays.asList(theValue1, theValue2));
 		}
 
 		@Override
@@ -640,40 +862,22 @@ public class BinaryOperator implements ObservableExpression {
 
 		@Override
 		public Observable<ObservableValueEvent<V>> noInitChanges() {
-			return theTransformedValue.noInitChanges();
+			return theListenableValue.noInitChanges();
 		}
 
 		@Override
-		public <V2 extends V> V set(V2 value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			return theTransformedValue.set(value, cause);
+		public V set(V value) throws IllegalArgumentException, UnsupportedOperationException {
+			return theTransformedValue.set(value);
 		}
 
 		@Override
-		public <V2 extends V> String isAcceptable(V2 value) {
+		public String isAcceptable(V value) {
 			return theTransformedValue.isAcceptable(value);
 		}
 
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return theTransformedValue.isEnabled();
-		}
-
-		@Override
-		public int hashCode() {
-			return getIdentity().hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (obj instanceof Identifiable)
-				return getIdentity().equals(((Identifiable) obj).getIdentity());
-			else
-				return false;
-		}
-
-		@Override
-		public String toString() {
-			return getIdentity().toString();
 		}
 	}
 }

@@ -3,6 +3,7 @@ package org.observe.util;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -17,6 +18,7 @@ import org.observe.Observer.SimpleObserver;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -327,6 +329,17 @@ public class WeakListening {
 			}
 
 			@Override
+			public Identifiable alias(String alias) {
+				observable.alias(alias);
+				return this;
+			}
+
+			@Override
+			public Set<String> getAliases() {
+				return observable.getAliases();
+			}
+
+			@Override
 			public ThreadConstraint getThreadConstraint() {
 				return observable.getThreadConstraint();
 			}
@@ -354,6 +367,11 @@ public class WeakListening {
 			@Override
 			public CoreId getCoreId() {
 				return observable.getCoreId();
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return observable.getChangeSources();
 			}
 		}
 		return new WeaklyListeningObservable();

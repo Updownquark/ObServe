@@ -40,20 +40,69 @@ public interface ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 		return getType() == CollectionChangeType.set && ObservableValueEvent.super.isUpdate();
 	}
 
+	/**
+	 * @param <E> The type of the collection event
+	 *
+	 * @param elementId The ID of the element that was added, removed, or changed
+	 * @param index The index of the element that was added, removed, or changed
+	 * @param type The type of the change (add, remove, or set)
+	 * @param oldValue The value that was previously present in the element (or null if the element was just added)
+	 * @param newValue The value that is now present in the element (or the value that was just removed)
+	 * @param causes The causes of the change
+	 * @return The collection event
+	 */
 	static <E> ObservableCollectionEvent<E> createCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue,
 		E newValue, Object... causes) {
 		return new DefaultObservableCollectionEvent<>(elementId, index, type, oldValue, newValue, causes);
 	}
 
+	/**
+	 * @param <E> The type of the collection event
+	 *
+	 * @param elementId The ID of the element that was added, removed, or changed
+	 * @param index The index of the element that was added, removed, or changed
+	 * @param type The type of the change (add, remove, or set)
+	 * @param oldValue The value that was previously present in the element (or null if the element was just added)
+	 * @param newValue The value that is now present in the element (or the value that was just removed)
+	 * @param causes The causes of the change
+	 * @return The collection event
+	 */
 	static <E> ObservableCollectionEvent<E> createCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue,
 		E newValue, Collection<?> causes) {
 		return new DefaultObservableCollectionEvent<>(elementId, index, type, oldValue, newValue, causes);
 	}
 
+	/*
+	 * The following methods are helpful performance improvements, allowing the creation of smaller, simpler derived objects that use
+	 * their parents for the heavy, complex Causable functionality.
+	 *
+	 * Use of these methods does mean that the derived elements don't report being finished until their source does,
+	 * but this is necessary for performance.
+	 */
+
+	/**
+	 * @param element The ID of the derived element
+	 * @param index The index of the derived element
+	 * @return A collection event with all of this event's information, except the given element ID and index
+	 */
 	ObservableCollectionEvent<E> derive(ElementId element, int index);
 
+	/**
+	 * @param <E2> The type of the derived event
+	 * @param element The ID of the derived element
+	 * @param index The index of the derived element
+	 * @param oldValue The previous value in the derived element
+	 * @param newValue The new value in the derived element
+	 * @return A collection event with all of this event's information, except the given element ID, index, and values
+	 */
 	<E2> ObservableCollectionEvent<E2> derive(ElementId element, int index, E2 oldValue, E2 newValue);
 
+	/**
+	 * Default implementation returned from
+	 * {@link ObservableCollectionEvent#createCollectionEvent(ElementId, int, CollectionChangeType, Object, Object, Collection)}
+	 *
+	 * @param <E> The type of the event
+	 */
 	class DefaultObservableCollectionEvent<E> extends ObservableValueEvent.DefaultObservableValueEvent<E>
 	implements ObservableCollectionEvent<E> {
 		private final ElementId theElementId;
@@ -165,17 +214,28 @@ public interface ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 		}
 	}
 
+	/**
+	 * Abstract derived implementation for {@link #derive(ElementId, int)} and {@link #derive(ElementId, int, Object, Object)}
+	 *
+	 * @param <T> The type of the derived collection
+	 */
 	public abstract class DerivedObservableCollectionEvent<T> implements ObservableCollectionEvent<T> {
 		private final ObservableCollectionEvent<?> theSource;
 		private final ElementId theId;
 		private final int theIndex;
 
+		/**
+		 * @param source The source collection event that this event is derived from
+		 * @param id The ID of the derived element
+		 * @param index The index of the derived element
+		 */
 		protected DerivedObservableCollectionEvent(ObservableCollectionEvent<?> source, ElementId id, int index) {
 			theSource = source;
 			theId = id;
 			theIndex = index;
 		}
 
+		/** @return The source collection event that this event is derived from */
 		protected ObservableCollectionEvent<?> getSource() {
 			return theSource;
 		}
@@ -248,7 +308,17 @@ public interface ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 		}
 	}
 
+	/**
+	 * Default derived implementation for {@link #derive(ElementId, int)}
+	 *
+	 * @param <T> The type of both the source and derived collections
+	 */
 	public class ElementChangedCollectionEvent<T> extends DerivedObservableCollectionEvent<T> {
+		/**
+		 * @param source The source collection event that this event is derived from
+		 * @param id The ID of the derived element
+		 * @param index The index of the derived element
+		 */
 		public ElementChangedCollectionEvent(ObservableCollectionEvent<T> source, ElementId id, int index) {
 			super(source, id, index);
 		}
@@ -276,10 +346,22 @@ public interface ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 		}
 	}
 
+	/**
+	 * Default derived implementation for {@link #derive(ElementId, int, Object, Object)}
+	 *
+	 * @param <T> The type of the derived collection
+	 */
 	public class ValueChangedCollectionEvent<T> extends DerivedObservableCollectionEvent<T> {
 		private final T theOldValue;
 		private final T theNewValue;
 
+		/**
+		 * @param source The source collection event that this event is derived from
+		 * @param id The ID of the derived element
+		 * @param index The index of the derived element
+		 * @param oldValue The previous value in the derived element
+		 * @param newValue The new value in the derived element
+		 */
 		public ValueChangedCollectionEvent(ObservableCollectionEvent<?> source, ElementId id, int index, T oldValue, T newValue) {
 			super(source, id, index);
 			theOldValue = oldValue;

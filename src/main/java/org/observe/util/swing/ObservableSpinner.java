@@ -10,9 +10,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import javax.swing.JComponent;
-import javax.swing.JFormattedTextField;
-import javax.swing.JFormattedTextField.AbstractFormatter;
-import javax.swing.JFormattedTextField.AbstractFormatterFactory;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerModel;
 import javax.swing.event.ChangeEvent;
@@ -36,8 +33,8 @@ import org.qommons.io.Format;
  * @param <T> The type of the spinner's value
  */
 public class ObservableSpinner<T> extends JSpinner implements ObservableTextEditorWidget<T, ObservableSpinner<T>> {
-	private final ObservableTextEditor<T> theEditor;
-	private final JFormattedTextField theTextField;
+	private final ObservableTextField<T> theTextField;
+	private ObservableTextEditor<T> theEditor;
 
 	/**
 	 * @param value The value for the model
@@ -50,37 +47,11 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		Function<? super T, ? extends T> nextMaker, Observable<?> until) {
 		super(new ObservableSpinnerModel<>(value, previousMaker, nextMaker, until));
 		ObservableSpinnerModel<T> model = (ObservableSpinnerModel<T>) getModel();
+		theTextField = new ObservableTextField<>(value, format, until);
+		theTextField.getEditor().setAdjuster((v0, up) -> up ? model.getNextValue() : model.getPreviousValue());
+		setEditor(theTextField);
 		SpinnerUI spinnerUI = getUI();
 		setUI(new ObservableSpinnerUI<>(model, spinnerUI instanceof BasicSpinnerUI ? (BasicSpinnerUI) spinnerUI : null, until));
-		JSpinner.DefaultEditor editor = (JSpinner.DefaultEditor) getEditor();
-		theTextField = editor.getTextField();
-		theTextField.setEditable(true);
-		theTextField.setFormatterFactory(new AbstractFormatterFactory() {
-			@Override
-			public AbstractFormatter getFormatter(JFormattedTextField tf) {
-				return new AbstractFormatter() {
-					@Override
-					public String valueToString(Object value2) throws ParseException {
-						return format.format((T) value2);
-					}
-
-					@Override
-					public Object stringToValue(String text) throws ParseException {
-						return format.parse(text);
-					}
-				};
-			}
-		});
-		theEditor = new ObservableTextEditor<T>(theTextField, value, format, until, //
-			e -> ObservableSpinner.super.setEnabled(e), //
-			tt -> ObservableSpinner.super.setToolTipText(tt)) {
-			@Override
-			protected void adjust(boolean up, Object cause) {
-				T adjacent = up ? model.getNextValue() : model.getPreviousValue();
-				if (adjacent != null)
-					model.setValue(adjacent);
-			}
-		};
 	}
 
 	@Override
@@ -91,8 +62,17 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 	}
 
 	/** @return The text field for this spinner */
-	public JFormattedTextField getTextField() {
+	public ObservableTextField<T> getTextField() {
 		return theTextField;
+	}
+
+	/**
+	 * @param editable Whether this spinner's text field should be editable
+	 * @return This spinner
+	 */
+	public ObservableSpinner<T> setTextEditable(boolean editable) {
+		theTextField.setEditable(editable);
+		return this;
 	}
 
 	@Override
@@ -197,6 +177,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 
 	@Override
 	public void setToolTipText(String text) {
+
 		if (theEditor != null)
 			theEditor.setToolTipText(text);
 		else

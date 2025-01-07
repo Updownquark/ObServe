@@ -50,6 +50,7 @@ import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.Collec
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -161,8 +162,10 @@ public class ExpressoQonfigValues {
 		 * @param <T> The type of the value
 		 */
 		public static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
+			private final ErrorReporting theReporting;
 			Instantiator(ConstantValueDef.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
+				theReporting = interpreted.reporting();
 			}
 
 			@Override
@@ -172,8 +175,14 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				SettableValue<T> initV = getElementValue().get(models);
-				return new ConstantValue<>(getModelPath(), initV.get());
+				try {
+					return new ConstantValue<>(getModelPath(), initV.get());
+				} catch (RuntimeException e) {
+					theReporting.error("Unable to generate constant value", e);
+					return new ConstantValue<>(getModelPath(), null);
+				}
 			}
 
 			@Override
@@ -228,12 +237,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public <V extends T> T set(V value2, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			public T set(T value2) throws IllegalArgumentException, UnsupportedOperationException {
 				throw new UnsupportedOperationException("Constant value");
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value2) {
+			public String isAcceptable(T value2) {
 				return "Constant value";
 			}
 
@@ -245,6 +254,12 @@ public class ExpressoQonfigValues {
 			@Override
 			protected Object createIdentity() {
 				return theModelPath;
+			}
+
+			@Override
+			public ConstantValue<T> alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 		}
 	}
@@ -363,6 +378,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				if (getElementValue() != null)
 					return getElementValue().get(models);
 				else {
@@ -597,13 +613,14 @@ public class ExpressoQonfigValues {
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
+				instantiate(models);
 				SettableValue<T> source = theSource.get(models);
 				ObservableAction save = theSave.get(models);
 				SettableValue<T> targetAs = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, models, targetAs);
 				ModelSetInstance fModels = models;
 				List<ObservableAction> postActions = QommonsUtils.filterMapE(thePostActions, null, a -> a.get(fModels));
-				return new FieldValue<>(source, save, targetAs, postActions);
+				return new FieldValue<>(reporting(), source, save, targetAs, postActions);
 			}
 
 			@Override
@@ -624,19 +641,23 @@ public class ExpressoQonfigValues {
 				else {
 					SettableValue<T> targetAs = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, newModels, targetAs);
-					return new FieldValue<>(newSource, newSave, targetAs, Collections.unmodifiableList(postActions));
+					return new FieldValue<>(reporting(), newSource, newSave, targetAs, Collections.unmodifiableList(postActions));
 				}
 			}
 		}
 
 		static class FieldValue<T> extends SettableValue.RefreshingSettableValue<T> {
+			private final ErrorReporting theReporting;
 			private final SettableValue<T> theSource;
 			private final ObservableAction theSave;
 			private final SettableValue<T> theSourceAs;
 			private final List<ObservableAction> thePostActions;
+			private boolean isSetting;
 
-			FieldValue(SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs, List<ObservableAction> postActions) {
+			FieldValue(ErrorReporting reporting, SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs,
+				List<ObservableAction> postActions) {
 				super(source, new SimpleObservable<>());
+				theReporting = reporting;
 				theSource = source;
 				theSave = save;
 				theSourceAs = sourceAs;
@@ -662,27 +683,44 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value) {
+			public String isAcceptable(T value) {
 				theSourceAs.set(value, null);
-				return isEnabled().get();
+				return theSave.isEnabled().get();
 			}
 
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 				T old = theSource.get();
-				theSourceAs.set(value, cause);
-				theSave.act(cause);
-				for (ObservableAction postAction : thePostActions) {
-					if (postAction.isEnabled().get() == null)
-						postAction.act(cause);
+				// Prevent reentrancy due to refresh
+				if (isSetting && old == value)
+					return value;
+				try {
+					isSetting = true;
+					theSourceAs.set(value);
+					theSave.act(getRootCausable());
+					for (ObservableAction postAction : thePostActions) {
+						if (postAction.isEnabled().get() == null)
+							postAction.act(getRootCausable());
+					}
+					((SimpleObservable<Void>) getRefresh()).onNext(null);
+				} catch (RuntimeException e) {
+					theReporting.error(e.getMessage(), e);
+					throw e;
+				} finally {
+					isSetting = false;
 				}
-				((SimpleObservable<Void>) getRefresh()).onNext(null);
 				return old;
 			}
 
 			@Override
 			protected Object createIdentity() {
-				return theSource.getIdentity();
+				if (theReporting != null) { // Don't really understand why this is null but don't feel like investigating now
+					return Identifiable.buildId()//
+						.id(theSource.getIdentity())//
+						.appendS(theReporting::toString)//
+						.build();
+				} else
+					return theSource.getIdentity();
 			}
 		}
 	}
@@ -797,6 +835,7 @@ public class ExpressoQonfigValues {
 
 				@Override
 				public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					instantiate(models);
 					return getElementValue().get(models);
 				}
 
@@ -990,6 +1029,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				if (getElementValue() != null)
 					return getElementValue().get(models);
 				ObservableCollectionBuilder<T, ?> builder = create(models);
@@ -1535,6 +1575,7 @@ public class ExpressoQonfigValues {
 
 				@Override
 				public SettableValue<V> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					instantiate(models);
 					return getElementValue().get(models);
 				}
 
@@ -1744,10 +1785,11 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				ObservableMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
-				M map = (M) builder.build();
+				M map = (M) builder.buildMap();
 				for (MapEntry.MapPopulator<K, V> entry : theEntries)
 					entry.populateMap(map, models);
 				return map;
@@ -2100,6 +2142,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				ObservableMultiMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
@@ -2509,6 +2552,7 @@ public class ExpressoQonfigValues {
 			@Override
 			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
+				instantiate(models);
 				Observable<T> on = theEvent == null ? null : theEvent.get(models);
 				ObservableAction action = theAction.get(models);
 				return create(on, action, models);
@@ -2553,7 +2597,8 @@ public class ExpressoQonfigValues {
 	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<?>>
 	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<?>> {
 		private CompiledExpression theAction;
-		private boolean isAsync;
+		private CompiledExpression onThread;
+		private boolean isAlwaysEnabled;
 
 		/**
 		 * @param parent The parent element of this value element
@@ -2568,17 +2613,24 @@ public class ExpressoQonfigValues {
 			return theAction;
 		}
 
-		/** @return Whether to perform the action asynchronously (off the UI event thread) */
-		@QonfigAttributeGetter("async")
-		public boolean isAsync() {
-			return isAsync;
+		/** @return The threading to delegate the action to (if asynchronous) */
+		@QonfigAttributeGetter("on-thread")
+		public CompiledExpression getOnThread() {
+			return onThread;
+		}
+
+		/** @return Whether this action will always report <code>null</code> for its {@link ObservableAction#isEnabled() enablement} */
+		@QonfigAttributeGetter("always-enabled")
+		public boolean isAlwaysEnabled() {
+			return isAlwaysEnabled;
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theAction = getValueExpression(session);
-			isAsync = session.getAttribute("async", boolean.class);
+			onThread = getAttributeExpression("on-thread", session);
+			isAlwaysEnabled = session.getAttribute("always-enabled", boolean.class);
 		}
 
 		@Override
@@ -2594,6 +2646,8 @@ public class ExpressoQonfigValues {
 		public static class Interpreted
 		extends ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>>
 		implements ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ThreadConstraint>> onThread;
+
 			/**
 			 * @param definition The definition to interpret
 			 * @param parent The parent element for this action element
@@ -2617,6 +2671,18 @@ public class ExpressoQonfigValues {
 				return BetterList.of(getElementValue());
 			}
 
+			/** @return The threading to delegate the action to (if asynchronous) */
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ThreadConstraint>> getOnThread() {
+				return onThread;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				onThread = getDefinition().getOnThread() == null ? null
+					: getDefinition().getOnThread().interpret(ModelTypes.Value.forType(ThreadConstraint.class), env);
+			}
+
 			@Override
 			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
@@ -2625,11 +2691,11 @@ public class ExpressoQonfigValues {
 
 		/** {@link Action} instantiator */
 		public static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
-			private final boolean isAsync;
+			private ModelValueInstantiator<SettableValue<ThreadConstraint>> onThread;
+			private boolean isAlwaysEnabled;
 
 			Instantiator(Action.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				isAsync = interpreted.getDefinition().isAsync();
 			}
 
 			@Override
@@ -2637,21 +2703,37 @@ public class ExpressoQonfigValues {
 				return (ModelValueInstantiator<ObservableAction>) super.getElementValue();
 			}
 
-			/** @return Whether to perform the action asynchronously (off the UI event thread) */
-			public boolean isAsync() {
-				return isAsync;
+			/** @return The threading to delegate the action to (if asynchronous) */
+			public ModelValueInstantiator<SettableValue<ThreadConstraint>> getOnThread() {
+				return onThread;
+			}
+
+			/** @return Whether this action will always report <code>null</code> for its {@link ObservableAction#isEnabled() enablement} */
+			public boolean isAlwaysEnabled() {
+				return isAlwaysEnabled;
+			}
+
+			@Override
+			protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
+				super.doUpdate(interpreted);
+				Action.Interpreted myInterpreted = (Action.Interpreted) interpreted;
+				onThread = myInterpreted.getOnThread() == null ? null : myInterpreted.getOnThread().instantiate();
+				isAlwaysEnabled = myInterpreted.getDefinition().isAlwaysEnabled();
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
 				getElementValue().instantiate();
+				if (onThread != null)
+					onThread.instantiate();
 			}
 
 			@Override
 			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				ObservableAction action = getElementValue().get(models);
-				if (isAsync)
-					return new AsyncAction(action);
+				if (onThread != null || isAlwaysEnabled)
+					return new ModifiedAction(action, onThread == null ? null : onThread.get(models), isAlwaysEnabled, reporting());
 				else
 					return action;
 			}
@@ -2659,36 +2741,69 @@ public class ExpressoQonfigValues {
 			@Override
 			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				if (isAsync) {
-					ObservableAction wrapped = ((AsyncAction) value).theWrapped;
-					ObservableAction newWrapped = getElementValue().forModelCopy(wrapped, sourceModels, newModels);
-					if (wrapped == newWrapped)
-						return wrapped;
-					return new AsyncAction(newWrapped);
-				} else
+				if (onThread != null || isAlwaysEnabled) {
+					if (value instanceof ModifiedAction) {
+						ModifiedAction async = (ModifiedAction) value;
+						ObservableAction newWrapped = getElementValue().forModelCopy(async.theWrapped, sourceModels, newModels);
+						SettableValue<ThreadConstraint> newOnThread = getOnThread() == null ? null
+							: getOnThread().forModelCopy(((ModifiedAction) value).onThread, sourceModels, newModels);
+						if (async.theWrapped == newWrapped && async.onThread == newOnThread)
+							return async;
+						return new ModifiedAction(newWrapped, newOnThread, isAlwaysEnabled, reporting());
+					} else
+						return get(newModels);
+				} else if (value instanceof ModifiedAction)
+					return get(newModels);
+				else
 					return getElementValue().forModelCopy(value, sourceModels, newModels);
 			}
 		}
 
-		static class AsyncAction implements ObservableAction {
+		static class ModifiedAction implements ObservableAction {
 			final ObservableAction theWrapped;
+			final SettableValue<ThreadConstraint> onThread;
+			final boolean isAlwaysEnabled;
+			private final ErrorReporting theReporting;
 
-			AsyncAction(ObservableAction wrapped) {
+			ModifiedAction(ObservableAction wrapped, SettableValue<ThreadConstraint> onThread, boolean alwaysEnabled,
+				ErrorReporting reporting) {
 				theWrapped = wrapped;
+				this.onThread = onThread;
+				isAlwaysEnabled = alwaysEnabled;
+				theReporting = reporting;
 			}
 
 			@Override
 			public void act(Object cause) throws IllegalStateException {
-				Runnable[] task = new Runnable[1];
-				task[0] = () -> {
-					if (theWrapped.isEventing())
-						QommonsTimer.getCommonInstance().offload(task[0]);
-					else if (cause instanceof Causable)
-						theWrapped.act(Causable.broken(cause));
-					else
-						theWrapped.act(cause);
+				ThreadConstraint threading = onThread == null ? null : onThread.get();
+				if (threading == null) {
+					theWrapped.act(cause);
+					return;
+				} else if (!threading.supportsInvoke()) {
+					theReporting.warn("on-thread returned " + threading + ", which does not support invocation");
+					theWrapped.act(cause);
+					return;
+				}
+
+				QommonsTimer.TaskHandle[] handle = new QommonsTimer.TaskHandle[1];
+				Runnable task = () -> {
+					if (theWrapped.isEventing()) {
+						handle[0].runImmediately();
+						return;
+					}
+					try {
+						if (cause instanceof Causable)
+							theWrapped.act(Causable.broken(cause));
+						else
+							theWrapped.act(cause);
+					} catch (RuntimeException e) {
+						if (!isAlwaysEnabled)
+							theReporting.error("Error executing action", e);
+					}
 				};
-				QommonsTimer.getCommonInstance().offload(task[0]);
+				handle[0] = QommonsTimer.getCommonInstance().build(task, null, false)//
+					.withThreading(threading)//
+					.runImmediately();
 			}
 
 			@Override
@@ -2698,21 +2813,26 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return theWrapped.isEnabled();
+				if (isAlwaysEnabled)
+					return SettableValue.ALWAYS_ENABLED;
+				else
+					return theWrapped.isEnabled();
 			}
 
 			@Override
 			public int hashCode() {
-				return theWrapped.hashCode();
+				return Objects.hash(theWrapped, onThread, isAlwaysEnabled);
 			}
 
 			@Override
 			public boolean equals(Object obj) {
 				if (this == obj)
 					return true;
-				else if (!(obj instanceof AsyncAction))
+				else if (!(obj instanceof ModifiedAction))
 					return false;
-				return theWrapped.equals(((AsyncAction) obj).theWrapped);
+				ModifiedAction other = (ModifiedAction) obj;
+				return theWrapped.equals(other.theWrapped) && Objects.equals(onThread, other.onThread)
+					&& isAlwaysEnabled == other.isAlwaysEnabled;
 			}
 
 			@Override
@@ -2831,6 +2951,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
+				super.doUpdate(interpreted);
+				ActionGroup.Interpreted myInterpreted = (ActionGroup.Interpreted) interpreted;
+				int a = 0;
+				for (Action.Instantiator action : theActions)
+					action.update(myInterpreted.getActions().get(a++), this);
+			}
+
+			@Override
 			public void instantiate() throws ModelInstantiationException {
 				for (ModelValueInstantiator<?> action : theActions)
 					action.instantiate();
@@ -2838,6 +2967,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				ObservableAction[] actions = new ObservableAction[theActions.size()];
 				for (int i = 0; i < actions.length; i++)
 					actions[i] = theActions.get(i).get(models);
@@ -3129,6 +3259,7 @@ public class ExpressoQonfigValues {
 			@Override
 			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
+				instantiate(models);
 				ObservableAction init = theInit == null ? null : theInit.get(models);
 				ObservableAction before = theBefore == null ? null : theBefore.get(models);
 				SettableValue<Boolean> condition = theWhile.get(models);
@@ -3311,6 +3442,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				return getElementValue().get(models);
 			}
 
@@ -3390,6 +3522,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ObservableValueSet<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				// Although a purely in-memory value set would be more efficient, I have yet to implement one.
 				// Easiest path forward for this right now is to make an unpersisted ObservableConfig and use it to back the value set.
 				// TODO At some point I should come back and make an in-memory implementation and use it here.
@@ -3732,6 +3865,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public SettableValue<Instant> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				instantiate(models);
 				SettableValue<Boolean> active = isActive.get(models);
 				SettableValue<Duration> frequency = theFrequency.get(models);
 				SettableValue<Integer> remainingExecutions = theRemainingExecutions == null ? null : theRemainingExecutions.get(models);

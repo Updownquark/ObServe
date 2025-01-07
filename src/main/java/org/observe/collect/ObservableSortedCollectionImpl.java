@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.Transformation;
@@ -159,8 +160,19 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public ObservableSubSequence<E> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getWrapped().isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getWrapped().getChangeSources();
 		}
 
 		@Override
@@ -290,6 +302,12 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		protected ObservableSortedCollection<E> getWrapped() {
 			return (ObservableSortedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public ReversedSortedCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -738,6 +756,12 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public PassiveDerivedSortedCollection<E, T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence.SortedEquivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -864,6 +888,12 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
+		public ActiveDerivedSortedCollection<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Comparator<? super T> comparator() {
 			return theCompare;
 		}
@@ -924,6 +954,12 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		protected ObservableValue<? extends ObservableSortedCollection<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSortedCollection<E>>) super.getWrapped();
+		}
+
+		@Override
+		public FlattenedValueSortedCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -1029,6 +1065,12 @@ public class ObservableSortedCollectionImpl {
 		@Override
 		protected ObservableSortedCollection<E> getWrapped() throws IllegalStateException {
 			return (ObservableSortedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public DataControlledSortedCollectionImpl<E, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override

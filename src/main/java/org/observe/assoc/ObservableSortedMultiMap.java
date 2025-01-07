@@ -2,11 +2,14 @@ package org.observe.assoc;
 
 import java.util.Comparator;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -17,6 +20,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMultiMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -37,6 +41,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	default ObservableSortedSet<? extends MultiEntryHandle<K, V>> entrySet() {
 		return new ObservableSortedMultiMapEntrySet<>(this);
 	}
+
+	@Override
+	ObservableSortedMultiMap<K, V> alias(String alias);
 
 	@Override
 	default MultiEntryHandle<K, V> search(Comparable<? super K> search, BetterSortedList.SortedSearchFilter filter) {
@@ -110,6 +117,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	@Override
 	default ObservableSortedMap<K, V> singleMap(boolean firstValue) {
 		return new SortedSingleMap<>(this, firstValue);
+	}
+
+	@Override
+	default <X> ObservableSortedMap<K, X> observeSingleMap(
+		BiFunction<? super ObservableCollection<V>, ? super Observable<?>, ? extends SettableValue<X>> combination, Observable<?> until) {
+		return new ActiveObservableSortedSingleMap<>(this, combination, until);
 	}
 
 	/**
@@ -213,6 +226,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public ObservableSortedMultiMapEntrySet<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public Equivalence.SortedEquivalence<? super MultiEntryHandle<K, V>> equivalence() {
 			return theEquivalence;
 		}
@@ -274,6 +293,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public SortedSingleMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public ObservableSortedSet<K> keySet() {
 			return (ObservableSortedSet<K>) super.keySet();
 		}
@@ -303,6 +328,42 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	/**
+	 * Implements {@link ObservableSortedMultiMap#observeSingleMap(BiFunction, Observable)}
+	 *
+	 * @param <K> The key-type of the maps (the source multi-map and this map)
+	 * @param <V> The value-type of the source multi-map
+	 * @param <X> The value type of this map
+	 */
+	class ActiveObservableSortedSingleMap<K, V, X> extends ActiveObservableSingleMap<K, V, X> implements ObservableSortedMap<K, X> {
+		public ActiveObservableSortedSingleMap(ObservableSortedMultiMap<K, V> multiMap,
+			BiFunction<? super ObservableCollection<V>, ? super Observable<?>, ? extends SettableValue<X>> valueProducer,
+				Observable<?> until) {
+			super(multiMap, valueProducer, until);
+		}
+
+		@Override
+		public ActiveObservableSortedSingleMap<K, V, X> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return (ObservableSortedSet<K>) super.keySet();
+		}
+
+		@Override
+		public ObservableSortedSet<Entry<K, X>> entrySet() {
+			return (ObservableSortedSet<Entry<K, X>>) super.entrySet();
+		}
+
+		@Override
+		public MapEntryHandle<K, X> searchEntries(Comparable<? super Map.Entry<K, X>> search, SortedSearchFilter filter) {
+			return (MapEntryHandle<K, X>) entrySet().searchValue(search, filter);
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableSortedMultiMap#reverse()}
 	 *
 	 * @param <K> The key type of the map
@@ -316,6 +377,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		protected ObservableSortedMultiMap<K, V> getSource() {
 			return (ObservableSortedMultiMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public ReversedObservableSortedMultiMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -350,7 +417,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 					if (valueSize == 0)
 						valueSize++; // May have just been removed
 					int valueIndex = valueSize - evt.getIndex() - 1;
-					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
+					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent.Default<>(//
 						evt.getKeyElement().reverse(), evt.getElementId().reverse(), //
 						keyIndex, valueIndex, evt.getType(), //
 						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
@@ -389,8 +456,19 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public ObservableSubMultiMap<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getWrapped().isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return getWrapped().getChangeSources();
 		}
 
 		@Override
@@ -460,8 +538,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			return getWrapped().onChange(evt -> {
 				int keyIndex = keySet().getElementsBefore(evt.getKeyElement());
 				int valueIndex = get(evt.getKey()).getElementsBefore(evt.getElementId());
-				ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(evt.getKeyElement(), evt.getElementId(), keyIndex,
-					valueIndex, evt.getType(), evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
+				ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent.Default<>(evt.getKeyElement(), evt.getElementId(),
+					keyIndex, valueIndex, evt.getType(), evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt,
+					evt.getMovement());
 				try (Transaction mt = mapEvent.use()) {
 					action.accept(mapEvent);
 				}

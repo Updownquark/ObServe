@@ -1,7 +1,9 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -10,12 +12,16 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.qommons.Identifiable;
 import org.qommons.MultiInheritanceSet;
+import org.qommons.Transaction;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
@@ -48,28 +54,30 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 
-			ElementModelValue.Cache dmvCache = session.getElementValueCache();
-			Map<String, ElementModelValue.Identity> dynamicValues = new LinkedHashMap<>();
-			QonfigToolkit expresso = session.getFocusType().getDeclarer();
-			dmvCache.getDynamicValues(expresso, session.getElement().getType(), dynamicValues, getElement().reporting());
-			for (QonfigAddOn inh : session.getElement().getInheritance().values())
-				dmvCache.getDynamicValues(expresso, inh, dynamicValues, getElement().reporting());
-			if (!dynamicValues.isEmpty()) {
-				// Branch the model lazily. Don't do it if there are no actual element values.
-				// This can happen if the values are all attribute-sourced and the attributes are optional
-				ObservableModelSet.Builder builder = null;
-				for (ElementModelValue.Identity dv : dynamicValues.values()) {
-					ExpressoQIS dvSession = session.forChild(dv.getDeclaration(), dv.getDeclaration().getType(),
-						MultiInheritanceSet.empty());
-					// We need the parent of this element to be the structure that we are currently preparing to create
-					dvSession.setElementRepresentation(null);
-					ExtModelValueElement.Def<?> spec = dvSession.interpret(ExtModelValueElement.Def.class);
-					spec.update(dvSession);
-					if (dv.getSourceChild() != null) {
-						for (ExpressoQIS childSession : session.asElement(dv.getOwner()).children().get(dv.getSourceChild()).get())
-							builder = handleDynamicValue(dv, builder, childSession, spec);
-					} else
-						builder = handleDynamicValue(dv, builder, session.asElement(dv.getOwner()), spec);
+			try (Transaction t = session.putTemp(ExTyped.VALUE_TYPE_KEY, null)) {
+				ElementModelValue.Cache dmvCache = session.getElementValueCache();
+				Map<String, ElementModelValue.Identity> dynamicValues = new LinkedHashMap<>();
+				QonfigToolkit expresso = session.getFocusType().getDeclarer();
+				dmvCache.getDynamicValues(expresso, session.getElement().getType(), dynamicValues, getElement().reporting());
+				for (QonfigAddOn inh : session.getElement().getInheritance().values())
+					dmvCache.getDynamicValues(expresso, inh, dynamicValues, getElement().reporting());
+				if (!dynamicValues.isEmpty()) {
+					// Branch the model lazily. Don't do it if there are no actual element values.
+					// This can happen if the values are all attribute-sourced and the attributes are optional
+					ObservableModelSet.Builder builder = null;
+					for (ElementModelValue.Identity dv : dynamicValues.values()) {
+						ExpressoQIS dvSession = session.forChild(dv.getDeclaration(), dv.getDeclaration().getType(),
+							MultiInheritanceSet.empty());
+						// We need the parent of this element to be the structure that we are currently preparing to create
+						dvSession.setElementRepresentation(null);
+						ExtModelValueElement.Def<?> spec = dvSession.interpret(ExtModelValueElement.Def.class);
+						spec.update(dvSession);
+						if (dv.getSourceChild() != null) {
+							for (ExpressoQIS childSession : session.asElement(dv.getOwner()).children().get(dv.getSourceChild()).get())
+								builder = handleDynamicValue(dv, builder, childSession, spec);
+						} else
+							builder = handleDynamicValue(dv, builder, session.asElement(dv.getOwner()), spec);
+					}
 				}
 			}
 		}
@@ -160,7 +168,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -213,6 +221,18 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		return (Class<Interpreted>) (Class<?>) Interpreted.class;
 	}
 
+	@Override
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
+		super.update(interpreted, element);
+		ModelInstantiator models = element.getModels();
+		ExWithElementModel.Interpreted myInterpreted = (ExWithElementModel.Interpreted) interpreted;
+		for (Map.Entry<String, InterpretedModelComponentNode<?, ?>> value : myInterpreted.getElementValues().entrySet()) {
+			ModelValueInstantiator<?> mv = models.getComponent(value.getValue().getIdentity());
+			if (mv instanceof ModelValueElement)
+				((ModelValueElement<?>) mv).update((ExElement.Interpreted<?>) value.getValue(), element);
+		}
+	}
+
 	interface ElementModelValuePlaceholder<M> extends ElementModelValue<M> {
 		@Override
 		default ElementModelValue.Identity getIdentity() {
@@ -237,6 +257,16 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			theName = name;
 			theSpec = spec;
 			theAttributeValue = attributeValue;
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			return this; // Aliasing not currently supported
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override
@@ -303,6 +333,16 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		@Override
 		public ElementModelValue.Identity getIdentity() {
 			return theId;
+		}
+
+		@Override
+		public Identifiable alias(String alias) {
+			return this; // Aliasing not currently supported
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return Collections.emptySet();
 		}
 
 		@Override

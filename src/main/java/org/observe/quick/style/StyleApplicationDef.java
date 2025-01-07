@@ -1,6 +1,18 @@
 package org.observe.quick.style;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
@@ -354,12 +366,12 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			InterpretableModelComponentNode<?> interpretableNode = env.getModels().getIdentifiedComponentIfExists(theModelValue);
 			if (interpretableNode != null) {// If we already have a handle on it, use that
 				InterpretedModelComponentNode<?, ?> node = interpretableNode.interpreted();
-				ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
+				ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder(exHandler.isInstantiating());
 				InterpretedValueSynth<M, MV> nodeX = node.as(type, env, tce);
 				if (nodeX != null)
 					return ObservableExpression.evEx(expressionOffset, getExpressionLength(), nodeX, theModelValue);
-				exHandler.handle1(
-					new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().getPosition(), getExpressionLength()));
+				exHandler.handle1(() -> new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().getPosition(),
+					getExpressionLength()));
 				return null;
 			}
 			// Otherwise, we may just not be in the right environment yet
@@ -429,7 +441,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 
 			@Override
-			public void instantiate() {}
+			public void instantiate() {
+			}
 
 			@Override
 			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {

@@ -7,13 +7,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
+import org.observe.LightWeightObservable;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionElementMove;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -21,7 +24,6 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 
@@ -34,7 +36,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	private String theValue;
 	private boolean mayBeTrivial;
 	private final BetterList<ObservableConfig> theContent;
-	private final ListenerList<InternalObservableConfigListener> theListeners;
+	private final LightWeightObservable<ObservableConfigEvent> theChanges;
 	private long theModCount;
 
 	/**
@@ -51,7 +53,12 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		theLocking = locking.apply(this);
 		theName = name;
 		theContent = BetterTreeList.<ObservableConfig> build().withLocking(theLocking).build();
-		theListeners = ListenerList.build().build();
+		theChanges = new LightWeightObservable<ObservableConfigEvent>() {
+			@Override
+			protected boolean isInternalState() {
+				return true;
+			}
+		};
 	}
 
 	/**
@@ -67,7 +74,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		theLocking = parent.theLocking;
 		theName = name;
 		theContent = BetterTreeList.<ObservableConfig> build().withLocking(theLocking).build();
-		theListeners = ListenerList.build().build();
+		theChanges = new LightWeightObservable<>();
 	}
 
 	/**
@@ -119,8 +126,13 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	@Override
 	public boolean isEventing() {
 		// A child cannot change as a result of a parent event
-		return theListeners.isFiring()//
+		return theChanges.isEventing()//
 			|| (theParentContentRef != null && getParent().isEventing());
+	}
+
+	@Override
+	public CoreChangeSources getChangeSources() {
+		return theChanges.getChangeSources();
 	}
 
 	@Override
@@ -277,18 +289,11 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	private void fire(CollectionChangeType eventType, CollectionElementMove move, BetterList<ObservableConfig> relativePath, String oldName,
 		String oldValue) {
 		theModCount++;
-		if (!theListeners.isEmpty() && !theListeners.isFiring()) {
+		if (theChanges.isAnyoneListening() && !theChanges.isEventing()) {
 			ObservableConfigEvent event = new ObservableConfigEvent(eventType, move, this, oldName, oldValue, relativePath,
 				getCurrentCause());
 			try (Transaction t = event.use()) {
-				theListeners.forEach(intL -> {
-					if (intL.path == null || intL.path.matches(relativePath)) {
-						if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)
-							intL.listener.onCompleted(() -> event);
-						else
-							intL.listener.onNext(event);
-					}
-				});
+				theChanges.onNext(event);
 			}
 		}
 		boolean fireWithParent;
@@ -311,7 +316,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		return BetterList.of(array);
 	}
 
-	private static class InternalObservableConfigListener {
+	private static class InternalObservableConfigListener implements Observer.SimpleObserver<ObservableConfigEvent> {
 		final ObservableConfigPath path;
 		final Observer<? super ObservableConfigEvent> listener;
 
@@ -321,15 +326,24 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
+		public void onNext(ObservableConfigEvent value) {
+			if (path != null && !path.matches(value.relativePath))
+				return;
+			if (value.relativePath.isEmpty() && value.changeType == CollectionChangeType.remove)
+				listener.onCompleted(() -> value);
+			else
+				listener.onNext(value);
+		}
+
+		@Override
 		public String toString() {
 			return path + ":" + listener;
 		}
 	}
 
-	private static class ObservableConfigChangesObservable implements Observable<ObservableConfigEvent> {
+	private static class ObservableConfigChangesObservable extends AbstractIdentifiable implements Observable<ObservableConfigEvent> {
 		private final DefaultObservableConfig theConfig;
 		private final ObservableConfigPath thePath;
-		private Object theIdentity;
 
 		ObservableConfigChangesObservable(DefaultObservableConfig config, ObservableConfigPath path) {
 			theConfig = config;
@@ -337,15 +351,13 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theConfig, "watch", thePath);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theConfig, "watch", thePath);
 		}
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableConfigEvent> observer) {
-			return theConfig.theListeners.add(new InternalObservableConfigListener(thePath, observer), true)::run;
+			return theConfig.theChanges.act(new InternalObservableConfigListener(thePath, observer));
 		}
 
 		@Override
@@ -376,6 +388,11 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		@Override
 		public CoreId getCoreId() {
 			return theConfig.getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theConfig.getChangeSources();
 		}
 	}
 }

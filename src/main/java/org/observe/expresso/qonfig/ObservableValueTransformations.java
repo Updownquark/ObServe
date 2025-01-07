@@ -1,6 +1,9 @@
 package org.observe.expresso.qonfig;
 
+import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -12,6 +15,7 @@ import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionImpl;
+import org.observe.collect.ObservableCollectionImpl.SimpleCollectionBackedObservable;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedCollection;
@@ -342,6 +346,8 @@ public class ObservableValueTransformations {
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> prevValue, SettableValue<T> newSource, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
+				sourceModels = theLocalModel.wrap(sourceModels);
+				newModels = theLocalModel.wrap(newModels);
 				FilterEnabledValue<T> filtered = (FilterEnabledValue<T>) prevValue;
 				SettableValue<String> newTest = theTest.forModelCopy(filtered.getTest(), sourceModels, newModels);
 				if (newSource == filtered.getWrapped() && newTest == filtered.getTest())
@@ -484,6 +490,12 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public TransformedUnsettableValue<S, T> alias(String alias) {
+				super.alias(alias);
+				return this;
+			}
+
+			@Override
 			public Transformation<S, T> getTransformation() {
 				return super.getTransformation();
 			}
@@ -509,12 +521,12 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value) {
+			public String isAcceptable(T value) {
 				return StdMsg.UNSUPPORTED_OPERATION;
 			}
 
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 		}
@@ -930,16 +942,16 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public <V extends T> String isAcceptable(V value) {
+			public String isAcceptable(T value) {
 				if (value == get())
 					return null;
 				return StdMsg.ILLEGAL_ELEMENT;
 			}
 
 			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			public T set(T value) throws IllegalArgumentException {
 				if (value == get())
-					return getWrapped().set(value, cause);
+					return getWrapped().set(value);
 				else
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			}
@@ -951,10 +963,15 @@ public class ObservableValueTransformations {
 		}
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "flatten",
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "flatten",
+			interpretation = FlattenValueTransform.FlattenedValueInterpretation.class,
+			instance = FlattenValueTransform.FlattenedValueInstantiator.class),
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "abst-map-op",
 		interpretation = FlattenValueTransform.FlattenedValueInterpretation.class,
-		instance = FlattenValueTransform.FlattenedValueInstantiator.class)
+		instance = FlattenValueTransform.FlattenedValueInstantiator.class) })
 	static class FlattenValueTransform<M> extends ExElement.Def.Abstract<ExElement> implements ValueTransform<M, ExElement> {
 		private ModelType<M> theTargetType;
 		private ExSort.ExRootSort theSorting;
@@ -966,19 +983,62 @@ public class ObservableValueTransformations {
 			super(parent, qonfigType);
 		}
 
+		@QonfigAttributeGetter(asType = "flatten", value = "to")
 		@Override
 		public ModelType<? extends M> getTargetModelType() {
 			return theTargetType;
 		}
 
-		@QonfigChildGetter("sort")
+		@QonfigChildGetter(asType = "flatten", value = "sort")
 		public ExSort.ExRootSort getSorting() {
 			return theSorting;
 		}
 
-		@QonfigAttributeGetter("equivalence")
+		@QonfigAttributeGetter(asType = "flatten", value = "equivalence")
 		public CompiledExpression getEquivalence() {
 			return theEquivalence;
+		}
+
+		// Suppress traceability warnings
+
+		@QonfigAttributeGetter(asType = "flatten", value = "propagate-update-to-parent")
+		public Void isPropagateUpdateToParent() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "cache")
+		public Void isCached() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "re-eval-on-update")
+		public Void isReEvalOnUpdate() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "fire-if-unchanged")
+		public Void isFireIfUnchanged() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "null-to-null")
+		public Void isNullToNull() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "many-to-one")
+		public Void isManyToOne() {
+			return null;
+		}
+
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "one-to-many")
+		public Void isOneToMany() {
+			return null;
+		}
+
+		@QonfigChildGetter(asType = "flatten", value = "reverse")
+		public ExElement.Def<?> getReverse() {
+			return null;
 		}
 
 		protected PositionedContent getEquivalencePosition() {
@@ -993,10 +1053,13 @@ public class ObservableValueTransformations {
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
 
-			QonfigValue pTP = session.attributes().get("propagate-update-to-parent").get();
-			// Defaulted to true, but warn if they specify it
-			if (pTP != null && pTP.position != null) // Not defaulted, but specified
-				reporting().at(pTP.position).warn("'propagate-update-to-parent' attribute not usable for value flattening");
+			warnIfAttributeSpecified(session, "propagate-update-to-parent");
+			warnIfAttributeSpecified(session, "cache");
+			warnIfAttributeSpecified(session, "re-eval-on-update");
+			warnIfAttributeSpecified(session, "fire-if-unchanged");
+			warnIfAttributeSpecified(session, "null-to-null");
+			warnIfAttributeSpecified(session, "many-to-one");
+			warnIfAttributeSpecified(session, "one-to-many");
 			ExpressoQIS reverse = session.forChildren("reverse").peekFirst();
 			if (reverse != null)
 				reverse.reporting().warn("reverse is not usable for value flattening");
@@ -1007,6 +1070,15 @@ public class ObservableValueTransformations {
 			LocatedPositionedContent targetModelType = session.attributes().get("to").getLocatedContent();
 			theTargetType = (ModelType<M>) parseModelType(targetModelType);
 			isCollection = ObservableCollection.class.isAssignableFrom(theTargetType.modelType);
+		}
+
+		void warnIfAttributeSpecified(ExpressoQIS session, String att) {
+			QonfigValue vp = session.attributes().get(att).get();
+			if (vp != null && vp.position != null
+				&& ExElement.documentsMatch(vp.fileLocation, session.reporting().getFileLocation().getFileLocation())) {
+				// Not defaulted, but specified
+				reporting().at(vp.position).warn("'" + att + "' attribute not usable for value flattening");
+			}
 		}
 
 		protected ModelType<?> parseModelType(LocatedPositionedContent modelTypeName) throws QonfigInterpretationException {
@@ -1247,6 +1319,8 @@ public class ObservableValueTransformations {
 		extends Interpreted<C, CV> {
 			private TypeToken<T> theValueType;
 			private ModelInstanceType<C, CV> theModelType;
+			private boolean isArray;
+			private boolean isFromNonObservable;
 			private boolean isSorted;
 			private ExSort.ExRootSort.Interpreted<T> theSorting;
 			private Comparator<? super T> theDefaultSorting;
@@ -1263,10 +1337,21 @@ public class ObservableValueTransformations {
 				ModelType<C> modelType = (ModelType<C>) getDefinition().getTargetModelType();
 				TypeToken<?> valueType = sourceType.getType(0);
 				Class<?> rawType = TypeTokens.getRawType(valueType);
-				if (!modelType.modelType.isAssignableFrom(rawType))
+				if (modelType.modelType.isAssignableFrom(rawType))
+					theValueType = (TypeToken<T>) valueType.resolveType(Collection.class.getTypeParameters()[0]);
+				else if (modelType == ModelTypes.Collection) {
+					if (Collection.class.isAssignableFrom(rawType)) {
+						isFromNonObservable = true;
+						theValueType = (TypeToken<T>) valueType.resolveType(Collection.class.getTypeParameters()[0]);
+					} else if (rawType.isArray()) {
+						isArray = true;
+						theValueType = (TypeToken<T>) valueType.getComponentType();
+					} else
+						throw new ExpressoInterpretationException("Cannot flatten type " + valueType + " to a " + modelType,
+							reporting().getFileLocation().getPosition(0), 0);
+				} else
 					throw new ExpressoInterpretationException("Cannot flatten type " + valueType + " to a " + modelType,
 						reporting().getFileLocation().getPosition(0), 0);
-				theValueType = (TypeToken<T>) valueType.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 				theModelType = (ModelInstanceType<C, CV>) modelType.forTypes(theValueType);
 				if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set) {//
 					theEquivalence = interpret(getDefinition().getEquivalence(), //
@@ -1318,21 +1403,26 @@ public class ObservableValueTransformations {
 					sorting = theSorting.instantiateSort();
 				else
 					sorting = ModelValueInstantiator.literal(theDefaultSorting, "default");
-				return new FlattenedCollectionValueInstantiator<>(getDefinition().getTargetModelType(),
+				return new FlattenedCollectionValueInstantiator<>(theModelType, isFromNonObservable, isArray,
 					theEquivalence == null ? null : theEquivalence.instantiate(), sorting);
 			}
 		}
 
 		static class FlattenedCollectionValueInstantiator<T, CV extends ObservableCollection<?>>
 		implements Operation.EfficientCopyingInstantiator<SettableValue<?>, CV> {
-			private final ModelType<? extends ObservableCollection<?>> theTargetModelType;
+			private final ModelInstanceType<? extends ObservableCollection<?>, CV> theTargetModelType;
+			private final boolean isNonObservable;
+			private final boolean isArray;
 			private final ModelValueInstantiator<SettableValue<Equivalence<? super T>>> theEquivalence;
 			private final ModelValueInstantiator<Comparator<? super T>> theSorting;
 
-			FlattenedCollectionValueInstantiator(ModelType<? extends ObservableCollection<?>> targetModelType,
+			FlattenedCollectionValueInstantiator(ModelInstanceType<? extends ObservableCollection<?>, CV> targetModelType,
+				boolean nonObservable, boolean array,
 				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
 				ModelValueInstantiator<Comparator<? super T>> sorting) {
 				theTargetModelType = targetModelType;
+				isNonObservable = nonObservable;
+				isArray = array;
 				theEquivalence = equivalence;
 				theSorting = sorting;
 			}
@@ -1357,14 +1447,25 @@ public class ObservableValueTransformations {
 					equivalence = Equivalence.DEFAULT;
 				Comparator<? super T> sorting = theSorting == null ? null : theSorting.get(models);
 
-				if (theTargetModelType == ModelTypes.Collection)
-					return (CV) new FlattenedCollection<>((SettableValue<? extends ObservableCollection<? extends T>>) source, equivalence);
-				else if (theTargetModelType == ModelTypes.Set)
+				if (theTargetModelType.getModelType() == ModelTypes.Collection) {
+					if (isNonObservable)
+						return (CV) new SimpleCollectionBackedObservable<>(ObservableCollection.<T> build().build(),
+							(SettableValue<? extends Collection<T>>) source);
+					else if (isArray) {
+						T[] emptyArray = (T[]) Array.newInstance(TypeTokens.getRawType(theTargetModelType.getType(0)), 0);
+						SettableValue<List<T>> listObservable = ((SettableValue<T[]>) source).<List<T>> transformReversible(tx -> tx//
+							.map(a -> a == null ? Collections.emptyList() : Arrays.asList(a))//
+							.withReverse(list -> list.toArray(emptyArray)));
+						return (CV) new SimpleCollectionBackedObservable<>(ObservableCollection.<T> build().build(), listObservable);
+					} else
+						return (CV) new FlattenedCollection<>((SettableValue<? extends ObservableCollection<? extends T>>) source,
+							equivalence);
+				} else if (theTargetModelType.getModelType() == ModelTypes.Set)
 					return (CV) new FlattenedSet<>((SettableValue<? extends ObservableSet<? extends T>>) source, equivalence);
-				else if (theTargetModelType == ModelTypes.SortedCollection)
+				else if (theTargetModelType.getModelType() == ModelTypes.SortedCollection)
 					return (CV) new FlattenedSortedCollection<>((SettableValue<? extends ObservableSortedCollection<? extends T>>) source,
 						sorting);
-				else if (theTargetModelType == ModelTypes.SortedSet)
+				else if (theTargetModelType.getModelType() == ModelTypes.SortedSet)
 					return (CV) new FlattenedSortedSet<>((SettableValue<? extends ObservableSortedSet<? extends T>>) source, sorting);
 				else
 					throw new IllegalStateException("Unrecognized collection type: " + theTargetModelType);

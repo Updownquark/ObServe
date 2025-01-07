@@ -14,6 +14,14 @@ public class DbugToken {
 		return thePath;
 	}
 
+	public DbugToken replaceLast(String last) {
+		if (thePath.size() == 1)
+			return new DbugToken(BetterList.of(last));
+		String[] path = thePath.toArray(new String[thePath.size()]);
+		path[path.length - 1] = last;
+		return new DbugToken(BetterList.of(path));
+	}
+
 	@Override
 	public int hashCode() {
 		return thePath.hashCode();

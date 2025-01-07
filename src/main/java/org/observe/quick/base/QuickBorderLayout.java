@@ -1,11 +1,16 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -39,7 +44,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		 * @param type The Qonfig type of this add-on
 		 * @param element The container widget whose contents to manage
 		 */
-		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
@@ -49,8 +54,28 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
-			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
+		public void postUpdate(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
+			// Do this in post so the children are present
+			super.postUpdate(session, element);
+			boolean hasCenter = false;
+			for (QuickWidget.Def<?> child : element
+				.as((Class<QuickContainer.Def<?, ?>>) (Class<?>) QuickContainer.Def.class, session.reporting().getPosition())
+				.getContents()) {
+				Child.Def blChild = child.getAddOn(Child.Def.class);
+				if (blChild.getRegion() == Region.Center) {
+					if (hasCenter) {
+						child.reporting()
+						.at(child.getElement().getAttributes().get(blChild.getType().getAttribute("region").getDeclared()).position)
+						.error("Only one child in a container with a " + BORDER_LAYOUT + " can have region=center");
+					} else
+						hasCenter = true;
+				}
+			}
+		}
+
+		@Override
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
+			return new Interpreted(this, element);
 		}
 	}
 
@@ -60,7 +85,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+		public Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -80,13 +105,13 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickBorderLayout create(QuickWidget element) {
+		public QuickBorderLayout create(ExElement element) {
 			return new QuickBorderLayout(element);
 		}
 	}
 
 	/** @param element The container whose contents to manage */
-	protected QuickBorderLayout(QuickWidget element) {
+	protected QuickBorderLayout(ExElement element) {
 		super(element);
 	}
 
@@ -129,8 +154,13 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			 * @param type The Qonfig type of this add-on
 			 * @param element The widget in the {@link QuickBorderLayout}-managed container
 			 */
-			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
+			public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 				super(type, element);
+			}
+
+			@Override
+			public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+				return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
 			}
 
 			/** @return The region for the content widget to occupy in the container */
@@ -166,8 +196,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<?> element) {
-				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
+			public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
+				return new Interpreted(this, element);
 			}
 		}
 
@@ -177,7 +207,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			 * @param definition The definition to interpret
 			 * @param element The widget in the {@link QuickBorderLayout}-maaged container
 			 */
-			protected Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 				super(definition, element);
 			}
 
@@ -192,7 +222,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Child create(QuickWidget element) {
+			public Child create(ExElement element) {
 				return new Child(element);
 			}
 		}
@@ -200,7 +230,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		private Region theRegion;
 
 		/** @param element The widget in the {@link QuickBorderLayout}-managed container */
-		protected Child(QuickWidget element) {
+		protected Child(ExElement element) {
 			super(element);
 		}
 
@@ -215,8 +245,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<? extends QuickWidget, ?> interpreted, QuickWidget element)
-			throws ModelInstantiationException {
+		public void update(ExAddOn.Interpreted<? super QuickWidget, ?> interpreted, ExElement element) throws ModelInstantiationException {
 			super.update(interpreted, element);
 			Child.Interpreted myInterpreted = (Child.Interpreted) interpreted;
 			theRegion = myInterpreted.getDefinition().getRegion();

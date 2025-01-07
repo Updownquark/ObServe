@@ -32,6 +32,8 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.QuickStyled;
+import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.qommons.Transaction;
@@ -209,7 +211,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			protected QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+			public QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
 				return new QuickWidgetStyle.Def.Default(parentStyle, this, style);
 			}
 		}
@@ -375,7 +377,6 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	QuickBorder getBorder();
 
 	/** @return The tool tip to display when the user hovers over this widget */
-
 	SettableValue<String> getTooltip();
 
 	/** @return The value determining when this widget is to be visible */
@@ -637,7 +638,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				 */
 				public Default(QuickInstanceStyle.Def parent, QuickWidget.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "widget");
 					theColor = addApplicableAttribute(typeStyle.getAttribute("color"));
 					theMouseCursor = addApplicableAttribute(typeStyle.getAttribute("mouse-cursor"));
@@ -665,7 +666,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		/** Interpretation of a widget style */
 		public interface Interpreted extends QuickTextStyle.Interpreted, QuickBackgroundStyle.Interpreted {
 			@Override
-			QuickWidgetStyle create(QuickStyledElement styledElement);
+			QuickWidgetStyle create(QuickStyled styled);
 
 			/** Default {@link QuickWidgetStyle} interpretation implementation */
 			public class Default extends QuickTextStyle.Interpreted.Abstract implements QuickWidgetStyle.Interpreted {
@@ -708,7 +709,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				}
 
 				@Override
-				public QuickWidgetStyle create(QuickStyledElement styledElement) {
+				public QuickWidgetStyle create(QuickStyled styled) {
 					return new QuickWidgetStyle.Default();
 				}
 			}
@@ -732,9 +733,9 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement)
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
 				throws ModelInstantiationException {
-				super.update(interpreted, styledElement);
+				super.update(interpreted, styled);
 
 				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;
 
@@ -746,8 +747,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			public Default copy(QuickStyledElement styledElement) {
-				Default copy = (Default) super.copy(styledElement);
+			public Default copy(QuickStyled styled) {
+				Default copy = (Default) super.copy(styled);
 
 				copy.theColor = copy.getApplicableAttribute(theColorAttr);
 				copy.theMouseCursor = copy.getApplicableAttribute(theMouseCursorAttr);

@@ -36,7 +36,6 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.qommons.ArgumentParsing;
 import org.qommons.Causable;
@@ -194,7 +193,9 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theMap = map;
 		theSelectableValues = ObservableSortedSet.create(SelectableValue::compareTo);
 		theFilterText = SettableValue.<TableContentControl> build().build().withValue(TableContentControl.DEFAULT, null);
-		theIncludedValues = theSelectableValues.flow().filter(sv -> sv.isIncluded() ? null : "Not Included").unmodifiable()
+		theIncludedValues = theSelectableValues.flow()//
+			.filter(sv -> sv.isIncluded() ? null : "Not Included")//
+			.unmodifiable()//
 			.collectActive(until);
 		theItemName = itemName == null ? "item" : itemName;
 		isIncludedByDefault = includedByDefault;
@@ -874,49 +875,49 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			.onEdt().build();
 		EventQueue.invokeLater(() -> {
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("A",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("A");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("A", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("B",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("B");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("B", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("C",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("C");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("C", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 150, 550));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("D",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("D");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("D", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("E",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("E");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("E", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("F",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("F");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.getSource().put("F", v)).asText(Format.TEXT).withRowUpdate(true);
 				}).withWidths(50, 100, 150));
 			columns.add(new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("G",
-				TypeTokens.get().STRING, map -> {
+				String.class, map -> {
 					return map.getSource().get("G");
 				})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
@@ -982,7 +983,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				.<Map<String, String>, Map<String, String>> build(rows, srcTable -> srcTable.withColumns(columns),
 					destTable -> destTable.withColumns(ObservableCollection.of(
 						new CategoryRenderStrategy<SelectableValue<Map<String, String>, Map<String, String>>, String>("Value",
-							TypeTokens.get().STRING, m -> m.getSource().toString()).withWidths(100, 200, 300))),
+							String.class, m -> m.getSource().toString()).withWidths(100, 200, 300))),
 					v -> v)
 				.build();
 			JFrame w = ObservableSwingUtils.buildUI()//

@@ -5,12 +5,14 @@ import java.text.ParseException;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -34,6 +36,7 @@ import org.observe.config.ObservableConfigFormat.MapEntry;
 import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -58,7 +61,7 @@ import org.qommons.tree.BetterTreeMap;
 import com.google.common.reflect.TypeToken;
 
 /** A super class for observable structures backed by an {@link ObservableConfig} */
-public abstract class ObservableConfigTransform implements CausalLock, Stamped, Eventable {
+public abstract class ObservableConfigTransform extends AbstractIdentifiable implements CausalLock, Stamped, Eventable {
 	private final CausalLock theLock;
 	private final ObservableConfigParseSession theSession;
 	private final ObservableValue<? extends ObservableConfig> theParent;
@@ -77,7 +80,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 	 * @param ceCreate Creates the parent config if it does not exist
 	 * @param until The until observable to release resources and listeners for config-backed structures
 	 */
-	public ObservableConfigTransform(CausalLock lock, ObservableConfigParseSession session,
+	protected ObservableConfigTransform(CausalLock lock, ObservableConfigParseSession session,
 		ObservableValue<? extends ObservableConfig> parent, Consumer<Boolean> ceCreate, Observable<?> until) {
 		theLock = lock;
 		theSession = session;
@@ -224,6 +227,15 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		return theLock.getCoreId();
 	}
 
+	/** @return Changes sources affecting this transform */
+	protected Observable.CoreChangeSources getChangeSources() {
+		ObservableConfig parent = theParent.get();
+		if (parent == null)
+			return theParent.noInitChanges().getChangeSources();
+		else
+			return parent.getChangeSources().union(theParent.noInitChanges().getChangeSources());
+	}
+
 	@Override
 	public long getStamp() {
 		return theStamp;
@@ -255,9 +267,6 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		private final ValueHolder<E> theModifyingValue;
 		private boolean isSetting;
 
-		private Object theIdentity;
-		private Object theChangesIdentity;
-
 		ObservableConfigValue(CausalLock lock, ObservableConfigParseSession session, ObservableValue<? extends ObservableConfig> parent,
 			Consumer<Boolean> ceCreate, Observable<?> until, ObservableConfigFormat<E> format, boolean listen, Observable<?> findRefs) {
 			super(lock, session, parent, ceCreate, until);
@@ -275,10 +284,14 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(getParent().getIdentity(), "value", theFormat);
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), "value", theFormat);
+		}
+
+		@Override
+		public ObservableConfigValue<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -291,9 +304,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			class OCVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<E>> {
 				@Override
 				protected Object createIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
-					return theChangesIdentity;
+					return Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
 				}
 
 				@Override
@@ -332,6 +343,11 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 				}
 
 				@Override
+				public CoreChangeSources getChangeSources() {
+					return ObservableConfigValue.this.getChangeSources();
+				}
+
+				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 					return theListeners.add(observer, true)::run;
 				}
@@ -340,15 +356,20 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		@Override
-		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public CoreChangeSources getChangeSources() {
+			return super.getChangeSources();
+		}
+
+		@Override
+		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			Object[] oldValue = new Object[1];
-			try (Transaction t = lock(true, cause)) {
+			try (Transaction t = lock(true, null)) {
 				isSetting = true;
 				boolean[] changed = new boolean[1];
 				getParent(true, false, parent -> {
-					try (Transaction parentT = parent.lock(true, cause)) {
+					try (Transaction parentT = parent.lock(true, null)) {
 						E oldV = theValue;
 						oldValue[0] = oldV;
 						changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, getUntil());
@@ -357,7 +378,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 					}
 				});
 				if (!changed[0]) // If there was no change by the format, we need to fire an event ourselves
-					fire(createChangeEvent((E) oldValue[0], value, cause));
+					fire(createChangeEvent((E) oldValue[0], value, getCurrentCauses()));
 			} finally {
 				isSetting = false;
 			}
@@ -365,7 +386,7 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		@Override
-		public <V extends E> String isAcceptable(V value) {
+		public String isAcceptable(E value) {
 			if (!isConnected().get())
 				return "Not connected";
 			return null;
@@ -463,6 +484,17 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			theCollection = createCollection();
 
 			init(until, listen, findRefs);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getParent().getIdentity(), theChildName, theFormat);
+		}
+
+		@Override
+		public ObservableConfigBackedCollection<E> alias(String alias) {
+			super.alias(alias);
+			return this;
 		}
 
 		@Override
@@ -773,14 +805,16 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			}
 		}
 
-		protected abstract class OCBCCollection implements ObservableCollection<E> {
-			private Object theIdentity;
+		protected abstract class OCBCCollection extends AbstractIdentifiable implements ObservableCollection<E> {
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(getParent().getIdentity(), "values", theFormat, theChildName);
+			}
 
 			@Override
-			public Object getIdentity() {
-				if (theIdentity == null)
-					theIdentity = Identifiable.wrap(getParent().getIdentity(), "values", theFormat, theChildName);
-				return theIdentity;
+			public OCBCCollection alias(String alias) {
+				super.alias(alias);
+				return this;
 			}
 
 			@Override
@@ -821,6 +855,11 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 			@Override
 			public CoreId getCoreId() {
 				return ObservableConfigBackedCollection.this.getCoreId();
+			}
+
+			@Override
+			public CoreChangeSources getChangeSources() {
+				return ObservableConfigBackedCollection.this.getChangeSources();
 			}
 
 			@Override
@@ -1259,6 +1298,17 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		@Override
+		public ObservableConfigMap<K, V> alias(String alias) {
+			theWrapped.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return theWrapped.getAliases();
+		}
+
+		@Override
 		public Equivalence<? super V> equivalence() {
 			return theWrapped.equivalence();
 		}
@@ -1266,6 +1316,11 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		@Override
 		public boolean isEventing() {
 			return theCollection.isEventing();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theCollection.getChangeSources();
 		}
 
 		@Override
@@ -1378,6 +1433,17 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		}
 
 		@Override
+		public ObservableConfigMultiMap<K, V> alias(String alias) {
+			theWrapped.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Set<String> getAliases() {
+			return theWrapped.getAliases();
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theCollection.getBacking().getThreadConstraint();
 		}
@@ -1410,6 +1476,11 @@ public abstract class ObservableConfigTransform implements CausalLock, Stamped, 
 		@Override
 		public CoreId getCoreId() {
 			return theCollection.getBacking().getCoreId();
+		}
+
+		@Override
+		public CoreChangeSources getChangeSources() {
+			return theCollection.getBacking().getChangeSources();
 		}
 
 		@Override

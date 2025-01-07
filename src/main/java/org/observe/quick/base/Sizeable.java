@@ -1,5 +1,7 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -20,6 +22,7 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigExpression;
@@ -62,6 +65,11 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		protected Def(Ternian vertical, QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 			isVertical = vertical;
+		}
+
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return Collections.singleton((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExModelAugmentation.Def.class);
 		}
 
 		/**
@@ -164,7 +172,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted.Vertical interpret(ExElement.Interpreted<?> element) {
+			public <E2 extends ExElement> Interpreted.Vertical interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted.Vertical(this, element);
 			}
 		}
@@ -213,7 +221,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted.Horizontal interpret(ExElement.Interpreted<?> element) {
+			public <E2 extends ExElement> Interpreted.Horizontal interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted.Horizontal(this, element);
 			}
 		}
@@ -229,7 +237,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted.Generic interpret(ExElement.Interpreted<?> element) {
+			public <E2 extends ExElement> Interpreted.Generic interpret(ExElement.Interpreted<E2> element) {
 				return new Interpreted.Generic(this, element);
 			}
 		}
@@ -414,7 +422,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
 		theSizeInstantiator = myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate();
@@ -575,7 +583,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0, ExceptionHandler.thrower2())//
 							.map(ModelTypes.Value.forType(QuickSize.class), mvi -> mvi
 								.map(v -> v.transformReversible(
-								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels))));
+									tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels))));
 					} catch (TypeConversionException e2) {
 						if (tce.get1() != null)
 							throw new ExpressoInterpretationException(e2.getMessage(),

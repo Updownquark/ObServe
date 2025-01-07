@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -23,8 +24,10 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
+import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -69,8 +72,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private CompiledExpression thePathMultiSelection;
 		private CompiledExpression theNodeSelection;
 		private CompiledExpression theNodeMultiSelection;
-		private final List<ValueAction.Def<?>> theActions;
+		private final List<ExElement.Def<?>> theActionsAndOptions;
 		private boolean isRootVisible;
+		private final List<QuickDragging.TransferSource.Def> theTransferSources;
+		private final List<QuickDragging.TransferAccept.Def> theTransferAccepters;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -78,7 +83,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
-			theActions = new ArrayList<>();
+			theActionsAndOptions = new ArrayList<>();
+			theTransferSources = new ArrayList<>();
+			theTransferAccepters = new ArrayList<>();
 		}
 
 		/** @return The data model for the tree */
@@ -110,13 +117,11 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theSelectedVariable;
 		}
 
-		@QonfigAttributeGetter(asType = MULTI_VALUE_WIDGET, value = "selection")
 		@Override
 		public CompiledExpression getSelection() {
 			return thePathSelection;
 		}
 
-		@QonfigAttributeGetter(asType = MULTI_VALUE_WIDGET, value = "multi-selection")
 		@Override
 		public CompiledExpression getMultiSelection() {
 			return thePathMultiSelection;
@@ -134,16 +139,40 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theNodeMultiSelection;
 		}
 
-		/** @return The set of actions that may be executed against the values of nodes in the tree */
+		/**
+		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+		 *         their specification in the file
+		 */
+		public List<ExElement.Def<?>> getActionsAndOptions() {
+			return Collections.unmodifiableList(theActionsAndOptions);
+		}
+
+		/** @return Actions that can be executed against nodes in the tree */
 		@QonfigChildGetter(asType = TREE, value = "action")
 		public List<ValueAction.Def<?>> getActions() {
-			return Collections.unmodifiableList(theActions);
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof ValueAction.Def, aao -> (ValueAction.Def<?>) aao);
+		}
+
+		/** @return Widget options to place in a bar above or below the table along with button actions */
+		@QonfigChildGetter(asType = TREE, value = "option")
+		public List<QuickWidget.Def<?>> getOptions() {
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof QuickWidget.Def, aao -> (QuickWidget.Def<?>) aao);
 		}
 
 		/** @return Whether the root node should be visible to the user */
 		@QonfigAttributeGetter(asType = TREE, value = "root-visible")
 		public boolean isRootVisible() {
 			return isRootVisible;
+		}
+
+		@Override
+		public List<QuickDragging.TransferSource.Def> getTransferSources() {
+			return Collections.unmodifiableList(theTransferSources);
+		}
+
+		@Override
+		public List<QuickDragging.TransferAccept.Def> getTransferAccepters() {
+			return Collections.unmodifiableList(theTransferAccepters);
 		}
 
 		@Override
@@ -155,7 +184,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			String nodeName = session.getAttributeText("active-node-name");
 			theNodeVariable = elModels.getElementValueModelId(nodeName);
 			theModel = syncChild(TreeModel.Def.class, theModel, session, TreeModel.TREE_MODEL,
-				(m, mEnv) -> m.update(mEnv, valueName, nodeName));
+				(m, mEnv) -> m.update(mEnv));
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theTreeColumn = syncChild(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
 			thePathSelection = getAttributeExpression("selection", session);
@@ -166,7 +195,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
 			isRootVisible = session.getAttribute("root-visible", boolean.class);
 
-			syncChildren(ValueAction.Def.class, theActions, session.forChildren("action"));
+			syncChildren(ExElement.Def.class, theActionsAndOptions, session.forChildren("action", "option"));
+			syncChildren(QuickDragging.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
+			syncChildren(QuickDragging.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
 		}
 
 		@Override
@@ -190,7 +221,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<BetterList<N>>> thePathMultiSelection;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theNodeSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> theNodeMultiSelection;
-		private final List<ValueAction.Interpreted<BetterList<N>, ?>> theActions;
+		private final List<ExElement.Interpreted<?>> theActionsAndOptions;
+		private final List<QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>> theTransferSources;
+		private final List<QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>> theTransferAccepters;
 
 		/**
 		 * @param definition The definition to interpret
@@ -199,7 +232,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		protected Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			persistModelInstances(true);
-			theActions = new ArrayList<>();
+			theActionsAndOptions = new ArrayList<>();
+			theTransferSources = new ArrayList<>();
+			theTransferAccepters = new ArrayList<>();
 		}
 
 		@Override
@@ -260,9 +295,34 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theTreeColumn;
 		}
 
-		/** @return The set of actions that may be executed against the values of nodes in the tree */
+		/**
+		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+		 *         their specification in the file
+		 */
+		public List<ExElement.Interpreted<?>> getActionsAndOptions() {
+			return Collections.unmodifiableList(theActionsAndOptions);
+		}
+
+		/** @return Actions that can be executed against nodes in the tree */
 		public List<ValueAction.Interpreted<BetterList<N>, ?>> getActions() {
-			return Collections.unmodifiableList(theActions);
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof ValueAction.Interpreted,
+				aao -> (ValueAction.Interpreted<BetterList<N>, ?>) aao);
+		}
+
+		/** @return Widget options to place in a bar above or below the table along with button actions */
+		public List<QuickWidget.Interpreted<?>> getOptions() {
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof QuickWidget.Interpreted,
+				aao -> (QuickWidget.Interpreted<?>) aao);
+		}
+
+		@Override
+		public List<QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>> getTransferSources() {
+			return Collections.unmodifiableList(theTransferSources);
+		}
+
+		@Override
+		public List<QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>> getTransferAccepters() {
+			return Collections.unmodifiableList(theTransferAccepters);
 		}
 
 		@Override
@@ -289,9 +349,25 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeSelection = interpret(getDefinition().getNodeSelection(), ModelTypes.Value.forType(nodeType));
 			theNodeMultiSelection = interpret(getDefinition().getNodeMultiSelection(), ModelTypes.Collection.forType(nodeType));
 
-			syncChildren(getDefinition().getActions(), theActions,
-				def -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType()),
-				ValueAction.Interpreted::updateAction);
+			syncChildren(getDefinition().getActionsAndOptions(), theActionsAndOptions, def -> {
+				if (def instanceof ValueAction.Def)
+					return (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType());
+				else if (def instanceof QuickWidget.Def)
+					return ((QuickWidget.Def<?>) def).interpret(this);
+				else
+					throw new IllegalStateException("Whats this? " + def.getClass().getName());
+			}, (interp, env2) -> {
+				if (interp instanceof ValueAction.Interpreted)
+					((ValueAction.Interpreted<BetterList<N>, ?>) interp).updateAction(env2);
+				else
+					((QuickWidget.Interpreted<?>) interp).updateElement(env2);
+			});
+			syncChildren(getDefinition().getTransferSources(), theTransferSources,
+				def -> (QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>) def.interpret(this),
+				(interp, env2) -> interp.updateTransferSource(env2, getNodeType()));
+			syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
+				def -> (QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>) def.interpret(this),
+				(interp, env2) -> interp.updateTransferAccepter(env2, getNodeType()));
 		}
 
 		@Override
@@ -318,7 +394,14 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	private SettableValue<SettableValue<BetterList<N>>> theActivePath;
 	private SettableValue<SettableValue<Boolean>> isSelected;
 
+	private ObservableCollection<ExElement> theActionsAndOptions;
 	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
+	private ObservableCollection<QuickWidget> theOptions;
+
+	private SettableValue<BetterList<N>> theTransferActiveValue;
+	private SettableValue<Boolean> theTransferSelectedValue;
+	private List<QuickDragging.TransferSource<BetterList<N>, ?>> theTransferSources;
+	private List<QuickDragging.TransferAccept<BetterList<N>, ?>> theTransderAccepters;
 
 	/** @param id The element ID for this widget */
 	protected QuickTree(Object id) {
@@ -329,7 +412,11 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		theNodeSelection = SettableValue.<SettableValue<N>> build().build();
 		theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
 		theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
-		theActions = ObservableCollection.<ValueAction<BetterList<N>>> build().build();
+		theActionsAndOptions = ObservableCollection.create();
+		theTransferActiveValue = SettableValue.create(BetterList.empty());
+		theTransferSelectedValue = SettableValue.create();
+		theTransferSources = new ArrayList<>();
+		theTransderAccepters = new ArrayList<>();
 	}
 
 	/** @return The data model for the tree */
@@ -383,9 +470,42 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return isRootVisible;
 	}
 
-	/** @return The set of actions that may be executed against the values of nodes in the tree */
+	/**
+	 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+	 *         their specification in the file
+	 */
+	public ObservableCollection<ExElement> getActionsAndOptions() {
+		return theActionsAndOptions.flow().unmodifiable(false).collectPassive();
+	}
+
+	/** @return Actions that can be executed against nodes in the tree */
 	public ObservableCollection<ValueAction<BetterList<N>>> getActions() {
-		return theActions.flow().unmodifiable(false).collect();
+		return theActions;
+	}
+
+	/** @return Widget options to place in a bar above or below the table along with button actions */
+	public ObservableCollection<QuickWidget> getOptions() {
+		return theOptions;
+	}
+
+	/** @return The holder in which to put the path to the node the user is attempting to drag data onto */
+	public SettableValue<BetterList<N>> getTransferActiveValue() {
+		return theTransferActiveValue;
+	}
+
+	/** @return The holder in which to put the whether path to the node the user is attempting to drag data onto is selected */
+	public SettableValue<Boolean> getTransferSelectedValue() {
+		return theTransferSelectedValue;
+	}
+
+	@Override
+	public List<QuickDragging.TransferSource<BetterList<N>, ?>> getTransferSources() {
+		return Collections.unmodifiableList(theTransferSources);
+	}
+
+	@Override
+	public List<QuickDragging.TransferAccept<BetterList<N>, ?>> getTransferAccepters() {
+		return Collections.unmodifiableList(theTransderAccepters);
 	}
 
 	@Override
@@ -421,14 +541,23 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		if (theTreeColumn != null)
 			theTreeColumn.update(myInterpreted.getTreeColumn(), this);
 
-		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
+		CollectionUtils.synchronize(theActionsAndOptions, myInterpreted.getActionsAndOptions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity())//
-		.<ModelInstantiationException> simpleX(action -> action.create())//
+		.<ModelInstantiationException> simpleX(aao -> {
+			if (aao instanceof ValueAction.Interpreted)
+				return ((ValueAction.Interpreted<BetterList<N>, ?>) aao).create();
+			else if (aao instanceof QuickWidget.Interpreted)
+				return ((QuickWidget.Interpreted<?>) aao).create();
+			else
+				throw new IllegalStateException("What is this? " + aao.getClass().getName());
+		})//
 		.rightOrder()//
 		.onLeftX(element -> element.getLeftValue().destroy())//
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
+		syncChildren(myInterpreted.getTransferSources(), theTransferSources, ts -> ts.create(), QuickDragging.TransferSource::update);
+		syncChildren(myInterpreted.getTransferAccepters(), theTransderAccepters, ts -> ts.create(), QuickDragging.TransferAccept::update);
 	}
 
 	@Override
@@ -445,8 +574,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeMultiSelectionInstantiator.instantiate();
 		if (theTreeColumn != null)
 			theTreeColumn.instantiated();
-		for (ValueAction<BetterList<N>> action : theActions)
-			action.instantiated();
+		for (ExElement aao : theActionsAndOptions)
+			aao.instantiated();
+		for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+			ts.instantiated();
+		for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+			ta.instantiated();
 	}
 
 	@Override
@@ -464,8 +597,29 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		if (theTreeColumn != null)
 			theTreeColumn.instantiate(myModels);
 
-		for (ValueAction<BetterList<N>> action : theActions)
-			action.instantiate(myModels);
+		if (theActions == null) {
+			theActions = theActionsAndOptions.flow()//
+				.filter((Class<ValueAction<BetterList<N>>>) (Class<?>) ValueAction.class)//
+				.unmodifiable(false)//
+				.collectActive(Observable.or(myModels.getUntil(), onDestroy()));
+			theOptions = theActionsAndOptions.flow()//
+				.filter(QuickWidget.class)//
+				.unmodifiable(false)//
+				.collectActive(Observable.or(myModels.getUntil(), onDestroy()));
+		}
+
+		for (ExElement aao : theActionsAndOptions)
+			aao.instantiate(myModels);
+		if (!theTransferSources.isEmpty() || !theTransderAccepters.isEmpty()) {
+			ModelSetInstance transferCopy = QuickCoreInterpretation.copyModels(myModels, theActiveValueVariable, myModels.getUntil())
+				.build();
+			ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, transferCopy, theTransferActiveValue);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, transferCopy, theTransferSelectedValue);
+			for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+				ts.instantiate(transferCopy);
+			for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+				ta.instantiate(transferCopy);
+		}
 	}
 
 	@Override
@@ -486,10 +640,18 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		copy.theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
 		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
-		copy.theActions = ObservableCollection.<ValueAction<BetterList<N>>> build().build();
+		copy.theActionsAndOptions = ObservableCollection.create();
 
-		for (ValueAction<BetterList<N>> action : theActions)
-			copy.theActions.add(action.copy(copy));
+		for (ExElement aao : theActionsAndOptions)
+			copy.theActionsAndOptions.add(aao.copy(copy));
+		copy.theTransferActiveValue = SettableValue.create(BetterList.empty());
+		copy.theTransferSelectedValue = SettableValue.create();
+		copy.theTransferSources = new ArrayList<>();
+		for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+			copy.theTransferSources.add(ts.copy(copy));
+		copy.theTransderAccepters = new ArrayList<>();
+		for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+			copy.theTransderAccepters.add(ta.copy(copy));
 
 		return copy;
 	}

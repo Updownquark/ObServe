@@ -315,7 +315,14 @@ public interface ObservableExpression {
 	 * @throws ExpressoCompilationException If the model type could not be evaluated
 	 */
 	default ModelType<?> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
-		return getModelType(env, 0);
+		try {
+			return getModelType(env, 0);
+		} catch (StackOverflowError e) {
+			throw new ExpressoCompilationException("Error compiling models, possibly due to a reference cycle",
+				env.reporting().getPosition(), getExpressionLength(), e);
+		} catch (RuntimeException | Error e) {
+			throw new ExpressoCompilationException("Error compiling models", env.reporting().getPosition(), getExpressionLength(), e);
+		}
 	}
 
 	/**
@@ -346,10 +353,10 @@ public interface ObservableExpression {
 		InterpretedExpressoEnv env, int expressionOffset,
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, TX> exHandler)
 			throws ExpressoInterpretationException, EX, TX {
-		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset, exHandler);
+		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset, exHandler.use());
 		if (value == null)
 			return null;
-		InterpretedValueSynth<M, MV> cast = value.as(type, env, exHandler.twoOnly());
+		InterpretedValueSynth<M, MV> cast = value.as(type, env, exHandler.twoOnly().use());
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
@@ -382,6 +389,7 @@ public interface ObservableExpression {
 	class LiteralExpression<T> implements ObservableExpression {
 		private final String theText;
 		private final T theValue;
+		private String theLocation;
 
 		/**
 		 * @param text The parsed expression
@@ -425,20 +433,27 @@ public interface ObservableExpression {
 		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 				throws EX {
-			if (type.getModelType() != ModelTypes.Value) {
+			theLocation = env.reporting().getFileLocation().getPosition(0).toShortString();
+			if (theValue == null && type.getModelType() == ModelTypes.Action)
+				return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.literal(ModelTypes.Action.instance(), ObservableAction.DO_NOTHING, theText), this);
+			else if (type.getModelType() != ModelTypes.Value) {
 				if (theValue == null)
 					return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 						InterpretedValueSynth.literal(type, null, "null"), this);
 				else {
-					exHandler.handle1(new ExpressoInterpretationException(theText, env.reporting().getPosition(), getExpressionLength()));
+					exHandler
+					.handle1(() -> new ExpressoInterpretationException(theText + " cannot be interpreted as a " + type.getModelType(),
+						env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 			}
 			if (theValue == null) {
 				if (type.getType(0).isPrimitive()) {
 					exHandler
-					.handle1(new ExpressoInterpretationException("Cannot assign null to a primitive type (" + type.getType(0) + ")",
-						env.reporting().getPosition(), getExpressionLength()));
+					.handle1(
+						() -> new ExpressoInterpretationException("Cannot assign null to a primitive type (" + type.getType(0) + ")",
+							env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 				MV value = (MV) createValue(type.getType(0), null);
@@ -470,7 +485,7 @@ public interface ObservableExpression {
 
 		SettableValue<?> createValue(TypeToken<?> type, Object value) {
 			return SettableValue.asSettable(ObservableValue.of(value), //
-				__ -> "Literal value '" + theText + "'");
+				__ -> theLocation + ": Literal value '" + theText + "'");
 		}
 
 		@Override

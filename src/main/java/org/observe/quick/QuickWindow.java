@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
@@ -54,6 +56,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
 		private CompiledExpression theHeight;
+		private CompiledExpression theRePack;
 		private CompiledExpression theWindowIcon;
 		private CloseAction theCloseAction;
 		private final List<ModelComponentId> theConfigVariables;
@@ -91,6 +94,12 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			return theHeight;
 		}
 
+		/** @return An observable that will cause the window to resize and reposition itself to more ideally display its content */
+		@QonfigAttributeGetter("re-pack")
+		public CompiledExpression getRePack() {
+			return theRePack;
+		}
+
 		/** @return The expression defining the icon of the window */
 		@QonfigAttributeGetter("window-icon")
 		public CompiledExpression getWindowIcon() {
@@ -114,6 +123,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			theY = element.getAttributeExpression("y", session);
 			theWidth = element.getAttributeExpression("width", session);
 			theHeight = element.getAttributeExpression("height", session);
+			theRePack = element.getAttributeExpression("re-pack", session);
 			theWindowIcon = element.getAttributeExpression("window-icon", session);
 			String closeAction = session.getAttributeText("close-action");
 			switch (closeAction) {
@@ -152,7 +162,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, element);
 		}
 	}
@@ -163,6 +173,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theHeight;
+		private InterpretedValueSynth<Observable<?>, Observable<?>> theRePack;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> theWindowIcon;
 
 		/**
@@ -198,6 +209,11 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			return theHeight;
 		}
 
+		/** @return An observable that will cause the window to resize and reposition itself to more ideally display its content */
+		public InterpretedValueSynth<Observable<?>, Observable<?>> getRePack() {
+			return theRePack;
+		}
+
 		/** @return The expression defining the icon to display for the window */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getWindowIcon() {
 			return theWindowIcon;
@@ -210,6 +226,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			theY = getElement().interpret(getDefinition().getY(), ModelTypes.Value.INT);
 			theWidth = getElement().interpret(getDefinition().getWidth(), ModelTypes.Value.INT);
 			theHeight = getElement().interpret(getDefinition().getHeight(), ModelTypes.Value.INT);
+			theRePack = getElement().interpret(getDefinition().getRePack(), ModelTypes.Event.any());
 			theWindowIcon = getDefinition().getWindowIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(
 				getDefinition().getWindowIcon(), getElement(), getDefinition().getElement().getElement().getDocument().getLocation());
 		}
@@ -229,23 +246,26 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theHeightInstantiator;
+	private ModelValueInstantiator<Observable<?>> theRePackInstantiator;
 	private ModelValueInstantiator<SettableValue<Image>> theWindowIconInstantiator;
 	private CloseAction theCloseAction;
-	private final SettableValue<SettableValue<Integer>> theX;
+	private SettableValue<SettableValue<Integer>> theX;
 	private SettableValue<SettableValue<Integer>> theY;
 	private SettableValue<SettableValue<Integer>> theWidth;
 	private SettableValue<SettableValue<Integer>> theHeight;
+	private SettableValue<Observable<?>> theRePack;
 	private SettableValue<SettableValue<Image>> theWindowIcon;
 	private final List<ModelComponentId> theConfigVariables;
 
 	/** @param element The element that this add-on is added onto */
 	public QuickWindow(ExElement element) {
 		super(element);
-		theX = SettableValue.<SettableValue<Integer>> build().build();
-		theY = SettableValue.<SettableValue<Integer>> build().build();
-		theWidth = SettableValue.<SettableValue<Integer>> build().build();
-		theHeight = SettableValue.<SettableValue<Integer>> build().build();
-		theWindowIcon = SettableValue.<SettableValue<Image>> build().build();
+		theX = SettableValue.create();
+		theY = SettableValue.create();
+		theWidth = SettableValue.create();
+		theHeight = SettableValue.create();
+		theRePack = SettableValue.create();
+		theWindowIcon = SettableValue.create();
 		theConfigVariables = new ArrayList<>();
 	}
 
@@ -279,6 +299,11 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		return SettableValue.flatten(theHeight);
 	}
 
+	/** @return An observable that will cause the window to resize and reposition itself to more ideally display its content */
+	public Observable<?> getRePack() {
+		return ObservableValue.flattenObservableValue(theRePack);
+	}
+
 	/** @return The icon to display for the window */
 	public SettableValue<Image> getWindowIcon() {
 		return SettableValue.flatten(theWindowIcon);
@@ -301,7 +326,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();
@@ -309,6 +334,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		theYInstantiator = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate();
 		theWidthInstantiator = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate();
 		theHeightInstantiator = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate();
+		theRePackInstantiator = myInterpreted.getRePack() == null ? null : myInterpreted.getRePack().instantiate();
 		theWindowIconInstantiator = myInterpreted.getWindowIcon() == null ? null : myInterpreted.getWindowIcon().instantiate();
 		theConfigVariables.clear();
 		theConfigVariables.addAll(myInterpreted.getDefinition().getConfigVariables());
@@ -325,6 +351,8 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			theWidthInstantiator.instantiate();
 		if (theHeightInstantiator != null)
 			theHeightInstantiator.instantiate();
+		if (theRePackInstantiator != null)
+			theRePackInstantiator.instantiate();
 		if (theWindowIconInstantiator != null)
 			theWindowIconInstantiator.instantiate();
 		// If there is a <config> model in the environment (and we're the root window),
@@ -343,14 +371,29 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
 		super.instantiate(models);
 
-		theX.set(theXInstantiator == null ? defaultIntV() : theXInstantiator.get(models), null);
-		theY.set(theYInstantiator == null ? defaultIntV() : theYInstantiator.get(models), null);
-		theWidth.set(theWidthInstantiator == null ? defaultIntV() : theWidthInstantiator.get(models), null);
-		theHeight.set(theHeightInstantiator == null ? defaultIntV() : theHeightInstantiator.get(models), null);
-		theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models), null);
+		theX.set(theXInstantiator == null ? defaultIntV() : theXInstantiator.get(models));
+		theY.set(theYInstantiator == null ? defaultIntV() : theYInstantiator.get(models));
+		theWidth.set(theWidthInstantiator == null ? defaultIntV() : theWidthInstantiator.get(models));
+		theHeight.set(theHeightInstantiator == null ? defaultIntV() : theHeightInstantiator.get(models));
+		theRePack.set(theRePackInstantiator == null ? null : theRePackInstantiator.get(models));
+		theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models));
 	}
 
 	private static SettableValue<Integer> defaultIntV() {
 		return SettableValue.<Integer> build().withValue(-1).build();
+	}
+
+	@Override
+	public QuickWindow copy(ExElement element) {
+		QuickWindow copy = (QuickWindow) super.copy(element);
+
+		copy.theX = SettableValue.create();
+		copy.theY = SettableValue.create();
+		copy.theWidth = SettableValue.create();
+		copy.theHeight = SettableValue.create();
+		copy.theRePack = SettableValue.create();
+		copy.theWindowIcon = SettableValue.create();
+
+		return copy;
 	}
 }

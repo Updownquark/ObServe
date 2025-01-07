@@ -1,7 +1,11 @@
 package org.observe.quick;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.qommons.config.QonfigAddOn;
 
 /** Tag for a widget that is only used as a renderer, instead of being a first class child of its parent */
@@ -12,17 +16,17 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		 * @param type The Qonfig type of this add-on
 		 * @param element The element this add-on affects
 		 */
-		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
 		@Override
-		public QuickWidget.Def<?> getElement() {
-			return (QuickWidget.Def<?>) super.getElement();
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
 			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 		}
 	}
@@ -49,12 +53,12 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public QuickRenderer create(QuickWidget element) {
+		public QuickRenderer create(ExElement element) {
 			return new QuickRenderer(element);
 		}
 	}
 
-	QuickRenderer(QuickWidget element) {
+	QuickRenderer(ExElement element) {
 		super(element);
 	}
 

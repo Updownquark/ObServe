@@ -1,7 +1,17 @@
 package org.observe.expresso.qonfig;
 
-import java.util.*;
-import java.util.function.BiFunction;
+import java.util.AbstractSet;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -24,7 +34,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
-import org.observe.expresso.qonfig.ExElement.Def.Abstract.JoinedCollection;
+import org.qommons.BreakpointHere;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
 import org.qommons.StringUtils;
@@ -34,12 +44,28 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
-import org.qommons.config.*;
+import org.qommons.config.AbstractQIS;
+import org.qommons.config.PartialQonfigElement;
+import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElementDef;
+import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigMetadata;
+import org.qommons.config.QonfigPromiseDef;
+import org.qommons.config.QonfigToolkit;
+import org.qommons.config.QonfigValueDef;
+import org.qommons.config.QonfigValueType;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
+import org.qommons.ex.ExTriConsumer;
+import org.qommons.ex.ExTriFunction;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
@@ -51,9 +77,13 @@ public interface ExElement extends Identifiable {
 	public static class ElementIdentity {
 		private String theStringRep;
 
-		/** @param stringRep The new toString() for this identity */
-		public void setStringRepresentation(String stringRep) {
+		/**
+		 * @param stringRep The new toString() for this identity
+		 * @return This identity
+		 */
+		public ElementIdentity setStringRepresentation(String stringRep) {
 			theStringRep = stringRep;
+			return this;
 		}
 
 		@Override
@@ -80,11 +110,26 @@ public interface ExElement extends Identifiable {
 		/** @return Error reporting for this element */
 		ErrorReporting reporting();
 
+		/**
+		 * @param file The file that this element may belong to
+		 * @return The reporting for this element, in the given file if this element has a representation in the file
+		 */
+		ErrorReporting reporting(String file);
+
 		/** @return The expresso environment for this element */
 		CompiledExpressoEnv getExpressoEnv();
 
 		/** @param env The expresso environment for this element */
 		void setExpressoEnv(CompiledExpressoEnv env);
+
+		/**
+		 * @param <D> The element definition type to cast this element to
+		 * @param type The element definition type to cast this element to
+		 * @param errorPosition The file position for the error if it must be thrown
+		 * @return The representation of this element as the given type
+		 * @throws QonfigInterpretationException If this element has no such representation
+		 */
+		<D extends ExElement.Def<?>> D as(Class<D> type, LocatedFilePosition errorPosition) throws QonfigInterpretationException;
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -368,7 +413,7 @@ public interface ExElement extends Identifiable {
 		 *
 		 * @param <E> The type of the element that this definition is for
 		 */
-		public abstract class Abstract<E extends ExElement> implements Def<E> {
+		public abstract class Abstract<E extends ExElement> extends AbstractIdentifiable implements Def<E> {
 			private final ElementIdentity theId;
 			private ExElement.Def<?> theParent;
 			private final QonfigElementOrAddOn theQonfigType;
@@ -380,15 +425,14 @@ public interface ExElement extends Identifiable {
 			private ErrorReporting theReporting;
 
 			private QonfigPromise.Def<?> thePromise;
-			private ExtElementView theExternalView;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
 			 * @param qonfigType The Qonfig type of this element
 			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-				theId = new ElementIdentity();
-				theId.setStringRepresentation(qonfigType.getName());
+				theId = new ElementIdentity().setStringRepresentation(qonfigType.getName());
+				initIdentity(theId);
 				theParent = parent;
 				theQonfigType = qonfigType;
 				theAddOns = new ClassMap<>();
@@ -396,8 +440,8 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public Object getIdentity() {
-				return theId;
+			protected Object createIdentity() {
+				throw new IllegalStateException("Should have been initialized");
 			}
 
 			@Override
@@ -435,20 +479,32 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
+			public ErrorReporting reporting(String file) {
+				if (file == null || file.equals(theReporting.getPosition().getFileLocation()))
+					return theReporting;
+				else if (thePromise != null && file.equals(thePromise.reporting().getPosition().getFileLocation()))
+					return thePromise.reporting();
+				else
+					return theReporting;
+			}
+
+			@Override
+			public <D extends Def<?>> D as(Class<D> type, LocatedFilePosition errorPosition) throws QonfigInterpretationException {
+				if (type.isInstance(this))
+					return (D) this;
+				throw new QonfigInterpretationException(
+					"This implementation requires an element definition of type " + type.getName() + ", not " + getClass().getName(),
+					errorPosition == null ? reporting().getPosition() : errorPosition, 0);
+			}
+
+			@Override
 			public <AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
-				AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				if (ao == null && theExternalView != null)
-					ao = (AO) theExternalView.theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				return ao;
+				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
 
 			@Override
 			public <AO extends ExAddOn.Def<? super E, ?>> Collection<AO> getAddOns(Class<AO> addOn) {
-				Collection<AO> ao = (Collection<AO>) theAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				if (theExternalView != null)
-					ao = new JoinedCollection<>(ao,
-						(Collection<AO>) theExternalView.theExtAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE));
-				return ao;
+				return (Collection<AO>) theAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
 
 			@Override
@@ -581,9 +637,9 @@ public interface ExElement extends Identifiable {
 				if (thePromise == null)
 					envSrc = this::getExpressoEnv;
 				else if (documentsMatch(thePromise.getElement().getDocument().getLocation(), value.fileLocation))
-					envSrc = this::getExpressoEnv;
-				else
 					envSrc = thePromise::getExternalExpressoEnv;
+				else
+					envSrc = this::getExpressoEnv;
 
 				ObservableExpression expression;
 				try {
@@ -708,11 +764,9 @@ public interface ExElement extends Identifiable {
 						.setExpressoEnv(theExpressoEnv);
 					if (thePromise == null || !typesEqual(thePromise.getElement(), theElement.getPromise())) {
 						thePromise = promiseSession.interpret(QonfigPromise.Def.class);
-						theExternalView = new ExtElementView();
 					}
 					if (thePromise != null) {
 						thePromise.update(promiseSession, this);
-						setExpressoEnv(thePromise.getExpressoEnv());
 						session.setExpressoEnv(theExpressoEnv);
 					}
 				}
@@ -720,35 +774,18 @@ public interface ExElement extends Identifiable {
 				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
-					for (QonfigAddOn addOn : theElement.getInheritance().values()) {
-						if (thePromise == null || !thePromise.getElement().isInstance(addOn))
-							addAddOn(session, addOn, addOnsTested, theAddOns);
-					}
-					if (thePromise == null)
-						addAddOns(session, theElement.getType(), addOnsTested, theAddOns);
-					else {
-						for (ExAddOn.Def<?, ?> addOn : thePromise.getAddOns()) {
-							ElementTypeTraceability.join(theTraceability, SingleTypeTraceability.traceabilityFor(addOn.getClass(),
-								theElement.getDocument().getDocToolkit(), theReporting));
-						}
-					}
-					if (theExternalView != null) {
-						theExternalView.update(session.setExpressoEnv(thePromise.getExternalExpressoEnv()));
-						session.setExpressoEnv(theExpressoEnv);
+					for (QonfigAddOn addOn : getElementInheritance()) {
+						addAddOn(session, addOn, addOnsTested, theAddOns);
 					}
 					makeAddOnSequence(theAddOns.getAllValues(),
-						theExternalView == null ? null : theExternalView.theExtAddOns.getAllValues(),
-							ao -> getAddOns((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
-					if (theExternalView != null)
-						makeAddOnSequence(theExternalView.theExtAddOns.getAllValues(), theAddOns.getAllValues(),
-							ao -> theExternalView.getAddOns((Class<ExAddOn.Def<? super ExElement, ?>>) ao),
-							theExternalView.theExtAddOnSequence, theExternalView.reporting());
+						// theExternalView == null ? null : theExternalView.theExtAddOns.getAllValues(),
+						ao -> getAddOns((Class<? extends ExAddOn.Def<? super E, ?>>) ao), theAddOnSequence, reporting());
 				}
 
 				try {
 					forAddOns(session, (addOn, s) -> addOn.preUpdate(s, this));
 
-					doUpdate(session);
+					doUpdate(session.setExpressoEnv(theExpressoEnv));
 
 					forAddOns(session, (addOn, s) -> addOn.postUpdate(s, this));
 
@@ -765,15 +802,16 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
+			/** @return This element's {@link QonfigElement#getInheritance() inheritance} */
+			protected Collection<QonfigAddOn> getElementInheritance() {
+				return theElement.getInheritance().values();
+			}
+
 			private void forAddOns(ExpressoQIS session,
 				ExBiConsumer<ExAddOn.Def<? super E, ?>, ExpressoQIS, QonfigInterpretationException> action)
 					throws QonfigInterpretationException {
 				for (ExAddOn.Def<? super E, ?> addOn : theAddOnSequence) {
 					session = session.asElement(addOn.getType());
-					if (addOn.getElement() == this)
-						session.setExpressoEnv(theExpressoEnv);
-					else
-						session.setExpressoEnv(thePromise.getExternalExpressoEnv());
 					action.accept(addOn, session);
 				}
 				session.setExpressoEnv(theExpressoEnv);
@@ -782,8 +820,6 @@ public interface ExElement extends Identifiable {
 			@Override
 			public void setExpressoEnv(CompiledExpressoEnv env) {
 				theExpressoEnv = env;
-				if (thePromise != null)
-					thePromise.setExpressoEnv(env);
 			}
 
 			/**
@@ -837,8 +873,10 @@ public interface ExElement extends Identifiable {
 					// Only warn about types that need any traceability
 					if (!type.getDeclaredAttributes().isEmpty() //
 						|| (type.getValue() != null && type.getValue().getOwner() == type)//
-						|| !type.getDeclaredChildren().isEmpty())
-						theReporting.warn(getClass() + ": Traceability not configured for " + key);
+						|| !type.getDeclaredChildren().isEmpty()) {
+						if (!(theElement.getType() instanceof QonfigPromiseDef))
+							theReporting.warn(getClass() + ": Traceability not configured for " + key);
+					}
 				} else {
 					if (type.getSuperElement() != null)
 						checkTraceability(type.getSuperElement());
@@ -847,176 +885,11 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
-			@Override
-			public String toString() {
-				return theId.toString();
-			}
-
-			private class ExtElementView implements ExElement.Def<ExElement> {
-				private final ClassMap<ExAddOn.Def<? super E, ?>> theExtAddOns;
-				private final Set<ExAddOn.Def<? super E, ?>> theExtAddOnSequence;
-				private final ErrorReporting theExtReporting;
-
-				ExtElementView() {
-					theExtAddOns = new ClassMap<>();
-					theExtAddOnSequence = new LinkedHashSet<>();
-					theExtReporting = Abstract.this.reporting()//
-						.at(theElement.getExternalContent().getFilePosition());
-				}
-
-				@Override
-				public Object getIdentity() {
-					return Abstract.this.getIdentity();
-				}
-
-				@Override
-				public Def<?> getParentElement() {
-					return Abstract.this.getParentElement();
-				}
-
-				@Override
-				public QonfigElementOrAddOn getQonfigType() {
-					return Abstract.this.getQonfigType();
-				}
-
-				@Override
-				public QonfigElement getElement() {
-					return Abstract.this.getElement();
-				}
-
-				@Override
-				public ErrorReporting reporting() {
-					return theExtReporting;
-				}
-
-				@Override
-				public CompiledExpressoEnv getExpressoEnv() {
-					return thePromise.getExternalExpressoEnv();
-				}
-
-				@Override
-				public void setExpressoEnv(CompiledExpressoEnv env) {
-					thePromise.setExternalExpressoEnv(env);
-				}
-
-				@Override
-				public <AO extends ExAddOn.Def<? super ExElement, ?>> AO getAddOn(Class<AO> addOn) {
-					AO ao = (AO) theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					if (ao == null)
-						ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					return ao;
-				}
-
-				@Override
-				public <AO extends ExAddOn.Def<? super ExElement, ?>> Collection<AO> getAddOns(Class<AO> addOn) {
-					Collection<AO> ao = (Collection<AO>) theExtAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					ao = new JoinedCollection<>(ao, (Collection<AO>) theAddOns.getAll(addOn, ClassMap.TypeMatch.SUB_TYPE));
-					return ao;
-				}
-
-				@Override
-				public Collection<ExAddOn.Def<? super ExElement, ?>> getAddOns() {
-					return (Set<ExAddOn.Def<? super ExElement, ?>>) (Set<?>) Collections.unmodifiableSet(theExtAddOnSequence);
-				}
-
-				@Override
-				public Object getAttribute(QonfigAttributeDef attr) {
-					return null;
-				}
-
-				@Override
-				public Object getElementValue() {
-					return Abstract.this.getElementValue();
-				}
-
-				@Override
-				public List<? extends Def<?>> getDefChildren(QonfigChildDef child) {
-					return Collections.emptyList();
-				}
-
-				@Override
-				public Object getAttribute(Interpreted<? extends ExElement> interpreted, QonfigAttributeDef attr) {
-					return null;
-				}
-
-				@Override
-				public Object getElementValue(Interpreted<? extends ExElement> interpreted) {
-					return null;
-				}
-
-				@Override
-				public List<? extends Interpreted<?>> getInterpretedChildren(Interpreted<? extends ExElement> interpreted,
-					QonfigChildDef child) {
-					return Collections.emptyList();
-				}
-
-				@Override
-				public List<? extends ExElement> getElementChildren(ExElement element, QonfigChildDef child) {
-					return Collections.emptyList();
-				}
-
-				@Override
-				public QonfigPromise.Def<?> getPromise() {
-					return Abstract.this.getPromise();
-				}
-
-				@Override
-				public CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session)
-					throws QonfigInterpretationException {
-					return Abstract.this.getAttributeExpression(attrName, session);
-				}
-
-				@Override
-				public CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session)
-					throws QonfigInterpretationException {
-					return Abstract.this.getAttributeExpression(attr, session);
-				}
-
-				@Override
-				public CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException {
-					return Abstract.this.getValueExpression(session);
-				}
-
-				@Override
-				public <D extends Def<?>> D syncChild(Class<? extends D> type, D def, ExpressoQIS session, String childName,
-					ExBiConsumer<? super D, ExpressoQIS, QonfigInterpretationException> update)
-						throws QonfigInterpretationException, IllegalArgumentException {
-					return Abstract.this.syncChild(type, def, session, childName, update);
-				}
-
-				@Override
-				public <T extends Def<?>> void syncChildren(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions,
-					ExBiConsumer<? super T, ExpressoQIS, QonfigInterpretationException> update) throws QonfigInterpretationException {
-					Abstract.this.syncChildren(defType, defs, sessions, update);
-				}
-
-				@Override
-				public void update(ExpressoQIS session) throws QonfigInterpretationException {
-					if (theExtAddOns.isEmpty()) {
-						session.setElementRepresentation(this);
-						PartialQonfigElement element = theElement.getExternalContent();
-						Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
-						for (QonfigAddOn addOn : element.getInheritance().values())
-							addAddOn(session, addOn, addOnsTested, theExtAddOns);
-						if (element.getType() instanceof QonfigElementDef)
-							addAddOns(session, (QonfigElementDef) element.getType(), addOnsTested, theExtAddOns);
-						else
-							addAddOn(session, (QonfigAddOn) element.getType(), addOnsTested, theExtAddOns);
-						session.setElementRepresentation(Abstract.this);
-					}
-				}
-
-				@Override
-				public String toString() {
-					return Abstract.this.toString() + ".extView";
-				}
-			}
-
-			static class JoinedCollection<E> extends AbstractCollection<E> {
+			static class JoinedSet<E> extends AbstractSet<E> {
 				private final Collection<? extends E> theSource1;
 				private final Collection<? extends E> theSource2;
 
-				JoinedCollection(Collection<? extends E> source1, Collection<? extends E> source2) {
+				JoinedSet(Collection<? extends E> source1, Collection<? extends E> source2) {
 					theSource1 = source1;
 					theSource2 = source2;
 				}
@@ -1056,7 +929,7 @@ public interface ExElement extends Identifiable {
 			}
 
 			static <E extends ExElement> void makeAddOnSequence(Collection<ExAddOn.Def<? super E, ?>> addOns1,
-				Collection<ExAddOn.Def<? super E, ?>> addOns2,
+				// Collection<ExAddOn.Def<? super E, ?>> addOns2,
 				Function<Class<? extends ExAddOn.Def<?, ?>>, Collection<? extends ExAddOn.Def<?, ?>>> getter,
 					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
 				BetterSet<ExAddOn.Def<? super E, ?>> dependencies = BetterHashSet.build().build();
@@ -1065,13 +938,13 @@ public interface ExElement extends Identifiable {
 					} else
 						addWithDependencies(addOn, getter, dependencies, sequence, reporting);
 				}
-				if (addOns2 != null) {
-					for (ExAddOn.Def<? super E, ?> addOn : addOns2) {
-						if (sequence.contains(addOn)) {// Already added via dependencies
-						} else
-							addWithDependencies(addOn, getter, dependencies, sequence, reporting);
-					}
-				}
+				// if (addOns2 != null) {
+				// for (ExAddOn.Def<? super E, ?> addOn : addOns2) {
+				// if (sequence.contains(addOn)) {// Already added via dependencies
+				// } else
+				// addWithDependencies(addOn, getter, dependencies, sequence, reporting);
+				// }
+				// }
 			}
 
 			private static <E extends ExElement> void addWithDependencies(ExAddOn.Def<? super E, ?> addOn,
@@ -1121,6 +994,14 @@ public interface ExElement extends Identifiable {
 			return getDefinition().reporting();
 		}
 
+		/**
+		 * @param file The file that this element may belong to
+		 * @return The reporting for this element, in the given file if this element has a representation in the file
+		 */
+		default ErrorReporting reporting(String file) {
+			return getDefinition().reporting(file);
+		}
+
 		/** @return This element's models */
 		InterpretedModelSet getModels();
 
@@ -1129,6 +1010,15 @@ public interface ExElement extends Identifiable {
 
 		/** @param env The expresso environment for this element */
 		void setExpressoEnv(InterpretedExpressoEnv env);
+
+		/**
+		 * @param <I> The element interpretation type to cast this element to
+		 * @param type The element interpretation type to cast this element to
+		 * @param errorPosition The file position for the error if it must be thrown
+		 * @return The representation of this element as the given type
+		 * @throws ExpressoInterpretationException If this element has no such representation
+		 */
+		<I extends ExElement.Interpreted<?>> I as(Class<I> type, LocatedFilePosition errorPosition) throws ExpressoInterpretationException;
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -1305,7 +1195,7 @@ public interface ExElement extends Identifiable {
 		 *
 		 * @param <E> The type of element that this interpretation is for
 		 */
-		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
+		public abstract class Abstract<E extends ExElement> extends AbstractIdentifiable implements Interpreted<E> {
 			private final Def.Abstract<? super E> theDefinition;
 			private Interpreted.Abstract<?> theParent;
 			private QonfigPromise.Interpreted<?> thePromise;
@@ -1316,8 +1206,6 @@ public interface ExElement extends Identifiable {
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
 			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
-
-			private final ExtElementView theExternalView;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -1331,33 +1219,13 @@ public interface ExElement extends Identifiable {
 				theAddOnSequence = new LinkedHashSet<>();
 				isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
 
-				if (theDefinition.theExternalView != null)
-					theExternalView = new ExtElementView();
-				else
-					theExternalView = null;
 
-				Map<ExAddOn.Def<? super E, ?>, ExAddOn.Interpreted<? super E, ?>> addOns = theExternalView == null ? null : new HashMap<>();
 				for (ExAddOn.Def<? super E, ?> addOn : theDefinition.getAddOns()) {
 					ExAddOn.Interpreted<? super E, ?> interp;
-					if (addOn.getElement() == theDefinition)
-						interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
-					else
-						interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(theExternalView);
+					interp = addOn.interpret(this);
 					if (interp != null) {// It is allowed for add-on definitions not to produce interpretations
 						theAddOnSequence.add(interp);
-						if (addOn.getElement() == theDefinition)
-							theAddOns.put(interp.getClass(), interp);
-						else
-							theExternalView.theExtAddOns.put(interp.getClass(), interp);
-						if (addOns != null)
-							addOns.put(addOn, interp);
-					}
-				}
-				if (theExternalView != null) {
-					for (ExAddOn.Def<? super E, ?> addOn : theDefinition.theExternalView.getAddOns()) {
-						ExAddOn.Interpreted<? super E, ?> interp = addOns.get(addOn);
-						if (interp != null)
-							theExternalView.theExtAddOnSequence.add(interp);
+						theAddOns.put(interp.getClass(), interp);
 					}
 				}
 			}
@@ -1373,7 +1241,7 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public Object getIdentity() {
+			protected Object createIdentity() {
 				return theDefinition.getIdentity();
 			}
 
@@ -1394,8 +1262,10 @@ public interface ExElement extends Identifiable {
 			 * @return This interpreted element
 			 */
 			protected Abstract<E> setParentElement(Interpreted<?> parent) {
-				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement())
+				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement()) {
+					BreakpointHere.breakpoint();
 					throw new IllegalArgumentException(parent + " is not the parent of " + this);
+				}
 				theParent = (Interpreted.Abstract<?>) parent;
 				return this;
 			}
@@ -1416,11 +1286,19 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
+			public <I extends Interpreted<?>> I as(Class<I> type, LocatedFilePosition errorPosition)
+				throws ExpressoInterpretationException {
+				if (type.isInstance(this))
+					return (I) this;
+				else
+					throw new ExpressoInterpretationException("This implementation requires an element interpretation of type "
+						+ type.getName() + ", not " + getClass().getName(),
+						errorPosition == null ? reporting().getPosition() : errorPosition, 0);
+			}
+
+			@Override
 			public <AO extends ExAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn) {
-				AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				if (ao == null && theExternalView != null)
-					ao = (AO) theExternalView.theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				return ao;
+				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
 
 			@Override
@@ -1572,10 +1450,8 @@ public interface ExElement extends Identifiable {
 					addOn.destroy();
 				theAddOns.clear();
 				theAddOnSequence.clear();
-				if (theExternalView != null) {
-					theExternalView.theExtAddOns.clear();
-					theExternalView.theExtAddOnSequence.clear();
-				}
+				if (thePromise != null)
+					thePromise.destroy();
 				if (!isDestroyed.get().booleanValue())
 					isDestroyed.set(true, null);
 			}
@@ -1602,6 +1478,8 @@ public interface ExElement extends Identifiable {
 					}
 					if (thePromise == null && getDefinition().getPromise() != null)
 						thePromise = getDefinition().getPromise().interpret();
+					if (thePromise != null)
+						thePromise.setParentEnv(parentEnv);
 
 					setExpressoEnv(parentEnv.forChild(theDefinition.getExpressoEnv()));
 
@@ -1630,10 +1508,8 @@ public interface ExElement extends Identifiable {
 			 */
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				setExpressoEnv(expressoEnv);
-				if (thePromise != null) {
-					thePromise.update(theExpressoEnv, this);
-					// setExpressoEnv(thePromise.getExpressoEnv());
-				}
+				if (thePromise != null)
+					thePromise.update(expressoEnv, this);
 				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 					addOn.update(this);
 				if (thePromise != null)
@@ -1651,110 +1527,6 @@ public interface ExElement extends Identifiable {
 			public String toString() {
 				return getDefinition().toString();
 			}
-
-			class ExtElementView implements Interpreted<ExElement> {
-				private final Def.Abstract<?>.ExtElementView theExtDefinition;
-				private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theExtAddOns;
-				private final Set<ExAddOn.Interpreted<? super E, ?>> theExtAddOnSequence;
-
-				ExtElementView() {
-					theExtDefinition = ((Def.Abstract<?>) theDefinition).theExternalView;
-					theExtAddOns = new ClassMap<>();
-					theExtAddOnSequence = new LinkedHashSet<>();
-				}
-
-				@Override
-				public Def<? super ExElement> getDefinition() {
-					return theExtDefinition;
-				}
-
-				@Override
-				public Interpreted<?> getParentElement() {
-					return Abstract.this.getParentElement();
-				}
-
-				@Override
-				public QonfigPromise.Interpreted<?> getPromise() {
-					return Abstract.this.getPromise();
-				}
-
-				@Override
-				public InterpretedModelSet getModels() {
-					return getExpressoEnv() == null ? null : getExpressoEnv().getModels();
-				}
-
-				@Override
-				public InterpretedExpressoEnv getExpressoEnv() {
-					return Abstract.this.getPromise().getExternalExpressoEnv();
-				}
-
-				@Override
-				public void setExpressoEnv(InterpretedExpressoEnv env) {
-					Abstract.this.getPromise().setExternalExpressoEnv(env);
-				}
-
-				@Override
-				public <AO extends ExAddOn.Interpreted<? super ExElement, ?>> AO getAddOn(Class<AO> addOn) {
-					AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					if (ao == null && thePromise != null)
-						ao = (AO) theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-					return ao;
-				}
-
-				@Override
-				public Collection<ExAddOn.Interpreted<? super ExElement, ?>> getAddOns() {
-					return (Set<ExAddOn.Interpreted<? super ExElement, ?>>) (Set<?>) Collections.unmodifiableSet(theExtAddOnSequence);
-				}
-
-				@Override
-				public boolean isModelInstancePersistent() {
-					return Abstract.this.isModelInstancePersistent();
-				}
-
-				@Override
-				public Interpreted<ExElement> persistModelInstances(boolean persist) {
-					return this;
-				}
-
-				@Override
-				public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env) {
-					return Abstract.this.getEnvironmentFor(env);
-				}
-
-				@Override
-				public <D extends Def<?>, I extends Interpreted<?>> I syncChild(D definition, I existing,
-					ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-					ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
-						throws ExpressoInterpretationException {
-					return Abstract.this.syncChild(definition, existing, interpret, update);
-				}
-
-				@Override
-				public <D extends Def<?>, I extends Interpreted<?>> void syncChildren(List<? extends D> definitions, List<I> existing,
-					ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-					ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
-						throws ExpressoInterpretationException {
-					Abstract.this.syncChildren(definitions, existing, interpret, update);
-				}
-
-				@Override
-				public Runnable onInstantiation(ExConsumer<? super ExElement, ModelInstantiationException> task) {
-					return Abstract.this.onInstantiation(task);
-				}
-
-				@Override
-				public ObservableValue<Boolean> isDestroyed() {
-					return Abstract.this.isDestroyed();
-				}
-
-				@Override
-				public void destroy() {}
-
-				@Override
-				public String toString() {
-					return theExtDefinition.toString();
-				}
-			}
 		}
 	}
 
@@ -1763,6 +1535,15 @@ public interface ExElement extends Identifiable {
 
 	/** @return The parent element */
 	ExElement getParentElement();
+
+	/**
+	 * @param <E> The element instance type to cast this element to
+	 * @param type The element instance type to cast this element to
+	 * @param errorPosition The file position for the error if it must be thrown
+	 * @return The representation of this element as the given type
+	 * @throws ModelInstantiationException If this element has no such representation
+	 */
+	<E extends ExElement> E as(Class<E> type, LocatedFilePosition errorPosition) throws ModelInstantiationException;
 
 	/**
 	 * @param <AO> The type of the add-on to get
@@ -1812,6 +1593,12 @@ public interface ExElement extends Identifiable {
 	ErrorReporting reporting();
 
 	/**
+	 * @param file The file that this element may belong to
+	 * @return The reporting for this element, in the given file if this element has a representation in the file
+	 */
+	ErrorReporting reporting(String file);
+
+	/**
 	 * Instantiates model value instantiators in this element this element. Must be called at least once after being produced by its
 	 * interpretation.
 	 *
@@ -1856,11 +1643,77 @@ public interface ExElement extends Identifiable {
 	}
 
 	/**
+	 * Instantiates or updates an instantiated child
+	 *
+	 * @param <I> The type of the interpretation of the child
+	 * @param <E> The type of the instantiation of the child
+	 * @param interpretation The child interpretation to interpret
+	 * @param existing The existing instantiated child
+	 * @param create The function to produce an instantiation for a child from an interpretation
+	 * @param update The function to update an instantiated child
+	 * @return The instantiated child
+	 * @throws ModelInstantiationException If an error occurs instantiating or updating the child
+	 */
+	default <I extends ExElement.Interpreted<?>, E extends ExElement> E syncChild(I interpretation, E existing,
+		ExFunction<? super I, ? extends E, ModelInstantiationException> create,
+		ExTriConsumer<? super E, ? super I, ExElement, ModelInstantiationException> update) throws ModelInstantiationException {
+		if (existing != null && (interpretation == null || existing.getIdentity() != interpretation.getIdentity())) {
+			existing.destroy();
+			existing = null;
+		}
+		if (interpretation == null)
+			return null;
+		try {
+			if (existing == null)
+				existing = create.apply(interpretation);
+			update.accept(existing, interpretation, this);
+		} catch (RuntimeException | Error e) {
+			interpretation.reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+		}
+		return existing;
+	}
+
+	/**
+	 * Synchronizes a list of child interpretations and instantiations, ensuring each child in the interpretation list has its instantiation
+	 * in the instantiation list, and that any instantiations without an interpretation are removed and disposed.
+	 *
+	 * @param <I> The type of the interpretation of the children
+	 * @param <E> The type of the instantiation of the children
+	 * @param definitions The child interpretations to instantiate
+	 * @param existing The existing instantiated children
+	 * @param interpret The function to produce an instantiation for a child from an interpretation
+	 * @param update The function to update an instantiated child
+	 * @throws ModelInstantiationException If an error occurs instantiating or updating any children
+	 */
+	default <I extends ExElement.Interpreted<?>, E extends ExElement> void syncChildren(List<? extends I> definitions, List<E> existing,
+		ExFunction<? super I, ? extends E, ModelInstantiationException> interpret,
+		ExTriConsumer<? super E, ? super I, ExElement, ModelInstantiationException> update) throws ModelInstantiationException {
+		CollectionUtils.synchronize(existing, definitions, (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
+		.<ModelInstantiationException> simpleX(interpret)//
+		.onLeftX(el -> el.getLeftValue().destroy())//
+		.onRightX(el -> {
+			try {
+				update.accept(el.getLeftValue(), el.getRightValue(), this);
+			} catch (RuntimeException | Error e) {
+				el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+			}
+		})//
+		.onCommonX(el -> {
+			try {
+				update.accept(el.getLeftValue(), el.getRightValue(), this);
+			} catch (RuntimeException | Error e) {
+				el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+			}
+		})//
+		.rightOrder()//
+		.adjust();
+	}
+
+	/**
 	 * An abstract implementation of {@link ExElement}. {@link ExElement} is an interface to allow implementations to implement more than
 	 * one type of element, but all implementations should probably extend or be backed by this.
 	 */
-	public abstract class Abstract implements ExElement, Cloneable {
-		private final Object theId;
+	public abstract class Abstract extends AbstractIdentifiable implements ExElement, Cloneable {
 		private ExElement theParent;
 		private ModelInstantiator theLocalModel;
 		private boolean isModelPersistent;
@@ -1872,13 +1725,12 @@ public interface ExElement extends Identifiable {
 		private ModelSetInstance theUpdatingModels;
 
 		private QonfigPromise thePromise;
-		private ExtElementView theExternalView;
 
 		/** @param id The identification for this element */
 		protected Abstract(Object id) {
 			if (id == null)
 				throw new NullPointerException();
-			theId = id;
+			initIdentity(id);
 			theAddOns = new ClassMap<>();
 			theAddOnSequence = new LinkedHashSet<>();
 			isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
@@ -1890,8 +1742,8 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public Object getIdentity() {
-			return theId;
+		protected Object createIdentity() {
+			throw new IllegalStateException("Should have been initialized");
 		}
 
 		@Override
@@ -1900,19 +1752,23 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
+		public <E extends ExElement> E as(Class<E> type, LocatedFilePosition errorPosition) throws ModelInstantiationException {
+			if (type.isInstance(this))
+				return (E) this;
+			else
+				throw new ModelInstantiationException(
+					"This implementation requires an element implementation of type " + type.getName() + ", not " + getClass().getName(),
+					errorPosition == null ? reporting().getPosition() : errorPosition, 0);
+		}
+
+		@Override
 		public <AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn) {
-			AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-			if (ao == null && theExternalView != null)
-				ao = (AO) theExternalView.theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-			return ao;
+			return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 		}
 
 		@Override
 		public Collection<ExAddOn<?>> getAddOns() {
-			if (thePromise != null)
-				return new Def.Abstract.JoinedCollection<>(theAddOns.getAllValues(), theExternalView.theExtAddOns.getAllValues());
-			else
-				return theAddOns.getAllValues();
+			return theAddOns.getAllValues();
 		}
 
 		@Override
@@ -1935,6 +1791,16 @@ public interface ExElement extends Identifiable {
 			return theReporting;
 		}
 
+		@Override
+		public ErrorReporting reporting(String file) {
+			if (file == null || file.equals(theReporting.getPosition().getFileLocation()))
+				return theReporting;
+			else if (thePromise != null && file.equals(thePromise.reporting().getPosition().getFileLocation()))
+				return thePromise.reporting();
+			else
+				return theReporting;
+		}
+
 		/**
 		 * Whether to preserve this element's {@link #getUpdatingModels() models} after {@link #instantiate(ModelSetInstance) instantiation}
 		 */
@@ -1944,26 +1810,18 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public final void update(Interpreted<?> interpreted, ExElement parent) throws ModelInstantiationException {
-			if (theId != interpreted.getIdentity())
+			if (getIdentity() != interpreted.getIdentity())
 				throw new IllegalArgumentException("Wrong interpretation: " + interpreted + " for " + this);
-			if (interpreted instanceof Interpreted.Abstract)
-				((Interpreted.Abstract<ExElement>) interpreted).instantiated(this);
+			Interpreted.Abstract<ExElement> myInterpreted = (Interpreted.Abstract<ExElement>) interpreted;
+			myInterpreted.instantiated(this);
 			theReporting = interpreted.reporting();
 			if (parent == this)
 				throw new IllegalArgumentException("An element cannot be its own parent");
 			theParent = parent;
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
 
-			Interpreted.Abstract<?> myInterpreted = (Interpreted.Abstract<?>) interpreted;
-			if (myInterpreted.theExternalView != null) {
-				if (theExternalView == null)
-					theExternalView = new ExtElementView(myInterpreted.theExternalView);
-			} else
-				theExternalView = null;
-
 			// Create add-ons
 			List<ExAddOn<?>> addOns = new ArrayList<>(theAddOnSequence);
-			Map<ExAddOn.Interpreted<?, ?>, ExAddOn<?>> addOnsByInterp = theExternalView == null ? null : new HashMap<>();
 			theAddOnSequence.clear();
 			CollectionUtils
 			.synchronize(addOns, new ArrayList<>(interpreted.getAddOns()),
@@ -1976,25 +1834,15 @@ public interface ExElement extends Identifiable {
 
 				@Override
 				public ElementSyncAction leftOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-					if (element.getRightValue().getElement() == interpreted)
-						theAddOns.compute(element.getLeftValue().getClass(), __ -> null);
-					else
-						theExternalView.theExtAddOns.compute(element.getLeftValue().getClass(), __ -> null);
+					theAddOns.compute(element.getLeftValue().getClass(), __ -> null);
 					return element.remove();
 				}
 
 				@Override
 				public ElementSyncAction rightOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
-					ExAddOn<?> instance;
-					if (element.getRightValue().getElement() == interpreted)
-						instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(ExElement.Abstract.this);
-					else
-						instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(theExternalView);
+					ExAddOn<?> instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(ExElement.Abstract.this);
 					if (instance != null) {
-						if (element.getRightValue().getElement() == interpreted)
-							theAddOns.put(instance.getClass(), instance);
-						else
-							theExternalView.theExtAddOns.put(instance.getClass(), instance);
+						theAddOns.put(instance.getClass(), instance);
 						return element.useValue(instance);
 					} else
 						return element.preserve();
@@ -2006,13 +1854,6 @@ public interface ExElement extends Identifiable {
 				}
 			}, CollectionUtils.AdjustmentOrder.RightOrder);
 			theAddOnSequence.addAll(addOns);
-			if (theExternalView != null) {
-				for (ExAddOn.Interpreted<?, ?> addOn : myInterpreted.theExternalView.getAddOns()) {
-					ExAddOn<?> interp = addOnsByInterp.get(addOn);
-					if (interp != null)
-						theExternalView.theExtAddOnSequence.add(interp);
-				}
-			}
 
 			if (thePromise != null
 				&& (interpreted.getPromise() == null || thePromise.getIdentity() != interpreted.getPromise().getIdentity())) {
@@ -2021,9 +1862,9 @@ public interface ExElement extends Identifiable {
 			}
 			if (thePromise == null && interpreted.getPromise() != null) {
 				thePromise = interpreted.getPromise().create(this);
-				if (theExternalView == null)
-					theExternalView = new ExtElementView(myInterpreted.theExternalView);
 			}
+			if (thePromise != null)
+				thePromise.update(interpreted.getPromise(), null);
 
 			if (interpreted.getParentElement() == null//
 				|| interpreted.getExpressoEnv().getModels().getIdentity() != interpreted.getParentElement().getExpressoEnv().getModels()
@@ -2057,20 +1898,18 @@ public interface ExElement extends Identifiable {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				((ExAddOn<ExElement>) addOn)
 				.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
-			if (theExternalView != null)
-				theExternalView.update(interpreted, theParent);
 		}
 
 		@Override
 		public void instantiated() throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.preInstantiated();
+			if (thePromise != null)
+				thePromise.instantiated();
 			if (theLocalModel != null)
 				theLocalModel.instantiate();
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.instantiated();
-			if (theExternalView != null)
-				theExternalView.instantiated();
 		}
 
 		@Override
@@ -2088,8 +1927,6 @@ public interface ExElement extends Identifiable {
 
 					for (ExAddOn<?> addOn : theAddOnSequence)
 						addOn.postInstantiate(theUpdatingModels);
-					if (theExternalView != null)
-						theExternalView.postInstantiateAddOns(theUpdatingModels);
 					myModels = theUpdatingModels;
 				} finally {
 					if (!isModelPersistent)
@@ -2128,11 +1965,23 @@ public interface ExElement extends Identifiable {
 			Observable<?> modelUntil = Observable.or(parentModels.getUntil(), onDestroy());
 			ModelSetInstanceBuilder runtimeModels = ObservableModelSet.createMultiModelInstanceBag(modelUntil)//
 				.withAll(parentModels);
+			ModelSetInstance promiseModels = thePromise == null ? null : thePromise.getModels().createInstance(parentModels.getUntil())//
+				.withAll(parentModels)//
+				.build();
+			if (promiseModels != null)
+				runtimeModels.withAll(promiseModels);
 			ModelSetInstance elementModels;
 			if (theLocalModel != null) {
-				elementModels = theLocalModel.createInstance(modelUntil)//
-					.withAll(parentModels)//
-					.build();
+				ModelSetInstanceBuilder localBuilder = theLocalModel.createInstance(modelUntil)//
+					.withAll(parentModels);
+				if (thePromise != null)
+					localBuilder.withAll(thePromise.getModels().createInstance(modelUntil));
+				elementModels = localBuilder.build();
+				runtimeModels.withAll(elementModels);
+			} else if (thePromise != null) {
+				ModelSetInstanceBuilder localBuilder = thePromise.getModels().createInstance(modelUntil)//
+					.withAll(parentModels);
+				elementModels = localBuilder.build();
 				runtimeModels.withAll(elementModels);
 			} else
 				elementModels = parentModels;
@@ -2153,8 +2002,6 @@ public interface ExElement extends Identifiable {
 			theUpdatingModels = myModels;
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.instantiate(myModels);
-			if (theExternalView != null)
-				theExternalView.instantiate(myModels);
 		}
 
 		@Override
@@ -2165,22 +2012,12 @@ public interface ExElement extends Identifiable {
 			copy.theAddOnSequence = new LinkedHashSet<>();
 			copy.isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
 
-			if (theExternalView != null)
-				copy.theExternalView = theExternalView.copy(this);
-
 			Map<ExAddOn<?>, ExAddOn<?>> addOns = new HashMap<>();
 			for (ExAddOn<?> addOn : theAddOnSequence) {
 				ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(copy);
 				addOns.put(addOn, addOnCopy);
 				copy.theAddOnSequence.add(addOnCopy);
-				if (addOn.getElement() == this)
-					copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);
-				else
-					copy.theExternalView.theExtAddOns.put(addOnCopy.getClass(), addOnCopy);
-			}
-			if (theExternalView != null) {
-				for (ExAddOn<?> addOn : theExternalView.theExtAddOnSequence)
-					copy.theExternalView.theExtAddOnSequence.add(addOns.get(addOn));
+				copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);
 			}
 			if (thePromise != null)
 				copy.thePromise = thePromise.copy(copy);
@@ -2208,119 +2045,8 @@ public interface ExElement extends Identifiable {
 				addOn.destroy();
 			theAddOns.clear();
 			theAddOnSequence.clear();
-			if (theExternalView != null) {
-				theExternalView.theExtAddOns.clear();
-				theExternalView.theExtAddOnSequence.clear();
-			}
 			if (!isDestroyed.get().booleanValue())
 				isDestroyed.set(true, null);
-		}
-
-		@Override
-		public String toString() {
-			return theId.toString();
-		}
-
-		private class ExtElementView implements ExElement, Cloneable {
-			private final ErrorReporting theExtReporting;
-			private ClassMap<ExAddOn<?>> theExtAddOns;
-			private Set<ExAddOn<?>> theExtAddOnSequence;
-
-			ExtElementView(Interpreted.Abstract<?>.ExtElementView interpreted) {
-				theExtReporting = interpreted.reporting();
-				theExtAddOns = new ClassMap<>();
-				theExtAddOnSequence = new LinkedHashSet<>();
-			}
-
-			ExtElementView(Abstract.ExtElementView toCopy) {
-				theExtReporting = toCopy.reporting();
-				theExtAddOns = new ClassMap<>();
-			}
-
-			@Override
-			public Object getIdentity() {
-				return Abstract.this.getIdentity();
-			}
-
-			@Override
-			public String getTypeName() {
-				return Abstract.this.getTypeName();
-			}
-
-			@Override
-			public ExElement getParentElement() {
-				return Abstract.this.getParentElement();
-			}
-
-			@Override
-			public <AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn) {
-				AO ao = (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				if (ao == null && thePromise != null)
-					ao = (AO) theExtAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-				return ao;
-			}
-
-			@Override
-			public Collection<ExAddOn<?>> getAddOns() {
-				return new JoinedCollection<>(theExtAddOns.getAllValues(), theAddOns.getAllValues());
-			}
-
-			@Override
-			public ModelInstantiator getModels() {
-				return thePromise.getExtModels();
-			}
-
-			@Override
-			public ModelSetInstance getUpdatingModels() throws IllegalStateException {
-				return Abstract.this.getUpdatingModels();
-			}
-
-			@Override
-			public ErrorReporting reporting() {
-				return theExtReporting;
-			}
-
-			@Override
-			public void update(Interpreted<?> interpreted, ExElement parent) throws ModelInstantiationException {
-				Interpreted.Abstract<?> owner = (Interpreted.Abstract<?>) interpreted;
-
-				thePromise.update(owner.getPromise());
-			}
-
-			@Override
-			public void instantiated() throws ModelInstantiationException {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					addOn.instantiated();
-				thePromise.instantiated();
-			}
-
-			@Override
-			public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
-				return models;
-			}
-
-			void postInstantiateAddOns(ModelSetInstance models) throws ModelInstantiationException {
-				for (ExAddOn<?> addOn : theExtAddOns.getAllValues())
-					((ExAddOn<ExElement>) addOn).postInstantiate(models);
-			}
-
-			@Override
-			public ExtElementView copy(ExElement element) {
-				return ((Abstract) element).new ExtElementView(this);
-			}
-
-			@Override
-			public ObservableValue<Boolean> isDestroyed() {
-				return Abstract.this.isDestroyed();
-			}
-
-			@Override
-			public void destroy() {}
-
-			@Override
-			public String toString() {
-				return Abstract.this.toString() + ".extView";
-			}
 		}
 	}
 
@@ -2358,6 +2084,12 @@ public interface ExElement extends Identifiable {
 			super(null);
 			throw new IllegalStateException("Impossible");
 		}
+
+		@Override
+		public Void alias(String alias) {
+			// Alias not supported for this constant
+			return this;
+		}
 	}
 
 	/**
@@ -2369,14 +2101,15 @@ public interface ExElement extends Identifiable {
 	 * @param creator Function to create the element from the parent and type
 	 * @return The Qonfig interpretation creator
 	 */
-	static <P extends Def<?>, T> QonfigInterpreterCore.QonfigValueCreator<T> creator(Class<P> parentType,
-		BiFunction<P, QonfigElementOrAddOn, T> creator) {
+	static <E extends ExElement, P extends Def<? extends E>, T> QonfigInterpreterCore.QonfigValueCreator<T> creator(Class<P> parentType,
+		ExBiFunction<Def<? extends E>, QonfigElementOrAddOn, T, QonfigInterpretationException> creator) {
 		return session -> {
 			Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
-			if (parent != null && !parentType.isInstance(parent))
-				throw new QonfigInterpretationException("This implementation requires a parent of type " + parentType.getName() + ", not "
-					+ (parent == null ? "null" : parent.getClass().getName()), session.reporting().getPosition(), 0);
-			return creator.apply((P) parent, session.getFocusType());
+			if (parent != null) {
+				// Check the type, but don't use the returned element def, as it may have different model visibility
+				parent.as(parentType, session.reporting().getPosition());
+			}
+			return creator.apply((Def<? extends E>) parent, session.getFocusType());
 		};
 	}
 
@@ -2387,7 +2120,23 @@ public interface ExElement extends Identifiable {
 	 * @param creator Function to create the element from the parent and type
 	 * @return The Qonfig interpretation creator
 	 */
-	static <T> QonfigInterpreterCore.QonfigValueCreator<T> creator(BiFunction<Def<?>, QonfigElementOrAddOn, T> creator) {
+	static <T> QonfigInterpreterCore.QonfigValueCreator<T> creator(
+		ExBiFunction<Def<?>, QonfigElementOrAddOn, T, QonfigInterpretationException> creator) {
 		return session -> creator.apply(session.as(ExpressoQIS.class).getElementRepresentation(), session.getFocusType());
+	}
+
+	/**
+	 * Creates a Qonfig interpretation creator for an {@link ExElement}
+	 *
+	 * @param <T> The type of the element
+	 * @param creator Function to create the element from the parent and type
+	 * @return The Qonfig interpretation creator
+	 */
+	static <T> QonfigInterpreterCore.QonfigValueCreator<T> creator(
+		ExTriFunction<Def<?>, QonfigElementOrAddOn, ? super ExpressoQIS, T, QonfigInterpretationException> creator) {
+		return session -> {
+			ExpressoQIS exSession = session.as(ExpressoQIS.class);
+			return creator.apply(exSession.getElementRepresentation(), session.getFocusType(), exSession);
+		};
 	}
 }

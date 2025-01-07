@@ -40,7 +40,7 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 	}
 
 	@Override
-	public Interpreted interpret(ExElement.Interpreted<?> element) {
+	public <E2 extends QuickDocument> Interpreted interpret(ExElement.Interpreted<E2> element) {
 		return new Interpreted(this, element);
 	}
 
@@ -50,7 +50,7 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		 * @param definition The definition to interpret
 		 * @param element The interpreted Quick document
 		 */
-		protected Interpreted(QuickSwing definition, ExElement.Interpreted<?> element) {
+		protected Interpreted(QuickSwing definition, ExElement.Interpreted<? extends QuickDocument> element) {
 			super(definition, element);
 		}
 
@@ -88,7 +88,7 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		}
 
 		@Override
-		public ExAddOn.Void<QuickDocument> create(QuickDocument element) {
+		public ExAddOn.Void<QuickDocument> create(ExElement element) {
 			return null;
 		}
 	}

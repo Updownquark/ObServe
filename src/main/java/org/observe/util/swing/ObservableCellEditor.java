@@ -40,7 +40,6 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -178,7 +177,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ObservableCellRenderer<M, C> renderer) {
 		Function<C, String>[] filter = new Function[1];
 		Object[] modelValue = new Object[1];
-		SettableValue<String> tooltip = SettableValue.<String> build().build();
+		SettableValue<String> tooltip = SettableValue.<String> build().onEdt().build();
 		Function<? super C, String>[] valueToolTip = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
 		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
@@ -206,7 +205,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			});
 		}
 		SimpleObservable<Void> until = SimpleObservable.build().build();
-		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue.<ObservableCollection<? extends C>> build()
+		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue.<ObservableCollection<? extends C>> build().onEdt()
 			.build();
 		ObservableComboBoxModel.comboFor(combo, tooltip, v -> {
 			return valueToolTip[0] == null ? null : valueToolTip[0].apply(v);
@@ -609,7 +608,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					.mutableElement(obsModel.getRows().getElement(row).getElementId());
 				CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
 				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(category.getType(), v))
+					if (v == null || category.getType().isInstance(v))
 						return category.getMutator().isAcceptable(modelElement, v);
 					else
 						return "Unacceptable value";
@@ -697,7 +696,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					}
 				};
 				valueFilter = v -> {
-					if (v == null || TypeTokens.get().isInstance(category.getType(), v))
+					if (v == null || category.getType().isInstance(v))
 						return category.getMutator().isAcceptable(modelElement, v);
 					else
 						return "Unacceptable value";
@@ -811,7 +810,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter,
 			Consumer<SettableValue.Builder<C>> modify) {
-			SettableValue.Builder<C> builder = SettableValue.<C> build().withListening(opts -> opts.forEachSafe(false));
+			SettableValue.Builder<C> builder = SettableValue.<C> build().onEdt().withListening(opts -> opts.forEachSafe(false));
 			if (modify != null)
 				modify.accept(builder);
 			return builder.build()//

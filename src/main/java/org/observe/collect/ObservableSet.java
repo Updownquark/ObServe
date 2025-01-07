@@ -27,6 +27,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	static TypeToken<ObservableSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSet.class).wildCard();
 
 	@Override
+	ObservableSet<E> alias(String alias);
+
+	@Override
 	default Iterator<E> iterator() {
 		return ObservableCollection.super.iterator();
 	}

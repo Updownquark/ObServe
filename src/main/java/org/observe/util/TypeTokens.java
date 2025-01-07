@@ -84,17 +84,8 @@ public class TypeTokens implements TypeParser {
 		 */
 		public int getSpecificity() {
 			if (theComplexity < 0)
-				theComplexity = computeSpecificity();
+				theComplexity = computeSpecificity(clazz);
 			return theComplexity;
-		}
-
-		int computeSpecificity() {
-			if (clazz == Object.class)
-				return theComplexity = 0;
-			else if (clazz.isInterface())
-				return theComplexity = 10 + addIntfs(clazz, new HashSet<>(Arrays.asList(clazz))).size();
-			else
-				return theComplexity = keyFor(clazz.getSuperclass()).getSpecificity() + 1 + addIntfs(clazz, new HashSet<>()).size();
 		}
 
 		/**
@@ -239,30 +230,6 @@ public class TypeTokens implements TypeParser {
 				LambdaUtils.printableFn(w -> w == null ? castError : null, "nullCheck", null), LambdaUtils.identity(), //
 				ALWAYS_NULL, LambdaUtils.identity());
 			thePrimitiveCasts.put(primitiveClass, unsafeCast);
-		}
-
-		@Override
-		int computeSpecificity() {
-			if (isVoid)
-				return 0;
-			else if (primitiveClass == double.class)
-				return 1;
-			else if (primitiveClass == float.class)
-				return 2;
-			else if (primitiveClass == long.class)
-				return 3;
-			else if (primitiveClass == int.class)
-				return 4;
-			else if (primitiveClass == short.class)
-				return 5;
-			else if (primitiveClass == byte.class)
-				return 6;
-			else if (isChar)
-				return 7;
-			else if (bool)
-				return 8;
-			else
-				throw new IllegalStateException("Unaccounted primitive " + clazz);
 		}
 
 		/**
@@ -977,28 +944,7 @@ public class TypeTokens implements TypeParser {
 	 * @return The non-primitive wrapper class corresponding to the given primitive type, or the input if it is not primitive
 	 */
 	public <T> Class<T> wrap(Class<T> type) {
-		if (!type.isPrimitive())
-			return type;
-		else if (type == boolean.class)
-			return (Class<T>) Boolean.class;
-		else if (type == int.class)
-			return (Class<T>) Integer.class;
-		else if (type == long.class)
-			return (Class<T>) Long.class;
-		else if (type == double.class)
-			return (Class<T>) Double.class;
-		else if (type == float.class)
-			return (Class<T>) Float.class;
-		else if (type == byte.class)
-			return (Class<T>) Byte.class;
-		else if (type == short.class)
-			return (Class<T>) Short.class;
-		else if (type == char.class)
-			return (Class<T>) Character.class;
-		else if (type == void.class)
-			return (Class<T>) Void.class;
-		else
-			throw new IllegalStateException("Unrecognized primitive type: " + type);
+		return QommonsUtils.wrap(type);
 	}
 
 	/**
@@ -1006,28 +952,7 @@ public class TypeTokens implements TypeParser {
 	 * @return The primitive type corresponding to the given primitive wrapper class, or the input if it is not a primitive wrapper
 	 */
 	public <T> Class<T> unwrap(Class<T> type) {
-		if (type.isPrimitive())
-			return type;
-		else if (type == Boolean.class)
-			return (Class<T>) boolean.class;
-		else if (type == Integer.class)
-			return (Class<T>) int.class;
-		else if (type == Long.class)
-			return (Class<T>) long.class;
-		else if (type == Double.class)
-			return (Class<T>) double.class;
-		else if (type == Float.class)
-			return (Class<T>) float.class;
-		else if (type == Byte.class)
-			return (Class<T>) byte.class;
-		else if (type == Short.class)
-			return (Class<T>) short.class;
-		else if (type == Character.class)
-			return (Class<T>) char.class;
-		else if (type == Void.class)
-			return (Class<T>) void.class;
-		else
-			return type;
+		return QommonsUtils.unwrap(type);
 	}
 
 	/**
@@ -1225,7 +1150,7 @@ public class TypeTokens implements TypeParser {
 	 * @param <TR> The super-type of all values that this converter can {@link #reverse(Object) reverse}
 	 * @param <T> The super-type of all values that this converter can produce
 	 */
-	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T> {
+	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T>, LambdaUtils.LambdaUtility {
 		private final String theName;
 		private final String theReverseName;
 		private final TypeToken<R> theReverseType;
@@ -1284,6 +1209,14 @@ public class TypeTokens implements TypeParser {
 			return theConvertedType;
 		}
 
+		/** @return The function that does the conversion */
+		public Function<? super S, T> getConverter() {
+			if (theApplicability == null)
+				return theConverter;
+			else
+				return this;
+		}
+
 		/**
 		 * @param source The source value to test
 		 * @return Null if the given source value can be converted to the {@link #getConvertedType() converted type} by this converter, or a
@@ -1314,6 +1247,14 @@ public class TypeTokens implements TypeParser {
 			return theReversibility == null ? null : theReversibility.apply(target);
 		}
 
+		/** @return This converter's reversibility function */
+		public Function<? super TR, R> getReverse() {
+			if (theReversibility == null)
+				return theReverse;
+			else
+				return reverse();
+		}
+
 		/**
 		 * @param target The target value to reverse
 		 * @return The source value which would be {@link #apply(Object) converted} to a value equivalent to the given value
@@ -1325,12 +1266,9 @@ public class TypeTokens implements TypeParser {
 			return theReverse.apply(target);
 		}
 
-		/**
-		 * @return Whether this converter simply returns the value given it for both the {@link #apply(Object)} and {@link #reverse(Object)}
-		 *         methods
-		 */
+		@Override
 		public boolean isTrivial() {
-			return theConverter == LambdaUtils.identity() && theReverse == LambdaUtils.identity();
+			return LambdaUtils.isTrivial(theConverter) && LambdaUtils.isTrivial(theReverse);
 		}
 
 		/**
@@ -1383,13 +1321,13 @@ public class TypeTokens implements TypeParser {
 			if (other instanceof NoOpTypeConverter)
 				return (TypeConverter<S, R, TR2, T2>) this;
 			// If one or the other is trivial, keep it simple
-			if (theConverter == LambdaUtils.identity()) {
+			if (LambdaUtils.isTrivial(theConverter)) {
 				if (theReverseType.equals(other.theReverseType))
 					return (TypeConverter<S, R, TR2, T2>) other;
 				return new TypeConverter<>(other.theName, other.theReverseName, theReverseType, other.theConvertedType, //
 					(Function<S, String>) other.theApplicability, (Function<S, T2>) other.theConverter, //
 					other.theReversibility, (Function<TR2, R>) other.theReverse);
-			} else if (other.theConverter == LambdaUtils.identity()) {
+			} else if (LambdaUtils.isTrivial(other.theConverter)) {
 				if (theConvertedType.equals(other.theConvertedType))
 					return (TypeConverter<S, R, TR2, T2>) this;
 				return new TypeConverter<>(theName, theReverseName, theReverseType, other.theConvertedType, //
@@ -1584,11 +1522,12 @@ public class TypeTokens implements TypeParser {
 						return (TypeConverter<S, S, T, T>) (safe ? primSource.safeCast : primSource.unsafeCast);
 				}
 				TypeConverter<S, S, T, T> primitiveCast = primTarget.getPrimitiveCast(primSource.primitiveClass);
+				TypeToken<T> fTarget = target;
 				if (primitiveCast == null) {
-					exHandler.handle1(new IllegalArgumentException("Cannot convert between " + source + " and " + target));
+					exHandler.handle1(() -> new IllegalArgumentException("Cannot convert between " + source + " and " + fTarget));
 					return null;
 				} else if (downCastOnly && !primitiveCast.isSafe()) {
-					exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+					exHandler.handle1(() -> new IllegalArgumentException("Cannot safely convert from " + source + " to " + fTarget));
 					return null;
 				}
 				else if (target.isPrimitive()) {
@@ -1616,7 +1555,8 @@ public class TypeTokens implements TypeParser {
 				return suppConvert;
 
 			if (downCastOnly) {
-				exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+				TypeToken<T> fTarget = target;
+				exHandler.handle1(() -> new IllegalArgumentException("Cannot safely convert from " + source + " to " + fTarget));
 				return null;
 			} else if (rawSource.isAssignableFrom(Comparable.class) // All remaining possible primitives are comparable
 				|| (primTarget.number && rawSource.isAssignableFrom(Number.class))) {
@@ -1638,7 +1578,7 @@ public class TypeTokens implements TypeParser {
 				if (reverseConverter == null)
 					return null;
 			} else {
-				reverseConverter = getCast(source, target, safe, false, ExceptionHandler.holder());
+				reverseConverter = getCast(source, target, safe, false, ExceptionHandler.placeHolder());
 				if (reverseConverter == null)
 					return suppConvert;
 			}
@@ -1646,7 +1586,8 @@ public class TypeTokens implements TypeParser {
 			if (downCastOnly && !converter.isSafe()) {
 				if (suppConvert != null)
 					return suppConvert;
-				exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+				TypeToken<T> fTarget = target;
+				exHandler.handle1(() -> new IllegalArgumentException("Cannot safely convert from " + source + " to " + fTarget));
 				return null;
 			}
 			return converter;
@@ -1668,16 +1609,17 @@ public class TypeTokens implements TypeParser {
 					null, LambdaUtils.<S, T> unenforcedCast(), sourceChecker.check, sourceChecker.cast);
 			}
 		} else if (target.isArray()) {
+			TypeToken<T> fTarget = target;
 			if (!source.isArray() || source.isPrimitive() || target.isPrimitive()) {
 				TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
 				if (suppConvert != null)
 					return suppConvert;
 				else {
-					exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+					exHandler.handle1(() -> new IllegalArgumentException("Cannot convert from " + source + " to " + fTarget));
 					return null;
 				}
 			} else {
-				exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+				exHandler.handle1(() -> new IllegalArgumentException("Cannot convert from " + source + " to " + fTarget));
 				return null;
 			}
 		}
@@ -1686,7 +1628,8 @@ public class TypeTokens implements TypeParser {
 		if (suppConvert != null)
 			return suppConvert;
 		else {
-			exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+			TypeToken<T> fTarget = target;
+			exHandler.handle1(() -> new IllegalArgumentException("Cannot convert from " + source + " to " + fTarget));
 			return null;
 		}
 	}
@@ -2059,7 +2002,51 @@ public class TypeTokens implements TypeParser {
 			throw new IllegalArgumentException("Unrecognized type: " + type);
 	}
 
-	static Set<Class<?>> addIntfs(Class<?> clazz, Set<Class<?>> intfs) {
+	private int computeSpecificity(Class<?> clazz) {
+		int specificity;
+		Class<?> unwrapped = unwrap(clazz);
+		// if (unwrapped != clazz)
+		// BreakpointHere.breakpoint();
+		if (clazz.isPrimitive())
+			return computeSpecificity(wrap(clazz)) + 1;
+		else if (clazz == Object.class)
+			return 1;
+		else if (clazz.isInterface())
+			specificity = 10 + addIntfs(clazz, new HashSet<>()).size();
+		else {
+			int intfCount = addIntfs(clazz, new HashSet<>()).size();
+			specificity = keyFor(clazz.getSuperclass()).getSpecificity() + 1 + intfCount;
+			if (intfCount > 0 && clazz.getSuperclass().getInterfaces().length == 0)
+				specificity += 10;
+		}
+
+		// Class<?> unwrapped = unwrap(clazz);
+		if (unwrapped != clazz) { // Primitive wrapper
+			if (unwrapped == void.class)
+				specificity += 1;
+			else if (unwrapped == double.class)
+				specificity += 2;
+			else if (unwrapped == float.class)
+				specificity += 3;
+			else if (unwrapped == long.class)
+				specificity += 4;
+			else if (unwrapped == int.class)
+				specificity += 5;
+			else if (unwrapped == short.class)
+				specificity += 6;
+			else if (unwrapped == byte.class)
+				specificity += 7;
+			else if (unwrapped == char.class)
+				specificity += 8;
+			else if (unwrapped == boolean.class)
+				specificity += 9;
+			else
+				throw new IllegalStateException("Unaccounted primitive " + unwrapped);
+		}
+		return specificity;
+	}
+
+	private Set<Class<?>> addIntfs(Class<?> clazz, Set<Class<?>> intfs) {
 		for (Class<?> intf : clazz.getInterfaces()) {
 			if (clazz.getSuperclass() != null && intf.isAssignableFrom(clazz.getSuperclass())) {//
 			} else if (intfs.add(intf))

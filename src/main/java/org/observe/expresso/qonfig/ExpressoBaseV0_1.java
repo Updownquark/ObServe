@@ -61,7 +61,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith(ExWithElementModel.WITH_ELEMENT_MODEL, ExWithElementModel.Def.class,
 			ExAddOn.creator(ExWithElementModel.Def::new));
 		interpreter.createWith(ExElementModelValue.ELEMENT_MODEL_VALUE, ExElementModelValue.Def.class,
-			ExAddOn.creator(ModelValueElement.Def.class, ExElementModelValue.Def::new));
+			ExAddOn.creator((Class<ExtModelValueElement.Def<?>>) (Class<?>) ExtModelValueElement.Def.class, ExElementModelValue.Def::new));
 		interpreter.createWith(ExWithLocalModel.WITH_LOCAL_MODEL, ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
 		interpreter.createWith(ExWithRequiredModels.WITH_REQUIRED_MODELS, ExWithRequiredModels.Def.class,
 			ExAddOn.creator(ExWithRequiredModels.Def::new));
@@ -71,7 +71,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith(ExpressoExternalDocument.EXPRESSO_EXTERNAL_DOCUMENT, ExpressoExternalDocument.Def.class,
 			ExElement.creator(ExpressoExternalDocument.Def::new));
 		interpreter.createWith(AttributeBackedModelValue.ATTR_BACKED_MODEL_VALUE, AttributeBackedModelValue.Def.class,
-			ExAddOn.creator(ExtModelValueElement.Def.class, AttributeBackedModelValue.Def::new));
+			ExAddOn.creator((Class<ExtModelValueElement.Def<?>>) (Class<?>) ExtModelValueElement.Def.class,
+				AttributeBackedModelValue.Def::new));
 		interpreter.createWith(ExpressoChildPlaceholder.CHILD_PLACEHOLDER, ExpressoChildPlaceholder.Def.class,
 			ExElement.creator(ExpressoChildPlaceholder.Def::new));
 		// We have to explicitly support any external reference types
@@ -89,7 +90,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith(ExpressoQonfigValues.FieldValueDef.FIELD_VALUE, FieldValueDef.class, ExElement.creator(FieldValueDef::new));
 		interpreter.createWith(ExComplexOperation.COMPLEX_OPERATION, ExComplexOperation.class, ExAddOn.creator(ExComplexOperation::new));
 		interpreter.createWith(ExSort.SORT, ExSort.ExRootSort.class, ExElement.creator(ExSort.ExRootSort::new));
-		interpreter.createWith(ExSort.SORT_BY, ExSort.ExSortBy.class, ExElement.creator(ExSort.class, ExSort.ExSortBy::new));
+		interpreter.createWith(ExSort.SORT_BY, ExSort.ExSortBy.class, ExElement.creator(ExSort.ExSortBy::new));
 		interpreter.createWith(If.IF, If.class, ExElement.creator(If::new));
 		interpreter.createWith(IfOp.IF_OP, IfOp.class, ExAddOn.creator(IfOp::new));
 		interpreter.createWith(Switch.SWITCH, Switch.class, ExElement.creator(Switch::new));

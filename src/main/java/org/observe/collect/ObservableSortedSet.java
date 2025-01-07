@@ -30,6 +30,9 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	Equivalence.SortedEquivalence<? super E> equivalence();
 
 	@Override
+	ObservableSortedSet<E> alias(String alias);
+
+	@Override
 	default Comparator<? super E> comparator() {
 		return equivalence().comparator();
 	}

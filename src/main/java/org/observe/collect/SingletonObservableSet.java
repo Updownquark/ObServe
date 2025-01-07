@@ -6,8 +6,10 @@ import java.util.function.Consumer;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
+import org.observe.Observable.CoreChangeSources;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -23,7 +25,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
  *
  * @param <T> The type of value in the collection
  */
-public class SingletonObservableSet<T> implements ObservableSet<T> {
+public class SingletonObservableSet<T> extends AbstractIdentifiable implements ObservableSet<T> {
 	private final SettableValue<T> theValue;
 	private final ElementId theId;
 	private final CollectionElement<T> theElement;
@@ -85,13 +87,24 @@ public class SingletonObservableSet<T> implements ObservableSet<T> {
 	}
 
 	@Override
+	public CoreChangeSources getChangeSources() {
+		return theValue.noInitChanges().getChangeSources();
+	}
+
+	@Override
 	public boolean isEventing() {
 		return theValue.isEventing();
 	}
 
 	@Override
-	public Object getIdentity() {
+	protected Object createIdentity() {
 		return theValue.getIdentity();
+	}
+
+	@Override
+	public SingletonObservableSet<T> alias(String alias) {
+		super.alias(alias);
+		return this;
 	}
 
 	@Override

@@ -25,6 +25,7 @@ import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedPositionedContent;
@@ -89,7 +90,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-		super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+		super.doUpdate(session);
 		ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 		String sortValueName = session.getAttributeText("sort-value-as");
 		theSortValue = sortValueName == null ? null : elModels.getElementValueModelId(sortValueName);
@@ -136,8 +137,9 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	/**
 	 * @param parent The parent for the interpreted sort
 	 * @return The interpreted sort
+	 * @throws ExpressoInterpretationException If this sort element's placement is illegal
 	 */
-	public abstract Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent);
+	public abstract Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
 
 	/**
 	 * Interpreted &lt;sort> element
@@ -276,7 +278,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				SettableValue<OT> left = SettableValue.<OT> build().withDescription(theSortValue.getName()).build();
 				SettableValue<OT> right = SettableValue.<OT> build().withDescription(theSortValue.getName()).build();
 				Supplier<Integer> sorting = getExternalSorting(models, left, right);
-				return new SortWithComparator<>(left, right, sorting, isAscending);
+				return new SortWithComparator<>(left, right, sorting);
 			}
 
 			@Override
@@ -299,7 +301,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 					int i = 0;
 					for (SortInstantiator<IT, ?> sb : theSortBy)
 						sortBy[i++] = sb.getExternalSorting(models, left, right);
-					return new CompositeIntSupplier(sortBy);
+					return new CompositeIntSupplier(sortBy, isAscending);
 				} else
 					return new DefaultSortSupplier<>(left, right, theDefaultSorting);
 			}
@@ -314,19 +316,16 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			private final SettableValue<T> theLeftValue;
 			private final SettableValue<T> theRightValue;
 			private final Supplier<Integer> theCompareResult;
-			private boolean isAscending;
 
 			/**
 			 * @param left The container for the left value to sort
 			 * @param right The container for the right value to sort
 			 * @param compareResult Provides the sorting result once the values are populated
-			 * @param ascending Whether to reverse the result
 			 */
-			public SortWithComparator(SettableValue<T> left, SettableValue<T> right, Supplier<Integer> compareResult, boolean ascending) {
+			public SortWithComparator(SettableValue<T> left, SettableValue<T> right, Supplier<Integer> compareResult) {
 				theLeftValue = left;
 				theRightValue = right;
 				theCompareResult = compareResult;
-				isAscending = ascending;
 			}
 
 			@Override
@@ -336,10 +335,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				Integer result = theCompareResult.get();
 				if (result == null)
 					return 0;
-				else if (isAscending)
-					return result.intValue();
-				else
-					return -result.intValue();
+				return result.intValue();
 			}
 
 			@Override
@@ -357,17 +353,22 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			@Override
 			public String toString() {
-				return (isAscending ? "" : "-") + theCompareResult.toString();
+				return theCompareResult.toString();
 			}
 		}
 
 		/** An integer supplier composed of one or more others. Returns the value of the first one that is non-zero, or null. */
 		public static class CompositeIntSupplier implements Supplier<Integer> {
 			private final Supplier<Integer>[] theComponents;
+			private final boolean isAscending;
 
-			/** @param components The components for this composite */
-			public CompositeIntSupplier(Supplier<Integer>[] components) {
+			/**
+			 * @param components The components for this composite
+			 * @param ascending Whether the sort is ascending
+			 */
+			public CompositeIntSupplier(Supplier<Integer>[] components, boolean ascending) {
 				theComponents = components;
+				isAscending = ascending;
 			}
 
 			@Override
@@ -376,9 +377,14 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				for (Supplier<Integer> component : theComponents) {
 					result = component.get();
 					if (result != null && result.intValue() != 0)
-						return result;
+						break;
 				}
-				return null;
+				if (result == null)
+					return null;
+				else if (isAscending)
+					return result;
+				else
+					return -result;
 			}
 
 			@Override
@@ -525,19 +531,24 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	/** A &lt;sort-by> element in a &lt;sort> */
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = SORT_BY, interpretation = ExSortBy.Interpreted.class)
 	public static class ExSortBy extends ExSort {
+		private final ExSort theSort;
 		private CompiledExpression theAttribute;
 
 		/**
 		 * @param parent The parent element for this sort
 		 * @param qonfigType The Qonfig type of this element
+		 * @param session The session parsing this sorting
+		 * @throws QonfigInterpretationException If this sort-by element's parent is not an instance of {@link ExSort}
 		 */
-		public ExSortBy(ExSort parent, QonfigElementOrAddOn qonfigType) {
+		public ExSortBy(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, AbstractQIS<?> session)
+			throws QonfigInterpretationException {
 			super(parent, qonfigType);
+			theSort = parent.as(ExSort.class, session.reporting().getPosition());
 		}
 
-		@Override
-		public ExSort getParentElement() {
-			return (ExSort) super.getParentElement();
+		/** @return This sort-by element's {@link ExSort} parent */
+		public ExSort getSort() {
+			return theSort;
 		}
 
 		/** @return The expression returning the attribute of sorted values to sort by */
@@ -553,8 +564,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, (ExSort.Interpreted<?, ?>) parent);
+		public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
 		}
 
 		/**
@@ -566,9 +577,11 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		 */
 		public static class Interpreted<OT, IT> extends ExSort.Interpreted<OT, IT> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<IT>> theAttribute;
+			private final ExSort.Interpreted<?, OT> theSort;
 
-			Interpreted(ExSortBy definition, ExSort.Interpreted<?, OT> parent) {
+			Interpreted(ExSortBy definition, ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
 				super(definition, parent);
+				theSort = parent.as(ExSort.Interpreted.class, definition.reporting().getPosition());
 			}
 
 			@Override
@@ -576,14 +589,14 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				return (ExSortBy) super.getDefinition();
 			}
 
-			@Override
-			public ExSort.Interpreted<?, OT> getParentElement() {
-				return (ExSort.Interpreted<?, OT>) super.getParentElement();
+			/** @return This sort-by element's {@link ExSort.Interpreted} parent */
+			public ExSort.Interpreted<?, OT> getSort() {
+				return theSort;
 			}
 
 			@Override
 			public TypeToken<OT> getSortType() {
-				return getParentElement().getInternalSortType();
+				return theSort.getInternalSortType();
 			}
 
 			/** @return The expression returning the attribute of sorted values to sort by */
@@ -611,7 +624,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				return new SortByInstantiator<>(getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
 					getSortWith() == null ? null : getSortWith().instantiate(), instantiateSortBy(), getDefaultSorting(),
 						getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
-						getParentElement().getDefinition().getSortValue(), theAttribute.instantiate());
+						theSort.getDefinition().getSortValue(), theAttribute.instantiate());
 			}
 		}
 

@@ -16,15 +16,20 @@ This file defines syntax for debugging expresso models, typically used for testi
 	</value-types>
 
 	<add-ons>
-		<?DOC Tagged onto a &lt;model-value> to catch a breakpoint as it is compiled, interpreted, or instantiated?>
-		<add-on name="debug-value" requires="model-value">
+		<?DOC Tagged onto an element to catch a breakpoint as it is compiled/defined, interpreted, or instantiated?>
+		<add-on name="debug-value">
 			<attribute name="break-on" type="breakpoint-type" specify="optional" />
+			<child-def name="tag" type="debug-tag" min="0" max="inf" />
 		</add-on>
 	</add-ons>
 
+	<elements>
+		<element-def name="debug-tag">
+			<attribute name="name" type="string" />
+		</element-def>
+	</elements>
+
 	<auto-inheritance>
-		<auto-inherit inherits="debug-value">
-			<target role="model.value" />
-		</auto-inherit>
+		<auto-inherit inherits="debug-value" universal="true" />
 	</auto-inheritance>
 </qonfig-def>

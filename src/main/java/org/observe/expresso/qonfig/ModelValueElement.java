@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.Iterator;
 
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -108,8 +109,9 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 		/**
 		 * @param env The expresso environment to use to interpret expressions
 		 * @return The model type of the value to create
+		 * @throws ExpressoCompilationException If the model type could not be determined
 		 */
-		ModelType<M> getModelType(CompiledExpressoEnv env);
+		ModelType<M> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException;
 
 		@Override
 		@QonfigAttributeGetter
@@ -493,7 +495,11 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 			if (name == null)
 				throw new QonfigInterpretationException("Not named, cannot add to model set", getElement().getPositionInFile(), 0);
-			builder.withMaker(name, this, reporting().getFileLocation().getPosition(0));
+			try {
+				builder.withMaker(name, this, reporting().getFileLocation().getPosition(0));
+			} catch (IllegalArgumentException e) {
+				session.reporting().error(e.getMessage());
+			}
 		}
 
 		@Override
@@ -501,7 +507,8 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 			ExElement.Interpreted<?> parent = INTERPRETING_PARENTS.getParent(getParentElement());
 			if (parent == null) {
 				INTERPRETING_PARENTS.getParent(getParentElement()); // Debugging
-				throw new ExpressoInterpretationException("Correct model not installed in environment", reporting().getFileLocation());
+				throw new ExpressoInterpretationException("InternalError: Correct model not installed in environment",
+					reporting().getFileLocation());
 			}
 			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
 			interpreted.updateValue(env);

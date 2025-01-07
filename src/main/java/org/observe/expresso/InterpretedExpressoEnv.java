@@ -6,9 +6,8 @@ import java.util.Set;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
-import org.observe.expresso.ops.BinaryOperatorSet;
+import org.observe.expresso.SyntheticField.Def;
 import org.observe.expresso.ops.ExternalLiteral;
-import org.observe.expresso.ops.UnaryOperatorSet;
 import org.qommons.ClassMap;
 import org.qommons.config.SessionValues;
 import org.qommons.io.ErrorReporting;
@@ -44,8 +43,9 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
 		Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting, SessionValues properties, boolean testing) {
-		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, properties);
+		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties,
+		boolean testing) {
+		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, syntheticFields, reporting, properties);
 		theExtModels = extModels;
 		theClassView = classView;
 		isTesting = testing;
@@ -54,11 +54,12 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	@Override
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting, SessionValues properties) {
+		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties) {
 		if (models != null && !(models instanceof InterpretedModelSet))
-			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting, getProperties());
+			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, syntheticFields, reporting,
+				getProperties());
 		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, attributes, nonStructuredParsers,
-			unaryOperators, binaryOperators, reporting, properties, isTesting);
+			unaryOperators, binaryOperators, syntheticFields, reporting, properties, isTesting);
 	}
 
 	/**
@@ -70,7 +71,13 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		for (Map.Entry<String, ModelComponentId> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
-		env = env.withOperators(child.getUnaryOperators(), child.getBinaryOperators());
+		if (!getUnaryOperators().equals(child.getUnaryOperators()) || !getBinaryOperators().equals(child.getBinaryOperators()))
+			env = env.withOperators(getUnaryOperators().copy()//
+				.withAll(child.getUnaryOperators())//
+				.build(),
+				getBinaryOperators().copy()//
+				.withAll(child.getBinaryOperators())//
+				.build());
 		if (getModels() != null) {
 			if (child.getModels() != null && !getModels().getIdentity().equals(child.getModels().getIdentity()))
 				env = env.with(child.getBuiltModels().createInterpreted(env));
@@ -109,7 +116,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 */
 	public InterpretedExpressoEnv withErrorReporting(ErrorReporting reporting) {
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, getProperties(), isTesting);
+			getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting, getProperties(), isTesting);
 	}
 
 	/** @return Whether this environment is to be used for testing */
@@ -130,7 +137,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (models == getModels())
 			return this;
 		return new InterpretedExpressoEnv(models, theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
+			getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting(), getProperties(), isTesting);
 	}
 
 	/**
@@ -141,7 +148,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (classView == theClassView)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, classView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
+			getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting(), getProperties(), isTesting);
 	}
 
 	@Override
@@ -199,7 +206,13 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (extModels == theExtModels)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), extModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), isTesting);
+			getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting(), getProperties(), isTesting);
+	}
+
+	@Override
+	public <E> InterpretedExpressoEnv withSyntheticField(Class<E> entityType, String fieldName, Def<? super E, ?> field) {
+		super.withSyntheticField(entityType, fieldName, field);
+		return this;
 	}
 
 	@Override
@@ -220,7 +233,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (isTesting == testing)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting(), getProperties(), testing);
+			getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting(), getProperties(), testing);
 	}
 
 	@Override

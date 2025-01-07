@@ -137,6 +137,10 @@ public class ClassView implements TypeParser {
 	 * @return The type corresponding to the given name, or null if no such type could be found in this view
 	 */
 	public Class<?> getType(String typeName) {
+		return getType(typeName, 0);
+	}
+
+	private Class<?> getType(String typeName, int withWildCards) {
 		Class<?> type;
 		if (theTypeCache == null)
 			theTypeCache = new HashMap<>();
@@ -159,35 +163,25 @@ public class ClassView implements TypeParser {
 		String imp = theImportedTypes.get(key);
 		if (imp != null) {
 			imp += suffix;
-			type = tryLoad(imp);
+			type = tryLoad(imp, withWildCards);
 			if (type != null) {
 				theTypeCache.put(imp, type);
 				theTypeCache.put(typeName, type);
 				return type;
 			}
 		}
-		type = tryLoad(typeName);
+		type = tryLoad(typeName, withWildCards);
 		if (type != null) {
 			theTypeCache.put(typeName, type);
 			return type;
 		}
-		for (String wc : theWildcardImports) {
-			String fullName = wc + "." + typeName;
-			type = tryLoad(fullName);
-			if (type != null) {
-				theTypeCache.put(typeName, type);
-				theTypeCache.put(fullName, type);
-				return type;
-			}
-		}
-		int dot = typeName.lastIndexOf('.');
-		if (dot >= 0) {
-			Class<?> ownerType = getType(typeName.substring(0, dot));
-			if (ownerType != null) {
-				String newName = ownerType.getName() + "$" + typeName.substring(dot + 1);
-				type = tryLoad(newName);
+		if (withWildCards < 3 && typeName.indexOf('.') < 0) {
+			for (String wc : theWildcardImports) {
+				String fullName = wc + "." + typeName;
+				type = tryLoad(fullName, withWildCards);
 				if (type != null) {
 					theTypeCache.put(typeName, type);
+					theTypeCache.put(fullName, type);
 					return type;
 				}
 			}
@@ -197,18 +191,37 @@ public class ClassView implements TypeParser {
 		return null;
 	}
 
-	private Class<?> tryLoad(String name) {
+	private Class<?> tryLoad(String name, int withWildCards) {
+		Class<?> type = tryLoad0(name);
+		if (type != null)
+			return type;
+		int dot = name.lastIndexOf('.');
+		if (dot >= 0) {
+			Class<?> ownerType = getType(name.substring(0, dot), withWildCards + 1);
+			if (ownerType != null) {
+				String newName = ownerType.getName() + "$" + name.substring(dot + 1);
+				type = tryLoad0(newName);
+				if (type != null) {
+					theTypeCache.put(name, type);
+					return type;
+				}
+			}
+		}
+		return null;
+	}
+
+	private Class<?> tryLoad0(String name) {
 		for (ClassLoader cl : theClassLoaders) {
 			try {
 				return cl.loadClass(name);
-			} catch (ClassNotFoundException | NoClassDefFoundError e) { // We don't throw exceptions, just return null
+			} catch (ClassNotFoundException | NoClassDefFoundError | RuntimeException e) { // We don't throw exceptions, just return null
 			}
 		}
 		ClassLoader ccl = Thread.currentThread().getContextClassLoader();
 		if (ccl != null && !theClassLoaders.contains(ccl)) {
 			try {
 				return ccl.loadClass(name);
-			} catch (ClassNotFoundException | NoClassDefFoundError e) {
+			} catch (ClassNotFoundException | NoClassDefFoundError | RuntimeException e) {
 			}
 		}
 		return null;
@@ -240,7 +253,7 @@ public class ClassView implements TypeParser {
 		if (theImportedTypes.isEmpty() && theWildcardImports.isEmpty())
 			return "<imports />";
 		StringBuilder str = new StringBuilder("<imports>");
-		for (String imp : theImportedTypes.keySet())
+		for (String imp : theImportedTypes.values())
 			str.append("\n\t<import>").append(imp).append("</import>");
 		for (String imp : theWildcardImports)
 			str.append("\n\t<import>").append(imp).append(".*</import>");

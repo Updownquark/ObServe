@@ -6,6 +6,7 @@ import java.awt.event.MouseAdapter;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import javax.swing.event.CaretListener;
 import javax.swing.text.JTextComponent;
@@ -46,7 +47,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	/**
 	 * @param panel The panel to populate
 	 * @param quick The Quick widget to populate for
-	 * @throws ModelInstantiationException If an problem occurs instantiating any components
+	 * @throws ModelInstantiationException If a problem occurs instantiating any components
 	 */
 	void populate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
@@ -70,6 +71,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			theModifiers = new LinkedList<>();
 		}
 
+		/**
+		 * @param panel The panel to populate
+		 * @param quick The Quick widget to populate for
+		 * @param component A consumer to be given the populated component editor as it is configured
+		 * @throws ModelInstantiationException If an problem occurs instantiating any components
+		 */
 		protected abstract void doPopulate(PanelPopulator<?, ?> panel, W quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException;
 
@@ -78,6 +85,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			populate((ContainerPopulator<?, ?>) panel, quick);
 		}
 
+		/**
+		 * @param <P> The type of the populator
+		 * @param panel The populator
+		 * @param quick The Quick widget
+		 * @throws ModelInstantiationException If the UI population fails
+		 */
 		protected <P extends ContainerPopulator<?, ?>> void populate(P panel, W quick) throws ModelInstantiationException {
 			boolean[] modified = new boolean[1];
 			try {
@@ -108,7 +121,17 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	/**
+	 * Quick Swing populator for a container
+	 *
+	 * @param <W> The type of Quick widget
+	 */
 	public interface QuickSwingContainerPopulator<W extends QuickWidget> extends QuickSwingPopulator<W> {
+		/**
+		 * @param panel The container to populate
+		 * @param quick The quick widget to populate the container with
+		 * @throws ModelInstantiationException If a problem occurs instantiating any components
+		 */
 		void populateContainer(ContainerPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
 		@Override
@@ -116,11 +139,21 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			populateContainer(panel, quick);
 		}
 
+		/**
+		 * Abstract {@link QuickSwingContainerPopulator}
+		 *
+		 * @param <W> The type of Quick widget
+		 */
 		public abstract class Abstract<W extends QuickWidget> extends QuickSwingPopulator.Abstract<W>
 		implements QuickSwingContainerPopulator<W> {
-			protected abstract void doPopulateContainer(ContainerPopulator<?, ?> panel, W quick,
-				Consumer<ComponentEditor<?, ?>> component)
-					throws ModelInstantiationException;
+			/**
+			 * @param panel The container to populate
+			 * @param quick The quick widget to populate the container with
+			 * @param component A consumer to be given the populated component editor as it is configured
+			 * @throws ModelInstantiationException If a problem occurs instantiating any components
+			 */
+			protected abstract void doPopulateContainer(ContainerPopulator<?, ?> panel, W quick, Consumer<ComponentEditor<?, ?>> component)
+				throws ModelInstantiationException;
 
 			@Override
 			public void populateContainer(ContainerPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
@@ -135,7 +168,17 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	/**
+	 * A modifier for a Swing window by a Quick add-on
+	 *
+	 * @param <AO> The type of add-on to modify the window with
+	 */
 	public interface WindowModifier<AO extends ExAddOn<?>> {
+		/**
+		 * @param window The window to modify
+		 * @param quick The add-on to modify the window with
+		 * @throws ModelInstantiationException If a problem occurs with the quick add-on
+		 */
 		void modifyWindow(PanelPopulation.WindowBuilder<?, ?> window, AO quick) throws ModelInstantiationException;
 	}
 
@@ -153,33 +196,104 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		 */
 		LayoutManager create(ContainerPopulator<?, ?> panel, L quick) throws ModelInstantiationException;
 
+		/**
+		 * @param child The child populator to modify
+		 * @throws ExpressoInterpretationException If an exception occurs interpreting anything in this layout's child modification
+		 */
 		void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException;
 	}
 
+	/** A swing border configured by a {@link QuickBorder} */
 	public interface QuickSwingBorder {
+		/**
+		 * @param deco The component decorator to configure
+		 * @param border The Quick border
+		 * @param component A 1-element array in which the bordered component will be placed when it becomes available
+		 * @throws ModelInstantiationException If a problem occurs with the Quick border
+		 */
 		void decorate(ComponentDecorator deco, QuickBorder border, Component[] component) throws ModelInstantiationException;
 	}
 
+	/**
+	 * An Quick event listener in Swing
+	 *
+	 * @param <L> The type of the Quick listener
+	 */
 	public interface QuickSwingEventListener<L extends QuickEventListener> {
+		/**
+		 * @param c The component to install the listener on
+		 * @param listener The Quick listener
+		 * @throws ModelInstantiationException If a problem occurs with the Quick listener
+		 */
 		void addListener(Component c, L listener) throws ModelInstantiationException;
 	}
 
+	/**
+	 * A Quick Swing dialog populator
+	 *
+	 * @param <D> The type of Quick dialog
+	 */
 	public interface QuickSwingDialog<D extends QuickDialog> {
+		/**
+		 * @param dialog The Quick dialog to configure the Swing dialog
+		 * @param parent The parent anchor for the dialog
+		 * @param until The observable to kill the dialog installation
+		 * @throws ModelInstantiationException If a problem occurs with the Quick dialog
+		 */
 		void initialize(D dialog, Component parent, Observable<?> until) throws ModelInstantiationException;
 	}
 
+	/**
+	 * A Quick-backed Swing styled document
+	 *
+	 * @param <T> The type of values in the document
+	 */
 	public interface QuickSwingDocument<T> {
+		/**
+		 * @param quickDoc The Quick styled document
+		 * @param until The observable to kill the document installation
+		 * @return The Swing styled document
+		 * @throws ModelInstantiationException If a problem occurs interpreting the Quick document
+		 */
 		ObservableStyledDocument<T> interpret(StyledDocument<T> quickDoc, Observable<?> until) throws ModelInstantiationException;
 
-		MouseAdapter mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
-			Observable<?> until);
+		/**
+		 * @param quickDoc The Quick styled document
+		 * @param doc The Swing styled document
+		 * @param widget The Swing text component
+		 * @param until The observable to kill the document installation
+		 * @return The mouse listener to install in the text component
+		 */
+		MouseAdapter mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget, Observable<?> until);
 
+		/**
+		 * @param quickDoc The Quick styled document
+		 * @param doc The Swing styled document
+		 * @param widget The Swing text component
+		 * @param until The observable to kill the document installation
+		 * @return The caret listener to install in the document
+		 */
 		CaretListener caretListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
 			Observable<?> until);
 	}
 
+	/**
+	 * A Quick-backed Swing table action
+	 *
+	 * @param <R> The type of rows in the Quick table widget
+	 * @param <A> The type of Quick action
+	 */
 	public interface QuickSwingTableAction<R, A extends ValueAction<R>> {
-		void addAction(PanelPopulation.CollectionWidgetBuilder<R, ?, ?> table, A action) throws ModelInstantiationException;
+		/**
+		 * @param <R2> The type of rows in the PanelPopulation table
+		 * @param table The PanelPopulation table
+		 * @param update The function to update a PanelPopulation value when a row changes in the Quick widget's row collection
+		 * @param reverse The function to produce a Quick widget's row value from a PanelPopulation row
+		 * @param action The Quick table action
+		 * @throws ModelInstantiationException If a problem occurs interpreting the Quick table action
+		 */
+		<R2> void addAction(PanelPopulation.CollectionWidgetBuilder<R2, ?, ?> table, Function<R2, R> reverse, A action)
+			throws ModelInstantiationException;
 	}
 
 	/**

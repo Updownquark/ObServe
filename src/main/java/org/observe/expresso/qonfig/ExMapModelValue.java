@@ -1,5 +1,8 @@
 package org.observe.expresso.qonfig;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -40,6 +43,11 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return (Set<Class<ExAddOn.Def<?, ?>>>) (Set<?>) Collections.singleton(ExModelAugmentation.Def.class);
+		}
+
 		/** @return The key type of the map */
 		@QonfigAttributeGetter("key-type")
 		public VariableType getKeyType() {
@@ -58,7 +66,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted<?, ? extends AO> interpret(ExElement.Interpreted<? extends ExElement> element) {
+		public <E2 extends ExElement> Interpreted<?, ? extends AO> interpret(ExElement.Interpreted<E2> element) {
 			return (Interpreted<?, ? extends AO>) new Interpreted<>((Def<ExMapModelValue<Object>>) this, element);
 		}
 	}
@@ -129,7 +137,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ExElement element) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		Interpreted<K, ?> myInterpreted = (Interpreted<K, ?>) interpreted;
 		theKeyType = myInterpreted.getKeyType();

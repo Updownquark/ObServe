@@ -57,7 +57,7 @@ public interface ModelCell<R, C> extends ModelRow<R> {
 
 		@Override
 		public String toString() {
-			return getModelValue() + ":" + theCellValue + "@[" + getRowIndex() + "," + theColumnIndex + "]";
+			return /*getModelValue() + ":" +*/ theCellValue + "@[" + getRowIndex() + "," + theColumnIndex + "]";
 		}
 	}
 }

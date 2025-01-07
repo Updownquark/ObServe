@@ -1,7 +1,11 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+import java.util.Set;
+
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 
@@ -30,7 +34,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		 * @param type The Qonfig type of this add-on
 		 * @param element The container widget whose contents to manage
 		 */
-		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
@@ -40,8 +44,8 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> element) {
-			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
+		public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
+			return new Interpreted(this, element);
 		}
 	}
 
@@ -51,7 +55,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		 * @param definition The definition to interpret
 		 * @param element The container widget whose contents to manage
 		 */
-		protected Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+		protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 			super(definition, element);
 		}
 
@@ -71,13 +75,13 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public QuickSimpleLayout create(QuickWidget element) {
+		public QuickSimpleLayout create(ExElement element) {
 			return new QuickSimpleLayout(element);
 		}
 	}
 
 	/** @param element The container whose contents to manage */
-	protected QuickSimpleLayout(QuickWidget element) {
+	protected QuickSimpleLayout(ExElement element) {
 		super(element);
 	}
 
@@ -94,13 +98,18 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 			 * @param type The Qonfig type of this add-on
 			 * @param element The widget in the {@link QuickSimpleLayout}-managed container
 			 */
-			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
+			public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
 				super(type, element);
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<?> element) {
-				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
+			public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+				return Collections.singleton((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExModelAugmentation.Def.class);
+			}
+
+			@Override
+			public <E2 extends QuickWidget> Interpreted interpret(ExElement.Interpreted<E2> element) {
+				return new Interpreted(this, element);
 			}
 		}
 
@@ -110,7 +119,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 			 * @param definition The definition to interpret
 			 * @param element The widget in the {@link QuickSimpleLayout}-managed container
 			 */
-			protected Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
+			protected Interpreted(Def definition, ExElement.Interpreted<? extends QuickWidget> element) {
 				super(definition, element);
 			}
 
@@ -120,13 +129,13 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Child create(QuickWidget element) {
+			public Child create(ExElement element) {
 				return new Child(element);
 			}
 		}
 
 		/** @param element The widget in the {@link QuickSimpleLayout}-managed container */
-		protected Child(QuickWidget element) {
+		protected Child(ExElement element) {
 			super(element);
 		}
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -19,6 +20,8 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.quick.QuickWidget;
+import org.qommons.QommonsUtils;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -47,7 +50,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private CompiledExpression theRows;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
-		private final List<ValueAction.Def<?>> theActions;
+		private final List<ExElement.Def<?>> theActionsAndOptions;
+		private boolean isOptionsOnTop;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -55,7 +59,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
-			theActions = new ArrayList<>();
+			theActionsAndOptions = new ArrayList<>();
 		}
 
 		@Override
@@ -79,10 +83,30 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theRows;
 		}
 
+		/**
+		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+		 *         their specification in the file
+		 */
+		public List<ExElement.Def<?>> getActionsAndOptions() {
+			return Collections.unmodifiableList(theActionsAndOptions);
+		}
+
+		/** @return Whether options and button actions should be placed at the top of the table or the bottom */
+		@QonfigAttributeGetter("options-on-top")
+		public boolean isOptionsOnTop() {
+			return isOptionsOnTop;
+		}
+
 		/** @return Actions that can be executed against rows in the table */
 		@QonfigChildGetter("action")
 		public List<ValueAction.Def<?>> getActions() {
-			return Collections.unmodifiableList(theActions);
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof ValueAction.Def, aao -> (ValueAction.Def<?>) aao);
+		}
+
+		/** @return Widget options to place in a bar above or below the table along with button actions */
+		@QonfigChildGetter("option")
+		public List<QuickWidget.Def<?>> getOptions() {
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof QuickWidget.Def, aao -> (QuickWidget.Def<?>) aao);
 		}
 
 		@Override
@@ -91,7 +115,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			theRows = getAttributeExpression("rows", session);
 			theSelection = getAttributeExpression("selection", session);
 			theMultiSelection = getAttributeExpression("multi-selection", session);
-			syncChildren(ValueAction.Def.class, theActions, session.forChildren("action"));
+			isOptionsOnTop = session.getAttribute("options-on-top", boolean.class);
+			syncChildren(ExElement.Def.class, theActionsAndOptions, session.forChildren("action", "option"));
 		}
 
 		@Override
@@ -116,7 +141,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theRows;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theMultiSelection;
-		private final List<ValueAction.Interpreted<R, ?>> theActions;
+		private final List<ExElement.Interpreted<?>> theActionsAndOptions;
 
 		/**
 		 * @param definition The definition to interpret
@@ -124,7 +149,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		 */
 		protected Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
-			theActions = new ArrayList<>();
+			theActionsAndOptions = new ArrayList<>();
 		}
 
 		@Override
@@ -136,6 +161,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		public TypeToken<R> getValueType() throws ExpressoInterpretationException {
 			if (theRows == null)
 				theRows = interpret(getDefinition().getRows(), ModelTypes.Collection.<R> anyAsV());
+
 			return (TypeToken<R>) theRows.getType().getType(0);
 		}
 
@@ -154,9 +180,24 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theMultiSelection;
 		}
 
+		/**
+		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+		 *         their specification in the file
+		 */
+		public List<ExElement.Interpreted<?>> getActionsAndOptions() {
+			return Collections.unmodifiableList(theActionsAndOptions);
+		}
+
 		/** @return Actions that can be executed against rows in the table */
 		public List<ValueAction.Interpreted<R, ?>> getActions() {
-			return Collections.unmodifiableList(theActions);
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof ValueAction.Interpreted,
+				aao -> (ValueAction.Interpreted<R, ?>) aao);
+		}
+
+		/** @return Widget options to place in a bar above or below the table along with button actions */
+		public List<QuickWidget.Interpreted<?>> getOptions() {
+			return QommonsUtils.filterMap(theActionsAndOptions, aao -> aao instanceof QuickWidget.Interpreted,
+				aao -> (QuickWidget.Interpreted<?>) aao);
 		}
 
 		@Override
@@ -164,9 +205,19 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			super.doUpdate(env);
 			theSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(getValueType()));
 			theMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(getValueType()));
-			syncChildren(getDefinition().getActions(), theActions,
-				def -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType()),
-				ValueAction.Interpreted::updateAction);
+			syncChildren(getDefinition().getActionsAndOptions(), theActionsAndOptions, def -> {
+				if (def instanceof ValueAction.Def)
+					return (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType());
+				else if (def instanceof QuickWidget.Def)
+					return ((QuickWidget.Def<?>) def).interpret(this);
+				else
+					throw new IllegalStateException("Whats this? " + def.getClass().getName());
+			}, (interp, env2) -> {
+				if (interp instanceof ValueAction.Interpreted)
+					((ValueAction.Interpreted<R, ?>) interp).updateAction(env2);
+				else
+					((QuickWidget.Interpreted<?>) interp).updateElement(env2);
+			});
 		}
 
 		@Override
@@ -182,11 +233,15 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	private SettableValue<ObservableCollection<R>> theRows;
 	private SettableValue<SettableValue<R>> theSelection;
 	private SettableValue<ObservableCollection<R>> theMultiSelection;
+	private ObservableCollection<ExElement> theActionsAndOptions;
 	private ObservableCollection<ValueAction<R>> theActions;
+	private ObservableCollection<QuickWidget> theOptions;
+	private boolean isOptionsOnTop;
 
 	/** @param id The element ID for this widget */
 	protected QuickTable(Object id) {
 		super(id);
+		theActionsAndOptions = ObservableCollection.create();
 	}
 
 	/** @return The row values for the table */
@@ -204,9 +259,27 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		return ObservableCollection.flattenValue(theMultiSelection);
 	}
 
+	/**
+	 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
+	 *         their specification in the file
+	 */
+	public ObservableCollection<ExElement> getActionsAndOptions() {
+		return theActionsAndOptions.flow().unmodifiable(false).collectPassive();
+	}
+
+	/** @return Whether options and button actions should be placed at the top of the table or the bottom */
+	public boolean isOptionsOnTop() {
+		return isOptionsOnTop;
+	}
+
 	/** @return Actions that can be executed against rows in the table */
 	public ObservableCollection<ValueAction<R>> getActions() {
-		return theActions.flow().unmodifiable(false).collect();
+		return theActions;
+	}
+
+	/** @return Widget options to place in a bar above or below the table along with button actions */
+	public ObservableCollection<QuickWidget> getOptions() {
+		return theOptions;
 	}
 
 	@Override
@@ -217,19 +290,26 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		theRows = SettableValue.<ObservableCollection<R>> build().build();
 		theSelection = SettableValue.<SettableValue<R>> build().build();
 		theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
-		theActions = ObservableCollection.<ValueAction<R>> build().build();
 
 		theRowsInstantiator = myInterpreted.getRows().instantiate();
 		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
 		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
-		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
+		CollectionUtils.synchronize(theActionsAndOptions, myInterpreted.getActionsAndOptions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity())//
-		.<ModelInstantiationException> simpleX(action -> action.create())//
+		.<ModelInstantiationException> simpleX(aao -> {
+			if (aao instanceof ValueAction.Interpreted)
+				return ((ValueAction.Interpreted<R, ?>) aao).create();
+			else if (aao instanceof QuickWidget.Interpreted)
+				return ((QuickWidget.Interpreted<?>) aao).create();
+			else
+				throw new IllegalStateException("What is this? " + aao.getClass().getName());
+		})//
 		.rightOrder()//
 		.onLeftX(element -> element.getLeftValue().destroy())//
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
+		isOptionsOnTop = myInterpreted.getDefinition().isOptionsOnTop();
 	}
 
 	@Override
@@ -242,8 +322,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		if (theMultiSelectionInstantiator != null)
 			theMultiSelectionInstantiator.instantiate();
 
-		for (ValueAction<R> action : theActions)
-			action.instantiated();
+		for (ExElement aao : theActionsAndOptions)
+			aao.instantiated();
 	}
 
 	@Override
@@ -253,9 +333,19 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		theRows.set(theRowsInstantiator.get(myModels), null);
 		theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels), null);
 		theMultiSelection.set(theMultiSelectionInstantiator == null ? null : theMultiSelectionInstantiator.get(myModels), null);
+		if (theActions == null) {
+			theActions = theActionsAndOptions.flow()//
+				.filter((Class<ValueAction<R>>) (Class<?>) ValueAction.class)//
+				.unmodifiable(false)//
+				.collectActive(Observable.or(myModels.getUntil(), onDestroy()));
+			theOptions = theActionsAndOptions.flow()//
+				.filter(QuickWidget.class)//
+				.unmodifiable(false)//
+				.collectActive(Observable.or(myModels.getUntil(), onDestroy()));
+		}
 
-		for (ValueAction<R> action : theActions)
-			action.instantiate(myModels);
+		for (ExElement aao : theActionsAndOptions)
+			aao.instantiate(myModels);
 	}
 
 	@Override
@@ -265,10 +355,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		copy.theRows = SettableValue.<ObservableCollection<R>> build().build();
 		copy.theSelection = SettableValue.<SettableValue<R>> build().build();
 		copy.theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
-		copy.theActions = ObservableCollection.<ValueAction<R>> build().build();
+		copy.theActionsAndOptions = ObservableCollection.create();
+		copy.theActions = null;
+		copy.theOptions = null;
 
-		for (ValueAction<R> action : theActions)
-			copy.theActions.add(action.copy(copy));
+		for (ExElement aao : theActionsAndOptions)
+			copy.theActionsAndOptions.add(aao.copy(copy));
 
 		return copy;
 	}
