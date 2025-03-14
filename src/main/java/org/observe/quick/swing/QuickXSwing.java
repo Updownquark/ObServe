@@ -6,7 +6,11 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.LayoutManager;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -15,6 +19,7 @@ import javax.swing.JPanel;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.observe.Observable;
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
@@ -27,6 +32,7 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.MultiValueRenderable;
+import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickTable;
 import org.observe.quick.base.TabularWidget;
@@ -48,6 +54,7 @@ import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableCo
 import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.swing.AbstractLayout;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.ModelCell;
 import org.observe.util.swing.MultiRangeSlider;
 import org.observe.util.swing.MultiRangeSlider.Range;
 import org.observe.util.swing.MultiRangeSlider.RangePoint;
@@ -160,8 +167,9 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.addCollapsePanel(true, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.addCollapsePanel(true,
+					new JustifiedBoxLayout(true).mainJustified().crossJustified().setShowingInvisible(showInvisible),
 					cp -> populateCollapsePane(cp, panel, null, true));
 				return this;
 			}
@@ -224,8 +232,8 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.withHeader(p -> p.addVPanel(p2 -> {
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.withHeader(p -> p.addVPanel(showInvisible, p2 -> {
 					if (theShading != null)
 						p2.withShading(theShading);
 					panel.accept(p2);
@@ -236,12 +244,13 @@ public class QuickXSwing implements QuickInterpretation {
 	}
 
 	static class SwingComboButton<T> extends QuickSwingPopulator.Abstract<QuickComboButton<T>> {
-		private QuickSwingPopulator<QuickWidget> theRenderer;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theRenderers;
 
 		SwingComboButton(QuickComboButton.Interpreted<T, QuickComboButton<T>> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			if (interpreted.getRenderer() != null)
-				theRenderer = tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+			theRenderers = new HashMap<>();
+			for (QuickWidget.Interpreted<?> renderer : interpreted.getRenderers())
+				theRenderers.put(renderer.getIdentity(), tx.transform(renderer, QuickSwingPopulator.class));
 		}
 
 		@Override
@@ -276,9 +285,9 @@ public class QuickXSwing implements QuickInterpretation {
 			};
 			quick.setContext(tableCtx);
 			SettableValue<T> selectedValue = SettableValue.<T> build().build();
-			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> renderer = theRenderer == null ? null
-				: new QuickSwingTablePopulation.QuickSwingRenderer<>(null, LambdaUtils.identity(), quick, selectedValue,
-					quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> renderer;
+			renderer = new QuickSwingTablePopulation.QuickSwingRenderer<>(null, LambdaUtils.identity(), quick, selectedValue,
+				quick.getRenderers(), tableCtx, () -> combo[0], theRenderers);
 			panel.addComboButton(null, quick.getValues(), (value, cause) -> {
 				ctx.getActiveValue().set(value, cause);
 				quick.getAction().act(cause);
@@ -287,25 +296,26 @@ public class QuickXSwing implements QuickInterpretation {
 				component.accept(cb);
 				cb.withText(quick.getText());
 				cb.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
-				if (theRenderer != null) {
-					cb.renderWith(renderer);
-					cb.withValueTooltip(v -> renderer.getTooltip(v, v));
-				}
+				cb.renderWith(renderer);
+				cb.withValueTooltip(v -> {
+					ModelCell<T, T> cell = new ModelCell.Default<>(() -> v, v, 0, 0, false, false, false, false, false, true);
+					return renderer.getTooltip(cell);
+				});
 			});
 		}
 	}
 
-	static class SwingTreeTable<N> extends QuickBaseSwing.SwingTree<N, QuickTreeTable<N>> {
+	static class SwingTreeTable<N, C> extends QuickBaseSwing.SwingTree<N, QuickTreeTable<N, C>> {
 		private final QuickSwingColumnSet<BetterList<N>, BetterList<N>> theColumns;
 
-		SwingTreeTable(QuickTreeTable.Interpreted<N> interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingTreeTable(QuickTreeTable.Interpreted<N, C> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			super(interpreted, tx);
 			theColumns = new QuickSwingColumnSet<>(interpreted, interpreted.getColumns(), tx, null, LambdaUtils.identity());
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTreeTable<N> quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTreeTable<N, C> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			TabularWidget.TabularContext<BetterList<N>> ctx = new TabularWidget.TabularContext.Default<>(
 				quick.reporting().getPosition().toShortString());
@@ -528,8 +538,9 @@ public class QuickXSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<T> renderCtx = new TabularWidget.TabularContext.Default<>(quick.toString());
 			quick.setContext(renderCtx);
 			QuickWidget renderer = quick.getRenderer();
+			Map<Object, QuickSwingPopulator<QuickWidget>> rendererMap = Collections.singletonMap(renderer.getIdentity(), theRenderer);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingRenderer = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
-				LambdaUtils.identity(), quick, quick.getActiveValue(), renderer, renderCtx, () -> populator[0], theRenderer);
+				LambdaUtils.identity(), quick, quick.getActiveValue(), Arrays.asList(renderer), renderCtx, () -> populator[0], rendererMap);
 
 			// Now we need to make copies of the Quick tiled pane so the other 2 renderers (one for hover, one for focus) are independent
 			// of each other and the renderer
@@ -563,8 +574,8 @@ public class QuickXSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<T> hoverCtx = new TabularWidget.TabularContext.Default<>(quick.toString() + "(hover)");
 			hoverCopy.setContext(hoverCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingHover = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
-				LambdaUtils.identity(), hoverCopy, hoverCopy.getActiveValue(), hoverCopy.getRenderer(), hoverCtx, () -> populator[0],
-				theRenderer);
+				LambdaUtils.identity(), hoverCopy, hoverCopy.getActiveValue(), Arrays.asList(hoverCopy.getRenderer()), hoverCtx,
+				() -> populator[0], rendererMap);
 
 			QuickTiledPane<T> focusCopy = quick.copy(quick.getParentElement());
 			ModelSetInstance focusModels = quick.getModels().createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil())
@@ -574,30 +585,51 @@ public class QuickXSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<T> focusCtx = new TabularWidget.TabularContext.Default<>(quick.toString() + "(focus)");
 			focusCopy.setContext(focusCtx);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingFocus = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
-				LambdaUtils.identity(), focusCopy, focusCopy.getActiveValue(), focusCopy.getRenderer(), focusCtx, () -> populator[0],
-				theRenderer);
+				LambdaUtils.identity(), focusCopy, focusCopy.getActiveValue(), Arrays.asList(focusCopy.getRenderer()), focusCtx,
+				() -> populator[0], rendererMap);
 
 			// Support modifying values in the collection
 
+			long[] hoverFocusKnownValuesStamp = new long[2];
+			hoverFocusKnownValuesStamp[0] = tiledPane.getValues().getStamp();
+			hoverFocusKnownValuesStamp[1] = hoverFocusKnownValuesStamp[0];
 			hoverCtx.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
-				if (!swingHover.isUpdating()) {
+				if (swingHover.isUpdating())
+					return;
+				long newValuesStamp = tiledPane.getValues().getStamp();
+				// If the collection hasn't changed but the value has, the input is from the UI and we should update the collection element
+				if (newValuesStamp == hoverFocusKnownValuesStamp[0]) {
+					if (evt.getNewValue() != tiledPane.getValues().get(hoverCtx.getRowIndex().get()))
+						System.out.println("Changing hover [" + hoverCtx.getRowIndex().get() + "] from "
+							+ tiledPane.getValues().get(hoverCtx.getRowIndex().get()) + " to " + evt.getNewValue());
 					try {
 						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(hoverCtx.getRowIndex().get()).getElementId())//
 						.set(evt.getNewValue());
 					} catch (RuntimeException e) {
 						quick.reporting().error("Unable to modify value[" + hoverCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
 					}
-				}
+					hoverFocusKnownValuesStamp[0] = tiledPane.getValues().getStamp();
+				} else
+					hoverFocusKnownValuesStamp[0] = newValuesStamp;
 			});
 			focusCtx.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
-				if (!swingFocus.isUpdating()) {
+				if (swingFocus.isUpdating())
+					return;
+				long newValuesStamp = tiledPane.getValues().getStamp();
+				// If the collection hasn't changed but the value has, the input is from the UI and we should update the collection element
+				if (newValuesStamp == hoverFocusKnownValuesStamp[1]) {
+					if (evt.getNewValue() != tiledPane.getValues().get(focusCtx.getRowIndex().get()))
+						System.out.println("Changing focus [" + focusCtx.getRowIndex().get() + "] from "
+							+ tiledPane.getValues().get(focusCtx.getRowIndex().get()) + " to " + evt.getNewValue());
 					try {
 						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(focusCtx.getRowIndex().get()).getElementId())//
 						.set(evt.getNewValue());
 					} catch (RuntimeException e) {
 						quick.reporting().error("Unable to modify value[" + focusCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
 					}
-				}
+					hoverFocusKnownValuesStamp[1] = tiledPane.getValues().getStamp();
+				} else
+					hoverFocusKnownValuesStamp[1] = newValuesStamp;
 			});
 
 			tiledPane.setConstantSizing(quick.isConstantSizing());
@@ -610,19 +642,19 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingSuperTable<R> extends QuickBaseSwing.SwingTable<R, R> {
+	static class SwingSuperTable<R, C> extends QuickBaseSwing.SwingTable<R, R, C> {
 		private SettableValue<TableContentControl> theContentControl;
 		private Component theSearchField;
 
-		SwingSuperTable(QuickSuperTable.Interpreted<R, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingSuperTable(QuickSuperTable.Interpreted<R, C, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			super(interpreted, tx);
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R> quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R, C> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			QuickSuperTable<R> superQuick = (QuickSuperTable<R>) quick;
+			QuickSuperTable<R, C> superQuick = (QuickSuperTable<R, C>) quick;
 			if (superQuick.isSearchable()) {
 				theContentControl = SettableValue.create(TableContentControl.DEFAULT);
 				panel.addVPanel(inner -> {
@@ -644,9 +676,15 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 
 		@Override
-		protected void modifyTable(TableBuilder<R, ?, ?> table, QuickTable<R> quick) {
+		protected void modifyTable(TableBuilder<R, ?, ?> table, QuickTable<R, C> quick) {
 			super.modifyTable(table, quick);
-			QuickSuperTable<R> superQuick = (QuickSuperTable<R>) quick;
+			QuickSuperTable<R, C> superQuick = (QuickSuperTable<R, C>) quick;
+			QuickSuperTable.WithRowDragging rowDragging = superQuick.getRowDragging();
+			if (rowDragging != null) {
+				ObservableAction postDrag = rowDragging.getPostDrag();
+				Runnable postDragRun = postDrag == null ? null : () -> postDrag.act(null);
+				table.withDraggableRows(true, postDragRun);
+			}
 			table.fill().fillV();
 			if (superQuick.isSearchable()) {
 				table.withFiltering(theContentControl);
@@ -666,15 +704,19 @@ public class QuickXSwing implements QuickInterpretation {
 	}
 
 	static class SwingValueSelector<A, I> extends QuickSwingPopulator.Abstract<QuickValueSelector<A, I>> {
-		private final QuickBaseSwing.SwingTable<A, ObservableValueSelector.SelectableValue<A, I>> theAvailableTable;
+		private final QuickBaseSwing.SwingTable<A, ObservableValueSelector.SelectableValue<A, I>, Object> theAvailableTable;
 		private final QuickSwingColumnSet<A, ObservableValueSelector.SelectableValue<A, I>> theAvailableColumns;
-		private final QuickBaseSwing.SwingTable<I, ObservableValueSelector.SelectableValue<A, I>> theIncludedTable;
+		private final QuickBaseSwing.SwingTable<I, ObservableValueSelector.SelectableValue<A, I>, Object> theIncludedTable;
 		private final QuickSwingColumnSet<I, ObservableValueSelector.SelectableValue<A, I>> theIncludedColumns;
+		private final QuickSwingPopulator<QuickButton> theIncludeAllConfig;
+		private final QuickSwingPopulator<QuickButton> theIncludeConfig;
+		private final QuickSwingPopulator<QuickButton> theExcludeConfig;
+		private final QuickSwingPopulator<QuickButton> theExcludeAllConfig;
 
 		SwingValueSelector(QuickValueSelector.Interpreted<A, I> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			TriConsumer<ObservableValueSelector.SelectableValue<A, I>, A, QuickWidget> update = (selValue, r, tbl) -> {
-				((QuickTable<A>) tbl).getRows().mutableElement(selValue.getSourceElement().getElementId()).set(r);
+				((QuickTable<A, Object>) tbl).getRows().mutableElement(selValue.getSourceElement().getElementId()).set(r);
 			};
 			Function<ObservableValueSelector.SelectableValue<A, I>, A> reverse = ObservableValueSelector.SelectableValue::getSource;
 			theAvailableTable = tx.transform(new QuickBaseSwing.MappedTableConfig<>(interpreted.getAvailable(), //
@@ -686,6 +728,14 @@ public class QuickXSwing implements QuickInterpretation {
 				null, destValue), QuickBaseSwing.SwingTable.class);
 			theIncludedColumns = new QuickSwingColumnSet<>(interpreted.getIncluded(), interpreted.getIncluded().getColumns(), tx, null,
 				ObservableValueSelector.SelectableValue::getDest);
+			theIncludeAllConfig = interpreted.getIncludeAllConfig() == null ? null
+				: tx.transform(interpreted.getIncludeAllConfig(), QuickSwingPopulator.class);
+			theIncludeConfig = interpreted.getIncludeConfig() == null ? null
+				: tx.transform(interpreted.getIncludeConfig(), QuickSwingPopulator.class);
+			theExcludeConfig = interpreted.getExcludeConfig() == null ? null
+				: tx.transform(interpreted.getExcludeConfig(), QuickSwingPopulator.class);
+			theExcludeAllConfig = interpreted.getExcludeAllConfig() == null ? null
+				: tx.transform(interpreted.getExcludeAllConfig(), QuickSwingPopulator.class);
 		}
 
 		@Override
@@ -710,7 +760,8 @@ public class QuickXSwing implements QuickInterpretation {
 				.createPopulator(quick.getIncluded(), quick.getIncluded().getAllColumns(), includedCtx, until);
 
 			selector[0] = ObservableValueSelector.<A, I> build(quick.getAvailable().getRows(), sourceTable -> {
-				theAvailableTable.populateTable(sourceTable, quick.getAvailable(), availableColumnsPopulator);
+				theAvailableTable.populateTable(sourceTable, availableCtx, (QuickTable<A, Object>) quick.getAvailable(),
+					availableColumnsPopulator);
 				ObservableCollection<A> availableRows = quick.getAvailable().getRows();
 				ObservableCollection<ObservableValueSelector.SelectableValue<A, I>> selectedSVs = quick.getAvailable().getMultiSelection()
 					.flow()//
@@ -744,7 +795,8 @@ public class QuickXSwing implements QuickInterpretation {
 						);
 				sourceTable.withSelection(selectedSV, false);
 			}, destTable -> {
-				theIncludedTable.populateTable(destTable, quick.getIncluded(), includedColumnsPopulator);
+				theIncludedTable.populateTable(destTable, includedCtx, (QuickTable<I, Object>) quick.getIncluded(),
+					includedColumnsPopulator);
 				// Can't respect selection here, can we?
 			}, av -> {
 				ctx.getAvailableValue().set(av, null);
@@ -753,6 +805,12 @@ public class QuickXSwing implements QuickInterpretation {
 				.withFilterCommitOnType(true)//
 				.withUntil(panel.getUntil())//
 				.withItemName(quick.getItemName())//
+				.configureIncludeAll(
+					theIncludeAllConfig == null ? null : btn -> theIncludeAllConfig.modify(btn, quick.getIncludeAllConfig()))//
+				.configureInclude(theIncludeConfig == null ? null : btn -> theIncludeConfig.modify(btn, quick.getIncludeConfig()))//
+				.configureExclude(theExcludeConfig == null ? null : btn -> theExcludeConfig.modify(btn, quick.getExcludeConfig()))//
+				.configureExcludeAll(
+					theExcludeAllConfig == null ? null : btn -> theExcludeAllConfig.modify(btn, quick.getExcludeAllConfig()))//
 				.build();
 			Subscription includedSub = ObservableCollectionSynchronization.synchronize(selector[0].getIncluded().flow()//
 				.<I> transform(tx -> tx.cache(false)//

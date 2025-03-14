@@ -307,7 +307,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 			if (canAdd == null)
 				canAdd = opp.canAdd(newValue, //
 					prevOpp == null ? null : prevOpp.getId(!left), nextOpp == null ? null : nextOpp.getId(!left)) == null;
-			if (canAdd && !opp.isEventing()) {
+			if (canAdd && !otherEventing) {
 				try {
 					oppEl = CollectionElement.getElementId(opp.addElement(newValue, //
 						prevOpp == null ? null : prevOpp.getId(!left), nextOpp == null ? null : nextOpp.getId(!left), false));

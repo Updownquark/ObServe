@@ -38,18 +38,30 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickDragging {
+/** Transfer support classes for the Quick-Base toolkit */
+public class QuickTransfer {
+	/** The XML name of the {@link TransferSource} element */
 	public static final String TRANSFER_SOURCE = "transfer-source";
+	/** The XML name of the {@link TransferAccept} element */
 	public static final String TRANSFER_ACCEPT = "transfer-accept";
+	/** The XML name of the {@link AsObject} element */
 	public static final String AS_OBJECT = "as-object";
+	/** The XML name of the {@link AsText} element */
 	public static final String AS_TEXT = "as-text";
 
+	/**
+	 * The source component configuration for the ability to transfer values between widgets in quick
+	 *
+	 * @param <S> The type of values in the widget this transfer source is for
+	 * @param <T> The type of transformed values produced by this source for acceptance in another widget (or the same widget)
+	 */
 	public static class TransferSource<S, T> extends ExElement.Abstract {
+		/** Definition for a {@link TransferSource} */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TRANSFER_SOURCE,
 			interpretation = Interpreted.class,
 			instance = TransferSource.class)
-		public static class Def extends ExElement.Def.Abstract<TransferSource> {
+		public static class Def extends ExElement.Def.Abstract<TransferSource<?, ?>> {
 			private boolean isDraggable;
 			private boolean isCopyable;
 			private boolean isMovable;
@@ -57,36 +69,49 @@ public class QuickDragging {
 			private CompiledExpression theTransform;
 			private final List<QuickDataFlavor.Def<?>> theFlavors;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theFlavors = new ArrayList<>();
 			}
 
+			/** @return Whether the user should be able to use drag operations to move values from this widget */
 			@QonfigAttributeGetter("drag")
 			public boolean isDraggable() {
 				return isDraggable;
 			}
 
+			/** @return Whether the user should be able to use copy/paste operations to move values from this widget */
 			@QonfigAttributeGetter("copy")
 			public boolean isCopyable() {
 				return isCopyable;
 			}
 
+			/** @return Whether the user should be able to use cut/paste operations to move values from this widget */
 			@QonfigAttributeGetter("move")
 			public boolean isMovable() {
 				return isMovable;
 			}
 
+			/** @return Whether the currently-configured transfer source operation (likely dependent on the user's selection) is enabled */
 			@QonfigAttributeGetter("can-transform")
 			public CompiledExpression canTransform() {
 				return canTransform;
 			}
 
+			/**
+			 * @return Produces the transfer value for the currently-configured transfer source operation (likely dependent on the user's
+			 *         selection)
+			 */
 			@QonfigAttributeGetter("transform")
 			public CompiledExpression getTransform() {
 				return theTransform;
 			}
 
+			/** @return Data flavors that this transfer source can produce data for */
 			@QonfigChildGetter("flavor")
 			public List<QuickDataFlavor.Def<?>> getFlavors() {
 				return Collections.unmodifiableList(theFlavors);
@@ -104,11 +129,21 @@ public class QuickDragging {
 				syncChildren(QuickDataFlavor.Def.class, theFlavors, session.forChildren("flavor"));
 			}
 
+			/**
+			 * @param parent The interpreted parent element
+			 * @return The interpreted transfer source
+			 */
 			public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link TransferSource}
+		 *
+		 * @param <S> The type of values in the widget this transfer source is for
+		 * @param <T> The type of transformed values produced by this source for acceptance in another widget (or the same widget)
+		 */
 		public static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<TransferSource<S, T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> canTransform;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theTransform;
@@ -126,22 +161,34 @@ public class QuickDragging {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return Whether the currently-configured transfer source operation (likely dependent on the user's selection) is enabled */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> canTransform() {
 				return canTransform;
 			}
 
+			/**
+			 * @return Produces the transfer value for the currently-configured transfer source operation (likely dependent on the user's
+			 *         selection)
+			 */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getTransform() {
 				return theTransform;
 			}
 
+			/** @return Data flavors that this transfer source can produce data for */
 			public List<QuickDataFlavor.Interpreted<? extends T, ?>> getFlavors() {
 				return Collections.unmodifiableList(theFlavors);
 			}
 
+			/** @return The type of transformed values produced by this source for acceptance in another widget (or the same widget) */
 			public TypeToken<T> getValueType() {
 				return theValueType;
 			}
 
+			/**
+			 * @param env The environment to use to interpret expressions
+			 * @param suggestedDataType The data type that this transfer source's parent thinks is most likely for the transfer data type
+			 * @throws ExpressoInterpretationException If an error occurs interpreting this transfer source
+			 */
 			public void updateTransferSource(InterpretedExpressoEnv env, TypeToken<?> suggestedDataType)
 				throws ExpressoInterpretationException {
 				theSuggestedDataType = suggestedDataType;
@@ -159,6 +206,7 @@ public class QuickDragging {
 				theTransform = interpret(getDefinition().getTransform(), ModelTypes.Value.anyAs());
 			}
 
+			/** @return The instantiated transfer source */
 			public TransferSource<S, T> create() {
 				return new TransferSource<>(getIdentity());
 			}
@@ -179,26 +227,35 @@ public class QuickDragging {
 			theFlavors = new ArrayList<>();
 		}
 
+		/** @return Whether the user should be able to use drag operations to move values from this widget */
 		public Boolean isDraggable() {
 			return isDraggable;
 		}
 
+		/** @return Whether the user should be able to use copy/paste operations to move values from this widget */
 		public Boolean isCopyable() {
 			return isCopyable;
 		}
 
+		/** @return Whether the user should be able to use cut/paste operations to move values from this widget */
 		public Boolean isMovable() {
 			return isMovable;
 		}
 
+		/** @return Whether the currently-configured transfer source operation (likely dependent on the user's selection) is enabled */
 		public SettableValue<Boolean> canTransform() {
 			return canTransform;
 		}
 
+		/**
+		 * @return Produces the transfer value for the currently-configured transfer source operation (likely dependent on the user's
+		 *         selection)
+		 */
 		public SettableValue<T> getTransform() {
 			return theTransform;
 		}
 
+		/** @return Data flavors that this transfer source can produce data for */
 		public List<QuickDataFlavor<? extends T>> getFlavors() {
 			return Collections.unmodifiableList(theFlavors);
 		}
@@ -248,7 +305,14 @@ public class QuickDragging {
 		}
 	}
 
+	/**
+	 * The target component configuration for the ability to transfer values between widgets in quick
+	 *
+	 * @param <T> The type of values in the widget this transfer source is for
+	 * @param <S> The type of transformed values acceptable to this target from another widget (or the same widget)
+	 */
 	public static class TransferAccept<T, S> extends QuickStyledElement.Abstract {
+		/** Definition for a {@link TransferAccept} */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = TRANSFER_ACCEPT,
 			interpretation = Interpreted.class,
@@ -266,59 +330,74 @@ public class QuickDragging {
 			private CompiledExpression theIconOffsetX;
 			private CompiledExpression theIconOffsetY;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 				theFlavors = new ArrayList<>();
 			}
 
+			/** @return The variable that will contain each value to transfer into this widget */
 			@QonfigAttributeGetter("transfer-value-as")
 			public ModelComponentId getTransferValueAs() {
 				return theTransferValueAs;
 			}
 
+			/** @return The variable that will contain the list of values to transfer into this widget */
 			@QonfigAttributeGetter("transfer-values-as")
 			public ModelComponentId getTransferValuesAs() {
 				return theTransferValuesAs;
 			}
 
+			/** @return Whether the user should be able to use drag operations to move values into this widget */
 			@QonfigAttributeGetter("drag")
 			public boolean isDraggable() {
 				return isDraggable;
 			}
 
+			/** @return Whether the user should be able to use copy/ or cut/paste operations to move values into this widget */
 			@QonfigAttributeGetter("paste")
 			public boolean isPasteable() {
 				return isPasteable;
 			}
 
+			/** @return Data flavors that this transfer accepter can accept data for */
 			@QonfigChildGetter("flavor")
 			public List<QuickDataFlavor.Def<?>> getFlavors() {
 				return Collections.unmodifiableList(theFlavors);
 			}
 
+			/** @return Whether the current transfer operation is acceptable */
 			@QonfigAttributeGetter("can-accept")
 			public CompiledExpression canAccept() {
 				return canAccept;
 			}
 
+			/** @return Whether the {@link #canAccept()} operation operates on the {@link #getTransferValueAs()} variable */
 			public boolean isCanAcceptOpOnSingle() {
 				return isCanAcceptOpOnSingle;
 			}
 
+			/** @return The action to perform the transfer operation */
 			@QonfigAttributeGetter("accept")
 			public CompiledExpression getAccept() {
 				return theAccept;
 			}
 
+			/** @return Whether the {@link #getAccept()} operation operates on the {@link #getTransferValueAs()} variable */
 			public boolean isAcceptOpOnSingle() {
 				return isAcceptOpOnSingle;
 			}
 
+			/** @return Horizontal offset for the icon for the current drag transfer */
 			@QonfigAttributeGetter("icon-offset-x")
 			public CompiledExpression getIconOffsetX() {
 				return theIconOffsetX;
 			}
 
+			/** @return Vertical offset for the icon for the current drag transfer */
 			@QonfigAttributeGetter("icon-offset-y")
 			public CompiledExpression getIconOffsetY() {
 				return theIconOffsetY;
@@ -377,6 +456,8 @@ public class QuickDragging {
 			}
 
 			private boolean hasVariable(ObservableExpression expression, ModelComponentId vbl) {
+				if (vbl == null)
+					return false;
 				if (expression instanceof NameExpression && ((NameExpression) expression).getNames().size() == 1
 					&& ((NameExpression) expression).getName().equals(vbl.getName()))
 					return true;
@@ -387,11 +468,21 @@ public class QuickDragging {
 				return false;
 			}
 
+			/**
+			 * @param parent The interpreted parent for this transfer accepter
+			 * @return The interpreted transfer accepter
+			 */
 			public Interpreted<?, ?> interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
 		}
 
+		/**
+		 * Interpretation for a {@link TransferAccept}
+		 *
+		 * @param <T> The type of values in the widget this transfer source is for
+		 * @param <S> The type of transformed values acceptable to this target from another widget (or the same widget)
+		 */
 		public static class Interpreted<T, S> extends QuickStyledElement.Interpreted.Abstract<TransferAccept<T, S>> {
 			private final List<QuickDataFlavor.Interpreted<? extends S, ?>> theFlavors;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> canAccept;
@@ -411,30 +502,41 @@ public class QuickDragging {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return Data flavors that this transfer accepter can accept data for */
 			public List<QuickDataFlavor.Interpreted<? extends S, ?>> getFlavors() {
 				return Collections.unmodifiableList(theFlavors);
 			}
 
+			/** @return Whether the current transfer operation is acceptable */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> canAccept() {
 				return canAccept;
 			}
 
+			/** @return The action to perform the transfer operation */
 			public InterpretedValueSynth<ObservableAction, ObservableAction> getAccept() {
 				return theAccept;
 			}
 
+			/** @return Horizontal offset for the icon for the current drag transfer */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getIconOffsetX() {
 				return theIconOffsetX;
 			}
 
+			/** @return Vertical offset for the icon for the current drag transfer */
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getIconOffsetY() {
 				return theIconOffsetY;
 			}
 
+			/** @return The type of transformed values acceptable to this target from another widget (or the same widget) */
 			public TypeToken<S> getDataType() {
 				return theDataType;
 			}
 
+			/**
+			 * @param env The environment to use to interpret expressions
+			 * @param suggestedDataType The data type that this transfer accepter's parent thinks is most likely for the transfer data type
+			 * @throws ExpressoInterpretationException If an error occurs interpreting this transfer accepter
+			 */
 			public void updateTransferAccepter(InterpretedExpressoEnv env, TypeToken<?> suggestedDataType)
 				throws ExpressoInterpretationException {
 				theSuggestedDataType = suggestedDataType;
@@ -453,6 +555,7 @@ public class QuickDragging {
 				theIconOffsetY = getDefinition().getIconOffsetY().interpret(ModelTypes.Value.INT, expressoEnv);
 			}
 
+			/** @return The instantiated transfer accepter */
 			public TransferAccept<T, S> create() {
 				return new TransferAccept<>(getIdentity());
 			}
@@ -511,46 +614,57 @@ public class QuickDragging {
 			theTransferValues = ObservableCollection.create();
 		}
 
+		/** @return Container for each source value to transfer into this widget */
 		public SettableValue<S> getTransferValue() {
 			return theTransferValue;
 		}
 
+		/** @return Container for the list of source values to transfer into this widget */
 		public ObservableCollection<S> getTransferValues() {
 			return theTransferValues;
 		}
 
+		/** @return Whether the user should be able to use drag operations to move values into this widget */
 		public boolean isDraggable() {
 			return isDraggable;
 		}
 
+		/** @return Whether the user should be able to use copy/ or cut/paste operations to move values into this widget */
 		public boolean isPasteable() {
 			return isPasteable;
 		}
 
+		/** @return Data flavors that this transfer accepter can accept data for */
 		public List<QuickDataFlavor<? extends S>> getFlavors() {
 			return Collections.unmodifiableList(theFlavors);
 		}
 
+		/** @return Whether the current transfer operation is acceptable */
 		public SettableValue<Boolean> canAccept() {
 			return canAccept;
 		}
 
+		/** @return Whether the {@link #canAccept()} operation operates on the {@link Def#getTransferValueAs()} variable */
 		public boolean isCanAcceptOpOnSingle() {
 			return isCanAcceptOpOnSingle;
 		}
 
+		/** @return The action to perform the transfer operation */
 		public ObservableAction getAccept() {
 			return theAccept;
 		}
 
+		/** @return Whether the {@link #getAccept()} operation operates on the {@link Def#getTransferValueAs()} variable */
 		public boolean isAcceptOpOnSingle() {
 			return isAcceptOpOnSingle;
 		}
 
+		/** @return Horizontal offset for the icon for the current drag transfer */
 		public SettableValue<Integer> getIconOffsetX() {
 			return theIconOffsetX;
 		}
 
+		/** @return Vertical offset for the icon for the current drag transfer */
 		public SettableValue<Integer> getIconOffsetY() {
 			return theIconOffsetY;
 		}
@@ -610,16 +724,43 @@ public class QuickDragging {
 		}
 	}
 
+	/**
+	 * A data flavor for transfer of values between Quick widgets
+	 *
+	 * @param <T> The type of data for this flavor
+	 */
 	public static interface QuickDataFlavor<T> extends ExElement {
+		/**
+		 * Definition for a {@link QuickDataFlavor}
+		 *
+		 * @param <F> The type of data flavor
+		 */
 		public interface Def<F extends QuickDataFlavor<?>> extends ExElement.Def<F> {
+			/**
+			 * @param parent The interpreted parent
+			 * @return The interpreted data flavor
+			 */
 			Interpreted<?, ? extends F> interpret(ExElement.Interpreted<?> parent);
 		}
 
+		/**
+		 * Interpretation for a {@link QuickDataFlavor}
+		 *
+		 * @param <T> The type of data for this flavor
+		 * @param <F> The type of data flavor
+		 */
 		public interface Interpreted<T, F extends QuickDataFlavor<T>> extends ExElement.Interpreted<F> {
+			/** @return The type of transfer data for this flavor */
 			TypeToken<T> getDataType();
 
+			/**
+			 * @param env The environment to use to interpret expressions
+			 * @param suggestedType The data type that this data flavor's parent thinks is most likely for the transfer data type
+			 * @throws ExpressoInterpretationException If an error occurs interpreting this data flavor
+			 */
 			void updateDataFlavor(InterpretedExpressoEnv env, TypeToken<?> suggestedType) throws ExpressoInterpretationException;
 
+			/** @return The instantiated data flavor */
 			F create();
 		}
 
@@ -627,12 +768,22 @@ public class QuickDragging {
 		QuickDataFlavor<T> copy(ExElement parent);
 	}
 
+	/**
+	 * Data flavor for simple transfer of objects in Quick
+	 *
+	 * @param <T> The type of object to transfer
+	 */
 	public static class AsObject<T> extends ExElement.Abstract implements QuickDataFlavor<T> {
+		/** Definition for an {@link AsObject} */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = AS_OBJECT,
 			interpretation = Interpreted.class,
 			instance = AsObject.class)
 		public static class Def extends ExElement.Def.Abstract<AsObject<?>> implements QuickDataFlavor.Def<AsObject<?>> {
+			/**
+			 * @param parent The parent of this element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 			}
@@ -643,6 +794,11 @@ public class QuickDragging {
 			}
 		}
 
+		/**
+		 * Interpretation for an {@link AsObject}
+		 *
+		 * @param <T> The type of object to transfer
+		 */
 		public static class Interpreted<T> extends ExElement.Interpreted.Abstract<AsObject<T>>
 		implements QuickDataFlavor.Interpreted<T, AsObject<T>> {
 			private TypeToken<T> theDataType;
@@ -692,18 +848,25 @@ public class QuickDragging {
 		}
 	}
 
+	/** Data flavor for transfer of text data in Quick */
 	public static class AsText extends ExElement.Abstract implements QuickDataFlavor<String> {
+		/** Definition for an {@link AsText} */
 		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 			qonfigType = AS_TEXT,
 			interpretation = Interpreted.class,
 			instance = AsText.class)
-		public static class Def extends ExElement.Def.Abstract<AsText> {
+		public static class Def extends ExElement.Def.Abstract<AsText> implements QuickDataFlavor.Def<AsText> {
 			private String theMimeType;
 
+			/**
+			 * @param parent The parent of this element
+			 * @param qonfigType The Qonfig type of this element
+			 */
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 				super(parent, qonfigType);
 			}
 
+			/** @return The MIME (Multipurpose Internet Mail Extension) type of text to be transferred. E.g. 'text/html' or 'text/plain' */
 			@QonfigAttributeGetter("mime-type")
 			public String getMimeType() {
 				return theMimeType;
@@ -714,9 +877,16 @@ public class QuickDragging {
 				super.doUpdate(session);
 				theMimeType = session.getAttributeText("mime-type");
 			}
+
+			@Override
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
+			}
 		}
 
-		public static class Interpreted extends ExElement.Interpreted.Abstract<AsText> {
+		/** Interpretation for an {@link AsText} */
+		public static class Interpreted extends ExElement.Interpreted.Abstract<AsText>
+		implements QuickDataFlavor.Interpreted<String, AsText> {
 			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -724,6 +894,21 @@ public class QuickDragging {
 			@Override
 			public Def getDefinition() {
 				return (Def) super.getDefinition();
+			}
+
+			@Override
+			public TypeToken<String> getDataType() {
+				return TypeTokens.get().STRING;
+			}
+
+			@Override
+			public void updateDataFlavor(InterpretedExpressoEnv env, TypeToken<?> suggestedType) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			public AsText create() {
+				return new AsText(getIdentity());
 			}
 		}
 
@@ -733,6 +918,7 @@ public class QuickDragging {
 			super(id);
 		}
 
+		/** @return The MIME (Multipurpose Internet Mail Extension) type of text to be transferred. E.g. 'text/html' or 'text/plain' */
 		public String getMimeType() {
 			return theMimeType;
 		}

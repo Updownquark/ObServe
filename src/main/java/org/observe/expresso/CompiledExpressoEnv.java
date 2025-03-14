@@ -40,7 +40,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	 */
 	public static final CompiledExpressoEnv STANDARD_JAVA = new CompiledExpressoEnv(//
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(), //
-		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(LocatedPositionedContent.EMPTY),
+		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(null),
 		SessionValues.EMPTY)//
 		.withDefaultNonStructuredParsing();
 
@@ -185,6 +185,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView) {
 		if (extModels == null)
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
+		if (classView == null)
+			classView = ClassView.build().build();
 
 		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, Collections.emptyMap(),
 			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), getSyntheticFields(), reporting(),

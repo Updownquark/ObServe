@@ -410,13 +410,15 @@ public class JustifiedBoxLayout extends AbstractLayout {
 				}
 				first = false;
 			} else {
-				int compCross = getCross(max);
-				if (compCross < minOfMaxCross)
-					minOfMaxCross = compCross;
-				Dimension min = comp.getSize(-1);
-				compCross = getCross(min);
-				if (compCross > maxOfMinCross)
-					maxOfMinCross = compCross;
+				if (computeCross) {
+					int compCross = getCross(max);
+					if (compCross < minOfMaxCross)
+						minOfMaxCross = compCross;
+					Dimension min = comp.getSize(-1);
+					compCross = getCross(min);
+					if (compCross > maxOfMinCross)
+						maxOfMinCross = compCross;
+				}
 				if (computeMain && main < Integer.MAX_VALUE)
 					main += thePadding;
 			}

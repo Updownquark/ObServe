@@ -90,7 +90,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			isConnected = ObservableValue.of(true);
 			theUntil = theParent.noInitChanges().filter(evt -> evt.getOldValue() != evt.getNewValue());
 		} else {
-			isConnected = ObservableValue.of(() -> _isConnected, () -> _isConnected ? 0 : 1, until.take(1));
+			isConnected = ObservableValue.of(() -> _isConnected, until.take(1));
 			theUntil = Observable.or(until, //
 				theParent.noInitChanges().takeUntil(until).filter(evt -> evt.getOldValue() != evt.getNewValue()));
 		}
@@ -340,6 +340,11 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				@Override
 				public CoreId getCoreId() {
 					return ObservableConfigValue.this.getCoreId();
+				}
+
+				@Override
+				public long getStamp() {
+					return ObservableConfigValue.this.getStamp();
 				}
 
 				@Override

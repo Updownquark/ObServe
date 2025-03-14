@@ -27,6 +27,9 @@
 		<add-on name="value-selector-included" requires="table" abstract="true">
 			<attr-mod name="table.rows" specify="forbidden" default="$INCLUDED_ROWS$" />
 		</add-on>
+		<add-on name="value-selector-button-config" requires="button" abstract="true">
+			<attr-mod name="button.action" specify="forbidden" default="" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -179,6 +182,7 @@
 			<?DOC If it is known that all possible values will be rendered to the same dimensions,
 				setting this to true can improve performance significantly for large collections?>
 			<attribute name="constant-size" type="boolean" default="false" />
+			<child-mod child="rendering.renderer" max="1" />
 		</element-def>
 
 		<element-def name="super-table" extends="table">
@@ -187,7 +191,12 @@
 			<?DOC A collection of the same type as this table's rows that, if specified,
 				will contain the list of row values actually displayed to the user in the table?>
 			<attribute name="displayed" type="expression" specify="optional" />
+			<?DOC Configuration for whether rows in the table may be re-ordered by the user via drag operations?>
+			<child-def name="rows-draggable" type="with-row-dragging" min="0" />
 			<child-def name="adaptive-height" type="adaptive-height" min="0" />
+		</element-def>
+		<element-def name="with-row-dragging">
+			<attribute name="post-drag" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="adaptive-height">
 			<attribute name="min-rows" type="int" specify="optional" />
@@ -211,11 +220,25 @@
 			<?DOC Converts a value from the available collection to a value that can be added to the included collection.<br>
 				If not specified, the included collection must be able to accept values from the available collection.?>
 			<attribute name="include" type="expression" default="{available-value-name}" />
+			<!--
+			Might do this sometime, but decided not to for now
+			<?DOC An optional action to perform on each item that is included by the user.<br>
+				This may also be a boolean value, which if it returns false, will prevent the value from being included.<br>
+				This may be used, for example, to allow the user to confirm whether to include the value.?>
+			<attribute name="on-include" type="expression" default="true" />-->
 			<attribute name="item-name" type="string" default="item" />
 			<?DOC Configuration for the table of values available for the user to include?>
 			<child-def name="available" type="super-table" inherits="value-selector-available" />
 			<?DOC Configuration for the table of included values?>
 			<child-def name="included" type="table" inherits="value-selector-included" />
+			<?DOC Optional configuration for the include-all button?>
+			<child-def name="include-all-button" type="button" min="0" inherits="value-selector-button-config" />
+			<?DOC Optional configuration for the include button?>
+			<child-def name="include-button" type="button" min="0" inherits="value-selector-button-config" />
+			<?DOC Optional configuration for the exclude button?>
+			<child-def name="exclude-button" type="button" min="0" inherits="value-selector-button-config" />
+			<?DOC Optional configuration for the exclude-all button?>
+			<child-def name="exclude-all-button" type="button" min="0" inherits="value-selector-button-config" />
 		</element-def>
 
 		<element-def name="bar-chart" extends="widget" inherits="multi-value-renderable">

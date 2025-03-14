@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -455,7 +456,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return The mapped instatiator
 		 */
 		default <MV2> ModelValueInstantiator<MV2> map(ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
-			return map(LambdaUtils.printableExBiFn((src, msi) -> map.apply(src), map::toString, map));
+			return map(ExBiFunction.ofF11(map));
 		}
 
 		/**
@@ -1400,6 +1401,20 @@ public interface ObservableModelSet extends Identifiable {
 		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, ModelValueInstantiator<MV> value,
 			LocatedFilePosition sourceLocation) {
 			return with(name, InterpretedValueSynth.simple(type, value), sourceLocation);
+		}
+
+		/**
+		 * Retrieves or creates, and then configures, a builder for a sub-model under this model set
+		 *
+		 * @param name The name for the sub-model
+		 * @param sourceLocation The location in the source file where the model was declared. May be null.
+		 * @param config Configuration for the model
+		 * @return This builder
+		 */
+		default Builder withSubModel(String name, LocatedFilePosition sourceLocation, Consumer<? super Builder> config) {
+			Builder builder = createSubModel(name, sourceLocation);
+			config.accept(builder);
+			return this;
 		}
 
 		/** @return The immutable {@link ObservableModelSet} configured with this builder */

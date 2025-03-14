@@ -20,6 +20,7 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoTransformations;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickDialog;
 import org.qommons.Transaction;
@@ -43,6 +44,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		private boolean isDirectoriesSelectable;
 		private boolean isMultiSelectable;
 		private CompiledExpression theDirectory;
+		private CompiledExpression theFileDescrip;
 		private CompiledExpression theOnSelect;
 		private CompiledExpression theOnCancel;
 
@@ -89,6 +91,12 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 			return theDirectory;
 		}
 
+		/** @return The description for the type of file selectable */
+		@QonfigAttributeGetter("file-descrip")
+		public CompiledExpression getFileDescrip() {
+			return theFileDescrip;
+		}
+
 		/** @return The action to execute when the user makes a selection */
 		@QonfigAttributeGetter("on-select")
 		public CompiledExpression getOnSelect() {
@@ -115,6 +123,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 				reporting().error("Neither files nor directories are selectable");
 			isMultiSelectable = session.getAttribute("multi-selectable", boolean.class);
 			theDirectory = getAttributeExpression("directory", session);
+			theFileDescrip = getAttributeExpression("file-descrip", session);
 			theOnSelect = getAttributeExpression("on-select", session);
 			theOnCancel = getAttributeExpression("on-cancel", session);
 		}
@@ -129,6 +138,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickFileChooser>
 	implements QuickDialog.Interpreted<QuickFileChooser> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<File>> theDirectory;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theFileDescrip;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnCancel;
 
@@ -148,6 +158,11 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		/** @return The current directory displayed to the user */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<File>> getDirectory() {
 			return theDirectory;
+		}
+
+		/** @return The description for the type of file selectable */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFileDescrip() {
+			return theFileDescrip;
 		}
 
 		/** @return The action to execute when the user makes a selection */
@@ -170,6 +185,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 			super.doUpdate(expressoEnv);
 
 			theDirectory = interpret(getDefinition().getDirectory(), ModelTypes.Value.forType(File.class));
+			theFileDescrip = ExpressoTransformations.parseFilter(getDefinition().getFileDescrip(), this, true);
 			theOnSelect = interpret(getDefinition().getOnSelect(), ModelTypes.Action.instance());
 			theOnCancel = interpret(getDefinition().getOnCancel(), ModelTypes.Action.instance());
 		}
@@ -182,6 +198,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 
 	private ModelComponentId theChosenFilesVariable;
 	private ModelValueInstantiator<SettableValue<File>> theDirectoryInstantiator;
+	private ModelValueInstantiator<SettableValue<String>> theFileDescripInstantiator;
 	private ModelValueInstantiator<ObservableAction> theOnSelectInstantiator;
 	private ModelValueInstantiator<ObservableAction> theOnCancelInstantiator;
 
@@ -190,6 +207,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	private boolean isDirectoriesSelectable;
 	private boolean isMultiSelectable;
 	private SettableValue<SettableValue<File>> theDirectory;
+	private SettableValue<SettableValue<String>> theFileDescrip;
 	private SettableValue<ObservableAction> theOnSelect;
 	private SettableValue<ObservableAction> theOnCancel;
 	private ObservableCollection<File> theChosenFiles;
@@ -198,6 +216,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	protected QuickFileChooser(Object id) {
 		super(id);
 		theDirectory = SettableValue.<SettableValue<File>> build().build();
+		theFileDescrip = SettableValue.create();
 		theOnSelect = SettableValue.<ObservableAction> build().build();
 		theOnCancel = SettableValue.<ObservableAction> build().build();
 		theChosenFiles = ObservableCollection.<File> build().build();
@@ -228,6 +247,11 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		return SettableValue.flatten(theDirectory);
 	}
 
+	/** @return The description for the type of file selectable */
+	public SettableValue<String> getFileDescrip() {
+		return SettableValue.flatten(theFileDescrip);
+	}
+
 	/** @return The action to execute when the user makes a selection */
 	public ObservableAction getOnSelect() {
 		return ObservableAction.flatten(theOnSelect);
@@ -236,6 +260,18 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	/** @return The action to execute when the user cancels the selection */
 	public ObservableAction getOnCancel() {
 		return ObservableAction.flatten(theOnCancel);
+	}
+
+	/**
+	 * @param file The file to test
+	 * @return Whether this file chooser's on-select action can handle the given file
+	 */
+	public String isFileAllowed(File file) {
+		try (Transaction t = theChosenFiles.lock(true, null)) {
+			theChosenFiles.clear();
+			theChosenFiles.add(file);
+		}
+		return theOnSelect.get().isEnabled().get();
 	}
 
 	/**
@@ -266,6 +302,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		isMultiSelectable = myInterpreted.getDefinition().isMultiSelectable();
 		theChosenFilesVariable = myInterpreted.getDefinition().getChosenFilesVariable();
 		theDirectoryInstantiator = myInterpreted.getDirectory() == null ? null : myInterpreted.getDirectory().instantiate();
+		theFileDescripInstantiator = myInterpreted.getFileDescrip() == null ? null : myInterpreted.getFileDescrip().instantiate();
 		theOnSelectInstantiator = myInterpreted.getOnSelect().instantiate();
 		theOnCancelInstantiator = myInterpreted.getOnCancel() == null ? null : myInterpreted.getOnCancel().instantiate();
 	}
@@ -276,6 +313,8 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 
 		if (theDirectoryInstantiator != null)
 			theDirectoryInstantiator.instantiate();
+		if (theFileDescripInstantiator != null)
+			theFileDescripInstantiator.instantiate();
 		theOnSelectInstantiator.instantiate();
 		if (theOnCancelInstantiator != null)
 			theOnCancelInstantiator.instantiate();
@@ -293,6 +332,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 				dir.set(theDirectory.get().get(), null);
 			theDirectory.set(dir, null);
 		}
+		theFileDescrip.set(theFileDescripInstantiator == null ? null : theFileDescripInstantiator.get(myModels), null);
 		theOnSelect.set(theOnSelectInstantiator.get(myModels), null);
 		theOnCancel.set(theOnCancelInstantiator == null ? ObservableAction.DO_NOTHING : theOnCancelInstantiator.get(myModels), null);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theChosenFilesVariable, myModels, theChosenFiles);
@@ -303,6 +343,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		QuickFileChooser copy = (QuickFileChooser) super.copy(parent);
 
 		copy.theDirectory = SettableValue.<SettableValue<File>> build().build();
+		copy.theFileDescrip = SettableValue.create();
 		copy.theOnSelect = SettableValue.<ObservableAction> build().build();
 		copy.theOnCancel = SettableValue.<ObservableAction> build().build();
 		copy.theChosenFiles = ObservableCollection.<File> build().build();

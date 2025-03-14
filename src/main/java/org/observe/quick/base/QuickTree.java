@@ -24,7 +24,6 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -74,8 +73,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private CompiledExpression theNodeMultiSelection;
 		private final List<ExElement.Def<?>> theActionsAndOptions;
 		private boolean isRootVisible;
-		private final List<QuickDragging.TransferSource.Def> theTransferSources;
-		private final List<QuickDragging.TransferAccept.Def> theTransferAccepters;
+		private final List<QuickTransfer.TransferSource.Def> theTransferSources;
+		private final List<QuickTransfer.TransferAccept.Def> theTransferAccepters;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -166,12 +165,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		@Override
-		public List<QuickDragging.TransferSource.Def> getTransferSources() {
+		public List<QuickTransfer.TransferSource.Def> getTransferSources() {
 			return Collections.unmodifiableList(theTransferSources);
 		}
 
 		@Override
-		public List<QuickDragging.TransferAccept.Def> getTransferAccepters() {
+		public List<QuickTransfer.TransferAccept.Def> getTransferAccepters() {
 			return Collections.unmodifiableList(theTransferAccepters);
 		}
 
@@ -196,8 +195,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			isRootVisible = session.getAttribute("root-visible", boolean.class);
 
 			syncChildren(ExElement.Def.class, theActionsAndOptions, session.forChildren("action", "option"));
-			syncChildren(QuickDragging.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
-			syncChildren(QuickDragging.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
+			syncChildren(QuickTransfer.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
+			syncChildren(QuickTransfer.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
 		}
 
 		@Override
@@ -222,8 +221,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theNodeSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> theNodeMultiSelection;
 		private final List<ExElement.Interpreted<?>> theActionsAndOptions;
-		private final List<QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>> theTransferSources;
-		private final List<QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>> theTransferAccepters;
+		private final List<QuickTransfer.TransferSource.Interpreted<BetterList<N>, ?>> theTransferSources;
+		private final List<QuickTransfer.TransferAccept.Interpreted<BetterList<N>, ?>> theTransferAccepters;
 
 		/**
 		 * @param definition The definition to interpret
@@ -316,12 +315,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		@Override
-		public List<QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>> getTransferSources() {
+		public List<QuickTransfer.TransferSource.Interpreted<BetterList<N>, ?>> getTransferSources() {
 			return Collections.unmodifiableList(theTransferSources);
 		}
 
 		@Override
-		public List<QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>> getTransferAccepters() {
+		public List<QuickTransfer.TransferAccept.Interpreted<BetterList<N>, ?>> getTransferAccepters() {
 			return Collections.unmodifiableList(theTransferAccepters);
 		}
 
@@ -363,10 +362,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 					((QuickWidget.Interpreted<?>) interp).updateElement(env2);
 			});
 			syncChildren(getDefinition().getTransferSources(), theTransferSources,
-				def -> (QuickDragging.TransferSource.Interpreted<BetterList<N>, ?>) def.interpret(this),
+				def -> (QuickTransfer.TransferSource.Interpreted<BetterList<N>, ?>) def.interpret(this),
 				(interp, env2) -> interp.updateTransferSource(env2, getNodeType()));
 			syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
-				def -> (QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?>) def.interpret(this),
+				def -> (QuickTransfer.TransferAccept.Interpreted<BetterList<N>, ?>) def.interpret(this),
 				(interp, env2) -> interp.updateTransferAccepter(env2, getNodeType()));
 		}
 
@@ -398,10 +397,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
 	private ObservableCollection<QuickWidget> theOptions;
 
-	private SettableValue<BetterList<N>> theTransferActiveValue;
-	private SettableValue<Boolean> theTransferSelectedValue;
-	private List<QuickDragging.TransferSource<BetterList<N>, ?>> theTransferSources;
-	private List<QuickDragging.TransferAccept<BetterList<N>, ?>> theTransderAccepters;
+	private List<QuickTransfer.TransferSource<BetterList<N>, ?>> theTransferSources;
+	private List<QuickTransfer.TransferAccept<BetterList<N>, ?>> theTransderAccepters;
 
 	/** @param id The element ID for this widget */
 	protected QuickTree(Object id) {
@@ -413,8 +410,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
 		theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
 		theActionsAndOptions = ObservableCollection.create();
-		theTransferActiveValue = SettableValue.create(BetterList.empty());
-		theTransferSelectedValue = SettableValue.create();
 		theTransferSources = new ArrayList<>();
 		theTransderAccepters = new ArrayList<>();
 	}
@@ -488,23 +483,13 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return theOptions;
 	}
 
-	/** @return The holder in which to put the path to the node the user is attempting to drag data onto */
-	public SettableValue<BetterList<N>> getTransferActiveValue() {
-		return theTransferActiveValue;
-	}
-
-	/** @return The holder in which to put the whether path to the node the user is attempting to drag data onto is selected */
-	public SettableValue<Boolean> getTransferSelectedValue() {
-		return theTransferSelectedValue;
-	}
-
 	@Override
-	public List<QuickDragging.TransferSource<BetterList<N>, ?>> getTransferSources() {
+	public List<QuickTransfer.TransferSource<BetterList<N>, ?>> getTransferSources() {
 		return Collections.unmodifiableList(theTransferSources);
 	}
 
 	@Override
-	public List<QuickDragging.TransferAccept<BetterList<N>, ?>> getTransferAccepters() {
+	public List<QuickTransfer.TransferAccept<BetterList<N>, ?>> getTransferAccepters() {
 		return Collections.unmodifiableList(theTransderAccepters);
 	}
 
@@ -556,8 +541,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
-		syncChildren(myInterpreted.getTransferSources(), theTransferSources, ts -> ts.create(), QuickDragging.TransferSource::update);
-		syncChildren(myInterpreted.getTransferAccepters(), theTransderAccepters, ts -> ts.create(), QuickDragging.TransferAccept::update);
+		syncChildren(myInterpreted.getTransferSources(), theTransferSources, ts -> ts.create(), QuickTransfer.TransferSource::update);
+		syncChildren(myInterpreted.getTransferAccepters(), theTransderAccepters, ts -> ts.create(), QuickTransfer.TransferAccept::update);
 	}
 
 	@Override
@@ -576,9 +561,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theTreeColumn.instantiated();
 		for (ExElement aao : theActionsAndOptions)
 			aao.instantiated();
-		for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+		for (QuickTransfer.TransferSource<BetterList<N>, ?> ts : theTransferSources)
 			ts.instantiated();
-		for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+		for (QuickTransfer.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
 			ta.instantiated();
 	}
 
@@ -610,16 +595,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		for (ExElement aao : theActionsAndOptions)
 			aao.instantiate(myModels);
-		if (!theTransferSources.isEmpty() || !theTransderAccepters.isEmpty()) {
-			ModelSetInstance transferCopy = QuickCoreInterpretation.copyModels(myModels, theActiveValueVariable, myModels.getUntil())
-				.build();
-			ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, transferCopy, theTransferActiveValue);
-			ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, transferCopy, theTransferSelectedValue);
-			for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
-				ts.instantiate(transferCopy);
-			for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
-				ta.instantiate(transferCopy);
-		}
+		for (QuickTransfer.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+			ts.instantiate(myModels);
+		for (QuickTransfer.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+			ta.instantiate(myModels);
 	}
 
 	@Override
@@ -644,13 +623,11 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		for (ExElement aao : theActionsAndOptions)
 			copy.theActionsAndOptions.add(aao.copy(copy));
-		copy.theTransferActiveValue = SettableValue.create(BetterList.empty());
-		copy.theTransferSelectedValue = SettableValue.create();
 		copy.theTransferSources = new ArrayList<>();
-		for (QuickDragging.TransferSource<BetterList<N>, ?> ts : theTransferSources)
+		for (QuickTransfer.TransferSource<BetterList<N>, ?> ts : theTransferSources)
 			copy.theTransferSources.add(ts.copy(copy));
 		copy.theTransderAccepters = new ArrayList<>();
-		for (QuickDragging.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
+		for (QuickTransfer.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
 			copy.theTransderAccepters.add(ta.copy(copy));
 
 		return copy;

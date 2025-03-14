@@ -469,6 +469,12 @@ public interface OperationResult<T> {
 				}
 
 				@Override
+				public long getStamp() {
+					OperationResult<? extends S> wrapped = theWrapped;
+					return wrapped == null ? 0 : wrapped.watchStatus().getStamp();
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					OperationResult<? extends S> wrapped = theWrapped;
 					return wrapped == null ? CoreChangeSources.empty() : wrapped.watchStatus().getChangeSources();

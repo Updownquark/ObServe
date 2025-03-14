@@ -32,8 +32,9 @@ import com.google.common.reflect.TypeToken;
  * A table that displays a row for each value in a collection
  *
  * @param <R> The row type of the table
+ * @param <C> The column type of the table
  */
-public class QuickTable<R> extends TabularWidget.Abstract<R> {
+public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 	/** The XML name of this element */
 	public static final String TABLE = "table";
 
@@ -46,10 +47,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		qonfigType = TABLE,
 		interpretation = Interpreted.class,
 		instance = QuickTable.class)
-	public static class Def<T extends QuickTable<?>> extends TabularWidget.Def.Abstract<T> {
+	public static class Def<T extends QuickTable<?, ?>> extends TabularWidget.Def.Abstract<T> {
 		private CompiledExpression theRows;
-		private CompiledExpression theSelection;
-		private CompiledExpression theMultiSelection;
 		private final List<ExElement.Def<?>> theActionsAndOptions;
 		private boolean isOptionsOnTop;
 
@@ -65,16 +64,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected String getActiveValueVariableName(ExpressoQIS session) {
 			return session.getAttributeText("active-value-name");
-		}
-
-		@Override
-		public CompiledExpression getSelection() {
-			return theSelection;
-		}
-
-		@Override
-		public CompiledExpression getMultiSelection() {
-			return theMultiSelection;
 		}
 
 		/** @return The row values for the table */
@@ -113,21 +102,19 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(TABULAR_WIDGET));
 			theRows = getAttributeExpression("rows", session);
-			theSelection = getAttributeExpression("selection", session);
-			theMultiSelection = getAttributeExpression("multi-selection", session);
 			isOptionsOnTop = session.getAttribute("options-on-top", boolean.class);
 			syncChildren(ExElement.Def.class, theActionsAndOptions, session.forChildren("action", "option"));
 		}
 
 		@Override
-		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
+		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?, ?> interpreted, InterpretedExpressoEnv env)
 			throws ExpressoInterpretationException {
-			return ((Interpreted<?, ?>) interpreted).getValueType();
+			return ((Interpreted<?, ?, ?>) interpreted).getValueType();
 		}
 
 		@Override
-		public Interpreted<?, T> interpret(ExElement.Interpreted<?> parent) {
-			return (Interpreted<?, T>) new Interpreted<>((Def<QuickTable<Object>>) this, parent);
+		public Interpreted<?, ?, T> interpret(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, ?, T>) new Interpreted<>((Def<QuickTable<Object, Object>>) this, parent);
 		}
 	}
 
@@ -135,12 +122,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	 * {@link QuickTable} interpretation
 	 *
 	 * @param <R> The row type of the table
+	 * @param <C> The column type of the table
 	 * @param <T> The sub-type of table to create
 	 */
-	public static class Interpreted<R, T extends QuickTable<R>> extends TabularWidget.Interpreted.Abstract<R, T> {
+	public static class Interpreted<R, C, T extends QuickTable<R, C>> extends TabularWidget.Interpreted.Abstract<R, C, T> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theRows;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<R>> theSelection;
-		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theMultiSelection;
 		private final List<ExElement.Interpreted<?>> theActionsAndOptions;
 
 		/**
@@ -170,16 +156,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theRows;
 		}
 
-		@Override
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<R>> getSelection() {
-			return theSelection;
-		}
-
-		@Override
-		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> getMultiSelection() {
-			return theMultiSelection;
-		}
-
 		/**
 		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
 		 *         their specification in the file
@@ -203,8 +179,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(getValueType()));
-			theMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(getValueType()));
 			syncChildren(getDefinition().getActionsAndOptions(), theActionsAndOptions, def -> {
 				if (def instanceof ValueAction.Def)
 					return (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType());
@@ -227,12 +201,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	private ModelValueInstantiator<ObservableCollection<R>> theRowsInstantiator;
-	private ModelValueInstantiator<SettableValue<R>> theSelectionInstantiator;
-	private ModelValueInstantiator<ObservableCollection<R>> theMultiSelectionInstantiator;
 
 	private SettableValue<ObservableCollection<R>> theRows;
-	private SettableValue<SettableValue<R>> theSelection;
-	private SettableValue<ObservableCollection<R>> theMultiSelection;
 	private ObservableCollection<ExElement> theActionsAndOptions;
 	private ObservableCollection<ValueAction<R>> theActions;
 	private ObservableCollection<QuickWidget> theOptions;
@@ -247,16 +217,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	/** @return The row values for the table */
 	public ObservableCollection<R> getRows() {
 		return ObservableCollection.flattenValue(theRows);
-	}
-
-	@Override
-	public SettableValue<R> getSelection() {
-		return SettableValue.flatten(theSelection);
-	}
-
-	@Override
-	public ObservableCollection<R> getMultiSelection() {
-		return ObservableCollection.flattenValue(theMultiSelection);
 	}
 
 	/**
@@ -285,15 +245,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
-		QuickTable.Interpreted<R, ?> myInterpreted = (QuickTable.Interpreted<R, ?>) interpreted;
+		QuickTable.Interpreted<R, C, ?> myInterpreted = (QuickTable.Interpreted<R, C, ?>) interpreted;
 
 		theRows = SettableValue.<ObservableCollection<R>> build().build();
-		theSelection = SettableValue.<SettableValue<R>> build().build();
-		theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
 
 		theRowsInstantiator = myInterpreted.getRows().instantiate();
-		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
-		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
 		CollectionUtils.synchronize(theActionsAndOptions, myInterpreted.getActionsAndOptions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity())//
 		.<ModelInstantiationException> simpleX(aao -> {
@@ -317,10 +273,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		super.instantiated();
 
 		theRowsInstantiator.instantiate();
-		if (theSelectionInstantiator != null)
-			theSelectionInstantiator.instantiate();
-		if (theMultiSelectionInstantiator != null)
-			theMultiSelectionInstantiator.instantiate();
 
 		for (ExElement aao : theActionsAndOptions)
 			aao.instantiated();
@@ -331,8 +283,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		super.doInstantiate(myModels);
 
 		theRows.set(theRowsInstantiator.get(myModels), null);
-		theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels), null);
-		theMultiSelection.set(theMultiSelectionInstantiator == null ? null : theMultiSelectionInstantiator.get(myModels), null);
 		if (theActions == null) {
 			theActions = theActionsAndOptions.flow()//
 				.filter((Class<ValueAction<R>>) (Class<?>) ValueAction.class)//
@@ -349,12 +299,10 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	public QuickTable<R> copy(ExElement parent) {
-		QuickTable<R> copy = (QuickTable<R>) super.copy(parent);
+	public QuickTable<R, C> copy(ExElement parent) {
+		QuickTable<R, C> copy = (QuickTable<R, C>) super.copy(parent);
 
 		copy.theRows = SettableValue.<ObservableCollection<R>> build().build();
-		copy.theSelection = SettableValue.<SettableValue<R>> build().build();
-		copy.theMultiSelection = SettableValue.<ObservableCollection<R>> build().build();
 		copy.theActionsAndOptions = ObservableCollection.create();
 		copy.theActions = null;
 		copy.theOptions = null;

@@ -53,8 +53,12 @@ public class ComponentPropertyManager<C extends Component> {
 			if (theSourceValue != adjusted) {
 				if (isImmediate)
 					setValue(newStamp, adjusted);
-				else
-					EventQueue.invokeLater(() -> setValue(newStamp, adjusted));
+				else {
+					EventQueue.invokeLater(() -> {
+						if (newStamp == theStamp)
+							setValue(newStamp, adjusted);
+					});
+				}
 			}
 		}
 

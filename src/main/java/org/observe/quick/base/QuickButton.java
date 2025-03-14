@@ -158,4 +158,9 @@ public class QuickButton extends QuickWidget.Abstract {
 		theText = theTextInstantiator == null ? null : theTextInstantiator.get(myModels);
 		theAction = theActionInstantiator.get(myModels);
 	}
+
+	@Override
+	public QuickButton copy(ExElement parent) {
+		return (QuickButton) super.copy(parent);
+	}
 }

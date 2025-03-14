@@ -171,6 +171,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					}
 
 					@Override
+					public long getStamp() {
+						return EmptyElement.this.getStamp();
+					}
+
+					@Override
 					public CoreChangeSources getChangeSources() {
 						return CoreChangeSources.empty();
 					}

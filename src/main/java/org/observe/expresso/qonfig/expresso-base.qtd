@@ -90,7 +90,8 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="null-to-null" type="boolean" default="false" />
 			<?DOC Whether many source values may map to identical results.<br>
 				This subtle attribute is seldom needed and may be ignored most of the time.<br>
-				It influences, for example, how a result behaves when searching for result values, as optimizations can be made on one-to-one mappings.?>
+				It influences, for example, how a result behaves when searching for result values,
+				as optimizations can be made on one-to-one mappings.?>
 			<attribute name="many-to-one" type="boolean" default="false" />
 			<?DOC Whether a single source attribute may not always result in a single set result.<br>
 				This subtle attribute is seldom needed and may be ignored most of the time.<br>
@@ -264,8 +265,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 
 		<?DOC Prevents modification to a transformed result depending on a condition?>
-		<element-def name="disable" inherits="complex-operation">
-			<attr-mod name="complex-operation.source-as" default="$SOURCE$" />
+		<element-def name="disable" inherits="operation">
 			<?DOC The expression to disable the value or action with.  May be a boolean or a String.<br>
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="with" type="expression" />
@@ -281,8 +281,11 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<?DOC A mapping operation, producing a value as the result of some function on each element of the source structure?>
 		<element-def name="map-to" inherits="abst-map-op, complex-operation, typed">
 			<element-model>
+				<value name-attribute="previous-result-as" />
 				<value name-attribute="combined-value/name" />
 			</element-model>
+			<?DOC The name of the variable in which to make available the previously-produced result for this operation?>
+			<attribute name="previous-result-as" type="identifier" specify="optional" />
 			<?DOC The equivalence for the result. This can almost always be ignored.<br>
 				This affects operations like tests for containment.<br>
 				If specified, its requirements are implementation-specific.?>
@@ -290,14 +293,9 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<?DOC A value that will affect the result.  The value will be available to expressions in this operation as the name it's given here.?>
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
 			<?DOC The expression producing the mapped result from the source value and the value of any combined values?>
-			<child-def name="map" type="map-with" />
+			<value type="expression" />
 			<?DOC A reverse operation to allow modification operations on the result?>
 			<child-def name="reverse" type="map-reverse" min="0" />
-		</element-def>
-		<?DOC Mapping function in a &lt;map-to> operation?>
-		<element-def name="map-with">
-			<?DOC The expression producing the mapped result from the source value and the value of any combined values?>
-			<value type="expression" />
 		</element-def>
 		<?DOC A value that will affect the result of a &lt;map-to> operation.  The value will be available to expressions in the operation as the name it's given here.?>
 		<element-def name="combine-with" inherits="named">
@@ -537,6 +535,33 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="map-transform" extends="transform" inherits="operation">
 			<attribute name="type" type="map-value-type" />
 			<attr-mod name="transform.source" specify="forbidden" default="null" />
+		</element-def>
+		
+		<?DOC Transforms a map into a set of key/value pairs?>
+		<element-def name="entry-set" inherits="operation,with-element-model">
+			<element-model>
+				<value name-attribute="key-as" />
+				<value name-attribute="value-as" />
+			</element-model>
+			<?DOC The name of the variable in which the key for each entry will be available?>
+			<attribute name="key-as" type="identifier" />
+			<?DOC The name of the variable in which the value for each entry will be available?>
+			<attribute name="value-as" type="identifier" />
+			<?DOC The expression to produce the transformed value for each entry in the map?>
+			<value type="expression" />
+		</element-def>
+		<?DOC Transforms a multi-map into a set of key/value collection pairs?>
+		<element-def name="multi-entry-set" inherits="operation,with-element-model">
+			<element-model>
+				<value name-attribute="key-as" />
+				<list name-attribute="values-as" />
+			</element-model>
+			<?DOC The name of the variable in which the key for each entry will be available?>
+			<attribute name="key-as" type="identifier" />
+			<?DOC The name of the list variable in which the values for each entry will be available?>
+			<attribute name="values-as" type="identifier" />
+			<?DOC The expression to produce the transformed value for each entry in the map?>
+			<value type="expression" />
 		</element-def>
 
 		<?DOC For event structures fire an initial event, this operation produces an event structure that fires all events except this initial event.<br>

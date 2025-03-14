@@ -382,6 +382,9 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
+	/** @return The model instantiator for this widget's visibility, if it is configured */
+	ModelValueInstantiator<SettableValue<Boolean>> getVisibleInstantiator();
+
 	/** @return An event that causes this widget to repaint itself */
 	Observable<?> getRepaint();
 
@@ -464,6 +467,11 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		@Override
 		public SettableValue<Boolean> isVisible() {
 			return SettableValue.flatten(isVisible, () -> true);
+		}
+
+		@Override
+		public ModelValueInstantiator<SettableValue<Boolean>> getVisibleInstantiator() {
+			return theVisibleInstantiator;
 		}
 
 		@Override

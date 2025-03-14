@@ -10,13 +10,11 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExpressoTransformations.ActionTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -40,7 +38,6 @@ public class ObservableActionTransformations {
 	static class DisabledActionTransform extends TypePreservingTransform<ObservableAction>
 	implements ActionTransform<ObservableAction, ExElement> {
 		private CompiledExpression theDisablement;
-		private ModelComponentId theSourceVariable;
 
 		DisabledActionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -54,13 +51,7 @@ public class ObservableActionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<ObservableAction> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			String sourceAs = session.getAttributeText("source-as");
-			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
-			theSourceVariable = sourceAs == null ? null : elModels.getElementValueModelId(sourceAs);
 			theDisablement = getAttributeExpression("with", session);
-			// Not useable for action--there's no value, but we still have to satisfy the type
-			if (theSourceVariable != null)
-				elModels.satisfyElementValueType(theSourceVariable, ModelTypes.Value.forType(TypeTokens.get().VOID));
 		}
 
 		@Override

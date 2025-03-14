@@ -88,12 +88,12 @@ public class FontAdjuster implements Cloneable {
 			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
 			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
 		}
-		return deriveFont(font -> font.deriveFont(style, size));
+		return deriveFont(font -> font == null ? null : font.deriveFont(style, size));
 	}
 
 	public FontAdjuster deriveFont(Attribute attr, Object value) {
 		Map<Attribute, Object> attrs = Collections.singletonMap(attr, value);
-		return deriveFont(font -> font.deriveFont(attrs));
+		return deriveFont(font -> font == null ? null : font.deriveFont(attrs));
 	}
 
 	public FontAdjuster withFontWeight(float weight) {
@@ -117,7 +117,7 @@ public class FontAdjuster implements Cloneable {
 			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
 			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
 		}
-		return deriveFont(font -> font.deriveFont(style));
+		return deriveFont(font -> font == null ? null : font.deriveFont(style));
 	}
 
 	/**
@@ -127,7 +127,7 @@ public class FontAdjuster implements Cloneable {
 	public FontAdjuster withFontSize(float size) {
 		if (theFontAttributes != null)
 			StyleConstants.setFontSize(theFontAttributes, Math.round(size));
-		return deriveFont(font -> font.deriveFont(size));
+		return deriveFont(font -> font == null ? null : font.deriveFont(size));
 	}
 
 	/**

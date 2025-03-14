@@ -1,10 +1,12 @@
 package org.observe;
 
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -38,6 +40,10 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		theListeners = listeners;
 	}
 
+	public LightWeightObservable(Function<? super LightWeightObservable<T>, ListenerList> listening) {
+		theListeners = listening.apply(this);
+	}
+
 	@Override
 	public ThreadConstraint getThreadConstraint() {
 		return ThreadConstraint.ANY;
@@ -61,6 +67,11 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 	@Override
 	public boolean isEventing() {
 		return theListeners.isFiring();
+	}
+
+	@Override
+	public long getStamp() {
+		return theListeners.getStamp();
 	}
 
 	@Override
@@ -120,6 +131,12 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 	/** @return Whether anyone is listening to this observable */
 	public boolean isAnyoneListening() {
 		return !theListeners.isEmpty();
+	}
+
+	/** Increments this observable's {@link #getStamp()} without invoking any listeners */
+	public void incrementStamp() {
+		if (!theListeners.isFiring())
+			theListeners.forEach(LambdaUtils.CONSUME_DO_NOTHING);
 	}
 
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */
@@ -182,6 +199,11 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		@Override
 		public int hashCode() {
 			return theWrapped.hashCode();
+		}
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
 		}
 
 		@Override

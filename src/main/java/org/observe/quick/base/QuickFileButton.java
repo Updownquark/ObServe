@@ -15,6 +15,7 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoTransformations;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -65,6 +66,7 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theDefaultDir = getAttributeExpression("default-dir", session);
+			theFileDescrip = getAttributeExpression("file-descrip", session);
 			isOpen = session.getAttribute("open", boolean.class);
 		}
 
@@ -111,10 +113,8 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theDefaultDir = getDefinition().getDefaultDir() == null ? null
-				: getDefinition().getDefaultDir().interpret(ModelTypes.Value.forType(File.class), env);
-			theFileDescrip = getDefinition().getFileDescrip() == null ? null
-				: getDefinition().getFileDescrip().interpret(ModelTypes.Value.forType(String.class), env);
+			theDefaultDir = interpret(getDefinition().getDefaultDir(), ModelTypes.Value.forType(File.class));
+			theFileDescrip = ExpressoTransformations.parseFilter(getDefinition().getFileDescrip(), this, true);
 		}
 
 		@Override

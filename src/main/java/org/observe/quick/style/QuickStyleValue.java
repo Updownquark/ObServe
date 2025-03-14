@@ -211,14 +211,15 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 
 	@Override
 	public int compareTo(QuickStyleValue o) {
-		int comp = theApplication.compareTo(o.theApplication);
+		int comp = 0;
 		// Compare the source style sheets
+		if (theStyleSheet == null) {
+			if (o.theStyleSheet != null)
+				comp = -1; // Style values specified on the element have highest priority
+		} else if (o.theStyleSheet == null)
+			comp = 1; // Style values specified on the element have highest priority
 		if (comp == 0) {
-			if (theStyleSheet == null) {
-				if (o.theStyleSheet != null)
-					comp = -1; // Style values specified on the element have highest priority
-			} else if (o.theStyleSheet == null)
-				comp = 1; // Style values specified on the element have highest priority
+			comp = theApplication.compareTo(o.theApplication);
 		}
 		// Last, compare the attributes, just multiple attribute values with identical priority
 		// can live in the same style sheet together

@@ -11,6 +11,7 @@ import java.lang.reflect.WildcardType;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1692,12 +1693,14 @@ public class TypeTokens implements TypeParser {
 	 * @param types The types to get the common type of
 	 * @return The most specific TypeToken that can be found which all of the inputs extend
 	 */
-	public <X> TypeToken<X> getCommonType(List<TypeToken<? extends X>> types) {
+	public <X> TypeToken<X> getCommonType(Collection<TypeToken<? extends X>> types) {
 		return (TypeToken<X>) _commonType(types);
 	}
 
-	private <X> TypeToken<?> _commonType(List<TypeToken<? extends X>> types) {
-		TypeToken<? extends X> firstType = types.get(0);
+	private <X> TypeToken<?> _commonType(Collection<TypeToken<? extends X>> types) {
+		if (types.isEmpty())
+			return OBJECT;
+		TypeToken<? extends X> firstType = types.iterator().next();
 		boolean first = true;
 		boolean firstIsCommon = true;
 		for (TypeToken<? extends X> type : types) {
@@ -1903,7 +1906,9 @@ public class TypeTokens implements TypeParser {
 		public TypeToken<?> resolve(Type type) {
 			if (type instanceof TypeVariable) {
 				TypeToken<?>[] accumulated = theAccumulatedTypes.get(type);
-				return accumulated == null ? resolveInternal(type) : accumulated[0];
+				if (accumulated != null && accumulated[0] != null)
+					return accumulated[0];
+				return resolveInternal(type);
 			} else if (type instanceof WildcardType) {
 				WildcardType wild = (WildcardType) type;
 				Type[] upper = new Type[wild.getUpperBounds().length], lower = new Type[wild.getLowerBounds().length];
@@ -1918,8 +1923,7 @@ public class TypeTokens implements TypeParser {
 				for (int p = 0; p < pts.length; p++)
 					pts[p] = resolve(pt.getActualTypeArguments()[p]).getType();
 				return of(new ParameterizedTypeImpl(//
-					resolve(pt.getRawType()).getType(), //
-					pts));
+					resolve(pt.getRawType()).getType(), pts));
 			} else if (type instanceof GenericArrayType)
 				return getArrayType(resolve(//
 					((GenericArrayType) type).getGenericComponentType()), 1);

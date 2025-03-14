@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.Set;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.VariableType;
@@ -90,14 +91,27 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 			return theValueType;
 		}
 
+		/**
+		 * @param env The expresso environment to use to evaluate the type
+		 * @return The type of the model value
+		 * @throws ExpressoInterpretationException If the type could not be evaluated
+		 */
+		public TypeToken<T> getValueType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			if (theValueType != null)
+				return theValueType;
+			else if (getDefinition().getValueType() == null)
+				theValueType = getElement().getExpressoEnv().get(VALUE_TYPE_KEY, TypeToken.class);
+			else
+				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(env);
+			return theValueType;
+		}
+
 		@Override
 		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 			super.update(element);
 
-			if (getDefinition().getValueType() == null)
-				theValueType = element.getExpressoEnv().get(VALUE_TYPE_KEY, TypeToken.class);
-			else
-				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(getElement().getExpressoEnv());
+			theValueType = null;
+			getValueType(getElement().getExpressoEnv());
 		}
 
 		@Override

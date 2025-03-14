@@ -237,16 +237,12 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 
 	@Override
 	public ObservableValue<String> getErrorState() {
-		if (theEditor == null)
-			return null;
-		return theEditor.getErrorState();
+		return theTextField.getErrorState();
 	}
 
 	@Override
 	public ObservableValue<String> getWarningState() {
-		if (theEditor == null)
-			return null;
-		return theEditor.getWarningState();
+		return theTextField.getWarningState();
 	}
 
 	/** Re-displays the parsing error message from this text field as a tooltip */
@@ -409,7 +405,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 		}
 
 		private void updateCache() {
-			long stamp = Stamped.compositeStamp(theValue.getStamp(), theValue.isEnabled().getStamp());
+			long stamp = Stamped.compositeOf2Stamps(theValue.getStamp(), theValue.isEnabled().getStamp());
 			if (stamp == theCachedValueStamp)
 				return;
 

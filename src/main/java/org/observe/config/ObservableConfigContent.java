@@ -308,6 +308,11 @@ public class ObservableConfigContent {
 				}
 
 				@Override
+				public long getStamp() {
+					return ObservableConfigChild.this.getStamp();
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					return theRoot.getChangeSources();
 				}
@@ -363,7 +368,7 @@ public class ObservableConfigContent {
 			long stamp = theConfigChild.getStamp();
 			ObservableConfig child = theConfigChild.get();
 			if (child != null)
-				stamp = Stamped.compositeStamp(stamp, child.getStamp());
+				stamp = Stamped.compositeOf2Stamps(stamp, child.getStamp());
 			return stamp;
 		}
 
@@ -427,6 +432,11 @@ public class ObservableConfigContent {
 				@Override
 				public CoreId getCoreId() {
 					return theConfigChild.theRoot.getCoreId();
+				}
+
+				@Override
+				public long getStamp() {
+					return ObservableConfigValue.this.getStamp();
 				}
 
 				@Override

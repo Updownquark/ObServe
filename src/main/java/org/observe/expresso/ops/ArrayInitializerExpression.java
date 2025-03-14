@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
 import org.observe.Observable.CoreChangeSources;
+import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
@@ -134,6 +136,26 @@ public class ArrayInitializerExpression implements ObservableExpression {
 						env.reporting().getPosition(), getExpressionLength()));
 				return null;
 			}
+		} else if (type.getModelType() == ModelTypes.Action) {
+			List<EvaluatedExpression<ObservableAction, ObservableAction>> components = new ArrayList<>(theValues.size());
+			for (ObservableExpression component : theValues) {
+				ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
+					.holder2(exHandler.isInstantiating());
+				EvaluatedExpression<ObservableAction, ObservableAction> componentAction = component.evaluate(ModelTypes.Action.instance(),
+					env, expressionOffset, tce);
+				if (componentAction == null) {
+					if (tce.hasException1())
+						exHandler.handle1(() -> new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(),
+							component.getExpressionLength(), tce.get1()));
+					else
+						exHandler.handle1(() -> new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(),
+							getExpressionLength(), tce.get2()));
+					return null;
+				}
+				components.add(componentAction);
+			}
+			return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				new InterpretedMultiAction(components), null, components);
 		} else {
 			exHandler
 			.handle1(() -> new ExpressoInterpretationException("An array initializer expression can only be evaluated as a collection",
@@ -560,6 +582,122 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		@Override
 		public String toString() {
 			return BetterCollection.toString(this);
+		}
+	}
+
+	static class InterpretedMultiAction implements InterpretedValueSynth<ObservableAction, ObservableAction> {
+		private final List<EvaluatedExpression<ObservableAction, ObservableAction>> theComponents;
+
+		InterpretedMultiAction(List<EvaluatedExpression<ObservableAction, ObservableAction>> components) {
+			theComponents = components;
+		}
+
+		@Override
+		public ModelInstanceType<ObservableAction, ObservableAction> getType() {
+			return ModelTypes.Action.instance();
+		}
+
+		@Override
+		public List<EvaluatedExpression<ObservableAction, ObservableAction>> getComponents() {
+			return Collections.unmodifiableList(theComponents);
+		}
+
+		@Override
+		public ModelValueInstantiator<ObservableAction> instantiate() throws ModelInstantiationException {
+			return new MultiActionInstantiator(this);
+		}
+	}
+
+	static class MultiActionInstantiator implements ModelValueInstantiator<ObservableAction> {
+		private final List<ModelValueInstantiator<ObservableAction>> theComponents;
+
+		MultiActionInstantiator(InterpretedMultiAction interpreted) throws ModelInstantiationException {
+			theComponents = new ArrayList<>(interpreted.getComponents().size());
+			for (EvaluatedExpression<ObservableAction, ObservableAction> component : interpreted.getComponents())
+				theComponents.add(component.instantiate());
+		}
+
+		@Override
+		public void instantiate() throws ModelInstantiationException {
+			for (ModelValueInstantiator<ObservableAction> component : theComponents)
+				component.instantiate();
+		}
+
+		@Override
+		public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			List<ObservableAction> components = new ArrayList<>(theComponents.size());
+			for (ModelValueInstantiator<ObservableAction> component : theComponents)
+				components.add(component.get(models));
+			return new MultiAction(Collections.unmodifiableList(components));
+		}
+
+		@Override
+		public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			MultiAction action = (MultiAction) value;
+			List<ObservableAction> newComponents = null;
+			for (int i = 0; i < action.getComponents().size(); i++) {
+				ObservableAction component = action.getComponents().get(i);
+				ObservableAction newComponent = theComponents.get(i).forModelCopy(component, sourceModels, newModels);
+				if (newComponents == null && newComponent != component)
+					newComponents = new ArrayList<>(action.getComponents().subList(0, i));
+				if (newComponents != null)
+					newComponents.add(newComponent);
+			}
+			if (newComponents != null)
+				return new MultiAction(Collections.unmodifiableList(newComponents));
+			else
+				return action;
+		}
+	}
+
+	static class MultiAction extends AbstractIdentifiable implements ObservableAction {
+		private final List<ObservableAction> theComponents;
+
+		MultiAction(List<ObservableAction> components) {
+			theComponents = components;
+		}
+
+		List<ObservableAction> getComponents() {
+			return theComponents;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			Identifiable.CustomIdentityBuilder builder = Identifiable.buildId()//
+				.append("{");
+			boolean first = true;
+			for (ObservableAction component : theComponents) {
+				if (first)
+					first = false;
+				else
+					builder.append(", ");
+				builder.withPrintedId(component instanceof Identifiable ? ((Identifiable) component).getIdentity() : component);
+			}
+			return builder.append("}").build();
+		}
+
+		@Override
+		public boolean isEventing() {
+			for (ObservableAction component : theComponents) {
+				if (component.isEventing())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
+		public void act(Object cause) throws IllegalStateException {
+			for (ObservableAction component : theComponents)
+				component.act(cause);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			ObservableValue<String>[] components = new ObservableValue[theComponents.size()];
+			for (int i = 0; i < components.length; i++)
+				components[i] = theComponents.get(i).isEnabled();
+			return ObservableValue.firstValue(msg -> msg != null, null, components);
 		}
 	}
 }

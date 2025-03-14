@@ -39,11 +39,11 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 
 		/** @return Transfer source configurations for values in the widget */
 		@QonfigChildGetter("transfer-source")
-		List<QuickDragging.TransferSource.Def> getTransferSources();
+		List<QuickTransfer.TransferSource.Def> getTransferSources();
 
 		/** @return Transfer accept configurations for moving values into the widget */
 		@QonfigChildGetter("transfer-accept")
-		List<QuickDragging.TransferAccept.Def> getTransferAccepters();
+		List<QuickTransfer.TransferAccept.Def> getTransferAccepters();
 	}
 
 	/**
@@ -64,10 +64,10 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();
 
 		/** @return Transfer source configurations for values in the widget */
-		List<QuickDragging.TransferSource.Interpreted<T, ?>> getTransferSources();
+		List<QuickTransfer.TransferSource.Interpreted<T, ?>> getTransferSources();
 
 		/** @return Transfer accept configurations for moving values into the widget */
-		List<QuickDragging.TransferAccept.Interpreted<T, ?>> getTransferAccepters();
+		List<QuickTransfer.TransferAccept.Interpreted<T, ?>> getTransferAccepters();
 
 		@Override
 		W create();
@@ -80,8 +80,8 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T>, ValueTyped
 	ObservableCollection<T> getMultiSelection();
 
 	/** @return Transfer source configurations for values in the widget */
-	List<QuickDragging.TransferSource<T, ?>> getTransferSources();
+	List<QuickTransfer.TransferSource<T, ?>> getTransferSources();
 
 	/** @return Transfer accept configurations for moving values into the widget */
-	List<QuickDragging.TransferAccept<T, ?>> getTransferAccepters();
+	List<QuickTransfer.TransferAccept<T, ?>> getTransferAccepters();
 }

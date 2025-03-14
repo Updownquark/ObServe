@@ -4,6 +4,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.ObservableValueEvent;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -91,6 +93,59 @@ public class ObservableUtils {
 					index--;
 			}
 		}
+	}
+
+	/**
+	 * An intermediate cause for events linking 2 {@link SettableValue}s
+	 *
+	 * @param <T> The type of the linked values
+	 */
+	public static class ObservableValueLinkEvent<T> extends Causable.AbstractCausable {
+		private final SettableValue<T> theSource;
+		private final SettableValue<T> theTarget;
+
+		ObservableValueLinkEvent(SettableValue<T> source, SettableValue<T> target, ObservableValueEvent<T> cause) {
+			super(cause);
+			theSource = source;
+			theTarget = target;
+		}
+
+		/**
+		 * @param potentialSource A SettableValue source to test
+		 * @param potentialTarget A SettableValue target to test
+		 * @return Whether the given link matches this event's link
+		 */
+		public boolean matches(SettableValue<?> potentialSource, SettableValue<?> potentialTarget) {
+			return theSource == potentialSource && theTarget == potentialTarget;
+		}
+	}
+
+	public static <T> Subscription link(SettableValue<T> v1, SettableValue<T> v2) {
+		Subscription sub1;
+		try (Transaction initT = v2.lock(true, null)) {
+			sub1 = v1.changes().act(evt -> {
+				if (evt
+					.hasCauseLike(c -> c instanceof ObservableValueLinkEvent && ((ObservableValueLinkEvent<?>) c).matches(v1, v2)) != null)
+					return;
+				ObservableValueLinkEvent<T> link = new ObservableValueLinkEvent<>(v1, v2, evt);
+				try (Transaction linkT = link.use(); //
+					Transaction t = v2.lock(true, link)) {
+					if (!v2.isEventing() || v2.get() != evt.getNewValue())
+						v2.set(evt.getNewValue());
+				}
+			});
+		}
+		Subscription sub2 = v2.noInitChanges().act(evt -> {
+			if (evt.hasCauseLike(c -> c instanceof ObservableValueLinkEvent && ((ObservableValueLinkEvent<?>) c).matches(v2, v1)) != null)
+				return;
+			ObservableValueLinkEvent<T> link = new ObservableValueLinkEvent<>(v2, v1, evt);
+			try (Transaction linkT = link.use(); //
+				Transaction t = v1.lock(true, link)) {
+				if (!v1.isEventing() || v1.get() != evt.getNewValue())
+					v1.set(evt.getNewValue());
+			}
+		});
+		return Subscription.forAll(sub1, sub2);
 	}
 
 	/**

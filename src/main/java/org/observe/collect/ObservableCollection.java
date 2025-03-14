@@ -39,6 +39,7 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
+import org.qommons.Stamped;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
@@ -319,51 +320,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this) {
-			@Override
-			protected Object createIdentity() {
-				return Identifiable.wrap(getCollection().getIdentity(), "size");
-			}
-
-			@Override
-			public ObservableCollectionImpl.ReducedValue<E, Integer, Integer> alias(String alias) {
-				super.alias(alias);
-				return this;
-			}
-
-			@Override
-			public long getStamp() {
-				return getCollection().getStamp();
-			}
-
-			@Override
-			public Integer get() {
-				return getCollection().size();
-			}
-
-			@Override
-			protected Integer init() {
-				return getCollection().size();
-			}
-
-			@Override
-			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
-				switch (change.getType()) {
-				case add:
-					return oldValue + 1;
-				case remove:
-					return oldValue - 1;
-				case set:
-					break;
-				}
-				return oldValue;
-			}
-
-			@Override
-			protected Integer getValue(Integer updated) {
-				return updated;
-			}
-		};
+		return ObservableValue.of(this::size, this::getStamp, simpleChanges(), () -> Identifiable.wrap(getIdentity(), "size"));
 	}
 
 	/**
@@ -381,6 +338,8 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	@Override
 	default Observable<Causable> simpleChanges() {
 		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
+			private boolean isFiring;
+
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableCollection.this.getIdentity(), "simpleChanges");
@@ -388,13 +347,22 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			public Subscription subscribe(Observer<? super Causable> observer) {
+				boolean[] subscribed = { true };
 				Causable.CausableKey key = Causable.key((root, values) -> {
-					observer.onNext(root);
+					if (!subscribed[0])
+						return;
+					isFiring = true;
+					try {
+						observer.onNext(root);
+					} finally {
+						isFiring = false;
+					}
 				});
+
 				Subscription sub = ObservableCollection.this.onChange(evt -> {
 					evt.getRootCausable().onFinish(key);
 				});
-				return sub;
+				return Subscription.forAll(() -> subscribed[0] = false, sub);
 			}
 
 			@Override
@@ -404,7 +372,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			public boolean isEventing() {
-				return ObservableCollection.this.isEventing();
+				return isFiring;
 			}
 
 			@Override
@@ -425,6 +393,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			@Override
 			public CoreId getCoreId() {
 				return ObservableCollection.this.getCoreId();
+			}
+
+			@Override
+			public long getStamp() {
+				return ObservableCollection.this.getStamp();
 			}
 
 			@Override
@@ -659,6 +632,20 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	}
 
 	/**
+	 * Sometimes this create method is nicer than using {@link #build()} because that method usually requires the type to be specified
+	 * explicitly, but this the compiler can often fill in the type for this method.
+	 *
+	 * @param <E> The type for the collection
+	 * @param build Configuration for the collection
+	 * @return The built collection
+	 */
+	static <E> ObservableCollection<E> create(Consumer<ObservableCollectionBuilder<E, ?>> build) {
+		ObservableCollectionBuilder<E, ?> builder = build();
+		build.accept(builder);
+		return builder.build();
+	}
+
+	/**
 	 * @param <E> The type for the collection
 	 * @return A new list to back a collection created by {@link #create()}
 	 */
@@ -789,6 +776,13 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			@Override
 			public CoreId getCoreId() {
 				return Lockable.getCoreId(Lockable.lockable(coll), coll);
+			}
+
+			@Override
+			public long getStamp() {
+				try (Transaction t = lock()) {
+					return Stamped.compositeOf2Stamps(coll.getStamp(), Stamped.compositeStamp(coll));
+				}
 			}
 
 			@Override
@@ -1004,8 +998,8 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		}
 
 		/**
-		 * @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally
 		 * @param allowUpdates Whether the collected results should allow updates
+		 * @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally
 		 */
 		default CollectionDataFlow<E, T, T> unmodifiable(boolean allowUpdates) {
 			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, allowUpdates));
@@ -1034,8 +1028,20 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		CollectionDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		/**
+		 * Disables all modifications to the produced collection while the given message is not null
+		 *
+		 * @param message An observable message with which to disable modifications to the collection
+		 * @param allowUpdates Whether to still allow updates when disabled
+		 * @return A flow with the same data and properties as this flow, but whose collected results are modification-protected by the
+		 *         given message value
+		 */
+		default CollectionDataFlow<E, T, T> disableWith(ObservableValue<String> message, boolean allowUpdates) {
+			ObservableValue<Boolean> filtered = message.map(msg -> msg != null);
+			return refresh(filtered.noInitChanges()).filterMod(fb -> fb.unmodifiable(message, allowUpdates));
+		}
+
+		/**
 		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
 		 * @param keyMap The function to produce keys from this flow's values
 		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
 		 *        into the gathered multi-map.
@@ -1048,7 +1054,6 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 		/**
 		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
 		 * @param keyMap The function to produce keys from this flow's values
 		 * @param keySorting The ordering for the key set
 		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
@@ -1244,6 +1249,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		default DistinctDataFlow<E, T, T> disableWith(ObservableValue<String> message, boolean allowUpdates) {
+			return (DistinctDataFlow<E, T, T>) CollectionDataFlow.super.disableWith(message, allowUpdates);
+		}
+
+		@Override
 		DistinctDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
 
 		@Override
@@ -1338,6 +1348,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		SortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		default SortedDataFlow<E, T, T> disableWith(ObservableValue<String> message, boolean allowUpdates) {
+			return (SortedDataFlow<E, T, T>) CollectionDataFlow.super.disableWith(message, allowUpdates);
+		}
+
+		@Override
 		SortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
 
 		@Override
@@ -1418,6 +1433,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		default DistinctSortedDataFlow<E, T, T> disableWith(ObservableValue<String> message, boolean allowUpdates) {
+			return (DistinctSortedDataFlow<E, T, T>) DistinctDataFlow.super.disableWith(message, allowUpdates);
+		}
+
+		@Override
 		DistinctSortedDataFlow<E, T, T> catchUpdates(ThreadConstraint constraint);
 
 		@Override
@@ -1456,7 +1476,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @param <T> The type of the collection to filter modification on
 	 */
 	class ModFilterBuilder<T> {
-		private String theUnmodifiableMsg;
+		private Supplier<String> theUnmodifiableMsg;
 		private boolean areUpdatesAllowed;
 		private String theAddMsg;
 		private String theRemoveMsg;
@@ -1468,7 +1488,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			areUpdatesAllowed = true;
 		}
 
-		public String getUnmodifiableMsg() {
+		public Supplier<String> getUnmodifiableSupplier() {
 			return theUnmodifiableMsg;
 		}
 
@@ -1497,6 +1517,10 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		}
 
 		public ModFilterBuilder<T> unmodifiable(String modMsg, boolean allowUpdates) {
+			return unmodifiable(LambdaUtils.constantSupplier(modMsg, modMsg, modMsg), allowUpdates);
+		}
+
+		public ModFilterBuilder<T> unmodifiable(Supplier<String> modMsg, boolean allowUpdates) {
 			theUnmodifiableMsg = modMsg;
 			areUpdatesAllowed = allowUpdates;
 			return this;

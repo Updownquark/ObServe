@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Spliterator;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
@@ -185,7 +186,6 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 
 	/**
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
 	 * @param compare The comparator for the collection
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
@@ -196,7 +196,6 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 
 	/**
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
 	 * @param compare The comparator for the collection
 	 * @param values The values to be in the immutable collection
 	 * @return An immutable collection with the given values
@@ -208,7 +207,6 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 
 	/**
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
 	 * @param compare The comparator to use to sort the collection's values
 	 * @return A new, empty, mutable observable sorted collection
 	 */
@@ -218,12 +216,27 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 
 	/**
 	 * @param <E> The type for the collection
-	 * @param type The type for the collection
 	 * @param compare The comparator to use to sort the collection's values
 	 * @return A builder to create a new, empty, mutable observable sorted collection
 	 */
 	static <E> ObservableCollectionBuilder.SortedBuilder<E, ?> build(Comparator<? super E> compare) {
 		return DefaultObservableSortedCollection.build(compare);
+	}
+
+	/**
+	 * Sometimes this create method is nicer than using {@link #build(Comparator)} because that method usually requires the type to be
+	 * specified explicitly, but this the compiler can often fill in the type for this method.
+	 *
+	 * @param <E> The type for the collection
+	 * @param compare The comparator to use to sort the collection's values
+	 * @param build Configuration for the collection
+	 * @return The built collection
+	 */
+	static <E> ObservableSortedCollection<E> create(Comparator<? super E> compare,
+		Consumer<ObservableCollectionBuilder.SortedBuilder<E, ?>> build) {
+		ObservableCollectionBuilder.SortedBuilder<E, ?> builder = build(compare);
+		build.accept(builder);
+		return builder.build();
 	}
 
 	/**

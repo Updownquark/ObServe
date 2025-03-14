@@ -7,6 +7,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.JComboBox;
@@ -15,6 +16,7 @@ import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.TableContentControl.ValueRenderer;
+import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ListenerList;
@@ -29,7 +31,7 @@ import org.qommons.io.Format;
  */
 public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	public class CategoryMutationStrategy {
-		private BiPredicate<? super R, ? super C> theEditability;
+		private Predicate<? super ModelCell<R, C>> theEditability;
 		private BiFunction<? super R, ? super C, ? extends C> theAttributeMutator;
 		private BiFunction<? super CollectionElement<? extends R>, ? super C, ? extends R> theRowMutator;
 		private boolean updateRowIfUnchanged;
@@ -38,11 +40,16 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		private Function<? super ModelCell<? extends R, ? extends C>, String> theEditorTooltip;
 
 		private BiFunction<MutableCollectionElement<R>, ? super C, String> theValueFilter;
-		private Dragging.SimpleTransferAccepter<R, C, C> theDragAccepter;
+		private Dragging.SimpleTransferAccepter<R, C> theDragAccepter;
 
 		CategoryMutationStrategy() {}
 
 		public CategoryMutationStrategy editableIf(BiPredicate<? super R, ? super C> editable) {
+			return editableIf(
+				LambdaUtils.printablePred(cell -> editable.test(cell.getModelValue(), cell.getCellValue()), editable::toString, editable));
+		}
+
+		public CategoryMutationStrategy editableIf(Predicate<? super ModelCell<R, C>> editable) {
 			theEditability = editable;
 			return this;
 		}
@@ -50,7 +57,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		public CategoryMutationStrategy mutateAttribute(BiConsumer<? super R, ? super C> mutator) {
 			return mutateAttribute2((row, col) -> {
 				mutator.accept(row, col);
-				return theAccessor.apply(row);
+				return col;
 			});
 		}
 
@@ -158,8 +165,10 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		public CategoryMutationStrategy clicks(int clicks) {
-			if (theEditor == null)
+			if (theEditor == null) {
+				BreakpointHere.breakpoint();
 				throw new IllegalStateException("The editor has not been configured yet");
+			}
 			theEditor.withClicks(clicks);
 			return this;
 		}
@@ -173,13 +182,13 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			return this;
 		}
 
-		public boolean isEditable(R row, C category) {
+		public boolean isEditable(ModelCell<R, C> cell) {
 			if (theAttributeMutator == null && theRowMutator == null) {
 				if (theEditor != null)
 					System.err.println("Warning: Editor configured for column " + theName + " (" + theType + "), but no mutation function");
 				return false;
 			}
-			return theEditability == null || theEditability.test(row, category);
+			return theEditability == null || theEditability.test(cell);
 		}
 
 		public String isAcceptable(MutableCollectionElement<R> row, C category) {
@@ -207,18 +216,18 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			return theEditorTooltip;
 		}
 
-		public BiPredicate<? super R, ? super C> getEditability() {
+		public Predicate<? super ModelCell<R, C>> getEditability() {
 			return theEditability;
 		}
 
-		public CategoryMutationStrategy dragAccept(Consumer<Dragging.TransferAccepter<R, C, C>> accepter) {
+		public CategoryMutationStrategy dragAccept(Consumer<? super Dragging.TransferAccepter<R, ? extends C>> accepter) {
 			if (theDragAccepter == null)
 				theDragAccepter = new Dragging.SimpleTransferAccepter<>();
 			accepter.accept(theDragAccepter);
 			return this;
 		}
 
-		public Dragging.TransferAccepter<R, C, C> getDragAccepter() {
+		public Dragging.TransferAccepter<R, C> getDragAccepter() {
 			return theDragAccepter;
 		}
 	}
@@ -338,7 +347,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		}
 
 		@Override
-		protected String printDefault(Supplier<? extends R> row, C column) {
+		protected String printDefault(C column) {
 			return "Add...";
 		}
 
@@ -355,7 +364,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private String theName;
 	private Object theIdentifier;
 	private final Class<C> theType;
-	private final Function<? super R, ? extends C> theAccessor;
+	private final Function<? super ModelRow<? extends R>, ? extends C> theAccessor;
 	private final CategoryMutationStrategy theMutator;
 	private ListenerList<CategoryMouseListener<? super R, ? super C>> theMouseListeners;
 	private CategoryKeyListener<? super R, ? super C> theKeyListener;
@@ -371,25 +380,30 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 	private boolean usesRenderingForSize;
 	private boolean isResizable;
 
-	private Dragging.SimpleTransferSource<C> theDragSource;
+	private Dragging.SimpleTransferSource<R, C> theDragSource;
 
 	private boolean isFilterable;
 
 	public CategoryRenderStrategy(String name, Class<C> type, Function<? super R, ? extends C> accessor) {
+		this(name, type, row->accessor.apply(row.getModelValue()), true);
+	}
+
+	public CategoryRenderStrategy(String name, Class<C> type, Function<? super ModelRow<? extends R>, ? extends C> accessor,
+		boolean resizeable) {
 		theName = name;
 		theType = type;
 		theAccessor = accessor;
 		theMutator = new CategoryMutationStrategy();
 		isRenderDefault = true;
-		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(this::printDefault);
+		theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>((mv, cv)->String.valueOf(cv));
 		theMinWidth = 10;
 		thePrefWidth = 100;
 		theMaxWidth = 10000;
-		isResizable = true;
+		isResizable = resizeable;
 		isFilterable = true;
 	}
 
-	protected String printDefault(Supplier<? extends R> row, C column) {
+	protected String printDefault(C column) {
 		return column == null ? "" : column.toString();
 	}
 
@@ -411,7 +425,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		return theType;
 	}
 
-	public C getCategoryValue(R rowValue) {
+	public C getCategoryValue(ModelRow<? extends R> rowValue) {
 		return theAccessor.apply(rowValue);
 	}
 
@@ -553,7 +567,7 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			theDecorator = theDecorator.modify(decorator);
 		if (theDecorator != null) {
 			if (theRenderer == null)
-				theRenderer = ObservableCellRenderer.formatted((mv, cv) -> print(() -> mv, cv));
+				theRenderer = new ObservableCellRenderer.DefaultObservableCellRenderer<>(cell -> print(cell, cell.getCellValue()));
 			theRenderer.decorate(theDecorator);
 		}
 		return this;
@@ -579,17 +593,17 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		return theRenderer;
 	}
 
-	public String print(R rowValue) {
-		C colValue = getCategoryValue(rowValue);
-		return print(() -> rowValue, colValue);
+	public String print(ModelRow<? extends R> row) {
+		C colValue = getCategoryValue(row);
+		return print(row, colValue);
 	}
 
-	public String print(Supplier<? extends R> rowValue, C colValue) {
+	public String print(ModelRow<? extends R> row, C colValue) {
 		if (theRenderer != null)
 			return theRenderer
-				.renderAsText(new ModelCell.Default<R, C>(rowValue, colValue, 0, 0, false, false, false, false, false, false));
+				.renderAsText(new ModelCell.RowWrapper<>(row, colValue, 0, false, false));
 		else
-			return printDefault(rowValue, colValue);
+			return printDefault(colValue);
 	}
 
 	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
@@ -689,14 +703,14 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 		return isFilterable;
 	}
 
-	public CategoryRenderStrategy<R, C> dragSource(Consumer<Dragging.TransferSource<C>> source) {
+	public CategoryRenderStrategy<R, C> dragSource(Consumer<? super Dragging.TransferSource<R, C>> source) {
 		if (theDragSource == null)
 			theDragSource = new Dragging.SimpleTransferSource<>();
 		source.accept(theDragSource);
 		return this;
 	}
 
-	public Dragging.TransferSource<C> getDragSource() {
+	public Dragging.TransferSource<R, C> getDragSource() {
 		return theDragSource;
 	}
 
@@ -720,15 +734,15 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	@Override
 	public CharSequence render(R row) {
-		return print(row);
+		return print(new ModelRow.Bare<>(row));
 	}
 
 	private boolean compareComparable = true;
 
 	@Override
 	public int compare(R row1, R row2, boolean reverse) {
-		C val1 = getCategoryValue(row1);
-		C val2 = getCategoryValue(row2);
+		C val1 = getCategoryValue(new ModelRow.Bare<>(row1));
+		C val2 = getCategoryValue(new ModelRow.Bare<>(row2));
 		// First try to find ways to compare the column values
 		// The null and empty comparisons here are switched from typical, under the assumption that if the user is sorting by this column,
 		// they are most likely interested in rows with values in this column
@@ -755,8 +769,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			}
 		}
 		// If that didn't work, then compare the formatted text
-		String render1 = print(() -> row1, val1);
-		String render2 = print(() -> row2, val2);
+		String render1 = print(new ModelRow.Bare<>(row1), val1);
+		String render2 = print(new ModelRow.Bare<>(row2), val2);
 		return TableContentControl.compareColumnRenders(render1, render2, reverse);
 	}
 

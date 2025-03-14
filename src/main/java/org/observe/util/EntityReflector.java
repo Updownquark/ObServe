@@ -974,6 +974,11 @@ public class EntityReflector<E> {
 			}
 
 			@Override
+			public long getStamp() {
+				return ObservableFieldImpl.this.getStamp();
+			}
+
+			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<F>> observer) {
 				return theField.theReflector.watchField(theEntity, theField.getFieldIndex(), event -> {
 					if (event.getEntity() == theEntity)
@@ -2818,12 +2823,15 @@ public class EntityReflector<E> {
 				return;
 			ReflectedField<E, F> field = (ReflectedField<E, F>) theFields.get(fieldIndex);
 			LightWeightObservable<EntityFieldChangeEvent<E, ?>> changes = theFieldChanges[field.getFieldIndex()];
-			if (changes == null || !changes.isAnyoneListening())
-				return;
-			EntityFieldChangeEvent<E, F> event = ((ObservableEntityInstanceBacking<E>) theBacking).createFieldChangeEvent(entity, field,
-				change.oldValue, change.newValue, change.cause);
-			try (Transaction t = event.use()) {
-				changes.onNext(event);
+			if (changes == null) {
+			} else if (!changes.isAnyoneListening())
+				changes.incrementStamp();
+			else {
+				EntityFieldChangeEvent<E, F> event = ((ObservableEntityInstanceBacking<E>) theBacking).createFieldChangeEvent(entity, field,
+					change.oldValue, change.newValue, change.cause);
+				try (Transaction t = event.use()) {
+					changes.onNext(event);
+				}
 			}
 		}
 

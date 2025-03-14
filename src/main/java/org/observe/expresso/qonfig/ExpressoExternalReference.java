@@ -127,19 +127,19 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 
 		private void buildExtContent(Builder builder, PartialQonfigElement element, QonfigChildDef fulfillmentRole) {
-			if (element.getParentRoles().contains(fulfillmentRole)) {
-				// The content may contain attributes specific to add-ons inherited by roles it fulfills
-				// The content as the fulfillment of the external content won't know of these roles
-				// theFulfilledContent.getElement().copy(builder.ignoreExtraAttributes(true));
-				theFulfilledContent.getElement().copy(builder, null, null);
-			} else {
-				element.copyAttributes(builder);
-				for (PartialQonfigElement child : element.getChildren()) {
-					builder.withChild2(child.getParentRoles(), child.getType(), cb -> {
-						buildExtContent(cb, child, fulfillmentRole);
-					}, child.getFilePosition(), child.getDescription());
-				}
+			// if (element.getParentRoles().contains(fulfillmentRole)) {
+			// // The content may contain attributes specific to add-ons inherited by roles it fulfills
+			// // The content as the fulfillment of the external content won't know of these roles
+			// // theFulfilledContent.getElement().copy(builder.ignoreExtraAttributes(true));
+			// theFulfilledContent.getElement().copy(builder, null, null, null);
+			// } else {
+			element.copyAttributes(builder);
+			for (PartialQonfigElement child : element.getChildren()) {
+				builder.withChild2(child.getParentRoles(), child.getType(), cb -> {
+					buildExtContent(cb, child, fulfillmentRole);
+				}, child.getFilePosition(), child.getDescription());
 			}
+				// }
 		}
 
 		@Override

@@ -37,7 +37,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -158,14 +157,15 @@ class PanelPopulationImpl {
 	implements PartialPanelPopulatorImpl<C, P> {
 		private Shading theShading;
 
-		MigFieldPanel(String fieldName, C container, Observable<?> until) {
+		MigFieldPanel(String fieldName, C container, boolean showInvisible, Observable<?> until) {
 			super(fieldName, //
-				container != null ? container
-					: (C) new ConformingPanel(PanelPopulation.createMigLayout(true, () -> "install the layout before using this class")),
+				container != null ? container : (C) new ConformingPanel(
+					PanelPopulation.createMigLayout(true, showInvisible, () -> "install the layout before using this class")),
 					until);
 			if (getContainer().getLayout() == null
 				|| !PanelPopulation.MIG_LAYOUT_CLASS_NAME.equals(getContainer().getLayout().getClass().getName())) {
-				LayoutManager2 migLayout = PanelPopulation.createMigLayout(true, () -> "install the layout before using this class");
+				LayoutManager2 migLayout = PanelPopulation.createMigLayout(true, showInvisible,
+					() -> "install the layout before using this class");
 				getContainer().setLayout(migLayout);
 			}
 		}
@@ -277,8 +277,8 @@ class PanelPopulationImpl {
 		private final JLabel theMenuCloser;
 		private boolean hasShown;
 
-		SettingsMenuImpl(String fieldName, C container, Observable<?> until) {
-			super(fieldName, container, until);
+		SettingsMenuImpl(String fieldName, C container, boolean showInvisible, Observable<?> until) {
+			super(fieldName, container, showInvisible, until);
 			thePopup = new JPopupMenu();
 			theIcon = ObservableValue.of(ObservableSwingUtils.getFixedIcon(null, "icons/gear.png", 20, 20));
 			theMenuCloser = new JLabel();
@@ -457,14 +457,8 @@ class PanelPopulationImpl {
 
 		@Override
 		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify) {
-			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox() {
-				@Override
-				public void setEnabled(boolean enabled) {
-					// BreakpointHere.breakpoint();
-					super.setEnabled(enabled);
-				}
-			}, fieldName,
-				null, false, getUntil());
+			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), fieldName, null, false,
+				getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
@@ -1055,8 +1049,9 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+		public P withVTab(Object tabID, int tabIndex, boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel,
+			Consumer<TabEditor<?>> tabModifier) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, showInvisible, getUntil());
 			panel.accept(fieldPanel);
 			fieldPanel.getComponent(); // Enact the decorations
 			return withTabImpl(tabID, tabIndex, fieldPanel.getContainer(), tabModifier, fieldPanel);
@@ -1417,8 +1412,8 @@ class PanelPopulationImpl {
 		boolean hasSetLast;
 
 		@Override
-		public P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+		public P firstV(boolean showInvisible, Consumer<PanelPopulator<?, ?>> vPanel) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, showInvisible, getUntil());
 			vPanel.accept(fieldPanel);
 			first(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -1446,8 +1441,8 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+		public P lastV(boolean showInvisible, Consumer<PanelPopulator<?, ?>> vPanel) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, showInvisible, getUntil());
 			vPanel.accept(fieldPanel);
 			last(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -1587,8 +1582,8 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+		public P withVContent(boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, showInvisible, getUntil());
 			panel.accept(fieldPanel);
 			withContent(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -1621,8 +1616,8 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withVRowHeader(Consumer<PanelPopulator<?, ?>> panel) {
-			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+		public P withVRowHeader(boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, showInvisible, getUntil());
 			panel.accept(fieldPanel);
 			withRowHeader(fieldPanel.getComponent());
 			if (fieldPanel.isVisible() != null)
@@ -1721,13 +1716,13 @@ class PanelPopulationImpl {
 
 		private SettableValue<Boolean> isCollapsed;
 
-		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, boolean vertical, LayoutManager layout) {
+		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, boolean vertical, boolean showInvisible, LayoutManager layout) {
 			super(null, new ConformingPanel(layout), until);
 			theCollapsePane = cp;
 			theCollapsePane.setContentPane(getEditor());
 			theCollapsePane.setLayout(new JustifiedBoxLayout(false).mainJustified().crossJustified());
 			if (vertical)
-				theContentPanel = new MigFieldPanel<>(null, getEditor(), getUntil());
+				theContentPanel = new MigFieldPanel<>(null, getEditor(), showInvisible, getUntil());
 			else
 				theContentPanel = new SimpleHPanel<>(null, getEditor(), getUntil());
 			theOuterContainer = new SimpleHPanel<>(null, new ConformingPanel(new CollapsePaneOuterLayout()), until);
@@ -1901,7 +1896,7 @@ class PanelPopulationImpl {
 		private final CollectionWidgetBuilder<R, ?, ?> theWidget;
 		private String theActionName;
 		final Consumer<? super List<? extends R>> theAction;
-		final Supplier<List<R>> theSelectedValues;
+		ObservableCollection<R> theSelectedValues;
 		private Function<? super R, String> theEnablement;
 		private Function<? super List<? extends R>, String> theMultiEnablement;
 		private Function<? super List<? extends R>, String> theTooltip;
@@ -1917,14 +1912,15 @@ class PanelPopulationImpl {
 		Consumer<ButtonEditor<?, ?>> theButtonMod;
 		Observable<?> theUntil;
 
+		private boolean isUpdatingSelection;
+
 		SimpleDataAction(String actionName, CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
-			Supplier<List<R>> selectedValues, boolean defaultAsButton, Observable<?> until) {
+			boolean defaultAsButton, Observable<?> until) {
 			theWidget = widget;
 			theActionName = actionName;
 			theAction = action;
-			theSelectedValues = selectedValues;
 			theUntil = until;
-			theEnabledString = SettableValue.<String> build().build();
+			theEnabledString = SettableValue.create();
 			theObservableAction = new ObservableAction() {
 				private final AtomicInteger isEventing = new AtomicInteger();
 
@@ -1932,11 +1928,11 @@ class PanelPopulationImpl {
 				public void act(Object cause) throws IllegalStateException {
 					isEventing.getAndIncrement();
 					try {
-						List<R> selected = theSelectedValues.get();
+						List<R> selected = getActionItems();
 						if (theEnablement != null)
 							selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
 						theAction.accept(selected);
-						updateSelection(getActionItems(), cause);
+						updateSelection(cause);
 					} finally {
 						isEventing.getAndDecrement();
 					}
@@ -1961,9 +1957,12 @@ class PanelPopulationImpl {
 			multipleAllowed = true;
 			isButton = defaultAsButton;
 			isPopup = !defaultAsButton;
-			EventQueue.invokeLater(() -> {
-				updateSelection(selectedValues.get(), null);
-			});
+		}
+
+		public void init(ObservableCollection<R> selectedValues) {
+			theSelectedValues = selectedValues;
+			theSelectedValues.simpleChanges().takeUntil(theUntil).act(evt -> updateSelection(evt));
+			updateSelection(null);
 		}
 
 		public String isEnabled() {
@@ -2071,13 +2070,8 @@ class PanelPopulationImpl {
 		@Override
 		public A disableWith(ObservableValue<String> disabled) {
 			theObservableAction = theObservableAction.disableWith(disabled);
-			disabled.noInitChanges().takeUntil(theUntil).act(evt -> refreshEnabled(evt));
+			disabled.noInitChanges().takeUntil(theUntil).act(evt -> updateSelection(evt));
 			return (A) this;
-		}
-
-		private void refreshEnabled(Object cause) {
-			List<R> selected = theSelectedValues.get();
-			updateSelection(selected, cause);
 		}
 
 		@Override
@@ -2185,70 +2179,79 @@ class PanelPopulationImpl {
 
 		@Override
 		public List<R> getActionItems() {
-			return theSelectedValues.get();
+			return QommonsUtils.unmodifiableCopy(theSelectedValues);
 		}
 
-		void updateSelection(List<R> selectedValues, Object cause) {
-			if (!zeroAllowed && selectedValues.isEmpty())
-				theEnabledString.set("Nothing selected", cause);
-			else if (!multipleAllowed && selectedValues.size() > 1)
-				theEnabledString.set("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected", cause);
-			else {
-				StringBuilder message = null;
-				if (theMultiEnablement != null) {
-					String msg = theMultiEnablement.apply(selectedValues);
-					if (msg != null)
-						message = new StringBuilder(msg);
-				}
-				if (message == null && theEnablement != null) {
-					Set<String> messages = null;
-					int allowedCount = 0;
-					for (R value : selectedValues) {
-						String msg = theEnablement.apply(value);
-						if (msg == null)
-							allowedCount++;
-						else {
-							if (messages == null)
+		void updateSelection(Object cause) {
+			if (isUpdatingSelection)
+				return;
+			isUpdatingSelection = true;
+			try {
+				List<R> values = getActionItems();
+				if (!zeroAllowed && values.isEmpty())
+					theEnabledString.set("Nothing selected", cause);
+				else if (!multipleAllowed && values.size() > 1)
+					theEnabledString.set("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected", cause);
+				else {
+					StringBuilder message = null;
+					if (theMultiEnablement != null) {
+						String msg = theMultiEnablement.apply(values);
+						if (msg != null)
+							message = new StringBuilder(msg);
+					}
+					if (message == null && theEnablement != null) {
+						Set<String> messages = null;
+						int allowedCount = 0;
+						for (R value : values) {
+							String msg = theEnablement.apply(value);
+							if (msg == null)
+								allowedCount++;
+							else {
+								if (messages == null)
+									messages = new LinkedHashSet<>();
+								messages.add(msg);
+							}
+						}
+						boolean error = false;
+						if (!actWhenAnyEnabled && messages != null) {
+							error = true;
+						} else if (allowedCount == 0 && !zeroAllowed) {
+							error = true;
+							if (messages == null) {
 								messages = new LinkedHashSet<>();
-							messages.add(msg);
+								messages.add("Nothing selected");
+							}
+						} else if (allowedCount > 1 && !multipleAllowed) {
+							error = true;
+							if (messages == null) {
+								messages = new LinkedHashSet<>();
+								messages.add("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected");
+							}
 						}
-					}
-					boolean error = false;
-					if (!actWhenAnyEnabled && messages != null) {
-						error = true;
-					} else if (allowedCount == 0 && !zeroAllowed) {
-						error = true;
-						if (messages == null) {
-							messages = new LinkedHashSet<>();
-							messages.add("Nothing selected");
-						}
-					} else if (allowedCount > 1 && !multipleAllowed) {
-						error = true;
-						if (messages == null) {
-							messages = new LinkedHashSet<>();
-							messages.add("Multiple " + StringUtils.pluralize(theWidget.getItemName()) + " selected");
-						}
-					}
-					if (error) {
-						message = new StringBuilder("<html>");
-						boolean first = true;
-						if (messages != null) {
-							for (String msg : messages) {
-								if (!first)
-									message.append("<br>");
-								else
-									first = false;
-								message.append(msg);
+						if (error) {
+							message = new StringBuilder("<html>");
+							boolean first = true;
+							if (messages != null) {
+								for (String msg : messages) {
+									if (!first)
+										message.append("<br>");
+									else
+										first = false;
+									message.append(msg);
+								}
 							}
 						}
 					}
+					theEnabledString.set(message == null ? null : message.toString(), cause);
 				}
-				theEnabledString.set(message == null ? null : message.toString(), cause);
-			}
 
-			if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled string will
-				// show
-				theTooltipString.set(theTooltip.apply(selectedValues), cause);
+				if (theTooltipString != null && theEnabledString.get() == null) { // No point generating the tooltip if the disabled string
+																					// will
+					// show
+					theTooltipString.set(theTooltip.apply(values), cause);
+				}
+			} finally {
+				isUpdatingSelection = false;
 			}
 		}
 

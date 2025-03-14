@@ -197,7 +197,7 @@ public class QuickStyleUtils {
 		throws IOException, ParseException {
 		// Try a whole bunch of different ways to resolve the icon resource
 		ResourceLocator locator = new ResourceLocator();
-		locator.relativeTo(ObservableSwingUtils.class.getClassLoader());
+		locator.relativeTo(ObservableSwingUtils.class);
 		locator.relativeTo(contextClassLoader);
 		locator.relativeTo(sourceDocument);
 		URL url = locator.findResource(iconLocation);

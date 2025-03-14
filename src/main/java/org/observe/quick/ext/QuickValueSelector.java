@@ -19,6 +19,7 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickTable;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -52,6 +53,10 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		private String theItemName;
 		private QuickSuperTable.Def<?> theAvailable;
 		private QuickTable.Def<?> theIncluded;
+		private QuickButton.Def<?> theIncludeAllConfig;
+		private QuickButton.Def<?> theIncludeConfig;
+		private QuickButton.Def<?> theExcludeConfig;
+		private QuickButton.Def<?> theExcludeAllConfig;
 
 		/**
 		 * @param parent The parent of this widget
@@ -111,6 +116,26 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 			return theInclude;
 		}
 
+		@QonfigChildGetter("include-all-button")
+		public QuickButton.Def<?> getIncludeAllConfig() {
+			return theIncludeAllConfig;
+		}
+
+		@QonfigChildGetter("include-button")
+		public QuickButton.Def<?> getIncludeConfig() {
+			return theIncludeConfig;
+		}
+
+		@QonfigChildGetter("exclude-button")
+		public QuickButton.Def<?> getExcludeConfig() {
+			return theExcludeConfig;
+		}
+
+		@QonfigChildGetter("exclude-all-button")
+		public QuickButton.Def<?> getExcludeAllConfig() {
+			return theExcludeAllConfig;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
@@ -128,6 +153,23 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 
 			theAvailable = syncChild(QuickSuperTable.Def.class, theAvailable, session, "available");
 			theIncluded = syncChild(QuickTable.Def.class, theIncluded, session, "included");
+
+			theIncludeAllConfig = syncChild(QuickButton.Def.class, theIncludeAllConfig, session, "include-all-button");
+			theIncludeConfig = syncChild(QuickButton.Def.class, theIncludeConfig, session, "include-button");
+			theExcludeConfig = syncChild(QuickButton.Def.class, theExcludeConfig, session, "exclude-button");
+			theExcludeAllConfig = syncChild(QuickButton.Def.class, theExcludeAllConfig, session, "exclude-all-button");
+
+			if (theIncludeAllConfig != null && theIncludeAllConfig.getClass() != QuickButton.Def.class)
+				theIncludeAllConfig.reporting()
+					.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+			if (theIncludeConfig != null && theIncludeConfig.getClass() != QuickButton.Def.class)
+				theIncludeConfig.reporting().warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+			if (theExcludeConfig != null && theExcludeConfig.getClass() != QuickButton.Def.class)
+				theExcludeConfig.reporting().warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+			if (theExcludeAllConfig != null && theExcludeAllConfig.getClass() != QuickButton.Def.class)
+				theExcludeAllConfig.reporting()
+					.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+
 			elModels.satisfyElementValueType(theAvailableValueName, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getAvailableValueType()));
 			elModels.satisfyElementValueType(theAvailableRowsName, ModelTypes.Collection, //
@@ -152,8 +194,12 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<A>> theAvailableValues;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<I>> theIncludedValues;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<I>> theInclude;
-		private QuickSuperTable.Interpreted<A, ?> theAvailable;
-		private QuickTable.Interpreted<I, ?> theIncluded;
+		private QuickSuperTable.Interpreted<A, ?, ?> theAvailable;
+		private QuickTable.Interpreted<I, ?, ?> theIncluded;
+		private QuickButton.Interpreted<?> theIncludeAllConfig;
+		private QuickButton.Interpreted<?> theIncludeConfig;
+		private QuickButton.Interpreted<?> theExcludeConfig;
+		private QuickButton.Interpreted<?> theExcludeAllConfig;
 
 		Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -180,13 +226,29 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		}
 
 		/** @return The available table */
-		public QuickSuperTable.Interpreted<A, ?> getAvailable() {
+		public QuickSuperTable.Interpreted<A, ?, ?> getAvailable() {
 			return theAvailable;
 		}
 
 		/** @return The included table */
-		public QuickTable.Interpreted<I, ?> getIncluded() {
+		public QuickTable.Interpreted<I, ?, ?> getIncluded() {
 			return theIncluded;
+		}
+
+		public QuickButton.Interpreted<?> getIncludeAllConfig() {
+			return theIncludeAllConfig;
+		}
+
+		public QuickButton.Interpreted<?> getIncludeConfig() {
+			return theIncludeConfig;
+		}
+
+		public QuickButton.Interpreted<?> getExcludeConfig() {
+			return theExcludeConfig;
+		}
+
+		public QuickButton.Interpreted<?> getExcludeAllConfig() {
+			return theExcludeAllConfig;
 		}
 
 		/** @return The name of the variable in which the currently active available value will be available */
@@ -207,11 +269,20 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 			super.doUpdate(expressoEnv);
 
 			theAvailable = syncChild(getDefinition().getAvailable(), theAvailable,
-				t -> (QuickSuperTable.Interpreted<A, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
+				t -> (QuickSuperTable.Interpreted<A, ?, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
 			theIncluded = syncChild(getDefinition().getIncluded(), theIncluded,
-				t -> (QuickTable.Interpreted<I, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
+				t -> (QuickTable.Interpreted<I, ?, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
 
 			theInclude = getDefinition().getInclude().interpret(ModelTypes.Value.forType(theIncluded.getValueType()), expressoEnv);
+
+			theIncludeAllConfig = syncChild(getDefinition().getIncludeAllConfig(), theIncludeAllConfig, t -> t.interpret(this),
+				QuickButton.Interpreted::updateElement);
+			theIncludeConfig = syncChild(getDefinition().getIncludeConfig(), theIncludeConfig, t -> t.interpret(this),
+				QuickButton.Interpreted::updateElement);
+			theExcludeConfig = syncChild(getDefinition().getExcludeConfig(), theExcludeConfig, t -> t.interpret(this),
+				QuickButton.Interpreted::updateElement);
+			theExcludeAllConfig = syncChild(getDefinition().getExcludeAllConfig(), theExcludeAllConfig, t -> t.interpret(this),
+				QuickButton.Interpreted::updateElement);
 		}
 
 		@Override
@@ -269,8 +340,12 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 	private SettableValue<ObservableCollection<I>> theIncludedValues;
 	private SettableValue<SettableValue<A>> theAvailableValue;
 	private SettableValue<I> theInclude;
-	private QuickSuperTable<A> theAvailable;
-	private QuickTable<I> theIncluded;
+	private QuickSuperTable<A, ?> theAvailable;
+	private QuickTable<I, ?> theIncluded;
+	private QuickButton theIncludeAllConfig;
+	private QuickButton theIncludeConfig;
+	private QuickButton theExcludeConfig;
+	private QuickButton theExcludeAllConfig;
 
 	QuickValueSelector(Object elementId) {
 		super(elementId);
@@ -295,13 +370,29 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 	}
 
 	/** @return The available table */
-	public QuickSuperTable<A> getAvailable() {
+	public QuickSuperTable<A, ?> getAvailable() {
 		return theAvailable;
 	}
 
 	/** @return The included table */
-	public QuickTable<I> getIncluded() {
+	public QuickTable<I, ?> getIncluded() {
 		return theIncluded;
+	}
+
+	public QuickButton getIncludeAllConfig() {
+		return theIncludeAllConfig;
+	}
+
+	public QuickButton getIncludeConfig() {
+		return theIncludeConfig;
+	}
+
+	public QuickButton getExcludeConfig() {
+		return theExcludeConfig;
+	}
+
+	public QuickButton getExcludeAllConfig() {
+		return theExcludeAllConfig;
 	}
 
 	/** @param context Model context for this value selector */
@@ -323,12 +414,17 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		theAvailableValueName = myInterpreted.getDefinition().getAvailableValueName();
 		theItemName = myInterpreted.getDefinition().getItemName();
 
-		if (theAvailable == null)
-			theAvailable = myInterpreted.getAvailable().create();
-		theAvailable.update(myInterpreted.getAvailable(), this);
-		if (theIncluded == null)
-			theIncluded = myInterpreted.getIncluded().create();
-		theIncluded.update(myInterpreted.getIncluded(), this);
+		theAvailable = syncChild(myInterpreted.getAvailable(), theAvailable, QuickSuperTable.Interpreted::create, QuickSuperTable::update);
+		theIncluded = syncChild(myInterpreted.getIncluded(), theIncluded, QuickTable.Interpreted::create, QuickTable::update);
+
+		theIncludeAllConfig = syncChild(myInterpreted.getIncludeAllConfig(), theIncludeAllConfig, QuickButton.Interpreted::create,
+			QuickButton::update);
+		theIncludeConfig = syncChild(myInterpreted.getIncludeConfig(), theIncludeConfig, QuickButton.Interpreted::create,
+			QuickButton::update);
+		theExcludeConfig = syncChild(myInterpreted.getExcludeConfig(), theExcludeConfig, QuickButton.Interpreted::create,
+			QuickButton::update);
+		theExcludeAllConfig = syncChild(myInterpreted.getExcludeAllConfig(), theExcludeAllConfig, QuickButton.Interpreted::create,
+			QuickButton::update);
 	}
 
 	@Override
@@ -340,6 +436,14 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		theIncludeInstantiator.instantiate();
 		theAvailable.instantiated();
 		theIncluded.instantiated();
+		if (theIncludeAllConfig != null)
+			theIncludeAllConfig.instantiated();
+		if (theIncludeConfig != null)
+			theIncludeConfig.instantiated();
+		if (theExcludeConfig != null)
+			theExcludeConfig.instantiated();
+		if (theExcludeAllConfig != null)
+			theExcludeAllConfig.instantiated();
 	}
 
 	@Override
@@ -357,6 +461,15 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		theInclude = theIncludeInstantiator.get(myModels);
 		theAvailable.instantiate(myModels);
 		theIncluded.instantiate(myModels);
+
+		if (theIncludeAllConfig != null)
+			theIncludeAllConfig.instantiate(myModels);
+		if (theIncludeConfig != null)
+			theIncludeConfig.instantiate(myModels);
+		if (theExcludeConfig != null)
+			theExcludeConfig.instantiate(myModels);
+		if (theExcludeAllConfig != null)
+			theExcludeAllConfig.instantiate(myModels);
 	}
 
 	@Override
@@ -368,6 +481,10 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		copy.theAvailableValue = SettableValue.create();
 		copy.theAvailable = theAvailable.copy(copy);
 		copy.theIncluded = theIncluded.copy(copy);
+		copy.theIncludeAllConfig = theIncludeAllConfig == null ? null : theIncludeAllConfig.copy(copy);
+		copy.theIncludeConfig = theIncludeConfig == null ? null : theIncludeConfig.copy(copy);
+		copy.theExcludeConfig = theExcludeConfig == null ? null : theExcludeConfig.copy(copy);
+		copy.theExcludeAllConfig = theExcludeAllConfig == null ? null : theExcludeAllConfig.copy(copy);
 
 		return copy;
 	}
@@ -377,5 +494,13 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		super.destroy();
 		theAvailable.destroy();
 		theIncluded.destroy();
+		if (theIncludeAllConfig != null)
+			theIncludeAllConfig.destroy();
+		if (theIncludeConfig != null)
+			theIncludeConfig.destroy();
+		if (theExcludeConfig != null)
+			theExcludeConfig.destroy();
+		if (theExcludeAllConfig != null)
+			theExcludeAllConfig.destroy();
 	}
 }

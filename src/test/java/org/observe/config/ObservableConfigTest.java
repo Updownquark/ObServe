@@ -500,7 +500,7 @@ public class ObservableConfigTest {
 		public ObservableConfigSuperTester() {
 			theEncoding = XmlEncoding.DEFAULT;
 			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
-			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy());
 			try {
 				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"), theEncoding);
 			} catch (IOException | TextParseException e) {

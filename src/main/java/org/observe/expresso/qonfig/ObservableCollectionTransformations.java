@@ -44,6 +44,7 @@ import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TransformInstantiator;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.util.TypeTokens;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -283,6 +284,8 @@ public class ObservableCollectionTransformations {
 	 * @param interpreter The interpretation builder to configure
 	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
+		interpreter.createWith(DisableCollectionTransform.DISABLE, CollectionTransform.class,
+			ExElement.creator(DisableCollectionTransform::new));
 		interpreter.createWith(MapCollectionTransform.MAP_TO, CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
 		interpreter.createWith(FilterCollectionTransform.FILTER, CollectionTransform.class,
 			ExElement.creator(FilterCollectionTransform::new));
@@ -319,6 +322,106 @@ public class ObservableCollectionTransformations {
 
 		// TODO Probably should support value-set transformations here, just grabbing the values and returning a collection
 		// This can always be overridden later
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = DisableCollectionTransform.DISABLE,
+		interpretation = DisableCollectionTransform.Interpreted.class)
+	static class DisableCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
+	implements CollectionTransform<C, C, ExElement> {
+		static final String DISABLE = "disable";
+
+		private CompiledExpression theWith;
+
+		DisableCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter("with")
+		public CompiledExpression getWith() {
+			return theWith;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
+			super.update(session, sourceModelType);
+			theWith = getAttributeExpression("with", session);
+		}
+
+		@Override
+		protected Interpreted<?, C, ?> tppInterpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theWith;
+
+			Interpreted(DisableCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public DisableCollectionTransform<C> getDefinition() {
+				return (DisableCollectionTransform<C>) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getWith() {
+				return theWith;
+			}
+
+			@Override
+			public void update(ModelInstanceType<C, CV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.update(sourceType, env);
+				theWith = ExpressoTransformations.parseFilter(getDefinition().getWith(), this, true);
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theWith);
+			}
+
+			@Override
+			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(theWith.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "disable(" + theWith + ")";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>>
+		implements CollectionFlowToFlowTransformInstantiator<CV, CV, T, T> {
+			private final ModelValueInstantiator<SettableValue<String>> theWith;
+
+			Instantiator(ModelValueInstantiator<SettableValue<String>> with) {
+				theWith = with;
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				theWith.instantiate();
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
+				throws ModelInstantiationException {
+				SettableValue<String> with = theWith.get(models);
+				return source.disableWith(with, true);
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, T> transformToFlow(CV source, ModelSetInstance models) throws ModelInstantiationException {
+				return transformFlow((CollectionDataFlow<?, ?, T>) source.flow(), models);
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				SettableValue<String> refresh = theWith.get(sourceModels);
+				return refresh != theWith.forModelCopy(refresh, sourceModels, newModels);
+			}
+		}
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
@@ -394,12 +497,13 @@ public class ObservableCollectionTransformations {
 			@Override
 			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate()
 				throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMap().instantiate(),
+					TypeTokens.get().getDefaultValue(getSourceType()), //
 					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
-					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
-						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
-						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate());
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(),
+						getDefinition().getPreviousResultAs(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
+						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
+						getDefinition().isOneToMany(), getEquivalence() == null ? null : getEquivalence().instantiate(), isTesting());
 			}
 		}
 
@@ -407,13 +511,14 @@ public class ObservableCollectionTransformations {
 		extends ExpressoTransformations.AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2>
 		implements CollectionFlowToFlowTransformInstantiator<CV1, CV2, S, T> {
 
-			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
-				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
-				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
-				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
-					manyToOne, oneToMany, equivalence);
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable,
+				ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+				boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, boolean testing) {
+				super(localModel, map, defaultSource, combinedValues, reverse, sourceVariable, previousResultVariable, cached,
+					reEvalOnUpdate, fireIfUnchanged, nullToNull, manyToOne, oneToMany, equivalence, testing);
 			}
 
 			@Override
@@ -1507,13 +1612,14 @@ public class ObservableCollectionTransformations {
 			@Override
 			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate()
 				throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMap().instantiate(),
+					TypeTokens.get().getDefaultValue(getSourceType()), //
 					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
-					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
-						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
-						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate(), theSort == null ? null : theSort.instantiateSort(),
-							reporting().getPosition());
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(),
+						getDefinition().getPreviousResultAs(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
+						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
+						getDefinition().isOneToMany(), getEquivalence() == null ? null : getEquivalence().instantiate(), isTesting(),
+							theSort == null ? null : theSort.instantiateSort(), reporting().getPosition());
 			}
 		}
 
@@ -1523,14 +1629,15 @@ public class ObservableCollectionTransformations {
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 			private final LocatedFilePosition theLocation;
 
-			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
-				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
-				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable,
+				ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+				boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, boolean testing,
 				ModelValueInstantiator<Comparator<? super T>> sort, LocatedFilePosition location) {
-				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
-					manyToOne, oneToMany, equivalence);
+				super(localModel, map, defaultSource, combinedValues, reverse, sourceVariable, previousResultVariable, cached,
+					reEvalOnUpdate, fireIfUnchanged, nullToNull, manyToOne, oneToMany, equivalence, testing);
 				theSort = sort;
 				theLocation = location;
 			}
@@ -1800,7 +1907,7 @@ public class ObservableCollectionTransformations {
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(Collection.class.getTypeParameters()[0]);
 					theFlatten = LambdaUtils.printableFn(flow -> flow//
 						.<ObservableCollection<T>> transform(tx -> tx//
-							.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)//
+							.cache(true).reEvalOnUpdate(true).fireIfUnchanged(false)//
 							.build((s, txvs) -> {
 								CollectionObservable<T> coll;
 								if (txvs.hasPreviousResult()) {
@@ -2849,9 +2956,9 @@ public class ObservableCollectionTransformations {
 
 		static class Instantiator<C extends ObservableCollection<?>, K, V> implements //
 		ObservableMultiMapTransformations.CollectionToMultiMapTransformInstantiator<C, ObservableMultiMap<K, V>, V, K, V> {
-			private ModelInstantiator theModels;
-			private ModelComponentId theSourceAs;
-			private ModelValueInstantiator<SettableValue<K>> theKey;
+			private final ModelInstantiator theModels;
+			private final ModelComponentId theSourceAs;
+			private final ModelValueInstantiator<SettableValue<K>> theKey;
 
 			Instantiator(Interpreted<?, V, C, K> interpreted) throws ModelInstantiationException {
 				theModels = interpreted.getModels().instantiate();
@@ -2895,10 +3002,10 @@ public class ObservableCollectionTransformations {
 					};
 				} else
 					reverse = null;
-				return sourceFlow.groupBy(v -> {
+				return sourceFlow.groupBy(LambdaUtils.printableFn(v -> {
 					value.set(v);
 					return key.get();
-				}, reverse);
+				}, value::toString, null), reverse);
 			}
 		}
 	}

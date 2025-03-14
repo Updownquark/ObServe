@@ -1359,13 +1359,17 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public boolean isEventing() {
-			try (Transaction t = theParent.lock(false, null)) {
-				if (theParent.isEventing())
-					return true;
+			if (theParent.isEventing())
+				return true;
+			// We don't want to lock here because it's too expensive.
+			// We're performing read-only operations here, so if anything fails, nobody else will be affected.
+			try {
 				for (FlattenedHolder el : theOuterElements) {
 					if (el.manager.isEventing())
 						return true;
 				}
+			} catch (RuntimeException e) {
+				// Gotta assume it was a threading error
 			}
 			return false;
 		}

@@ -68,7 +68,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 		Consumer<PanelPopulator<JPanel, ?>> panel);
 
 	@Override
-	public abstract AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
+	public abstract AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 	@Override
 	public Component decorate(Component c) {
@@ -419,5 +419,11 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	@Override
 	public ObservableValue<String> getTooltip() {
 		return ObservableValue.of(null);
+	}
+
+	@Override
+	public ObservableValue<String> getTooltipContents() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

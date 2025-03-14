@@ -3,7 +3,6 @@ package org.observe.util.swing;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import javax.swing.JTable;
 import javax.swing.ListModel;
@@ -120,15 +119,19 @@ public class ObservableTableModel<R> extends AbstractObservableTableModel<R> imp
 
 	@Override
 	public Object getValueAt(int rowIndex, int columnIndex) {
-		return getColumnModel().getElementAt(columnIndex).getCategoryValue(theRowModel.getElementAt(rowIndex));
+		ModelRow<R> row = new ModelRow.Default<>(() -> theRowModel.getElementAt(rowIndex), 0, false, false, false, false, false);
+		return getColumnModel().getElementAt(columnIndex).getCategoryValue(row);
 	}
 
 	@Override
 	public boolean isCellEditable(int rowIndex, int columnIndex) {
-		CategoryRenderStrategy<? super R, Object> column = (CategoryRenderStrategy<? super R, Object>) getColumnModel()
-			.getElementAt(columnIndex);
-		R rowValue = theRowModel.getElementAt(rowIndex);
-		return column.getMutator().isEditable(rowValue, column.getCategoryValue(rowValue));
+		return isCellEditable(rowIndex, columnIndex, getColumnModel().getElementAt(columnIndex));
+	}
+
+	private <C> boolean isCellEditable(int rowIndex, int columnIndex, CategoryRenderStrategy<R, C> column) {
+		ModelRow<R> row = new ModelRow.Default<>(() -> theRowModel.getElementAt(rowIndex), 0, false, false, false, false, false);
+		ModelCell<R, C> cell = new ModelCell.RowWrapper<>(row, column.getCategoryValue(row), columnIndex, false, false);
+		return column.getMutator().isEditable(cell);
 	}
 
 	@Override
@@ -177,7 +180,7 @@ public class ObservableTableModel<R> extends AbstractObservableTableModel<R> imp
 	}
 
 	@Override
-	protected boolean isLeaf(int rowIndex, Supplier<R> rowValue) {
+	protected boolean isLeaf(int rowIndex, JTable table) {
 		return true;
 	}
 

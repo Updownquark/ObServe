@@ -146,6 +146,11 @@ public interface ObservableAction extends Eventable {
 		public ObservableValue<String> isEnabled() {
 			return SettableValue.ALWAYS_ENABLED;
 		}
+
+		@Override
+		public String toString() {
+			return theAction.toString();
+		}
 	}
 
 	/** Implements {@link ObservableAction#disableWith(ObservableValue)} */

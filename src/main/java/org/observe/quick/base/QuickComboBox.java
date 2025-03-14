@@ -1,5 +1,9 @@
 package org.observe.quick.base;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -35,7 +39,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		instance = QuickComboBox.class)//
 	})
 	public static class Def extends CollectionSelectorWidget.Def<QuickComboBox<?>> {
-		private QuickWidget.Def<?> theRenderer;
+		private final List<QuickWidget.Def<?>> theRenderers;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -43,22 +47,23 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+			theRenderers = new ArrayList<>();
 		}
 
 		/** @return The renderer to determine how values in the combo box appear */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
-		public QuickWidget.Def<?> getRenderer() {
-			return theRenderer;
+		public List<QuickWidget.Def<?>> getRenderers() {
+			return Collections.unmodifiableList(theRenderers);
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
-			if (renderer == null)
-				renderer = session.metadata().get("default-renderer").get().peekFirst();
-			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
+			List<ExpressoQIS> renderers = session.forChildren("renderer");
+			if (renderers.isEmpty())
+				renderers = session.metadata().get("default-renderer").get();
+			syncChildren(QuickWidget.Def.class, theRenderers, renderers);
 		}
 
 		@Override
@@ -73,7 +78,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	 * @param <T> The type of the value to select
 	 */
 	public static class Interpreted<T> extends CollectionSelectorWidget.Interpreted<T, QuickComboBox<T>> {
-		private QuickWidget.Interpreted<?> theRenderer;
+		private final List<QuickWidget.Interpreted<?>> theRenderers;
 
 		/**
 		 * @param definition The definition to interpret
@@ -81,6 +86,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		 */
 		protected Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
+			theRenderers = new ArrayList<>();
 		}
 
 		@Override
@@ -89,14 +95,14 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 
 		/** @return The renderer to determine how values in the combo box appear */
-		public QuickWidget.Interpreted<?> getRenderer() {
-			return theRenderer;
+		public List<QuickWidget.Interpreted<?>> getRenderers() {
+			return Collections.unmodifiableList(theRenderers);
 		}
 
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+			syncChildren(getDefinition().getRenderers(), theRenderers, def -> def.interpret(this),
 				(r, rEnv) -> r.updateElement(rEnv));
 		}
 
@@ -106,16 +112,17 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 	}
 
-	private QuickWidget theRenderer;
+	private List<QuickWidget> theRenderers;
 
 	/** @param id The element ID for this widget */
 	protected QuickComboBox(Object id) {
 		super(id);
+		theRenderers = new ArrayList<>();
 	}
 
 	/** @return The renderer to determine how values in the combo box appear */
-	public QuickWidget getRenderer() {
-		return theRenderer;
+	public List<QuickWidget> getRenderers() {
+		return Collections.unmodifiableList(theRenderers);
 	}
 
 	@Override
@@ -123,38 +130,31 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		super.doUpdate(interpreted);
 
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		if (theRenderer != null
-			&& (myInterpreted.getRenderer() == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getIdentity())) {
-			theRenderer.destroy();
-			theRenderer = null;
-		}
-		if (theRenderer == null && myInterpreted.getRenderer() != null)
-			theRenderer = myInterpreted.getRenderer().create();
-		if (theRenderer != null)
-			theRenderer.update(myInterpreted.getRenderer(), this);
+		syncChildren(myInterpreted.getRenderers(), theRenderers, r -> r.create(), QuickWidget::update);
 	}
 
 	@Override
 	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
-		if (theRenderer != null)
-			theRenderer.instantiated();
+		for (QuickWidget renderer : theRenderers)
+			renderer.instantiated();
 	}
 
 	@Override
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 
-		if (theRenderer != null)
-			theRenderer.instantiate(myModels);
+		for (QuickWidget renderer : theRenderers)
+			renderer.instantiate(myModels);
 	}
 
 	@Override
 	public QuickComboBox<T> copy(ExElement parent) {
 		QuickComboBox<T> copy = (QuickComboBox<T>) super.copy(parent);
 
-		if (theRenderer != null)
-			copy.theRenderer = theRenderer.copy(copy);
+		copy.theRenderers = new ArrayList<>();
+		for (QuickWidget renderer : theRenderers)
+			copy.theRenderers.add(renderer.copy(copy));
 
 		return copy;
 	}

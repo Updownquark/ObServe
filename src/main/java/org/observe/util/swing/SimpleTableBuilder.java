@@ -1,16 +1,15 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
-import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.dnd.DnDConstants;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -22,7 +21,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.BorderFactory;
-import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
@@ -45,13 +43,11 @@ import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
-import org.qommons.ArrayUtils;
 import org.qommons.IntList;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -85,6 +81,9 @@ implements TableBuilder<R, T, P> {
 	private ObservableValue<? extends TableContentControl> theFilter;
 	private String theCountTitleDisplayedText;
 	private ObservableCollection<FilteredValue<R>> theFilteredValueRows;
+	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theDisplayedColumns;
+	private boolean isRowsDraggable;
+	private Runnable thePostDrag;
 
 	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
 		this(rows, (T) new NoLayoutTable(), until);
@@ -125,7 +124,7 @@ implements TableBuilder<R, T, P> {
 				public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
 					int rowIndex, int columnIndex) {
 					super.getTableCellRendererComponent(table, value, isSelected, hasFocus, rowIndex, columnIndex);
-					setText(col.print(() -> {
+					Supplier<R> rowValue = () -> {
 						CollectionElement<R> el = theFilteredRows.getElement(rowIndex);
 						if (el == null)
 							return null; // May have been removed
@@ -133,7 +132,9 @@ implements TableBuilder<R, T, P> {
 						if (realRow == null)
 							return null; // May have been removed
 						return theRows.getElement(realRow).get();
-					}, rowIndex));
+					};
+					ModelRow<R> modelRow = new ModelRow.Default<>(rowValue, rowIndex, false, isSelected, hasFocus, false, true);
+					setText(col.print(modelRow));
 					return this;
 				}
 			}, (__, c) -> String.valueOf(c)));
@@ -174,8 +175,12 @@ implements TableBuilder<R, T, P> {
 
 	@Override
 	public List<R> getSelection() {
-		return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
-			getEditor().getSelectionModel(), null);
+		if (getEditor().getModel() instanceof ObservableTableModel) {
+			return ObservableSwingUtils.getSelection(((ObservableTableModel<R>) getEditor().getModel()).getRowModel(),
+				getEditor().getSelectionModel(), null);
+		} else { // Model must have not been installed yet
+			return Collections.emptyList();
+		}
 	}
 
 	@Override
@@ -361,7 +366,7 @@ implements TableBuilder<R, T, P> {
 				}
 			};
 			if (getSelectionValues() != null)
-				enabled = ObservableValue.of(enabledGet, () -> getSelectionValues().getStamp(), getSelectionValues().simpleChanges());
+				enabled = ObservableValue.of(enabledGet, getSelectionValues().simpleChanges());
 			else
 				enabled = getSelectionValue().map(__ -> enabledGet.get());
 			action.allowForMultiple(true)
@@ -369,6 +374,13 @@ implements TableBuilder<R, T, P> {
 			.modifyButton(button -> button.withIcon(PanelPopulationImpl.getMoveEndIcon(up, 16)))//
 			.allowForEmpty(false).allowForAnyEnabled(false).modifyAction(a -> a.disableWith(enabled));
 		});
+	}
+
+	@Override
+	public P withDraggableRows(boolean draggable, Runnable postDrag) {
+		isRowsDraggable = draggable;
+		thePostDrag = postDrag;
+		return (P) this;
 	}
 
 	@Override
@@ -454,10 +466,10 @@ implements TableBuilder<R, T, P> {
 			}
 
 			columns = TableContentControl.applyColumnControl(columns, theFilter, getUntil());
-			ObservableCollection<? extends CategoryRenderStrategy<R, ?>> fColumns = columns;
+			theDisplayedColumns = columns;
 			Observable<?> columnChanges = Observable.or(Observable.constant(null), columns.simpleChanges());
 			ObservableCollection<TableContentControl.FilteredValue<R>> rawFiltered = TableContentControl.applyRowControl(theRows,
-				() -> fColumns, theFilter.refresh(columnChanges), getUntil());
+				() -> theDisplayedColumns, theFilter.refresh(columnChanges), getUntil());
 			theFilteredValueRows = rawFiltered.safe(ThreadConstraint.EDT, getUntil());
 			theFilteredRows = theFilteredValueRows.flow()
 				.<R> transform(tx -> tx.map(LambdaUtils.printableFn(f -> f.value, "value", null)).modifySource(FilteredValue::setValue))
@@ -465,6 +477,7 @@ implements TableBuilder<R, T, P> {
 		} else {
 			theFilteredValueRows = null;
 			theFilteredRows = theRows.safe(ThreadConstraint.EDT, getUntil());
+			theDisplayedColumns = columns;
 		}
 
 		return new ObservableTableModel<>(theFilteredRows, columns);
@@ -499,7 +512,7 @@ implements TableBuilder<R, T, P> {
 						el.set(el.get());
 					}
 				}
-			}, false);
+			});
 	}
 
 	@Override
@@ -510,7 +523,7 @@ implements TableBuilder<R, T, P> {
 		table.setSelectionModel(selectionModel);
 		if (selection != null) {
 			Subscription syncSub = ObservableCollectionSynchronization.synchronize(selection, selectionModel).strictOrder().synchronize();
-			getUntil().take(1).act(__ -> syncSub.unsubscribe());
+			getUntil().take(1).act0(syncSub::unsubscribe);
 		}
 		// selectionModel.synchronize(theSelectionValues, getUntil());
 		// ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
@@ -518,13 +531,18 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
-	protected TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource, SimpleTransferAccepter<R, Object, R> dragAccepter) {
-		return new TableBuilderTransferHandler(table, dragSource, dragAccepter);
+	protected TransferHandler setUpDnD(T table, SimpleTransferSource<R, ?> dragSource, SimpleTransferAccepter<R, ?> dragAccepter) {
+		return new TableBuilderTransferHandler(table, dragSource, dragAccepter, thePostDrag);
 	}
 
 	@Override
 	protected void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange) {
 		theFilteredRows.changes().takeUntil(getUntil()).act(onChange::accept);
+	}
+
+	@Override
+	protected ObservableCollection<? extends CategoryRenderStrategy<R, ?>> getDisplayedColumns() {
+		return theDisplayedColumns;
 	}
 
 	private static class ModelRowImpl<R> implements ModelRow<R> {
@@ -600,6 +618,16 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
+	protected boolean isTransferConfigured() {
+		return isRowsDraggable || super.isTransferConfigured();
+	}
+
+	@Override
+	protected boolean isDraggable() {
+		return isRowsDraggable || super.isDraggable();
+	}
+
+	@Override
 	protected Component createComponent() {
 		Component comp = super.createComponent();
 
@@ -646,94 +674,98 @@ implements TableBuilder<R, T, P> {
 		return comp;
 	}
 
-	class TableBuilderTransferHandler extends TransferHandler {
-		private final JTable theTable;
-		private final Dragging.SimpleTransferSource<R> theRowSource;
-		private final Dragging.SimpleTransferAccepter<R, Object, R> theRowAccepter;
+	class TableBuilderTransferHandler extends AbstractSimpleTableBuilder<R, T, P>.AbstractTableBuilderTransferHandler {
+		private final Runnable thePostDrag;
 
-		TableBuilderTransferHandler(JTable table, SimpleTransferSource<R> rowSource, SimpleTransferAccepter<R, Object, R> rowAccepter) {
-			theTable = table;
-			theRowSource = rowSource;
-			theRowAccepter = rowAccepter;
+		TableBuilderTransferHandler(JTable table, SimpleTransferSource<R, ?> rowSource, SimpleTransferAccepter<R, ?> rowAccepter,
+			Runnable postDrag) {
+			super(table, rowSource, rowAccepter);
+			thePostDrag = postDrag;
+		}
+
+		@Override
+		protected Transaction lockRows(boolean forWrite) {
+			return theRows.lock(forWrite, null);
+		}
+
+		@Override
+		protected ElementId getRowElement(int rowIndex) {
+			if (rowIndex >= 0 && rowIndex < theFilteredRows.size())
+				return theFilteredRows.getElement(rowIndex).getElementId();
+			else
+				return null;
+		}
+
+		@Override
+		protected ElementId getAdjacentRowElement(ElementId rowElement, boolean next) {
+			return CollectionElement.getElementId(theFilteredRows.getAdjacentElement(rowElement, next));
+		}
+
+		@Override
+		protected int getElementsAfter(ElementId rowElement) {
+			return theFilteredRows.getElementsAfter(rowElement);
+		}
+
+		@Override
+		protected R getRowValue(ElementId rowElement) {
+			return theFilteredRows.getElement(rowElement).get();
+		}
+
+		@Override
+		protected String canAddRow(R row, ElementId after, ElementId before) {
+			return theRows.canAdd(row, coreElement(after), coreElement(before));
+		}
+
+		@Override
+		protected String isRowAcceptable(ElementId rowElement, R newValue) {
+			return theRows.mutableElement(coreElement(rowElement)).isAcceptable(newValue);
+		}
+
+		@Override
+		protected void setRow(ElementId rowElement, R newValue) {
+			theRows.mutableElement(coreElement(rowElement)).set(newValue);
+		}
+
+		@Override
+		protected Object getRowCellValue(R rowValue) {
+			return rowValue;
+		}
+
+		private ElementId coreElement(ElementId filteredId) {
+			return filteredId == null ? null : theFilteredRows.getSourceElements(filteredId, theRows).getFirst();
 		}
 
 		@Override
 		protected Transferable createTransferable(JComponent c) {
-			try (Transaction rowT = theRows.lock(false, null); Transaction colT = getColumns().lock(false, null)) {
-				if (theTable.getSelectedRowCount() == 0)
-					return null;
-				List<R> selectedRows = new ArrayList<>(theTable.getSelectedRowCount());
-				for (int i = theTable.getSelectionModel().getMinSelectionIndex(); i <= theTable.getSelectionModel()
+			Transferable superT = super.createTransferable(c);
+			Transferable rowTransfer = null;
+			if (isRowsDraggable) {
+				ElementId[] rowIds = new ElementId[getEditor().getSelectedRowCount()];
+				int r = 0;
+				for (int i = getEditor().getSelectionModel().getMinSelectionIndex(); i <= getEditor().getSelectionModel()
 					.getMaxSelectionIndex(); i++) {
-					if (theTable.getSelectionModel().isSelectedIndex(i))
-						selectedRows.add(theRows.get(i));
-				}
-				int columnIndex = theTable.getSelectedColumn();
-				if (columnIndex >= 0)
-					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<? super R, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-				Transferable columnTransfer = null;
-				if (column != null && column.getDragSource() != null) {
-					Transferable[] columnTs = new Transferable[selectedRows.size()];
-					for (int r = 0; r < selectedRows.size(); r++)
-						columnTs[r] = ((Dragging.TransferSource<Object>) column.getDragSource())
-						.createTransferable(column.getCategoryValue(selectedRows.get(r)));
-					columnTransfer = columnTs.length == 1 ? columnTs[0] : new Dragging.AndTransferable(columnTs);
-				}
-				Transferable rowTransfer = null;
-				if (theRowSource != null) {
-					List<Transferable> rowTs = new ArrayList<>(selectedRows.size());
-					ElementId[] rowIds = new ElementId[selectedRows.size()];
-					int r = 0;
-					for (int i = theTable.getSelectionModel().getMinSelectionIndex(); i <= theTable.getSelectionModel()
-						.getMaxSelectionIndex(); i++) {
-						if (theTable.getSelectionModel().isSelectedIndex(i)) {
-							Transferable rowTr = theRowSource.createTransferable(selectedRows.get(r));
-							if (rowTr != null)
-								rowTs.add(rowTr);
-							rowIds[r] = theFilteredRows.getElement(i).getElementId();
-							r++;
-						}
+					if (getEditor().getSelectionModel().isSelectedIndex(i)) {
+						rowIds[r] = theFilteredRows.getElement(i).getElementId();
+						r++;
 					}
-					if (rowTs.isEmpty())
-						rowTransfer = new RowTransferable(null, rowIds);
-					else
-						rowTransfer = new RowTransferable(
-							rowTs.size() == 1 ? rowTs.get(0) : new Dragging.AndTransferable(rowTs.toArray(new Transferable[rowTs.size()])),
-								rowIds);
 				}
-				if (rowTransfer != null && columnTransfer != null)
-					return new Dragging.OrTransferable(rowTransfer, columnTransfer);
-				else if (rowTransfer != null)
-					return rowTransfer;
-				else
-					return columnTransfer;
+				rowTransfer = new RowTransferable(rowIds);
 			}
+			if (superT != null) {
+				if (rowTransfer != null)
+					return new Dragging.AndTransferable(superT, rowTransfer);
+				else
+					return superT;
+			} else
+				return rowTransfer;
 		}
 
 		@Override
 		public int getSourceActions(JComponent c) {
-			int actions = 0;
-			try (Transaction rowT = theRows.lock(false, null); Transaction colT = getColumns().lock(false, null)) {
-				if (theTable.getSelectedRowCount() == 0)
-					return actions;
-				if (theRowSource != null)
-					actions |= theRowSource.getSourceActions();
-				int columnIndex = theTable.getSelectedColumn();
-				if (columnIndex >= 0)
-					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<? super R, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-				if (column != null && column.getDragSource() != null) {
-					actions |= column.getDragSource().getSourceActions();
-				}
-			}
+			int actions = super.getSourceActions(c);
+			if (isRowsDraggable)
+				actions |= TransferHandler.MOVE;
 			return actions;
-		}
-
-		@Override
-		public Icon getVisualRepresentation(Transferable t) {
-			// TODO Auto-generated method stub
-			return super.getVisualRepresentation(t);
 		}
 
 		@Override
@@ -743,320 +775,66 @@ implements TableBuilder<R, T, P> {
 		}
 
 		@Override
-		public boolean canImport(TransferSupport support) {
-			TableContentControl filter = theFilter == null ? null : theFilter.get();
-			if (filter != null && filter.getRowSorting() != null) {
-				return false; // Can't drag into the table when row-sorted
-			}
-			try (Transaction rowT = theRows.lock(true, support); Transaction colT = getColumns().lock(false, null)) {
-				int rowIndex, colIndex;
-				boolean beforeRow, beforeCol;
-				if (support.isDrop()) {
-					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
-					colIndex = theTable.columnAtPoint(support.getDropLocation().getDropPoint());
-					if (rowIndex < 0) {
-						rowIndex = theFilteredRows.size() - 1;
-						beforeRow = beforeCol = false;
-					} else {
-						Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
-						beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
-						beforeCol = (support.getDropLocation().getDropPoint().x - bounds.x) <= bounds.x / 2;
-					}
-				} else {
-					rowIndex = theTable.getSelectedRow();
-					colIndex = -1;
-					beforeRow = beforeCol = true;
-				}
-				ElementId targetRow = rowIndex < 0 ? null : theFilteredRows.getElement(rowIndex).getElementId();
-				ElementId after, before;
-				if (targetRow != null) {
-					after = beforeRow ? CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, false)) : targetRow;
-					before = beforeRow ? targetRow : CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, true));
-				} else
-					after = before = null;
-				// Support row move before anything else
-				if (support.isDrop() && (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
-					// Moving rows by drag
-					ElementId[] rowElements;
-					try {
-						rowElements = (ElementId[]) support.getTransferable().getTransferData(ROW_ELEMENT_FLAVOR);
-						if (rowElements.length == 0)
-							return false;
-						if (theFilteredRows.getEquivalentElement(rowElements[0]) != null) { // Drag within same table
-							boolean canMoveAll = true;
-							for (ElementId rowEl : rowElements) {
-								if (!rowEl.isPresent())
-									continue;
-								if (rowEl.equals(after) || rowEl.equals(before))
-									continue;
-								if (theFilteredRows.canMove(rowEl, after, before) != null) {
-									canMoveAll = false;
-									break;
-								}
+		protected boolean doImport(TransferSupport support, int rowIndex, int colIndex, boolean beforeRow, boolean beforeCol,
+			ElementId targetRow, ElementId after, ElementId before, boolean testOnly) {
+			// Support row move before anything else
+			if (isRowsDraggable && support.isDrop() && (support.getSourceDropActions() & MOVE) != 0
+				&& support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
+				// Moving rows by drag
+				ElementId[] rowElements;
+				try {
+					rowElements = (ElementId[]) support.getTransferable().getTransferData(ROW_ELEMENT_FLAVOR);
+					if (rowElements.length == 0)
+						return false;
+					if (theFilteredRows.getEquivalentElement(rowElements[0]) != null) { // Drag within same table
+						boolean canMoveAll = true;
+						for (ElementId rowEl : rowElements) {
+							if (!rowEl.isPresent())
+								continue;
+							if (rowEl.equals(after) || rowEl.equals(before))
+								continue;
+							if (theFilteredRows.canMove(rowEl, after, before) != null) {
+								canMoveAll = false;
+								break;
 							}
-							if (canMoveAll)
+						}
+						if (canMoveAll) {
+							if (testOnly)
 								return true;
-						}
-					} catch (IOException | UnsupportedFlavorException e) {
-						e.printStackTrace();
-					}
-				}
-				if (theRowAccepter != null) {
-					CollectionElement<R> targetRowEl = targetRow == null ? null : theFilteredRows.getElement(targetRow);
-					CategoryRenderStrategy<R, Object> column = colIndex < 0 ? null
-						: (CategoryRenderStrategy<R, Object>) getColumns().get(colIndex);
-					boolean selected = theTable.isRowSelected(rowIndex);
-					ModelCell<R, Object> cell = targetRowEl == null ? null
-						: new ModelCell.Default<>(targetRowEl::get, column == null ? null : column.getCategoryValue(targetRowEl.get()),
-							rowIndex, colIndex, selected, selected, false, false, false, true);
-					if (theRowAccepter.canAccept(cell, beforeCol, beforeRow, support, true)) {
-						BetterList<R> newRows;
-						try {
-							newRows = theRowAccepter.accept(cell, beforeCol, beforeRow, support.getTransferable(), true, true);
-						} catch (IOException e) {
-							newRows = null;
-							// Ignore
-						}
-						if (newRows == null) {//
-						} else {
-							boolean allImportable = true;
-							if (rowIndex < 0) {
-								for (R row : newRows) {
-									if (theRows.canAdd(row) != null) {
-										allImportable = false;
-										break;
-									}
-								}
-							} else {
-								after = after == null ? null : theRows.getEquivalentElement(after);
-								before = before == null ? null : theRows.getEquivalentElement(before);
-								for (R row : newRows) {
-									if (theRows.canAdd(row, after, before) != null) {
-										allImportable = false;
-										break;
-									}
-								}
-							}
-							if (allImportable)
-								return true;
-						}
-					}
-				}
-				if (rowIndex >= 0) {
-					int columnIndex = support.isDrop() ? theTable.columnAtPoint(support.getDropLocation().getDropPoint())
-						: theTable.getSelectedColumn();
-					if (columnIndex >= 0)
-						columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-					CategoryRenderStrategy<? super R, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-					ElementId coreRowEl = theFilteredRows.getSourceElements(targetRow, theRows).getFirst();
-					if (column != null
-						&& canImport(support, theRows.getElementsBefore(coreRowEl), theRows.getElement(coreRowEl), column, false))
-						return true;
-				}
-			} catch (RuntimeException | Error e) {
-				e.printStackTrace();
-				throw e;
-			}
-			return false;
-		}
-
-		private <C> boolean canImport(TransferSupport support, int rowIndex, CollectionElement<R> rowEl,
-			CategoryRenderStrategy<? super R, C> column, boolean doImport) {
-			if (column.getMutator().getDragAccepter() == null)
-				return false;
-			C oldValue = column.getCategoryValue(rowEl.get());
-			if (!column.getMutator().isEditable(rowEl.get(), oldValue))
-				return false;
-			int colIndex = getColumns().indexOf(column);
-			boolean beforeRow, beforeCol;
-			if (support.isDrop()) {
-				rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
-				colIndex = theTable.columnAtPoint(support.getDropLocation().getDropPoint());
-				if (rowIndex < 0) {
-					rowIndex = theFilteredRows.size() - 1;
-					beforeRow = beforeCol = false;
-				} else {
-					Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
-					beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
-					beforeCol = (support.getDropLocation().getDropPoint().x - bounds.x) <= bounds.x / 2;
-				}
-			} else {
-				rowIndex = theTable.getSelectedRow();
-				colIndex = -1;
-				beforeRow = beforeCol = true;
-			}
-			boolean selected = theTable.isRowSelected(rowIndex);
-			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, colIndex, selected, selected, false, false,
-				false, true);
-			if (!column.getMutator().getDragAccepter().canAccept(cell, beforeCol, beforeRow, support, false))
-				return false;
-			BetterList<C> newColValue;
-			try {
-				newColValue = column.getMutator().getDragAccepter().accept(cell, beforeCol, beforeRow, support.getTransferable(), false,
-					!doImport);
-			} catch (IOException e) {
-				return false;
-			}
-			if (newColValue == null || ((CategoryRenderStrategy<R, C>) column).getMutator()//
-				.isAcceptable(//
-					theRows.mutableElement(rowEl.getElementId()), newColValue.getFirst()) != null)
-				return false;
-			if (doImport) {
-				support.setDropAction(DnDConstants.ACTION_COPY_OR_MOVE);
-				((CategoryRenderStrategy<R, C>) column).getMutator()//
-				.mutate(//
-					theRows.mutableElement(rowEl.getElementId()), newColValue.getFirst());
-			}
-			return true;
-		}
-
-		@Override
-		public boolean importData(TransferSupport support) {
-			try (Transaction rowT = theRows.lock(true, support); Transaction colT = getColumns().lock(false, null)) {
-				int rowIndex, colIndex;
-				boolean beforeRow, beforeCol;
-				if (support.isDrop()) {
-					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
-					colIndex = theTable.columnAtPoint(support.getDropLocation().getDropPoint());
-					if (rowIndex < 0) {
-						rowIndex = theFilteredRows.size() - 1;
-						beforeRow = beforeCol = false;
-					} else {
-						Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
-						beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
-						beforeCol = (support.getDropLocation().getDropPoint().x - bounds.x) <= bounds.x / 2;
-					}
-				} else {
-					rowIndex = theTable.getSelectedRow();
-					colIndex = -1;
-					beforeRow = beforeCol = true;
-				}
-				ElementId targetRow = rowIndex < 0 ? null : theFilteredRows.getElement(rowIndex).getElementId();
-				ElementId after, before;
-				if (targetRow != null) {
-					after = beforeRow ? CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, false)) : targetRow;
-					before = beforeRow ? targetRow : CollectionElement.getElementId(theFilteredRows.getAdjacentElement(targetRow, true));
-				} else
-					after = before = null;
-				// Support row move before anything else
-				if (support.isDrop() && (support.getSourceDropActions() & MOVE) != 0 && support.isDataFlavorSupported(ROW_ELEMENT_FLAVOR)) {
-					// Moving rows by drag
-					ElementId[] rowElements;
-					boolean moved = false;
-					try {
-						rowElements = (ElementId[]) support.getTransferable().getTransferData(ROW_ELEMENT_FLAVOR);
-						if (rowElements.length == 0)
-							return false;
-						if (theFilteredRows.getEquivalentElement(rowElements[0]) != null) { // Drag within same table
 							for (ElementId rowEl : rowElements) {
-								// Let's not throw an exception if the collection changed or something else happened
-								// to make an item unmovable
-								if (!rowEl.isPresent())
-									continue;
-								if (rowEl.equals(after) || rowEl.equals(before))
-									continue;
-								moved = true;
-								if (theFilteredRows.canMove(rowEl, after, before) != null)
-									continue;
 								ElementId newRowEl = theFilteredRows.move(rowEl, after, before, true, null).getElementId();
 								after = newRowEl;
 							}
-							if (moved)
-								return true;
-						}
-					} catch (IOException | UnsupportedFlavorException e) {
-						e.printStackTrace();
-					}
-				}
-				if (theRowAccepter != null) {
-					CollectionElement<R> targetRowEl = targetRow == null ? null : theFilteredRows.getElement(targetRow);
-					CategoryRenderStrategy<R, Object> column = colIndex < 0 ? null
-						: (CategoryRenderStrategy<R, Object>) getColumns().get(colIndex);
-					boolean selected = theTable.isRowSelected(rowIndex);
-					ModelCell<R, Object> cell = targetRowEl == null ? null
-						: new ModelCell.Default<>(targetRowEl::get, column == null ? null : column.getCategoryValue(targetRowEl.get()),
-							rowIndex, colIndex, selected, selected, false, false, false, true);
-					if (theRowAccepter.canAccept(cell, beforeCol, beforeRow, support, true)) {
-						BetterList<R> newRows;
-						try {
-							newRows = theRowAccepter.accept(cell, beforeCol, beforeRow, support.getTransferable(), true, false);
-						} catch (IOException e) {
-							newRows = null;
-							// Ignore
-						}
-						if (newRows == null) {//
-						} else {
-							boolean allImportable = true;
-							if (rowIndex < 0) {
-								for (R row : newRows) {
-									if (theRows.canAdd(row) != null) {
-										allImportable = false;
-										break;
-									}
-								}
-								if (allImportable) {
-									theRows.addAll(newRows);
-									return true;
-								}
-							} else {
-								for (R row : newRows) {
-									if (theFilteredRows.canAdd(row, after, before) != null) {
-										allImportable = false;
-										break;
-									}
-								}
-								if (allImportable) {
-									theFilteredRows.addAll(beforeRow ? rowIndex : rowIndex + 1, newRows);
-									return true;
-								}
-							}
+							if (thePostDrag != null)
+								thePostDrag.run();
 						}
 					}
+				} catch (IOException | UnsupportedFlavorException e) {
+					e.printStackTrace();
 				}
-				if (rowIndex >= 0) {
-					int columnIndex = support.isDrop() ? theTable.columnAtPoint(support.getDropLocation().getDropPoint())
-						: theTable.getSelectedColumn();
-					if (columnIndex >= 0)
-						columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-					CategoryRenderStrategy<? super R, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-					ElementId coreRowEl = theFilteredRows.getSourceElements(targetRow, theRows).getFirst();
-					if (column != null
-						&& canImport(support, theRows.getElementsBefore(coreRowEl), theRows.getElement(coreRowEl), column, true)) {
-						return true;
-					}
-				}
-			} catch (RuntimeException | Error e) {
-				e.printStackTrace();
-				throw e;
 			}
-			return false;
+			return super.doImport(support, rowIndex, colIndex, beforeRow, beforeCol, targetRow, after, before, testOnly);
 		}
 	}
 
 	static final DataFlavor ROW_ELEMENT_FLAVOR = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType, "Row Elements");
 
 	static class RowTransferable implements Transferable {
-		private final Transferable theWrapped;
 		private final ElementId[] theRowElements;
 
-		public RowTransferable(Transferable wrapped, ElementId[] rowElements) {
-			theWrapped = wrapped;
+		public RowTransferable(ElementId[] rowElements) {
 			theRowElements = rowElements;
 		}
 
 		@Override
 		public DataFlavor[] getTransferDataFlavors() {
-			if (theWrapped == null)
-				return new DataFlavor[] { ROW_ELEMENT_FLAVOR };
-			return ArrayUtils.add(theWrapped.getTransferDataFlavors(), ROW_ELEMENT_FLAVOR);
+			return new DataFlavor[] { ROW_ELEMENT_FLAVOR };
 		}
 
 		@Override
 		public boolean isDataFlavorSupported(DataFlavor flavor) {
 			if (flavor == ROW_ELEMENT_FLAVOR)
 				return true;
-			else if (theWrapped != null)
-				return theWrapped.isDataFlavorSupported(flavor);
 			return false;
 		}
 
@@ -1064,8 +842,6 @@ implements TableBuilder<R, T, P> {
 		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
 			if (flavor == ROW_ELEMENT_FLAVOR)
 				return theRowElements;
-			else if (theWrapped != null)
-				return theWrapped.getTransferData(flavor);
 			throw new UnsupportedFlavorException(flavor);
 		}
 	}

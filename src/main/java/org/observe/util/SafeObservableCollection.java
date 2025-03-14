@@ -129,7 +129,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private final Map<ElementId, ElementRef<E>> theElementsBySource;
 
 	private final ThreadConstraint theThreadConstraint;
-	private Object theIdentity;
 
 	private final Set<ElementId> theAddedElements;
 	private final List<ElementRef<E>> theRemovedElements;
@@ -155,7 +154,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			throw new IllegalArgumentException("Safe collection unsupported for thread constraint ANY");
 		theCollection = collection;
 		theSyntheticBacking = BetterTreeList.<ElementRef<E>> build()
-			.withLocking(new ThreadConstrainedLockingStrategy(threading, this::doFlush)).build();
+			.withLocking(ThreadConstrainedLockingStrategy.get(threading, this::doFlush)).build();
 		theThreadConstraint = threading;
 
 		ObservableCollectionBuilder<ElementRef<E>, ?> builder = DefaultObservableCollection.<ElementRef<E>> build()//
@@ -380,22 +379,21 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
 	 */
 	protected boolean doFlush() {
-		if (isFinished || theMidMoveCount > 0)
+		if (isFinished || theMidMoveCount > 0 || hasNoCachedChanges())
 			return false;
-		ObservableSwingUtils.flushEQCache();
-		if (!theFlushLock.compareAndSet(false, true)) {
-			if (isFlushing)
-				return false;
-			else
-				return true;
-		}
 		// We need to obtain a read lock on the main collection to prevent it from mucking with the state collections we use
 		// to synchronize the state of the safe collection.
 		// But we can afford to wait if it's not immediately available
 		Transaction sourceLock = theCollection.tryLock(false, null);
-		if (sourceLock == null) {
-			theFlushLock.set(false);
+		if (sourceLock == null)
 			return true;
+		ObservableSwingUtils.flushEQCache();
+		if (!theFlushLock.compareAndSet(false, true)) {
+			sourceLock.close();
+			if (isFlushing)
+				return false;
+			else
+				return true;
 		}
 		isFlushing = true;
 		boolean flushed = false;
@@ -481,6 +479,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		return flushed;
 	}
 
+	private boolean hasNoCachedChanges() {
+		return theAddedElements.isEmpty() && theRemovedElements.isEmpty() && theChangedElements.isEmpty();
+	}
+
 	private ElementRef<E> findRef(ElementId sourceId) {
 		return theElementsBySource.get(sourceId);
 	}
@@ -528,10 +530,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public Object getIdentity() {
-		if (theIdentity == null)
-			theIdentity = Identifiable.wrap(theCollection.getIdentity(), "safe");
-		return theIdentity;
+	protected Object createIdentity() {
+		return Identifiable.wrap(theCollection.getIdentity(), "safe");
 	}
 
 	@Override

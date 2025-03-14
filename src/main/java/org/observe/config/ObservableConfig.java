@@ -70,10 +70,10 @@ import org.qommons.config.QommonsConfig;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
 import org.qommons.io.Format;
-import org.qommons.io.PositionedContent;
 import org.qommons.io.SimpleXMLParser;
 import org.qommons.io.SimpleXMLParser.XmlAttribute;
 import org.qommons.io.SimpleXMLParser.XmlCdata;
+import org.qommons.io.SimpleXMLParser.XmlElementContent;
 import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
 import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeMap;
@@ -1723,7 +1723,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			}
 
 			@Override
-			public void handleElementContent(String elementName, PositionedContent elementValue) {
+			public void handleElementContent(String elementName, XmlElementContent elementValue) {
 				if (hasElementContent.get(theStack.size() - 1))
 					return; // We only pay attention to the first set of content
 				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);

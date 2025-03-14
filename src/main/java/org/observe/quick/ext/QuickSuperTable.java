@@ -1,5 +1,6 @@
 package org.observe.quick.ext;
 
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -24,10 +25,13 @@ import org.qommons.config.QonfigInterpretationException;
  * A table extension with a search bar and other added capabilities
  *
  * @param <R> The type of rows in the table
+ * @param <C> The type of IDs of the columns in the table
  */
-public class QuickSuperTable<R> extends QuickTable<R> {
+public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 	/** The XML name of this Qonfig type */
 	public static final String SUPER_TABLE = "super-table";
+	/** The XML name of the {@link WithRowDragging} type */
+	public static final String WITH_ROW_DRAGGING = "with-row-dragging";
 	/** The XML name of the {@link AdaptiveHeight} type */
 	public static final String ADAPTIVE_HEIGHT = "adaptive-height";
 
@@ -40,10 +44,11 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 		qonfigType = SUPER_TABLE,
 		interpretation = Interpreted.class,
 		instance = QuickSuperTable.class)
-	public static class Def<T extends QuickSuperTable<?>> extends QuickTable.Def<T> {
+	public static class Def<T extends QuickSuperTable<?, ?>> extends QuickTable.Def<T> {
 		private boolean isSearchable;
 		private String theItemName;
 		private CompiledExpression theDisplayed;
+		private WithRowDragging.Def theRowDragging;
 		private AdaptiveHeight.Def theAdaptiveHeight;
 
 		/**
@@ -75,6 +80,12 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 			return theDisplayed;
 		}
 
+		/** @return Configuration for whether rows in the table may be re-ordered by the user via drag operations */
+		@QonfigChildGetter("rows-draggable")
+		public WithRowDragging.Def getRowDragging() {
+			return theRowDragging;
+		}
+
 		/** @return Determines the size of the table from the number of rows displayed */
 		@QonfigChildGetter("adaptive-height")
 		public AdaptiveHeight.Def getAdaptiveHeight() {
@@ -88,12 +99,15 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 			isSearchable = session.getAttribute("searchable", boolean.class);
 			theItemName = session.getAttribute("item-name", String.class);
 			theDisplayed = getAttributeExpression("displayed", session);
+			theRowDragging = syncChild(WithRowDragging.Def.class, theRowDragging, session, "rows-draggable");
+			if (theRowDragging != null && getSelectionType() != TableSelectionType.row)
+				theRowDragging.reporting().warn(WITH_ROW_DRAGGING + " should only be used with selection-type=row");
 			theAdaptiveHeight = syncChild(AdaptiveHeight.Def.class, theAdaptiveHeight, session, "adaptive-height");
 		}
 
 		@Override
-		public Interpreted<?, T> interpret(ExElement.Interpreted<?> parent) {
-			return (Interpreted<?, T>) new Interpreted<>((Def<QuickSuperTable<Object>>) this, parent);
+		public Interpreted<?, ?, T> interpret(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, ?, T>) new Interpreted<>((Def<QuickSuperTable<Object, Object>>) this, parent);
 		}
 	}
 
@@ -101,10 +115,12 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 	 * {@link QuickSuperTable} interpretation
 	 *
 	 * @param <R> The type of rows in the table
+	 * @param <C> The type of IDs of the columns in the table
 	 * @param <T> The sub-type of table to create
 	 */
-	public static class Interpreted<R, T extends QuickSuperTable<R>> extends QuickTable.Interpreted<R, T> {
+	public static class Interpreted<R, C, T extends QuickSuperTable<R, C>> extends QuickTable.Interpreted<R, C, T> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theDisplayed;
+		private WithRowDragging.Interpreted theRowDragging;
 		private AdaptiveHeight.Interpreted theAdaptiveHeight;
 
 		/**
@@ -128,6 +144,11 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 			return theDisplayed;
 		}
 
+		/** @return Configuration for whether rows in the table may be re-ordered by the user via drag operations */
+		public WithRowDragging.Interpreted getRowDragging() {
+			return theRowDragging;
+		}
+
 		/** @return Determines the size of the table from the number of rows displayed */
 		public AdaptiveHeight.Interpreted getAdaptiveHeight() {
 			return theAdaptiveHeight;
@@ -138,13 +159,133 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 			super.doUpdate(env);
 			theDisplayed = getDefinition().getDisplayed() == null ? null
 				: getDefinition().getDisplayed().interpret(ModelTypes.Collection.forType(getValueType()), env);
+			theRowDragging = syncChild(getDefinition().getRowDragging(), theRowDragging, def -> def.interpret(this),
+				WithRowDragging.Interpreted::updateRowDragging);
 			theAdaptiveHeight = syncChild(getDefinition().getAdaptiveHeight(), theAdaptiveHeight, def -> def.interpret(this),
 				AdaptiveHeight.Interpreted::updateAdaptiveHeight);
 		}
 
 		@Override
 		public T create() {
-			return (T) new QuickSuperTable<R>(getIdentity());
+			return (T) new QuickSuperTable<R, C>(getIdentity());
+		}
+	}
+
+	/** If specified in a &lt;super-table>, this element causes the table to allow rows to be dragged to re-order them */
+	public static class WithRowDragging extends ExElement.Abstract {
+		/** Definition for {@link WithRowDragging} */
+		@ExElementTraceable(toolkit = QuickXInterpretation.X,
+			qonfigType = WITH_ROW_DRAGGING,
+			interpretation = Interpreted.class,
+			instance = WithRowDragging.class)
+		public static class Def extends ExElement.Def.Abstract<WithRowDragging> {
+			private CompiledExpression thePostDrag;
+
+			/**
+			 * @param parent The parent element of the widget
+			 * @param qonfigType The Qonfig type of the widget
+			 */
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
+			}
+
+			@QonfigAttributeGetter("post-drag")
+			public CompiledExpression getPostDrag() {
+				return thePostDrag;
+			}
+
+			@Override
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				super.doUpdate(session);
+
+				thePostDrag = getAttributeExpression("post-drag", session);
+			}
+
+			/**
+			 * @param parent The parent for the interpreted element
+			 * @return The interpretation for this row dragging configuration
+			 */
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
+			}
+		}
+
+		/** Interpretation for {@link WithRowDragging} */
+		public static class Interpreted extends ExElement.Interpreted.Abstract<WithRowDragging> {
+			private InterpretedValueSynth<ObservableAction, ObservableAction> thePostDrag;
+
+			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getPostDrag() {
+				return thePostDrag;
+			}
+
+			/**
+			 * Updates this element
+			 *
+			 * @param env The interpreted environment to use for evaluating expressions
+			 * @throws ExpressoInterpretationException If an error occurs interpreting this element
+			 */
+			public void updateRowDragging(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				super.doUpdate(expressoEnv);
+				thePostDrag = interpret(getDefinition().getPostDrag(), ModelTypes.Action.instance());
+			}
+
+			/** @return The row dragging instance */
+			public WithRowDragging create() {
+				return new WithRowDragging(getIdentity());
+			}
+		}
+
+		private ModelValueInstantiator<ObservableAction> thePostDragInstantiator;
+		private ObservableAction thePostDrag;
+
+		WithRowDragging(Object id) {
+			super(id);
+		}
+
+		public ObservableAction getPostDrag() {
+			return thePostDrag;
+		}
+
+		@Override
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
+			super.doUpdate(interpreted);
+
+			Interpreted myInterpreted = (Interpreted) interpreted;
+			thePostDragInstantiator = myInterpreted.getPostDrag() == null ? null : myInterpreted.getPostDrag().instantiate();
+		}
+
+		@Override
+		public void instantiated() throws ModelInstantiationException {
+			super.instantiated();
+
+			if (thePostDragInstantiator != null)
+				thePostDragInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			thePostDrag = thePostDragInstantiator == null ? null : thePostDragInstantiator.get(myModels);
+		}
+
+		@Override
+		public WithRowDragging copy(ExElement parent) {
+			return (WithRowDragging) super.copy(parent);
 		}
 	}
 
@@ -308,6 +449,8 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 
 	private SettableValue<ObservableCollection<R>> theDisplayed;
 
+	private WithRowDragging theRowDragging;
+
 	private AdaptiveHeight theAdaptiveHeight;
 
 	/** @param id The element ID for this widget */
@@ -334,6 +477,11 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 		return theDisplayed.unsettable();
 	}
 
+	/** @return Configuration for whether rows in the table may be re-ordered by the user via drag operations */
+	public WithRowDragging getRowDragging() {
+		return theRowDragging;
+	}
+
 	/** @return Determines the size of the table from the number of rows displayed */
 	public AdaptiveHeight getAdaptiveHeight() {
 		return theAdaptiveHeight;
@@ -343,9 +491,11 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
-		Interpreted<R, ?> myInterpreted = (Interpreted<R, ?>) interpreted;
+		Interpreted<R, C, ?> myInterpreted = (Interpreted<R, C, ?>) interpreted;
 		isSearchable = myInterpreted.getDefinition().isSearchable();
 		theItemName = myInterpreted.getDefinition().getItemName();
+		theRowDragging = syncChild(myInterpreted.getRowDragging(), theRowDragging, WithRowDragging.Interpreted::create,
+			WithRowDragging::update);
 		theDisplayedInstantiator = myInterpreted.getDisplayed() == null ? null : myInterpreted.getDisplayed().instantiate();
 		if (myInterpreted.getAdaptiveHeight() == null) {
 			if (theAdaptiveHeight != null) {
@@ -361,6 +511,7 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 				theAdaptiveHeight = myInterpreted.getAdaptiveHeight().create();
 			theAdaptiveHeight.update(myInterpreted.getAdaptiveHeight(), this);
 		}
+
 	}
 
 	@Override
@@ -369,6 +520,8 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 
 		if (theDisplayedInstantiator != null)
 			theDisplayedInstantiator.instantiate();
+		if (theRowDragging != null)
+			theRowDragging.instantiated();
 		if (theAdaptiveHeight != null)
 			theAdaptiveHeight.instantiated();
 	}
@@ -383,10 +536,12 @@ public class QuickSuperTable<R> extends QuickTable<R> {
 	}
 
 	@Override
-	public QuickSuperTable<R> copy(ExElement parent) {
-		QuickSuperTable<R> copy = (QuickSuperTable<R>) super.copy(parent);
+	public QuickSuperTable<R, C> copy(ExElement parent) {
+		QuickSuperTable<R, C> copy = (QuickSuperTable<R, C>) super.copy(parent);
 
 		copy.theDisplayed = SettableValue.create();
+		if (theRowDragging != null)
+			copy.theRowDragging = theRowDragging.copy(copy);
 		if (theAdaptiveHeight != null)
 			copy.theAdaptiveHeight = theAdaptiveHeight.copy(copy);
 

@@ -148,7 +148,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 	ObservableConfig getSuiteConfig() throws IOException {
 		if (theGlobalConfig != null)
 			return theGlobalConfig;
-		ObservableConfig config = ObservableConfig.createRoot(getName(), null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+		ObservableConfig config = ObservableConfig.createRoot(getName(), null, __ -> new FastFailLockingStrategy());
 		if (theGlobalConfigLocation != null) {
 			URL url = QommonsConfig.toUrl(theGlobalConfigLocation);
 			try {

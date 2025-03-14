@@ -433,7 +433,7 @@ public interface ObservableExpression {
 		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 				throws EX {
-			theLocation = env.reporting().getFileLocation().getPosition(0).toShortString();
+			theLocation = env.reporting().getFileLocation() == null ? "" : (env.reporting().getPosition().toShortString() + ": ");
 			if (theValue == null && type.getModelType() == ModelTypes.Action)
 				return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 					InterpretedValueSynth.literal(ModelTypes.Action.instance(), ObservableAction.DO_NOTHING, theText), this);

@@ -7,6 +7,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
@@ -27,6 +28,8 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		interpretation = Interpreted.class,
 		instance = QuickScrollPane.class)
 	public static class Def extends QuickContainer.Def.Abstract<QuickScrollPane, QuickWidget> {
+		private boolean isScrollingVertically;
+		private boolean isScrollingHorizontally;
 		private QuickWidget.Def<?> theRowHeader;
 		private QuickWidget.Def<?> theColumnHeader;
 
@@ -36,6 +39,20 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+		}
+
+		/** @return Whether the vertical scroll bar should be displayed when the content exceeds the amount of vertical space available */
+		@QonfigAttributeGetter("scroll-vertically")
+		public boolean isScrollingVertically() {
+			return isScrollingVertically;
+		}
+
+		/**
+		 * @return Whether the horizontal scroll bar should be displayed when the content exceeds the amount of horizontal space available
+		 */
+		@QonfigAttributeGetter("scroll-horizontally")
+		public boolean isScrollingHorizontally() {
+			return isScrollingHorizontally;
 		}
 
 		/** @return The row header for the scroll pane, displayed to the left of the content and scrolled vertically with it */
@@ -53,6 +70,8 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement().getSuperElement())); // Skip singleton-container
+			isScrollingVertically = session.getAttribute("scroll-vertically", boolean.class);
+			isScrollingHorizontally = session.getAttribute("scroll-horizontally", boolean.class);
 			theRowHeader = syncChild(QuickWidget.Def.class, theRowHeader, session, "row-header");
 			theColumnHeader = syncChild(QuickWidget.Def.class, theColumnHeader, session, "column-header");
 		}
@@ -107,12 +126,24 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	private boolean isScrollingVertically;
+	private boolean isScrollingHorizontally;
 	private QuickWidget theRowHeader;
 	private QuickWidget theColumnHeader;
 
 	/** @param id The element ID for this widget */
 	protected QuickScrollPane(Object id) {
 		super(id);
+	}
+
+	/** @return Whether the vertical scroll bar should be displayed when the content exceeds the amount of vertical space available */
+	public boolean isScrollingVertically() {
+		return isScrollingVertically;
+	}
+
+	/** @return Whether the horizontal scroll bar should be displayed when the content exceeds the amount of horizontal space available */
+	public boolean isScrollingHorizontally() {
+		return isScrollingHorizontally;
 	}
 
 	/** @return The row header for the scroll pane, displayed to the left of the content and scrolled vertically with it */
@@ -130,6 +161,8 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 
+		isScrollingVertically = myInterpreted.getDefinition().isScrollingVertically();
+		isScrollingHorizontally = myInterpreted.getDefinition().isScrollingHorizontally();
 		if (myInterpreted.getRowHeader() != null) {
 			if (theRowHeader == null || theRowHeader.getIdentity() != myInterpreted.getRowHeader().getIdentity())
 				theRowHeader = myInterpreted.getRowHeader().create();

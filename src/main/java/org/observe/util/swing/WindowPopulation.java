@@ -188,15 +188,15 @@ public class WindowPopulation {
 		}
 
 		@Override
-		public P withVContent(Consumer<PanelPopulator<?, ?>> content) {
+		public P withVContent(boolean showInvisible, Consumer<PanelPopulator<?, ?>> content) {
 			if (!EventQueue.isDispatchThread())
 				System.err.println(
 					"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 			PanelPopulator<?, ?> populator;
 			if (theWindow instanceof RootPaneContainer)
-				populator = PanelPopulation.populateVPanel(((RootPaneContainer) theWindow).getContentPane(), theUntil);
+				populator = PanelPopulation.populateVPanel(((RootPaneContainer) theWindow).getContentPane(), showInvisible, theUntil);
 			else
-				populator = PanelPopulation.populateVPanel(null, theUntil);
+				populator = PanelPopulation.populateVPanel(null, showInvisible, theUntil);
 			content.accept(populator);
 			if (!(theWindow instanceof RootPaneContainer))
 				withContent(populator.getContainer());

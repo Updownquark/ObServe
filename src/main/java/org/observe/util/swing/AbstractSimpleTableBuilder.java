@@ -4,6 +4,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.Rectangle;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.DnDConstants;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.HierarchyEvent;
@@ -11,18 +15,22 @@ import java.awt.event.HierarchyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.BoundedRangeModel;
 import javax.swing.DropMode;
+import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -31,6 +39,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.TransferHandler;
 import javax.swing.table.TableColumn;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -38,10 +47,14 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization;
+import org.observe.util.ObservableUtils;
+import org.observe.util.swing.Dragging.GridFlavor;
+import org.observe.util.swing.Dragging.GridTransferable;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.Dragging.TransferWrapper;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.observe.util.swing.PanelPopulation.AbstractTableBuilder;
 import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
@@ -51,9 +64,13 @@ import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.IntList;
-import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableCollectionElement;
 
 public abstract class AbstractSimpleTableBuilder<R, T extends JTable, P extends AbstractSimpleTableBuilder<R, T, P>>
 extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
@@ -82,10 +99,12 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theFlatColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
+	private SettableValue<Object> theColumnSelectionValue;
+	private ObservableCollection<Object> theColumnSelectionValues;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
-	private Dragging.SimpleTransferSource<R> theDragSource;
-	private Dragging.SimpleTransferAccepter<R, Object, R> theDragAccepter;
+	private Dragging.SimpleTransferSource<R, ?> theDragSource;
+	private Dragging.SimpleTransferAccepter<R, ?> theDragAccepter;
 	private List<AbstractObservableTableModel.RowMouseListener<? super R>> theMouseListeners;
 	private int theAdaptiveMinRowHeight;
 	private int theAdaptivePrefRowHeight;
@@ -164,15 +183,64 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 
 	@Override
 	public P withSelection(SettableValue<R> selection, boolean enforceSingleSelection) {
-		theSelectionValue = selection;
 		if (enforceSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		if (theSelectionValue == null) {
+			theSelectionValue = selection;
+		} else {
+			Subscription linkSub = ObservableUtils.link(theSelectionValue, selection);
+			getUntil().take(1).act0(linkSub::unsubscribe);
+		}
 		return (P) this;
 	}
 
 	@Override
 	public P withSelection(ObservableCollection<R> selection) {
-		theSelectionValues = selection;
+		if (theSelectionValues == null) {
+			theSelectionValues = selection;
+		} else {
+			Subscription linkSub = ObservableCollectionSynchronization.synchronize(theSelectionValues, selection)//
+				.synchronize();
+			getUntil().take(1).act0(linkSub::unsubscribe);
+		}
+		return (P) this;
+	}
+
+	@Override
+	public P withColumnSelection(SettableValue<Object> selection, boolean enforceSingleSelection) {
+		theColumnSelectionValue = selection;
+		if (enforceSingleSelection)
+			getEditor().getColumnModel().getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		return (P) this;
+	}
+
+	@Override
+	public P withColumnSelection(ObservableCollection<Object> selection) {
+		theColumnSelectionValues = selection;
+		return (P) this;
+	}
+
+	@Override
+	public P withSelectionMode(int mode) {
+		getEditor().getSelectionModel().setSelectionMode(mode);
+		return (P) this;
+	}
+
+	@Override
+	public P rowSelection(boolean rowSelection) {
+		getEditor().setRowSelectionAllowed(rowSelection);
+		return (P) this;
+	}
+
+	@Override
+	public P columnSelection(boolean columnSelection) {
+		getEditor().setColumnSelectionAllowed(columnSelection);
+		return (P) this;
+	}
+
+	@Override
+	public P withColumnSelectionMode(int mode) {
+		getEditor().getColumnModel().getSelectionModel().setSelectionMode(mode);
 		return (P) this;
 	}
 
@@ -228,7 +296,7 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
-		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true, getUntil());
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, true, getUntil());
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -247,7 +315,7 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 	}
 
 	@Override
-	public P dragSourceRow(Consumer<? super TransferSource<R>> source) {
+	public P dragSourceRow(Consumer<? super TransferSource<R, ?>> source) {
 		if (theDragSource == null)
 			theDragSource = new SimpleTransferSource<>();
 		// if (source == null)
@@ -258,7 +326,7 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 	}
 
 	@Override
-	public P dragAcceptRow(Consumer<? super TransferAccepter<R, Object, R>> accept) {
+	public P dragAcceptRow(Consumer<? super TransferAccepter<R, ?>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>();
 		// if (accept == null)
@@ -312,12 +380,21 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 
 	protected abstract void syncMultiSelection(T table, AbstractObservableTableModel<R> model, ObservableCollection<R> selection);
 
-	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource,
-		SimpleTransferAccepter<R, Object, R> dragAccepter);
+	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R, ?> dragSource, SimpleTransferAccepter<R, ?> dragAccepter);
 
 	protected abstract void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange);
 
 	protected abstract void forAllVisibleData(AbstractObservableTableModel<R> model, Consumer<ModelRow<R>> forEach);
+
+	protected abstract ObservableCollection<? extends CategoryRenderStrategy<R, ?>> getDisplayedColumns();
+
+	protected boolean isTransferConfigured() {
+		return theDragSource != null || theDragAccepter != null;
+	}
+
+	protected boolean isDraggable() {
+		return (theDragSource != null && theDragSource.isDraggable()) || (theDragAccepter != null && theDragAccepter.isDraggable());
+	}
 
 	@Override
 	protected Component createComponent() {
@@ -364,13 +441,50 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 		if (theSelectionValue != null)
 			syncSelection(table, model, theSelectionValue, false);
 		// Sync multi-selection so we can control the actions if nothing else
-		ObservableCollection<R> multiSelection = ObservableCollection.<R> build().onEdt().build();
+		ObservableCollection<R> multiSelection = ObservableCollection.create(b -> b.onEdt());
 		syncMultiSelection(table, model, multiSelection);
 		if (theSelectionValues != null) {
 			// ObservableUtils.link(multiSelection, theSelectionValues);
 			Subscription selSyncSub = ObservableCollectionSynchronization.synchronize(multiSelection, theSelectionValues)//
 				.synchronize();
 			getUntil().take(1).act(__ -> selSyncSub.unsubscribe());
+		}
+		if (theColumnSelectionValue != null || theColumnSelectionValues != null) {
+			ObservableListModel<CategoryRenderStrategy<R, ?>> columnModel = (ObservableListModel<CategoryRenderStrategy<R, ?>>) model
+				.getColumnModel();
+			Function<Object, CategoryRenderStrategy<R, ?>> columnFinder = id -> {
+				if (id == null)
+					return null;
+				for (int c = 0; c < model.getColumnCount(); c++) {
+					if (id.equals(model.getColumn(c).getIdentifier()))
+						return model.getColumn(c);
+				}
+				return null;
+			};
+			if (theColumnSelectionValues != null) {
+				ObservableListSelectionModel<CategoryRenderStrategy<R, ?>> selectionModel = new ObservableListSelectionModel<>(columnModel,
+					null, getUntil());
+				table.getColumnModel().setSelectionModel(selectionModel);
+				ObservableCollection<CategoryRenderStrategy<R, ?>> selectedColumnIds = theColumnSelectionValues.flow()//
+					.<CategoryRenderStrategy<R, ?>> transform(
+						tx -> tx.map(columnFinder).withReverse(c -> c == null ? null : c.getIdentifier()))//
+					.collectActive(getUntil());
+				Subscription syncSub = ObservableCollectionSynchronization.synchronize(selectedColumnIds, selectionModel).strictOrder()
+					.synchronize();
+				getUntil().take(1).act(__ -> syncSub.unsubscribe());
+			}
+			if (theColumnSelectionValue != null) {
+				SettableValue<CategoryRenderStrategy<R, ?>> selectedColumn = theColumnSelectionValue.transformReversible(tx -> tx//
+					.map(columnFinder).withReverse(c -> c == null ? null : c.getIdentifier()));
+				ObservableSwingUtils.syncSelection(getEditor(), (ObservableListModel<CategoryRenderStrategy<R, ?>>) model.getColumnModel(),
+					() -> getEditor().getColumnModel().getSelectionModel(), Equivalence.DEFAULT, selectedColumn, getUntil(), (idx, c) -> {
+						if (idx > getDisplayedColumns().size())
+							return;
+						CollectionElement<?> cEl = getDisplayedColumns().getElement(idx);
+						((MutableCollectionElement<CategoryRenderStrategy<R, Object>>) getDisplayedColumns()
+							.mutableElement(cEl.getElementId())).set((CategoryRenderStrategy<R, Object>) cEl.get());
+					});
+			}
 		}
 
 		JComponent comp;
@@ -386,19 +500,10 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 						hasButtons = true;
 				}
 			}
-			multiSelection.simpleChanges().act(e -> {
-				List<R> copy = QommonsUtils.unmodifiableCopy(multiSelection);
-				for (Object action : theActions) {
-					if (action instanceof SimpleDataAction)
-						((SimpleDataAction<R, ?>) action).updateSelection(copy, e);
-				}
-			});
-			List<R> copy = QommonsUtils.unmodifiableCopy(multiSelection);
 			for (Object action : theActions) {
 				if (action instanceof SimpleDataAction)
-					((SimpleDataAction<R, ?>) action).updateSelection(copy, null);
+					((SimpleDataAction<R, ?>) action).init(multiSelection);
 			}
-
 			if (hasPopups) {
 				withPopupMenu(popupMenu -> {
 					for (Object action : theActions) {
@@ -429,23 +534,63 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 			comp = scroll;
 
 		// Set up transfer handling (DnD, copy/paste)
-		boolean draggable = theDragSource != null || theDragAccepter != null;
-		for (CategoryRenderStrategy<? super R, ?> column : getColumns()) {
-			// TODO check the draggable flag
-			if (column.getDragSource() != null || column.getMutator().getDragAccepter() != null) {
-				draggable = true;
-				break;
+		TransferHandler handler = setUpDnD(table, theDragSource, theDragAccepter);
+		if (isTransferConfigured()) {
+			if (isDraggable()) {
+				table.setDragEnabled(isDraggable());
+			} else {
+				configureColumnsDraggable(columns);
 			}
-		}
-		if (draggable) {
-			table.setDragEnabled(true);
 			table.setDropMode(DropMode.INSERT_ROWS);
-			TransferHandler handler = setUpDnD(table, theDragSource, theDragAccepter);
 			table.setTransferHandler(handler);
+		} else {
+			configureColumnsTransferable(columns, handler);
+			configureColumnsDraggable(columns);
 		}
 
 		decorate(comp);
 		return comp;
+	}
+
+	private void configureColumnsTransferable(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns,
+		TransferHandler handler) {
+		ObservableValue<Boolean> columnsTransferable = columns.reduce(0, (count, column) -> {
+			if (column.getDragSource() != null || column.getMutator().getDragAccepter() != null)
+				return count + 1;
+			else
+				return count;
+		}, (count, column) -> {
+			if (column.getDragSource() != null || column.getMutator().getDragAccepter() != null)
+				return count - 1;
+			else
+				return count;
+		}).map(count -> count > 0);
+		columnsTransferable.changes().takeUntil(getUntil()).filter(evt -> !evt.getNewValue().equals(evt.getOldValue())).act(evt -> {
+			if (evt.getNewValue().booleanValue()) {
+				getEditor().setDropMode(DropMode.INSERT_ROWS);
+				getEditor().setTransferHandler(handler);
+			} else {
+				getEditor().setTransferHandler(null);
+			}
+		});
+	}
+
+	private void configureColumnsDraggable(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns) {
+		ObservableValue<Boolean> columnsDraggable = columns.reduce(0, (count, column) -> {
+			if ((column.getDragSource() != null && column.getDragSource().isDraggable())//
+				|| (column.getMutator().getDragAccepter() != null && column.getMutator().getDragAccepter().isDraggable()))
+				return count + 1;
+			else
+				return count;
+		}, (count, column) -> {
+			if ((column.getDragSource() != null && column.getDragSource().isDraggable())//
+				|| (column.getMutator().getDragAccepter() != null && column.getMutator().getDragAccepter().isDraggable()))
+				return count - 1;
+			else
+				return count;
+		}).map(count -> count > 0);
+		columnsDraggable.changes().takeUntil(getUntil()).filter(evt -> !evt.getNewValue().equals(evt.getOldValue()))
+		.act(evt -> getEditor().setDragEnabled(evt.getNewValue()));
 	}
 
 	class SizeListener implements ComponentListener, HierarchyListener, MouseListener, MouseMotionListener {
@@ -488,7 +633,7 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 				widths[3] = widths[1];
 			}
 			adjustScrollWidths();
-			onVisibleData(model, evt -> EventQueue.invokeLater(()-> {
+			onVisibleData(model, evt -> EventQueue.invokeLater(() -> {
 				if (theAdaptivePrefRowHeight > 0)
 					adjustHeight();
 				boolean adjusted = false;
@@ -1086,9 +1231,12 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 			if (rowEvent != null) {
 				for (CollectionChangeEvent.ElementChange<R> change : rowEvent.getElements()) {
 					R row = change.newValue;
-					Object cellValue = column.getCategoryValue(row);
-					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, change.index, columnIndex,
-						getEditor().isRowSelected(change.index), false, false, false, false, true);
+					boolean rowSelected = getEditor().isRowSelected(change.index);
+					ModelRow<R> modelRow = new ModelRow.Default<>(() -> row, change.index, false, rowSelected, false, false, false);
+
+					boolean cellSelected = getEditor().isCellSelected(change.index, columnIndex);
+					Object cellValue = column.getCategoryValue(modelRow);
+					ModelCell<R, Object> cell = new ModelCell.RowWrapper<>(modelRow, cellValue, columnIndex, false, cellSelected);
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
@@ -1098,9 +1246,9 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 				}
 			} else {
 				forAllVisibleData(model, row -> {
-					Object cellValue = column.getCategoryValue(row.getModelValue());
-					ModelCell<R, Object> cell = new ModelCell.Default<>(row::getModelValue, cellValue, row.getRowIndex(), columnIndex,
-						row.isSelected(), row.hasFocus(), false, false, row.isExpanded(), row.isLeaf());
+					Object cellValue = column.getCategoryValue(row);
+					boolean cellSelected = getEditor().isCellSelected(row.getRowIndex(), columnIndex);
+					ModelCell<R, Object> cell = new ModelCell.RowWrapper<>(row, cellValue, columnIndex, false, cellSelected);
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
@@ -1119,6 +1267,355 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 			widths[0] = column.getMinWidth();
 			widths[1] = column.getPrefWidth();
 			widths[2] = column.getMaxWidth();
+		}
+	}
+
+	private static class TransferTarget {
+		final int rowIndex;
+		final int colIndex;
+		final boolean beforeRow;
+		final boolean beforeCol;
+		final ElementId targetRow;
+		final ElementId after;
+		final ElementId before;
+
+		TransferTarget(int rowIndex, int colIndex, boolean beforeRow, boolean beforeCol, ElementId targetRow, ElementId after,
+			ElementId before) {
+			this.rowIndex = rowIndex;
+			this.colIndex = colIndex;
+			this.beforeRow = beforeRow;
+			this.beforeCol = beforeCol;
+			this.targetRow = targetRow;
+			this.after = after;
+			this.before = before;
+		}
+	}
+
+	public abstract class AbstractTableBuilderTransferHandler extends TransferHandler {
+		private final JTable theTable;
+		private final Dragging.SimpleTransferSource<R, Object> theRowSource;
+		private final Dragging.SimpleTransferAccepter<R, Object> theRowAccepter;
+		private Icon theAppearance;
+
+		protected AbstractTableBuilderTransferHandler(JTable table, SimpleTransferSource<R, ?> rowSource,
+			SimpleTransferAccepter<R, ?> rowAccepter) {
+			theTable = table;
+			theRowSource = (SimpleTransferSource<R, Object>) rowSource;
+			theRowAccepter = (SimpleTransferAccepter<R, Object>) rowAccepter;
+		}
+
+		protected abstract Transaction lockRows(boolean forWrite);
+
+		@Override
+		protected Transferable createTransferable(JComponent c) {
+			AbstractObservableTableModel<R> model = (AbstractObservableTableModel<R>) getEditor().getModel();
+			try (Transaction rowT = lockRows(false); Transaction colT = getColumns().lock(false, null)) {
+				if (getEditor().getSelectedRowCount() == 0)
+					return null;
+				List<R> selectedRows = new ArrayList<>(getEditor().getSelectedRowCount());
+				for (int i = getEditor().getSelectionModel().getMinSelectionIndex(); i <= getEditor().getSelectionModel()
+					.getMaxSelectionIndex(); i++) {
+					if (getEditor().getSelectionModel().isSelectedIndex(i))
+						selectedRows.add(model.getRow(i, getEditor()));
+				}
+				Transferable columnTransfer = null;
+				Map<Integer, CategoryRenderStrategy<R, ?>> columns = new LinkedHashMap<>();
+				for (int col = 0; col < getEditor().getColumnCount(); col++) {
+					if (getEditor().getColumnModel().getSelectionModel().isSelectedIndex(col)) {
+						int modelCol = getEditor().convertColumnIndexToModel(col);
+						CategoryRenderStrategy<R, ?> column = model.getColumnModel().getElementAt(modelCol);
+						if (column.getDragSource() != null)
+							columns.put(modelCol, column);
+					}
+				}
+				if (!columns.isEmpty()) {
+					Transferable[][] grid = new Transferable[getEditor().getSelectedRowCount()][columns.size()];
+					int row = 0;
+					for (int r = getEditor().getSelectionModel().getMinSelectionIndex(); r <= getEditor().getSelectionModel()
+						.getMaxSelectionIndex(); r++) {
+						if (!getEditor().isRowSelected(r))
+							continue;
+						R rowValue = model.getRow(r, getEditor());
+						ModelRow<R> modelRow = new ModelRow.Default<>(() -> rowValue, r, false, true, false,
+							model.isExpanded(r, getEditor()), model.isLeaf(r, theTable));
+						int cIdx = 0;
+						for (Map.Entry<Integer, CategoryRenderStrategy<R, ?>> col : columns.entrySet()) {
+							ModelCell<R, Object> cell = new ModelCell.RowWrapper<>(modelRow, col.getValue().getCategoryValue(modelRow),
+								col.getKey(), false, getEditor().isCellSelected(row, getEditor().convertColumnIndexToView(col.getKey())));
+							grid[row][cIdx] = ((Dragging.TransferSource<R, Object>) col.getValue().getDragSource())
+								.createTransferable(cell);
+							cIdx++;
+						}
+						row++;
+					}
+					if (columns.size() == 1) {
+						Transferable[] multi = new Transferable[grid.length];
+						for (int r = 0; r < grid.length; r++) {
+							multi[r] = grid[r][0];
+						}
+						if (grid.length == 1) {
+							columnTransfer = new Dragging.OrTransferable(new GridTransferable(grid), new Dragging.AndTransferable(multi),
+								multi[0]);
+						} else
+							columnTransfer = new Dragging.OrTransferable(new GridTransferable(grid), new Dragging.AndTransferable(multi));
+					} else
+						columnTransfer = new GridTransferable(grid);
+				}
+
+				Transferable rowValueTransfer = null;
+				if (theRowSource != null) {
+					List<Transferable> rowTs = new ArrayList<>(selectedRows.size());
+					int r = 0;
+					for (int row = getEditor().getSelectionModel().getMinSelectionIndex(); row <= getEditor().getSelectionModel()
+						.getMaxSelectionIndex(); row++) {
+						if (getEditor().getSelectionModel().isSelectedIndex(row)) {
+							R rowValue = selectedRows.get(r);
+							ModelCell<R, R> cell = new ModelCell.Default<>(() -> rowValue, rowValue, row, 0, true, false, false, false,
+								false, true);
+							Transferable rowTr = theRowSource.createTransferable(cell);
+							if (rowTr != null)
+								rowTs.add(rowTr);
+							r++;
+						}
+					}
+					rowValueTransfer = new Dragging.AndTransferable(rowTs.toArray(new Transferable[rowTs.size()]));
+				}
+				Transferable result;
+				if (columnTransfer != null) {
+					if (rowValueTransfer != null)
+						result = new Dragging.OrTransferable(columnTransfer, rowValueTransfer);
+					else
+						result = columnTransfer;
+				} else if (rowValueTransfer != null)
+					result = columnTransfer;
+				else
+					result = null;
+				return result;
+			}
+		}
+
+		@Override
+		public int getSourceActions(JComponent c) {
+			int actions = 0;
+			try (Transaction rowT = lockRows(false); Transaction colT = getColumns().lock(false, null)) {
+				if (getEditor().getSelectedRowCount() == 0)
+					return actions;
+				if (theRowSource != null)
+					actions |= theRowSource.getSourceActions();
+				int columnIndex = getEditor().getSelectedColumn();
+				if (columnIndex >= 0)
+					columnIndex = getEditor().convertColumnIndexToModel(columnIndex);
+				CategoryRenderStrategy<R, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
+				if (column != null && column.getDragSource() != null) {
+					actions |= column.getDragSource().getSourceActions();
+				}
+			}
+			return actions;
+		}
+
+		@Override
+		public Icon getVisualRepresentation(Transferable t) {
+			if (theAppearance != null)
+				return theAppearance;
+			return super.getVisualRepresentation(t);
+		}
+
+		@Override
+		protected void exportDone(JComponent source, Transferable data, int action) {
+			// TODO If removed, scroll
+			super.exportDone(source, data, action);
+		}
+
+		protected abstract ElementId getRowElement(int rowIndex);
+
+		protected abstract ElementId getAdjacentRowElement(ElementId rowElement, boolean next);
+
+		protected abstract int getElementsAfter(ElementId rowElement);
+
+		protected abstract R getRowValue(ElementId rowElement);
+
+		protected abstract String canAddRow(R row, ElementId after, ElementId before);
+
+		protected abstract String isRowAcceptable(ElementId rowElement, R newValue);
+
+		protected abstract void setRow(ElementId rowElement, R newValue);
+
+		protected abstract Object getRowCellValue(R rowValue);
+
+		@Override
+		public boolean canImport(TransferSupport support) {
+			try (Transaction rowT = lockRows(false); Transaction colT = getColumns().lock(false, null)) {
+				TransferTarget target = getTarget(support);
+				return doImport(support, target.rowIndex, target.colIndex, target.beforeRow, target.beforeCol, target.targetRow,
+					target.after, target.before, true);
+			}
+		}
+
+		@Override
+		public boolean importData(TransferSupport support) {
+			try (Transaction rowT = lockRows(true); Transaction colT = getColumns().lock(false, null)) {
+				TransferTarget target = getTarget(support);
+				return doImport(support, target.rowIndex, target.colIndex, target.beforeRow, target.beforeCol, target.targetRow,
+					target.after, target.before, false);
+			} catch (RuntimeException | Error e) {
+				e.printStackTrace();
+				throw e;
+			}
+		}
+
+		private TransferTarget getTarget(TransferSupport support) {
+			int rowIndex, colIndex;
+			boolean beforeRow, beforeCol;
+			if (support.isDrop()) {
+				rowIndex = getEditor().rowAtPoint(support.getDropLocation().getDropPoint());
+				colIndex = getEditor().columnAtPoint(support.getDropLocation().getDropPoint());
+				if (rowIndex < 0) {
+					rowIndex = getEditor().getRowCount();
+					beforeRow = beforeCol = false;
+				} else {
+					Rectangle bounds = getEditor().getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
+					beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
+					beforeCol = (support.getDropLocation().getDropPoint().x - bounds.x) <= bounds.x / 2;
+				}
+			} else {
+				rowIndex = getEditor().getSelectedRow();
+				colIndex = -1;
+				beforeRow = beforeCol = true;
+			}
+			ElementId targetRow = (rowIndex < 0 || rowIndex > getEditor().getRowCount()) ? null : getRowElement(rowIndex);
+			ElementId after, before;
+			if (targetRow != null) {
+				after = beforeRow ? getAdjacentRowElement(targetRow, false) : targetRow;
+				before = beforeRow ? targetRow : getAdjacentRowElement(targetRow, true);
+			} else
+				after = before = null;
+			return new TransferTarget(rowIndex, colIndex, beforeRow, beforeCol, targetRow, after, before);
+		}
+
+		protected boolean doImport(TransferSupport support, int rowIndex, int colIndex, boolean beforeRow, boolean beforeCol,
+			ElementId targetRow, ElementId after, ElementId before, boolean testOnly) {
+			TransferWrapper wrapper = Dragging.wrap(support);
+			if (theRowAccepter != null) {
+				boolean selected = getEditor().isRowSelected(rowIndex);
+				R rowValue = getRowValue(targetRow);
+				ModelCell<R, ?> cell = targetRow == null ? null : new ModelCell.Default<>(() -> rowValue, getRowCellValue(rowValue),
+					rowIndex, colIndex, selected, selected, false, false, false, true);
+				if (theRowAccepter.canAccept(cell, beforeCol, beforeRow, wrapper, true)) {
+					BetterList<? extends R> newRows;
+					try {
+						newRows = theRowAccepter.accept(cell, beforeCol, beforeRow, wrapper, true, testOnly);
+					} catch (IOException e) {
+						newRows = null;
+						// Ignore
+					}
+					if (newRows == null) {//
+					} else {
+						boolean allImportable = true;
+						if (rowIndex < 0) {
+							for (R row : newRows) {
+								if (canAddRow(row, null, null) != null) {
+									allImportable = false;
+									break;
+								}
+							}
+						} else {
+							for (R row : newRows) {
+								if (canAddRow(row, after, before) != null) {
+									allImportable = false;
+									break;
+								}
+							}
+						}
+						if (allImportable)
+							return true;
+					}
+				}
+			}
+			if (rowIndex >= 0) {
+				int columnIndex = wrapper.isDrop() ? getEditor().columnAtPoint(wrapper.getDropLocation().getDropPoint())
+					: getEditor().getSelectedColumn();
+				if (columnIndex >= 0) {
+					int modelColumn = getEditor().convertColumnIndexToModel(columnIndex);
+					CategoryRenderStrategy<R, ?> column = getColumns().get(modelColumn);
+					R rowValue = getRowValue(targetRow);
+					if (canImport(wrapper, rowIndex, modelColumn, targetRow, rowValue, column, !testOnly))
+						return true;
+					for (DataFlavor flavor : wrapper.getDataFlavors()) {
+						if (flavor instanceof GridFlavor) {
+							GridFlavor gridFlavor = (GridFlavor) flavor;
+							if (gridFlavor.rows - 1 >= getElementsAfter(targetRow)
+								|| columnIndex + gridFlavor.columns > getEditor().getColumnCount())
+								continue;
+							boolean allImportable = true;
+							for (int c = 0; c < gridFlavor.columns; c++) {
+								modelColumn = getEditor().convertColumnIndexToModel(columnIndex + c);
+								column = getColumns().get(modelColumn);
+								ElementId rowEl = targetRow;
+								for (int r = 0; r < gridFlavor.rows; r++) {
+									rowValue = getRowValue(rowEl);
+									allImportable = canImport(new Dragging.GridElementTransferWrapper(wrapper, r, c), rowIndex + r,
+										columnIndex + c, rowEl, rowValue, column, false);
+									if (!allImportable)
+										break;
+									rowEl = getAdjacentRowElement(rowEl, true);
+								}
+								if (!allImportable)
+									break;
+							}
+							if (allImportable) {
+								if (!testOnly) {
+									for (int c = 0; c < gridFlavor.columns; c++) {
+										modelColumn = getEditor().convertColumnIndexToModel(columnIndex + c);
+										column = getColumns().get(modelColumn);
+										ElementId rowEl = targetRow;
+										for (int r = 0; r < gridFlavor.rows; r++) {
+											rowValue = getRowValue(rowEl);
+											canImport(new Dragging.GridElementTransferWrapper(wrapper, r, c), rowIndex + r, columnIndex + c,
+												rowEl, rowValue, column, true);
+											rowEl = getAdjacentRowElement(rowEl, true);
+										}
+									}
+								}
+								return true;
+							}
+						}
+					}
+				}
+			}
+			return false;
+		}
+
+		private <C> boolean canImport(TransferWrapper support, int rowIndex, int colIndex, ElementId rowElement, R rowValue,
+			CategoryRenderStrategy<R, C> column, boolean doImport) {
+			if (column.getMutator().getDragAccepter() == null)
+				return false;
+			boolean selected = getEditor().isRowSelected(rowIndex);
+			AbstractObservableTableModel<R> model = (AbstractObservableTableModel<R>) getEditor().getModel();
+			ModelRow<R> row = new ModelRow.Default<>(() -> rowValue, rowIndex, false, selected, false,
+				model.isExpanded(rowIndex, getEditor()), model.isLeaf(rowIndex, theTable));
+			C oldValue = column.getCategoryValue(row);
+			ModelCell<R, C> cell = new ModelCell.RowWrapper<>(row, oldValue, colIndex, false,
+				getEditor().isCellSelected(rowIndex, colIndex));
+			if (!column.getMutator().getDragAccepter().canAccept(cell, false, false, support, false))
+				return false;
+			BetterList<? extends R> result;
+			try {
+				result = column.getMutator().getDragAccepter().accept(cell, false, false, support, false,
+					!doImport);
+			} catch (IOException e) {
+				return false;
+			}
+			if (result == null)
+				return false;
+			else if (result.isEmpty())
+				return true;
+			else if (isRowAcceptable(rowElement, result.getFirst()) != null)
+				return false;
+			else if (doImport) {
+				support.setDropAction(DnDConstants.ACTION_COPY_OR_MOVE);
+				setRow(rowElement, result.getFirst());
+			}
+			return true;
 		}
 	}
 }

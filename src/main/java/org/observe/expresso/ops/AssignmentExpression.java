@@ -23,7 +23,6 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
-import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
@@ -259,6 +258,9 @@ public class AssignmentExpression implements ObservableExpression {
 			SettableValue<T> newSource = theSource.get(newModels);
 			if (oldTarget == newTarget && oldSource == newSource)
 				return value2;
+			else if (isList)
+				return new ListAssignmentAction<>((SettableValue<List<Object>>) newTarget, (SettableValue<List<Object>>) newSource,
+					theReporting);
 			else
 				return newTarget.assignmentTo(newSource);
 		}
@@ -410,8 +412,7 @@ public class AssignmentExpression implements ObservableExpression {
 					}, ordered ? CollectionUtils.AdjustmentOrder.RightOrder : CollectionUtils.AdjustmentOrder.AddLast);
 				}
 				return message[0];
-			}, () -> Stamped.compositeStamp(theTarget.getStamp(), theSource.getStamp()), //
-				Observable.or(theTarget.noInitChanges(), theSource.noInitChanges()));
+			}, Observable.or(theTarget.noInitChanges(), theSource.noInitChanges()));
 			ObservableValue<ObservableValue<String>> toFlatten = theTarget.isEnabled()
 				.map(e -> e == null ? simpleAssignmentEnabled : listAssignmentEnabled);
 			return new ObservableValue.FlattenedObservableValue<String>(toFlatten, null) {

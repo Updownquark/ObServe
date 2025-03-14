@@ -1,13 +1,15 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.datatransfer.Transferable;
-import java.awt.dnd.InvalidDnDOperationException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -15,6 +17,7 @@ import java.util.function.Predicate;
 
 import javax.swing.Icon;
 import javax.swing.JComponent;
+import javax.swing.JTree;
 import javax.swing.TransferHandler;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
@@ -27,24 +30,20 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
-import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.swing.AbstractObservableTableModel.TableRenderContext;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
+import org.observe.util.swing.Dragging.TransferAccepter;
+import org.observe.util.swing.Dragging.TransferSource;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
-import org.qommons.tree.BetterTreeList;
 
 /**
  * Implements {@link PanelPopulation}'s tree table.
@@ -88,6 +87,7 @@ implements TreeTableEditor<F, P> {
 	private boolean isRootVisible;
 
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
+	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theDisplayedColumns;
 
 	private SimpleTreeTableBuilder(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children1,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
@@ -124,14 +124,13 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		public boolean isLeaf(Object node) {
+			ObservableTreeModel<F>.TreeNode treeNode = (ObservableTreeModel<F>.TreeNode) node;
 			Predicate<? super F> leafTest = theLeafTest;
 			if (leafTest != null)
-				return leafTest.test((F) node);
+				return leafTest.test(treeNode.get());
 			Predicate<? super BetterList<F>> leafTest2 = theLeafTest2;
 			if (leafTest2 != null) {
-				BetterList<F> path = getBetterPath((F) node, false);
-				if (path != null)
-					return leafTest2.test(path);
+				return leafTest2.test(treeNode.getValuePath());
 			}
 			return false;
 		}
@@ -140,8 +139,10 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public List<BetterList<F>> getSelection() {
 		TreePath[] selection = getEditor().getTreeSelectionModel().getSelectionPaths();
+		if (selection == null || selection.length == 0)
+			return BetterList.empty();
 		return BetterList.of(Arrays.stream(selection)//
-			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
+			.map(ObservableTreeModel::betterPath));
 	}
 
 	@Override
@@ -219,7 +220,16 @@ implements TreeTableEditor<F, P> {
 	@Override
 	protected AbstractObservableTableModel<BetterList<F>> createTableModel(
 		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns) {
-		return new ObservableTreeTableModel<>(new PPTreeModel(), columns);
+		theDisplayedColumns = columns;
+		ObservableTreeTableModel<F> model= new ObservableTreeTableModel<>(new PPTreeModel(), columns);
+		JXTreeTable tree = getEditor();
+		model.getTreeModel().withRenderer(theTreeColumn).withStatus(tree::getRowForPath, tree::isExpanded, tree.getTreeSelectionModel()::isPathSelected);
+		return model;
+	}
+
+	@Override
+	protected ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> getDisplayedColumns() {
+		return theDisplayedColumns;
 	}
 
 	@Override
@@ -234,7 +244,7 @@ implements TreeTableEditor<F, P> {
 		if (theValueSingleSelection != null) {
 			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
 			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.<BetterList<F>> transformReversible(//
-				tx -> tx.map(v -> treeModel.getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
+				tx -> tx.map(v -> treeModel.getValuePath(v, true)).withReverse(path -> path == null ? null : path.getLast())), false,
 				Equivalence.DEFAULT, getUntil());
 		}
 	}
@@ -243,7 +253,7 @@ implements TreeTableEditor<F, P> {
 	protected void syncMultiSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
 		ObservableCollection<BetterList<F>> selection) {
 		if (selection != null)
-			ObservableTreeTableModel.syncSelection(table, selection, getUntil());
+			ObservableTreeTableModel.syncSelection(table, selection, Equivalence.DEFAULT, getUntil());
 		if (theValueMultiSelection != null) {
 			ObservableTreeModel<F> treeModel = ((ObservableTreeTableModel<F>) model).getTreeModel();
 			// Subscription sub = ObservableUtils.link(selection, theValueMultiSelection, //
@@ -253,7 +263,7 @@ implements TreeTableEditor<F, P> {
 				.<F> transform(tx -> tx//
 					.cache(false).reEvalOnUpdate(false).fireIfUnchanged(true)//
 					.map(path -> path == null ? null : path.getLast())//
-					.replaceSource(value -> treeModel.getBetterPath(value, true), null))//
+					.replaceSource(value -> treeModel.getValuePath(value, true), null))//
 				.collect();
 			Subscription sub = ObservableCollectionSynchronization.synchronize(modelValueSel, theValueMultiSelection)//
 				.synchronize();
@@ -262,58 +272,110 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	protected TransferHandler setUpDnD(JXTreeTable table, SimpleTransferSource<BetterList<F>> dragSource,
-		SimpleTransferAccepter<BetterList<F>, Object, BetterList<F>> dragAccepter) {
-		return new TreeTableBuilderTransferHandler(table);
+	protected boolean isDraggable() {
+		Dragging.TransferSource<BetterList<F>, F> valueDragSource = null;
+		Dragging.TransferAccepter<BetterList<F>, F> valueDragAccept = null;
+		if (theTreeColumn != null) {
+			valueDragSource = theTreeColumn.getDragSource();
+			if (theTreeColumn.getMutator() != null)
+				valueDragAccept = theTreeColumn.getMutator().getDragAccepter();
+		}
+
+		return super.isDraggable() || valueDragSource != null || valueDragAccept != null;
+	}
+
+	@Override
+	protected TransferHandler setUpDnD(JXTreeTable table, SimpleTransferSource<BetterList<F>, ?> dragSource,
+		SimpleTransferAccepter<BetterList<F>, ?> dragAccepter) {
+		Dragging.TransferSource<BetterList<F>, F> valueDragSource = null;
+		Dragging.TransferAccepter<BetterList<F>, F> valueDragAccept = null;
+		if (theTreeColumn != null) {
+			valueDragSource = theTreeColumn.getDragSource();
+			if (theTreeColumn.getMutator() != null)
+				valueDragAccept = theTreeColumn.getMutator().getDragAccepter();
+		}
+
+		return new TreeTableBuilderTransferHandler((JTree) table.getCellRenderer(0, table.getHierarchicalColumn()),
+			(TransferSource<BetterList<F>, F>) dragSource, (TransferAccepter<BetterList<F>, F>) dragAccepter, valueDragSource,
+			valueDragAccept);
 	}
 
 	@Override
 	protected void onVisibleData(AbstractObservableTableModel<BetterList<F>> model,
 		Consumer<CollectionChangeEvent<BetterList<F>>> onChange) {
+		/* I've had so many issues here where the tree table doesn't report model updates to me correctly.
+		 * E.g. when this call happens, the tree model is empty, but at some point it acquires the root row without reporting it.
+		 * I also get duplicate add and remove calls, and sometimes update events for rows that haven't been reported.
+		 * I don't understand why this is happening, but for reliability I'm just going to refresh any time things aren't as I expect.
+		 */
+		ObservableCollection<BetterList<F>> rows = ObservableCollection.create();
+		JXTreeTable editor = getEditor();
 		TableModelListener listener = new TableModelListener() {
 			@Override
 			public void tableChanged(TableModelEvent e) {
 				if (e.getColumn() == TableModelEvent.ALL_COLUMNS && e.getFirstRow() != TableModelEvent.HEADER_ROW) {
-					CollectionChangeType type = null;
-					List<CollectionChangeEvent.ElementChange<BetterList<F>>> changes = null;
+					int eventRows = e.getLastRow() - e.getFirstRow() + 1;
 					switch (e.getType()) {
 					case TableModelEvent.INSERT:
-						type = CollectionChangeType.add;
-						changes = new ArrayList<>();
-						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++)
-							changes.add(new CollectionChangeEvent.ElementChange<>(model.getRow(i, getEditor()), null, i, null));
+						if (e.getFirstRow() > rows.size() || (rows.size() + eventRows != editor.getRowCount())) {
+							// Not in-sync
+							refresh(false);
+							return;
+						}
+						BetterList<F>[] newRows = new BetterList[eventRows];
+						int newIndex = 0;
+						for (int r = e.getFirstRow(); r <= e.getLastRow(); r++)
+							newRows[newIndex++] = model.getRow(r, editor);
+						rows.addAll(e.getFirstRow(), Arrays.asList(newRows));
 						break;
 					case TableModelEvent.DELETE:
-						type = CollectionChangeType.remove;
-						changes = new ArrayList<>();
-						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++) {
-							BetterList<F> row = model.getRow(i, getEditor());
-							changes.add(new CollectionChangeEvent.ElementChange<>(row, row, i, null));
-						}
+						if (e.getLastRow() >= rows.size() || (rows.size() - eventRows != editor.getRowCount()))
+							refresh(false);
+						else
+							rows.subList(e.getFirstRow(), e.getLastRow() + 1).clear();
 						break;
 					case TableModelEvent.UPDATE:
-						type = CollectionChangeType.set;
-						changes = new ArrayList<>();
 						int lastRow = e.getLastRow();
-						if (lastRow == Integer.MAX_VALUE)
-							lastRow = getEditor().getRowCount();
-						for (int i = e.getFirstRow(); i <= lastRow; i++) {
-							BetterList<F> row = model.getRow(i, getEditor());
-							changes.add(new CollectionChangeEvent.ElementChange<>(row, row, i, null));
+						if (lastRow == Integer.MAX_VALUE) {// Stupid code for anything may have happened.
+							refresh(true);
+							return;
 						}
+						if (lastRow >= rows.size()) { // Not in-sync
+							refresh(false);
+						}
+						for (int r = e.getFirstRow(); r <= lastRow; r++)
+							rows.set(r, model.getRow(r, editor));
 						break;
-					}
-					if (type != null) {
-						CollectionChangeEvent<BetterList<F>> event = new CollectionChangeEvent<>(type, changes, e);
-						try (Transaction t = event.use()) {
-							onChange.accept(event);
-						}
 					}
 				}
 			}
+
+			void refresh(boolean updateAll) {
+				BetterList<F>[] currentRows = new BetterList[editor.getRowCount()];
+				for (int r = 0; r < currentRows.length; r++)
+					currentRows[r] = model.getRow(r, editor);
+				CollectionUtils.synchronize(rows, Arrays.asList(currentRows), SimpleTreeTableBuilder::rowsIdentical)//
+				.simple(LambdaUtils.identity())//
+				.commonUses(true, updateAll)//
+				.rightOrder()//
+				.adjust();
+			}
 		};
-		getEditor().getModel().addTableModelListener(listener);
-		getUntil().act(__ -> getEditor().getModel().removeTableModelListener(listener));
+		editor.getModel().addTableModelListener(listener);
+		rows.changes().takeUntil(getUntil()).act(onChange::accept);
+		getUntil().act(__ -> editor.getModel().removeTableModelListener(listener));
+	}
+
+	static boolean rowsIdentical(BetterList<?> row1, BetterList<?> row2) {
+		if (row1.size() != row2.size())
+			return false;
+		Iterator<?> iter1 = row1.iterator();
+		Iterator<?> iter2 = row2.iterator();
+		while (iter1.hasNext()) {
+			if (iter1.next() != iter2.next())
+				return false;
+		}
+		return true;
 	}
 
 	private static class ModelRowImpl<F> implements ModelRow<BetterList<F>> {
@@ -402,60 +464,114 @@ implements TreeTableEditor<F, P> {
 		return comp;
 	}
 
-	class TreeTableBuilderTransferHandler extends TransferHandler {
-		private final JXTreeTable theTable;
+	class PathElement<N> implements ElementId {
+		final ObservableTreeModel<F>.TreeNode parentNode;
+		final ElementId childElement;
 
-		TreeTableBuilderTransferHandler(JXTreeTable table) {
-			theTable = table;
+		PathElement(ObservableTreeModel<F>.TreeNode parentNode, ElementId childElement) {
+			this.parentNode = parentNode;
+			this.childElement = childElement;
 		}
 
 		@Override
-		protected Transferable createTransferable(JComponent c) {
-			try (Transaction colT = getColumns().lock(false, null)) {
-				if (theTable.getSelectedRowCount() == 0)
-					return null;
-				List<BetterList<F>> selectedRows = new ArrayList<>(theTable.getSelectedRowCount());
-				for (int i = theTable.getSelectionModel().getMinSelectionIndex(); i <= theTable.getSelectionModel()
-					.getMaxSelectionIndex(); i++) {
-					if (theTable.getSelectionModel().isSelectedIndex(i))
-						selectedRows.add(ObservableTreeModel.betterPath(theTable.getPathForRow(i)));
-				}
-				int columnIndex = theTable.getSelectedColumn();
-				if (columnIndex >= 0)
-					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-				Transferable columnTransfer = null;
-				if (column != null && column.getDragSource() != null) {
-					Transferable[] columnTs = new Transferable[selectedRows.size()];
-					for (int r = 0; r < selectedRows.size(); r++)
-						columnTs[r] = ((Dragging.TransferSource<Object>) column.getDragSource())
-						.createTransferable(column.getCategoryValue(selectedRows.get(r)));
-					columnTransfer = columnTs.length == 1 ? columnTs[0] : new Dragging.AndTransferable(columnTs);
-				}
-				return columnTransfer;
-			}
+		public int compareTo(ElementId o) {
+			ElementId otherChild = ((PathElement<?>) o).childElement;
+			if (childElement == null) {
+				if (otherChild == null)
+					return 0;
+				else
+					return -1;
+			} else if (otherChild == null)
+				return 1;
+			return childElement.compareTo(otherChild);
+		}
+
+		@Override
+		public boolean isPresent() {
+			return childElement == null || childElement.isPresent();
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(childElement);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof PathElement && childElement.equals(((PathElement<?>) obj).childElement);
+		}
+
+		@Override
+		public String toString() {
+			String str = parentNode.toString();
+			if (childElement != null)
+				str += "." + childElement;
+			return str;
+		}
+	}
+
+	class TreeTableBuilderTransferHandler extends TransferHandler {
+		private final JTree theTree;
+		private final Dragging.TransferSource<BetterList<F>, F> thePathSource;
+		private final Dragging.TransferAccepter<BetterList<F>, F> thePathAccepter;
+		private final Dragging.TransferSource<BetterList<F>, F> theNodeSource;
+		private final Dragging.TransferAccepter<BetterList<F>, F> theNodeAccepter;
+		private Icon theDragAppearance;
+
+		TreeTableBuilderTransferHandler(JTree tree, TransferSource<BetterList<F>, F> pathSource,
+			TransferAccepter<BetterList<F>, F> pathAccepter, Dragging.TransferSource<BetterList<F>, F> nodeSource,
+			Dragging.TransferAccepter<BetterList<F>, F> nodeAccepter) {
+			theTree = tree;
+			thePathSource = pathSource;
+			thePathAccepter = pathAccepter;
+			theNodeSource = nodeSource;
+			theNodeAccepter = nodeAccepter;
 		}
 
 		@Override
 		public int getSourceActions(JComponent c) {
 			int actions = 0;
-			try (Transaction colT = getColumns().lock(false, null)) {
-				if (theTable.getSelectedRowCount() == 0)
-					return actions;
-				int columnIndex = theTable.getSelectedColumn();
-				if (columnIndex >= 0)
-					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
-				if (column != null && column.getDragSource() != null) {
-					actions |= column.getDragSource().getSourceActions();
-				}
-			}
+			if (thePathSource != null)
+				actions |= thePathSource.getSourceActions();
+			if (theNodeSource != null)
+				actions |= theNodeSource.getSourceActions();
 			return actions;
 		}
 
 		@Override
+		protected Transferable createTransferable(JComponent c) {
+			if ((thePathSource == null && theNodeSource == null) || theTree.getSelectionCount() == 0)
+				return null;
+
+			List<Transferable> transferables = new ArrayList<>(theTree.getSelectionCount());
+			for (TreePath path : theTree.getSelectionPaths()) {
+				BetterList<F> betterPath = ObservableTreeModel.betterPath(path);
+				ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> betterPath, betterPath.getLast(),
+					theTree.getRowForPath(path), 0, theTree.isPathSelected(path), false, false, false, theTree.isExpanded(path),
+					theTree.getModel().isLeaf(path.getLastPathComponent()));
+				if (thePathSource != null) {
+					Transferable pathT = thePathSource.createTransferable(cell);
+					if (pathT != null)
+						transferables.add(pathT);
+				}
+				if (theNodeSource != null) {
+					Transferable nodeT = theNodeSource.createTransferable(cell);
+					if (nodeT != null)
+						transferables.add(nodeT);
+				}
+			}
+			if (transferables.isEmpty())
+				return null;
+			else if (transferables.size() == 1)
+				return transferables.get(0);
+			else
+				return new Dragging.AndTransferable(transferables.toArray(new Transferable[transferables.size()]));
+		}
+
+		@Override
 		public Icon getVisualRepresentation(Transferable t) {
-			// TODO Auto-generated method stub
+			if (theDragAppearance != null)
+				return theDragAppearance;
 			return super.getVisualRepresentation(t);
 		}
 
@@ -467,330 +583,85 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		public boolean canImport(TransferSupport support) {
-			try (Transaction colT = getColumns().lock(false, null)) {
-				int rowIndex;
-				if (support.isDrop()) {
-					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
-					if (rowIndex < 0)
-						return false;
-				} else
-					rowIndex = theTable.getSelectedRow();
-				BetterList<F> path = rowIndex < 0 ? BetterList.of(theRoot.get())
-					: ObservableTreeModel.betterPath(theTable.getPathForRow(rowIndex));
-				F parent;
-				ObservableCollection<F> children;
-				ElementId targetRow;
-				if (path.size() == 1) {
-					parent = null;
-					children = null;
-					targetRow = null;
+			if ((thePathAccepter == null && theNodeAccepter == null) || theTree.getRowCount() == 0)
+				return false;
+			int rowIndex;
+			boolean beforeRow;
+			if (support.isDrop()) {
+				Point dropPoint = support.getDropLocation().getDropPoint();
+				rowIndex = theTree.getRowForLocation(dropPoint.x, dropPoint.y);
+				if (rowIndex < 0) {
+					rowIndex = theTree.getRowCount() - 1;
+					beforeRow = false;
 				} else {
-					parent = path.get(path.size() - 2);
-					if (theChildren1 != null)
-						children = (ObservableCollection<F>) theChildren1.apply(parent);
-					else
-						children = (ObservableCollection<F>) theChildren2.apply(path.subList(0, path.size() - 1));
-					try {
-						targetRow = children.getElement(path.getLast(), true).getElementId();
-					} catch (IndexOutOfBoundsException e) {
-						return false; // Out-of-sync
-					}
-					if (children.getElement(targetRow).get() != path.getLast())
-						return false; // Out-of-sync
+					Rectangle bounds = theTree.getRowBounds(rowIndex);
+					beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
 				}
-				if (rowIndex >= 0) {
-					int columnIndex = support.isDrop() ? theTable.columnAtPoint(support.getDropLocation().getDropPoint())
-						: theTable.getSelectedColumn();
-					if (columnIndex >= 0)
-						columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-					CategoryRenderStrategy<BetterList<F>, ?> column;
-					if (columnIndex < 0)
-						return false;
-					else if (columnIndex == 0)
-						column = theTreeColumn;
-					else
-						column = getColumns().get(columnIndex - 1);
-					BetterList<F> parentPath = BetterTreeList.<F> build().build();
-					parentPath.addAll(path.subList(0, path.size() - 1));
-					if (canImport(support, parentPath, children, targetRow, rowIndex, column, false))
-						return true;
-				}
-			} catch (RuntimeException | Error e) {
-				e.printStackTrace();
-				throw e;
+			} else {
+				rowIndex = theTree.getLeadSelectionRow();
+				if (rowIndex < 0)
+					return false;
+				beforeRow = false;
+			}
+
+			Dragging.TransferWrapper wrapper = Dragging.wrap(support);
+			TreePath treePath = theTree.getPathForRow(rowIndex);
+			BetterList<F> targetPath = ObservableTreeModel.betterPath(treePath);
+			boolean selected = theTree.isRowSelected(rowIndex);
+			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> targetPath, targetPath.getLast(), rowIndex, 0, selected,
+				selected, false, false, theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(treePath.getLastPathComponent()));
+			if (thePathAccepter != null && thePathAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
+				theDragAppearance = thePathAccepter.getDragAppearance();
+				return true;
+			}
+			if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
+				theDragAppearance = theNodeAccepter.getDragAppearance();
+				return true;
 			}
 			return false;
 		}
 
-		class MutableTreeTableRow implements MutableCollectionElement<BetterList<F>> {
-			private final MutableCollectionElement<F> terminal;
-			private final BetterList<F> path;
-
-			public MutableTreeTableRow(MutableCollectionElement<F> terminal, BetterList<F> path) {
-				this.terminal = terminal;
-				this.path = path;
-			}
-
-			@Override
-			public ElementId getElementId() {
-				return terminal.getElementId();
-			}
-
-			@Override
-			public BetterList<F> get() {
-				return path;
-			}
-
-			@Override
-			public BetterCollection<BetterList<F>> getCollection() {
-				throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-			}
-
-			@Override
-			public String isEnabled() {
-				return terminal.isEnabled();
-			}
-
-			@Override
-			public String isAcceptable(BetterList<F> value) {
-				if (value.isEmpty())
-					return StdMsg.ILLEGAL_ELEMENT;
-				else
-					return terminal.isAcceptable(value.getLast());
-			}
-
-			@Override
-			public void set(BetterList<F> value) throws UnsupportedOperationException, IllegalArgumentException {
-				// Just ignore the rest of the path
-				if (value.isEmpty())
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				else
-					terminal.set(value.getLast());
-			}
-
-			@Override
-			public String canRemove() {
-				return terminal.canRemove();
-			}
-
-			@Override
-			public void remove() throws UnsupportedOperationException {
-				terminal.remove();
-			}
-
-			@Override
-			public String toString() {
-				return terminal.toString();
-			}
-		}
-
-		private <C> boolean canImport(TransferSupport support, BetterList<F> parentPath, ObservableCollection<? extends F> children,
-			ElementId childEl, int rowIndex, CategoryRenderStrategy<BetterList<F>, C> column, boolean doImport) {
-			if (column.getMutator().getDragAccepter() == null)
-				return false;
-			if (children != null) {
-				CollectionElement<? extends F> rowEl = children.getElement(childEl);
-				parentPath.add(rowEl.get());
-				C oldValue = column.getCategoryValue(parentPath);
-				if (!column.getMutator().isEditable(parentPath, oldValue))
-					return false;
-				boolean selected = theTable.isRowSelected(rowIndex);
-				int colIndex = getColumns().indexOf(column) + 1;
-				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
-					rowIndex, colIndex, selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(rowEl.get()));
-				boolean above;
-				if (support.isDrop()) {
-					Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
-					above = (support.getDropLocation().getDropPoint().y - bounds.y) >= bounds.height / 2;
-				} else
-					above = false;
-				if (!column.getMutator().getDragAccepter().canAccept(cell, false, above, support, false))
-					return false;
-				BetterList<C> newColValue;
-				try {
-					newColValue = column.getMutator().getDragAccepter().accept(cell, false, above, support.getTransferable(), false,
-						!doImport);
-				} catch (IOException e) {
-					return false;
-				} catch (InvalidDnDOperationException e) {
-					if ("No drop current".equals(e.getMessage())) {
-						/* Found this from some dude on coderanch.com, specifically at
-						 * https://coderanch.com/t/664525/java/Invalid-Drag-Drop-Exception
-						 *
-						 * Basically, under Windows, this call is invoked when the user releases the mouse button, but since the mouse
-						 * button is not pressed, the underlying mechanism assumes there's no DnD operation going on,
-						 * so when Transferable.getTransferData() is called, it throws an exception.
-						 *
-						 * This method is also called whenever the user moves their mouse, so the only way this could fail
-						 * is if the underlying widgets or data have changed.  This is, of course, possible,
-						 * so it makes sense to do the check.  However, if Windows throws this exception, meaning we can't do the check,
-						 * it's most probable that things are ok and we should be ok to do the drop.
-						 */
-						return true;
-					}
-					throw e;
-				}
-				if (newColValue == null || column.getMutator().isAcceptable(//
-					new MutableTreeTableRow((MutableCollectionElement<F>) children.mutableElement(rowEl.getElementId()),
-						cell.getModelValue()),
-					newColValue.getFirst()) != null)
-					return false;
-				if (doImport) {
-					column.getMutator().mutate(//
-						new MutableTreeTableRow((MutableCollectionElement<F>) children.mutableElement(rowEl.getElementId()),
-							cell.getModelValue()),
-						newColValue.getFirst());
-				}
-				return true;
-			} else {
-				BetterList<F> root = BetterList.of(theRoot.get());
-				C oldValue = column.getCategoryValue(root);
-				if (!column.getMutator().isEditable(root, oldValue))
-					return false;
-				boolean selected = theTable.isRowSelected(rowIndex);
-				int colIndex = getColumns().indexOf(column) + 1;
-				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, colIndex, selected, selected,
-					false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
-				boolean above;
-				if (support.isDrop()) {
-					Rectangle bounds = theTable.getCellRect(rowIndex, colIndex < 0 ? 0 : colIndex, false);
-					above = (support.getDropLocation().getDropPoint().y - bounds.y) >= bounds.height / 2;
-				} else
-					above = false;
-				if (!column.getMutator().getDragAccepter().canAccept(cell, false, above, support, false))
-					return false;
-				BetterList<C> newColValue;
-				try {
-					newColValue = column.getMutator().getDragAccepter().accept(cell, false, above, support.getTransferable(), false,
-						!doImport);
-				} catch (IOException e) {
-					return false;
-				}
-				MutableCollectionElement<BetterList<F>> syntheticRootEl = new MutableCollectionElement<BetterList<F>>() {
-					@Override
-					public ElementId getElementId() {
-						throw new IllegalStateException();
-					}
-
-					@Override
-					public BetterList<F> get() {
-						return BetterList.of(theRoot.get());
-					}
-
-					@Override
-					public BetterCollection<BetterList<F>> getCollection() {
-						throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-					}
-
-					@Override
-					public String isEnabled() {
-						if (theRoot instanceof SettableValue)
-							return ((SettableValue<F>) theRoot).isEnabled().get();
-						else
-							return StdMsg.UNSUPPORTED_OPERATION;
-					}
-
-					@Override
-					public String isAcceptable(BetterList<F> value) {
-						if (value.size() != 1)
-							return StdMsg.ILLEGAL_ELEMENT;
-						else if (theRoot instanceof SettableValue)
-							return ((SettableValue<F>) theRoot).isAcceptable(value.getLast());
-						else
-							return StdMsg.UNSUPPORTED_OPERATION;
-					}
-
-					@Override
-					public void set(BetterList<F> value) throws UnsupportedOperationException, IllegalArgumentException {
-						if (value.size() != 1)
-							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-						else if (theRoot instanceof SettableValue)
-							((SettableValue<F>) theRoot).set(value.getLast(), null);
-						else
-							throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					}
-
-					@Override
-					public String canRemove() {
-						return StdMsg.UNSUPPORTED_OPERATION;
-					}
-
-					@Override
-					public void remove() throws UnsupportedOperationException {
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					}
-
-					@Override
-					public String toString() {
-						return theRoot.toString();
-					}
-				};
-				if (newColValue == null || column.getMutator().isAcceptable(//
-					syntheticRootEl, newColValue.getFirst()) != null)
-					return false;
-				if (doImport) {
-					column.getMutator().mutate(//
-						syntheticRootEl, newColValue.getFirst());
-				}
-				return true;
-			}
-		}
-
 		@Override
 		public boolean importData(TransferSupport support) {
-			try (// Transaction rowT = getRoot().lock(true, support); // Don't know what to lock here
-				Transaction colT = getColumns().lock(false, null)) {
-				int rowIndex;
-				if (support.isDrop()) {
-					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
-					if (rowIndex < 0)
-						return false;
-				} else
-					rowIndex = theTable.getSelectedRow();
-				BetterList<F> path = rowIndex < 0 ? BetterList.of(theRoot.get())
-					: ObservableTreeModel.betterPath(theTable.getPathForRow(rowIndex));
-				F parent;
-				ObservableCollection<F> children;
-				ElementId targetRow;
-				if (path.size() == 1) {
-					parent = null;
-					children = null;
-					targetRow = null;
+			if ((thePathAccepter == null && theNodeAccepter == null) || theTree.getRowCount() == 0)
+				return false;
+			int rowIndex;
+			boolean beforeRow;
+			if (support.isDrop()) {
+				Point dropPoint = support.getDropLocation().getDropPoint();
+				rowIndex = theTree.getRowForLocation(dropPoint.x, dropPoint.y);
+				if (rowIndex < 0) {
+					rowIndex = theTree.getRowCount() - 1;
+					beforeRow = false;
 				} else {
-					parent = path.get(path.size() - 2);
-					if (theChildren1 != null)
-						children = (ObservableCollection<F>) theChildren1.apply(parent);
-					else
-						children = (ObservableCollection<F>) theChildren2.apply(path.subList(0, path.size() - 1));
-					try {
-						targetRow = children.getElement(path.getLast(), true).getElementId();
-					} catch (IndexOutOfBoundsException e) {
-						return false; // Out-of-sync
-					}
-					if (children.getElement(targetRow).get() != path.getLast())
-						return false; // Out-of-sync
+					Rectangle bounds = theTree.getRowBounds(rowIndex);
+					beforeRow = (support.getDropLocation().getDropPoint().y - bounds.y) <= bounds.height / 2;
 				}
-				if (rowIndex >= 0) {
-					int columnIndex = support.isDrop() ? theTable.columnAtPoint(support.getDropLocation().getDropPoint())
-						: theTable.getSelectedColumn();
-					if (columnIndex >= 0)
-						columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-					CategoryRenderStrategy<BetterList<F>, ?> column;
-					if (columnIndex < 0)
-						return false;
-					else if (columnIndex == 0)
-						column = theTreeColumn;
-					else
-						column = getColumns().get(columnIndex - 1);
-					BetterList<F> parentPath = BetterTreeList.<F> build().build();
-					parentPath.addAll(path.subList(0, path.size() - 1));
-					if (canImport(support, parentPath, children, targetRow, rowIndex, column, true)) {
-						return true;
-					}
+			} else {
+				rowIndex = theTree.getLeadSelectionRow();
+				if (rowIndex < 0)
+					return false;
+				beforeRow = false;
+			}
+
+			Dragging.TransferWrapper wrapper = Dragging.wrap(support);
+			TreePath treePath = theTree.getPathForRow(rowIndex);
+			BetterList<F> targetPath = ObservableTreeModel.betterPath(treePath);
+			boolean selected = theTree.isRowSelected(rowIndex);
+			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> targetPath, targetPath.getLast(), rowIndex, 0, selected,
+				selected, false, false, theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(treePath.getLastPathComponent()));
+			if (thePathAccepter != null && thePathAccepter.canAccept(cell, selected, beforeRow, wrapper, true)) {
+				try {
+					thePathAccepter.accept(cell, false, beforeRow, wrapper, true, false);
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
-			} catch (RuntimeException | Error e) {
-				e.printStackTrace();
-				throw e;
+			} else if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
+				try {
+					theNodeAccepter.accept(cell, false, beforeRow, wrapper, true, false);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 			return false;
 		}

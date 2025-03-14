@@ -27,6 +27,8 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.qommons.BiTuple;
+import org.qommons.Colors;
+import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.io.Format;
@@ -199,7 +201,7 @@ public class ObservableTextEditor<E> {
 	private final Consumer<String> theTooltipSetter;
 
 	private final SettableValue<E> theValue;
-	private final Format<E> theFormat;
+	private Format<E> theFormat;
 	private Function<? super E, String> theWarning;
 	private boolean reformatOnCommit;
 	private boolean isInternallyChanging;
@@ -208,9 +210,9 @@ public class ObservableTextEditor<E> {
 
 	private final Color normal_bg;
 	private final Color disabled_bg;
-	private final Color error_bg = new Color(255, 200, 200);
+	private final Color error_bg = Colors.lightCoral;
 	private final Color error_disabled_bg = new Color(200, 150, 150);
-	private final Color warning_bg = new Color(250, 200, 90);
+	private final Color warning_bg = Colors.orange;
 	private final Color warning_disabled_bg = new Color(235, 220, 150);
 
 	private boolean selectAllOnFocus;
@@ -226,7 +228,6 @@ public class ObservableTextEditor<E> {
 	private BiConsumer<? super E, ? super KeyEvent> theEnterAction;
 
 	private String theCachedText;
-	private long theStateStamp;
 	private SimpleObservable<Void> theStatusChange;
 	private ValueAdjuster<E> theAdjuster;
 
@@ -240,6 +241,8 @@ public class ObservableTextEditor<E> {
 	 */
 	public ObservableTextEditor(JTextComponent component, SettableValue<E> value, Format<E> format, Observable<?> until, //
 		Consumer<Boolean> enabled, Consumer<String> tooltip) {
+		if (format == null)
+			throw new NullPointerException();
 		theComponent = component;
 		theEnabledSetter = enabled;
 		theTooltipSetter = tooltip;
@@ -344,6 +347,17 @@ public class ObservableTextEditor<E> {
 	/** @return The format converting between value and text */
 	public Format<E> getFormat() {
 		return theFormat;
+	}
+
+	/**
+	 * @param format The new format for the editor
+	 * @return This editor
+	 */
+	public ObservableTextEditor<E> setFormat(Format<E> format) {
+		if (format == null)
+			throw new NullPointerException();
+		theFormat = format;
+		return this;
 	}
 
 	/**
@@ -489,7 +503,8 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditError()
 	 */
 	public ObservableValue<String> getErrorState() {
-		return ObservableValue.of(() -> theError, () -> theStateStamp, getStatusChanges());
+		return ObservableValue.of(() -> theError, () -> getStatusChanges().getStamp(), getStatusChanges(), () -> Identifiable.buildId()//
+			.withPrintedId("text-field(").withPrintedIdS(theValue::getIdentity).withPrintedId(").error"));
 	}
 
 	/**
@@ -497,7 +512,8 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditWarning()
 	 */
 	public ObservableValue<String> getWarningState() {
-		return ObservableValue.of(() -> theWarningMsg, () -> theStateStamp, getStatusChanges());
+		return ObservableValue.of(() -> theWarningMsg, () -> getStatusChanges().getStamp(), getStatusChanges(), () -> Identifiable.buildId()//
+			.withPrintedId("text-field(").withPrintedIdS(theValue::getIdentity).withPrintedId(").warning"));
 	}
 
 	/** @return An observable that fires whenever the {@link #getErrorState()} or {@link #getWarningState()} values change */
@@ -740,10 +756,8 @@ public class ObservableTextEditor<E> {
 			else
 				theTooltipSetter.accept(theToolTip);
 		}
-		if (theStatusChange != null) {
-			theStateStamp++;
+		if (theStatusChange != null)
 			theStatusChange.onNext(null);
-		}
 	}
 
 	/**

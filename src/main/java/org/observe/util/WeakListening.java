@@ -370,6 +370,11 @@ public class WeakListening {
 			}
 
 			@Override
+			public long getStamp() {
+				return observable.getStamp();
+			}
+
+			@Override
 			public CoreChangeSources getChangeSources() {
 				return observable.getChangeSources();
 			}

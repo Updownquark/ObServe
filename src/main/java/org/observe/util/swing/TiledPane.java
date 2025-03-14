@@ -29,6 +29,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.BreakpointHere;
+import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionElement;
@@ -68,6 +69,9 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	private final Component thePostFocus;
 
 	private final List<Rectangle> theValueBounds;
+	private String theDebugUpdatePrint;
+	private boolean isBreakOnHover;
+	private boolean isPaintPrint;
 
 	/**
 	 * @param values The values to render
@@ -77,6 +81,13 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		theValues = values.safe(ThreadConstraint.EDT, until);
 		super.setLayout(new JustifiedBoxLayout(true));
 		theValueBounds = new ArrayList<>();
+		Causable.CausableKey updateKey = Causable.key((cause, data) -> {
+			if (theDebugUpdatePrint != null)
+				System.out.println("TP Re-rendering " + theDebugUpdatePrint);
+			invalidate();
+			revalidate();
+			repaint();
+		});
 		Subscription valueSub = theValues.onChange(evt -> {
 			switch (evt.getType()) {
 			case add:
@@ -94,15 +105,23 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					theFocus.replace(true, null, evt.getIndex(), false);
 				break;
 			case set:
-				if (theHover.valueEquals(evt.getElementId()))
+				String dup = theDebugUpdatePrint;
+				if (theHover.valueEquals(evt.getElementId())) {
+					if (dup != null)
+						System.out.println("TP Updating " + dup + " hover[" + evt.getIndex() + "]=" + evt.getNewValue());
 					theHover.replace(false, theValues.getElement(evt.getElementId()), evt.getIndex(), true);
-				if (theFocus.valueEquals(evt.getElementId()))
+				} else if (theFocus.valueEquals(evt.getElementId())) {
+					if (dup != null)
+						System.out.println("TP Updating " + dup + " focus[" + evt.getIndex() + "]=" + evt.getNewValue());
 					theFocus.replace(true, theValues.getElement(evt.getElementId()), evt.getIndex(), true);
-				break; // Just re-validate below
+				} else if (dup != null) {
+					if (dup != null)
+						System.out.println("TP Updating " + dup + "[" + evt.getIndex() + "]=" + evt.getNewValue());
+					// Just re-validate and repaint after all's said and done
+				}
+				break;
 			}
-			invalidate();
-			revalidate();
-			repaint();
+			evt.getRootCausable().onFinish(updateKey);
 		});
 		until.take(1).act(__ -> valueSub.unsubscribe());
 		theGlassPane = new Component() {
@@ -181,19 +200,28 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					Point deepestPoint = SwingUtilities.convertPoint(target, hoverX, hoverY, deepest);
 					if (theGlassPane.getCursor() != deepest.getCursor())
 						theGlassPane.setCursor(deepest.getCursor());
-					deepest.dispatchEvent(new MouseEvent(deepest, e.getID(), e.getWhen(), e.getModifiers(), deepestPoint.x, deepestPoint.y,
-						e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(), e.isPopupTrigger(), e.getButton()));
+					MouseEvent copy;
+					if (e instanceof MouseWheelEvent) {
+						MouseWheelEvent we = (MouseWheelEvent) e;
+						copy = new MouseWheelEvent(deepest, e.getID(), e.getWhen(), e.getModifiers(), deepestPoint.x, deepestPoint.y,
+							e.getXOnScreen(), e.getYOnScreen(), we.getClickCount(), we.isPopupTrigger(), we.getScrollType(),
+							we.getScrollAmount(), we.getWheelRotation(), we.getPreciseWheelRotation());
+					} else {
+						copy = new MouseEvent(deepest, e.getID(), e.getWhen(), e.getModifiers(), deepestPoint.x, deepestPoint.y,
+							e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(), e.isPopupTrigger(), e.getButton());
+					}
+					deepest.dispatchEvent(copy);
 				}
 			}
 
 			private Component getDeepestComponentAt(Component parent, int x, int y) {
-				if (x < 0 || y < 0 || x >= parent.getWidth() || y >= parent.getHeight())
+				if (!parent.isVisible() || x < 0 || y < 0 || x >= parent.getWidth() || y >= parent.getHeight())
 					return null;
 				if (!(parent instanceof Container))
 					return parent;
 				for (int c = ((Container) parent).getComponentCount() - 1; c >= 0; c--) {
 					Component comp = ((Container) parent).getComponent(c);
-					if (comp.getBounds().contains(x, y)) {
+					if (comp.isVisible() && comp.getBounds().contains(x, y)) {
 						if (comp instanceof Container) {
 							parent = comp;
 							c = ((Container) parent).getComponentCount();
@@ -214,6 +242,8 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					index++;
 				}
 				if (index < theValueBounds.size()) {
+					if (isBreakOnHover)
+						BreakpointHere.breakpoint();
 					CollectionElement<T> moused = theValues.getElement(index);
 					if (theFocus.valueEquals(moused.getElementId()))
 						theHover.replace(false, null, -1, false);
@@ -402,6 +432,16 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		return getLayout().layoutSize(type, getSize(), getInsets(), layoutChildren());
 	}
 
+	@Override
+	public void setName(String name) {
+		super.setName(name);
+		isBreakOnHover = PanelPopulation.isDebugging(name, "hover");
+		isPaintPrint = PanelPopulation.isDebugging(name, "paintPrint");
+		if (PanelPopulation.isDebugging(name, "printUpdates")) {
+			theDebugUpdatePrint = theValues.getIdentity().toString();
+		}
+	}
+
 	private List<AbstractLayout.LayoutChild> layoutChildren() {
 		if (theValues.isEmpty())
 			return Collections.emptyList();
@@ -411,24 +451,43 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 		if (theValues.isEmpty())
 			return children;
 		else if (isConstantSizing) {
-			T value = theValues.get(0);
-			ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, 0, 0, false,
-				false, false, false, false, true);
-			Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+			Component renderer;
+			if (theFocus.value != null && theFocus.value.getElementId().isPresent())
+				renderer = theFocus.component;
+			else if (theHover.value != null && theHover.value.getElementId().isPresent())
+				renderer = theHover.component;
+			else {
+				T value = theValues.get(0);
+				ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, 0, 0,
+					false, false, false, false, false, true);
+				renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+			}
 			renderer.invalidate();
 			AbstractLayout.LayoutChild layoutChild = new AbstractLayout.LayoutChild.ExtractedLayoutChild(
 				new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer, null));
 			for (int i = 0; i < theValues.size(); i++)
 				children.add(layoutChild);
 		} else {
+			int focusRow = (theFocus.value == null || theFocus.component == null || !theFocus.value.getElementId().isPresent()) ? -1
+				: theValues.getElementsBefore(theFocus.value.getElementId());
+			int hoverRow = (theHover.value == null || theHover.component == null || !theHover.value.getElementId().isPresent()) ? -1
+				: theValues.getElementsBefore(theHover.value.getElementId());
 			int row = 0;
 			for (T value : theValues) {
-				ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, row, 0,
-					false, false, false, false, false, true);
-				Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+				Component renderer;
+				if (row == focusRow)
+					renderer = theFocus.component;
+				else if (row == hoverRow)
+					renderer = theHover.component;
+				else {
+					ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(value, value::toString, null), value, row,
+						0, false, false, false, false, false, true);
+					renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
+				}
 				renderer.invalidate();
 				children.add(new AbstractLayout.LayoutChild.ExtractedLayoutChild(
 					new AbstractLayout.LayoutChild.ComponentLayoutChild(renderer, null)));
+				row++;
 			}
 		}
 		return children;
@@ -478,10 +537,16 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 			Rectangle bounds = theValueBounds.get(row);
 			if (bounds == null || !clip.intersects(bounds))
 				continue;
-			if (theHover.component != null && theHover.valueEquals(value.getElementId()))
+			if (theHover.component != null && theHover.valueEquals(value.getElementId())) {
+				if (isPaintPrint)
+					System.out.println("TP paint[" + row + "] hover " + theHover.component.getBounds());
 				continue; // Handled by the actual component
-			else if (theFocus.component != null && theFocus.valueEquals(value.getElementId()))
+			} else if (theFocus.component != null && theFocus.valueEquals(value.getElementId())) {
+				if (isPaintPrint)
+					System.out.println("TP paint[" + row + "] focus " + theFocus.component.getBounds());
 				continue; // Handled by the actual component
+			} else if (isPaintPrint)
+				System.out.println("TP paint[" + row + "] " + bounds);
 
 			cell.set(value.get(), row).setEnabled(theValues.mutableElement(value.getElementId()).isEnabled());
 			Component renderer = theRenderer.getCellRendererComponent(this, cell, CellRenderContext.DEFAULT);
@@ -540,7 +605,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 				}
 				if (newRender != null) {
 					Rectangle bounds = theValueBounds.get(index);
-					if (!bounds.equals(newRender.getBounds())) {
+					if (bounds != null && !bounds.equals(newRender.getBounds())) {
 						repaint = true;
 						newRender.setBounds(bounds);
 					}
@@ -552,6 +617,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 			}
 
 			if (repaint) {
+				invalidate();
 				revalidate();
 				repaint();
 			}

@@ -24,7 +24,6 @@ import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
 import org.qommons.Named;
-import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -86,7 +85,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		if (theConfigs.containsKey(test.getName()))
 			throw new IllegalArgumentException("A test named " + test.getName() + " already exists in this suite");
 		theConfigs.put(test.getName(),
-			ObservableConfig.createRoot(test.getName(), null, __ -> new FastFailLockingStrategy(theLocker.getThreadConstraint())));
+			ObservableConfig.createRoot(test.getName(), null, __ -> new FastFailLockingStrategy()));
 		theContent.add(test);
 		if (configLocation != null)
 			theConfigLocations.putIfAbsent(test.getName(), configLocation);
@@ -138,7 +137,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		String location = theConfigLocations.get(testName);
 		if (location != null) {
 			URL url = QommonsConfig.toUrl(location);
-			ObservableConfig xmlConfig = ObservableConfig.createRoot("", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+			ObservableConfig xmlConfig = ObservableConfig.createRoot("", null, __ -> new FastFailLockingStrategy());
 			try {
 				ObservableConfig.readXml(xmlConfig, url.openStream(), XmlEncoding.DEFAULT);
 			} catch (TextParseException e) {
@@ -208,7 +207,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 			BetterFile testResultsFile = getTestResultsFile(test.getClass());
 			if (testResultsFile.exists()) {
 				ObservableConfig resultsConfig = ObservableConfig.createRoot(test.getName(), null,
-					__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+					__ -> new FastFailLockingStrategy());
 				try {
 					ObservableConfig.readXml(resultsConfig, testResultsFile.read(), XmlEncoding.DEFAULT);
 				} catch (IOException | TextParseException e) {
@@ -271,7 +270,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 					}
 					// Write the results to XML
 					ObservableConfig resultsConfig = ObservableConfig.createRoot("results", null,
-						__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+						__ -> new FastFailLockingStrategy());
 					SimpleObservable<Void> until = SimpleObservable.build().build();
 					SyncValueSet<TestResult> configFailures = resultsConfig.asValue(TestResult.class).at("result").until(until)
 						.buildEntitySet(null);

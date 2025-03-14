@@ -133,8 +133,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 		return theListeners.add(listener, true);
 	}
 
-	void fireChange(DocumentNode node, CollectionChangeType type, boolean deep, Object cause) {
-		ChangeEvent<T> event = new ChangeEvent<>(node, type, deep, node.getStart(), cause);
+	void fireChange(ChangeEvent<T> event) {
 		try (Transaction t = event.use()) {
 			theListeners.forEach(//
 				l -> l.accept(event));
@@ -409,24 +408,27 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 				})//
 				.adjust();
 				Subscription childSub = safeChildren.onChange(evt -> {
+					ChangeEvent<T> toFire = null;
 					switch (evt.getType()) {
 					case add:
 						DocumentNode node = new DocumentNode(this, evt.getNewValue());
 						theChildNodes.add(evt.getIndex(), node);
 						contentLengthChanged(node.theContentLength);
-						fireChange(node, CollectionChangeType.add, false, evt);
+						toFire = new ChangeEvent<>(node, CollectionChangeType.add, false, node.getStart(), evt);
 						node.syncLengths();
 						break;
 					case remove:
 						node = theChildNodes.remove(evt.getIndex());
 						contentLengthChanged(-node.removed());
-						fireChange(node, CollectionChangeType.remove, true, evt);
+						toFire = new ChangeEvent<>(node, CollectionChangeType.remove, true, node.getStart(), evt);
 						break;
 					case set:
 						node = theChildNodes.get(evt.getIndex());
 						node.changed(evt.getNewValue(), evt, true, false);
 						break;
 					}
+					if (toFire != null)
+						fireChange(toFire);
 				});
 				deepChange |= !theChildNodes.isEmpty();
 				theNodeUntil.take(1).act(__ -> childSub.unsubscribe());
@@ -449,7 +451,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 					contentLengthChanged(lengthDiff[0]);
 			}
 			if (withEvents)
-				fireChange(this, CollectionChangeType.set, deepChange, cause);
+				fireChange(new ChangeEvent<>(this, CollectionChangeType.set, deepChange, getStart(), cause));
 			syncLengths();
 		}
 
@@ -541,7 +543,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 					if (!evt.getNode().getPreviousText().isEmpty())
 						swingDoc.remove(evt.getIndex(), evt.getNode().getPreviousText().length());
 					if (!evt.getNode().getPreviousPostText().isEmpty()) {
-						int postTextIndex = evt.getIndex() + evt.getNode().length() - evt.getNode().getPreviousPostText().length();
+						int postTextIndex = evt.getIndex();
 						swingDoc.remove(postTextIndex, evt.getNode().getPreviousPostText().length());
 					}
 					break;

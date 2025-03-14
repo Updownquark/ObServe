@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -24,11 +23,9 @@ import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
-import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 /**
@@ -443,7 +440,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value) {
-		return flatten(value, () -> null);
+		return flatten(value, LambdaUtils.constantSupplier(null));
 	}
 
 	/**
@@ -639,6 +636,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
+		}
+
+		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return theWrapped.getCurrentCauses();
 		}
@@ -746,7 +748,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.firstValue(e -> e != null, () -> null, //
 				transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
-					BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true);
 					return state.getValue1().isEnabled(state.getValue2());
 				}, "enabled", "enabled"))), //
 				getSource().isEnabled());
@@ -755,7 +757,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public String isAcceptable(T value) {
 			try (Transaction t = lock()) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false);
 				ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
 				if (rq.getError() != null)
 					return rq.getError();
@@ -766,7 +768,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			try (Transaction t = lock(true, null)) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false);
 				S source = state.getValue1()//
 					.set(//
 						value, state.getValue2(), false)
@@ -1222,6 +1224,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		private final Function<? super T, String> theDisablement;
 
 		protected AlwaysDisabledValue(ObservableValue<T> value, Function<? super T, String> disablement) {
+			if (value == null || disablement == null)
+				throw new NullPointerException();
 			theValue = value;
 			theDisablement = disablement;
 		}
@@ -1320,6 +1324,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
 			return obj instanceof AlwaysDisabledValue && theValue.equals(((AlwaysDisabledValue<?>) obj).theValue);
 		}
 
@@ -1580,18 +1586,28 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		return SettableValue.<T> build().withValue(initialValue).build();
 	}
 
-	/** @param <T> The type for the settable value */
-	class Builder<T> extends TransactableBuilder.Default<Builder<T>> {
-		static final AtomicLong ID_GEN = new AtomicLong();
+	/**
+	 * Sometimes this create method is nicer than using {@link #build()} because that method usually requires the type to be specified
+	 * explicitly, but this the compiler can often fill in the type for this method.
+	 *
+	 * @param <T> The type for the value
+	 * @param build Configuration for the value
+	 * @return The built value
+	 */
+	static <T> SettableValue<T> create(Consumer<Builder<T>> build) {
+		Builder<T> builder = new Builder<>();
+		build.accept(builder);
+		return builder.build();
+	}
 
+	/** @param <T> The type for the settable value */
+	class Builder<T> extends AbstractEventableBuilder<SettableValue<T>, Builder<T>> {
 		private boolean isVetoable;
-		private ListenerList.Builder theListenerBuilder;
 		private T theInitialValue;
 		private boolean isNullable;
 
 		Builder() {
 			super("settable-value");
-			theListenerBuilder = ListenerList.build();
 			isNullable = true;
 		}
 
@@ -1602,11 +1618,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		public Builder<T> nullable(boolean nullable) {
 			isNullable = nullable;
-			return this;
-		}
-
-		public Builder<T> withListening(Consumer<ListenerList.Builder> listening) {
-			listening.accept(theListenerBuilder);
 			return this;
 		}
 
@@ -1621,9 +1632,9 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 			if (!isNullable && theInitialValue == null)
 				throw new IllegalArgumentException("This value cannot be null.  Provide an initial value.");
 			if (isVetoable)
-				return new VetoableSettableValue<>(getDescription(), isNullable, theListenerBuilder, getLocker(), theInitialValue);
+				return new VetoableSettableValue<>(getDescription(), isNullable, buildData(), theInitialValue);
 			else
-				return new SimpleSettableValue<>(getDescription(), isNullable, getLocker(), theListenerBuilder, theInitialValue);
+				return new SimpleSettableValue<>(getDescription(), isNullable, buildData(), theInitialValue);
 		}
 	}
 }

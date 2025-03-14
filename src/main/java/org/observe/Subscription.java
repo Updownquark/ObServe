@@ -62,6 +62,49 @@ public interface Subscription extends AutoCloseable {
 		}
 	};
 
+	/** A Subscription that will only execute its close action the first time it is {@link #unsubscribe() unsubscribed} */
+	public static class ReleaseOnceSubscription implements Subscription {
+		private final Runnable theCloseAction;
+		private boolean isClosed;
+
+		/** @param closeAction The action to take when the subscription is unsubscribed */
+		public ReleaseOnceSubscription(Runnable closeAction) {
+			theCloseAction = closeAction;
+		}
+
+		/** @return Whether this transaction has been {@link #unsubscribe()}d */
+		public boolean isClosed() {
+			return isClosed;
+		}
+
+		@Override
+		public void unsubscribe() {
+			if (isClosed)
+				return;
+			synchronized (this) {
+				if (isClosed)
+					return;
+				isClosed = true;
+			}
+			theCloseAction.run();
+		}
+
+		@Override
+		public int hashCode() {
+			return theCloseAction.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ReleaseOnceSubscription && theCloseAction.equals(((ReleaseOnceSubscription) obj).theCloseAction);
+		}
+
+		@Override
+		public String toString() {
+			return theCloseAction.toString();
+		}
+	}
+
 	/** A subscription composed of any number of others */
 	static class MultiSubscription implements Subscription {
 		private final Subscription[] subs;

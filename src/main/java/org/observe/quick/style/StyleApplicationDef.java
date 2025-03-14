@@ -383,9 +383,15 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			else if (theModelValue.getType() == null)
 				throw new ExpressoInterpretationException("Cannot use a variable-type model value in this style",
 					env.reporting().getPosition(), getExpressionLength());
-			ModelInstanceConverter<SettableValue<?>, M> converter = ModelTypes.Value.forType(//
-				(TypeToken<Object>) theModelValue.getType().getType(env))//
+			TypeToken<Object> valueType = (TypeToken<Object>) theModelValue.getType().getType(env);
+			ModelInstanceConverter<SettableValue<?>, M> converter = ModelTypes.Value.forType(valueType)//
 				.convert(type, env);
+			if (converter == null) {
+				exHandler.handle1(() -> new ExpressoInterpretationException(
+					"Cannot convert " + theModelValue.getName() + " (" + valueType + ") to type " + type,
+					env.reporting().getFileLocation()));
+				return null;
+			}
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				new Interpreted<>(theModelValue, (ModelInstanceConverter<SettableValue<?>, MV>) converter), theModelValue);
 		}
@@ -490,17 +496,26 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 */
 	protected QonfigElement appliesLocal(QonfigElement element) {
 		for (QonfigElementOrAddOn type : theTypes.values()) {
-			if (!element.isInstance(type))
-				return null;
+			if (!element.isInstance(type)) {
+				if (element.getPromise() == null || !element.getPromise().isInstance(type))
+					return null;
+			}
 		}
 		if (theRole != null) {
-			if (theRole.getType() != null && !element.isInstance(theRole.getType()))
-				return null;
-			if (!element.getDeclaredRoles().contains(theRole.getDeclared()))
-				return null;
+			if (theRole.getType() != null && !element.isInstance(theRole.getType())) {
+				if (element.getPromise() == null || !element.getPromise().isInstance(theRole.getType()))
+					return null;
+			}
+			if (!element.getDeclaredRoles().contains(theRole.getDeclared())) {
+				if (element.getPromise() == null || !element.getPromise().getDeclaredRoles().contains(theRole.getDeclared()))
+					return null;
+			}
 			QonfigElement parent = element.getParent();
-			if (parent == null || !parent.isInstance(theRole.getOwner()))
-				return null;
+			if (parent == null || !parent.isInstance(theRole.getOwner())) {
+				if (element.getPromise() == null || element.getPromise().getParent() == null
+					|| !element.getPromise().getParent().isInstance(theRole.getOwner()))
+					return null;
+			}
 			return parent;
 		} else
 			return element;

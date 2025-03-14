@@ -39,11 +39,14 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
+import org.observe.expresso.ops.Invocation;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
+import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.config.AbstractQIS;
@@ -135,7 +138,13 @@ public class ExpressoTransformations {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModelPath = session.get(ModelValueElement.PATH_KEY, String.class);
+			String path = session.get(ModelValueElement.PATH_KEY, String.class);
+			if (path == null)
+				path = "";
+			if (path.length() > 0)
+				path += ".";
+			path += getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
+			theModelPath = path;
 			isPrepared = false;
 		}
 
@@ -320,6 +329,7 @@ public class ExpressoTransformations {
 			private final List<Operation.Instantiator<?, ?>> theOperations;
 			private final boolean isEfficientCopy;
 			private final TransformInstantiator<IMV1, IMV2> theFullTransform;
+			private final String theAlias;
 
 			protected Instantiator(AbstractExpressoTransformedElement.Interpreted<?, MV1, ?, IMV1, ?, MV2, ?, IMV2> interpreted)
 				throws ModelInstantiationException {
@@ -338,6 +348,7 @@ public class ExpressoTransformations {
 				theOperations = operations;
 				isEfficientCopy = efficientCopy;
 				theFullTransform = (TransformInstantiator<IMV1, IMV2>) fullTransform;
+				theAlias = getModelPath() + ":" + interpreted.toString();
 			}
 
 			protected List<Operation.Instantiator<?, ?>> getOperations() {
@@ -355,7 +366,10 @@ public class ExpressoTransformations {
 			}
 
 			public IMV2 transformInternal(IMV1 source, ModelSetInstance models) throws ModelInstantiationException {
-				return theFullTransform.transform(source, models);
+				IMV2 result = theFullTransform.transform(source, models);
+				if (result instanceof Identifiable)
+					((Identifiable) result).alias(theAlias);
+				return result;
 			}
 
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
@@ -802,15 +816,6 @@ public class ExpressoTransformations {
 
 		ObservableMultiMapTransformations.configureTransformation(interpreter);
 
-		interpreter.createWith("map-with", MapWith.class, session -> {
-			ExElement.Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
-			if (!(parent instanceof AbstractCompiledTransformation))
-				throw new QonfigInterpretationException(
-					"This interpretation may only be used by a parent whose interpretation is an instance of "
-						+ AbstractCompiledTransformation.class.getName(),
-						session.getElement().getPositionInFile(), session.getElement().getType().getName().length());
-			return new MapWith<>((AbstractCompiledTransformation<?, ?, ?>) parent, session.getFocusType());
-		});
 		interpreter.createWith("combine-with", CombineWith.class, session -> {
 			ExElement.Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
 			if (!(parent instanceof AbstractCompiledTransformation))
@@ -931,8 +936,8 @@ public class ExpressoTransformations {
 			if (preferMessage)
 				test = element.interpret(testX, ModelTypes.Value.forType(String.class));
 			else {
-				String uModMsg = element.reporting().getFileLocation().getPosition(0).toShortString()
-					+ "boolean->String filter not reversible";
+				String uModMsg = testX.getFilePosition(0).toShortString()
+					+ ": boolean->String filter not reversible";
 				test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 					.mapValue(ModelTypes.Value.forType(String.class),
 						bv -> SettableValue.asSettable(bv.map(b -> b ? null : uModMsg), __ -> uModMsg));
@@ -940,8 +945,8 @@ public class ExpressoTransformations {
 		} catch (ExpressoInterpretationException e) {
 			try {
 				if (preferMessage) {
-					String uModMsg = element.reporting().getFileLocation().getPosition(0).toShortString()
-						+ "boolean->String filter not reversible";
+					String uModMsg = testX.getFilePosition(0).toShortString()
+						+ ": boolean->String filter not reversible";
 					test = element.interpret(testX, ModelTypes.Value.forType(boolean.class))//
 						.mapValue(ModelTypes.Value.forType(String.class),
 							bv -> SettableValue.asSettable(bv.map(b -> b ? null : uModMsg), __ -> uModMsg));
@@ -967,6 +972,8 @@ public class ExpressoTransformations {
 	public interface CompiledTransformation<M1, M2, E extends ExElement> extends Operation<M1, M2, E> {
 		/** @return The model ID of the variable that will contain the source value being transformed */
 		ModelComponentId getSourceName();
+
+		ModelComponentId getPreviousResultAs();
 
 		@Override
 		Interpreted<M1, ?, ?, ?, M2, ?, ? extends E> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
@@ -1090,6 +1097,7 @@ public class ExpressoTransformations {
 
 			/**
 			 * @param sourceValue The source value being transformed
+			 * @param previousResultValue The container to publish the previously-evaluated result value in
 			 * @param targetType The transformed value type
 			 * @param modifications Modifications from {@link ExpressoTransformations.CombineWith} operations to
 			 *        {@link ExpressoTransformations.CombineWith.TransformationModification#prepareTransformOperation(TransformationValues)
@@ -1099,7 +1107,7 @@ public class ExpressoTransformations {
 			 * @return The transformation reverse
 			 * @throws ModelInstantiationException If the reverse operation could not be instantiated
 			 */
-			Transformation.TransformReverse<S, T> reverse(SettableValue<S> sourceValue,
+			Transformation.TransformReverse<S, T> reverse(SettableValue<S> sourceValue, SettableValue<T> previousResultValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException;
 
@@ -1131,11 +1139,12 @@ public class ExpressoTransformations {
 		interpretation = AbstractCompiledTransformation.Interpreted.class) })
 	public static abstract class AbstractCompiledTransformation<M1, M2, E extends ExElement> extends ExElement.Def.Abstract<E>
 	implements CompiledTransformation<M1, M2, E> {
-		private ModelComponentId theSourceName;
+		private ModelComponentId theSourceAs;
+		private ModelComponentId thePreviousResultAs;
 		private VariableType theType;
-		private MapWith<?> theMapWith;
 		private CompiledExpression theEquivalence;
 		private final List<CombineWith<?>> theCombinedValues;
+		private CompiledExpression theMap;
 		private CompiledMapReverse<?> theReverse;
 
 		private boolean isCached;
@@ -1156,7 +1165,13 @@ public class ExpressoTransformations {
 
 		@Override
 		public ModelComponentId getSourceName() {
-			return theSourceName;
+			return theSourceAs;
+		}
+
+		@QonfigAttributeGetter(asType = "map-to", value = "previous-result-as")
+		@Override
+		public ModelComponentId getPreviousResultAs() {
+			return thePreviousResultAs;
 		}
 
 		/** @return The specified type of values produced by this transformation */
@@ -1200,12 +1215,6 @@ public class ExpressoTransformations {
 			return isOneToMany;
 		}
 
-		/** @return The &lt;map-with> operation that produces transformed values from source values */
-		@QonfigChildGetter(asType = "map-to", value = "map")
-		public MapWith<?> getMapWith() {
-			return theMapWith;
-		}
-
 		/** @return The equivalence for the result value */
 		@QonfigAttributeGetter(asType = "map-to", value = "equivalence")
 		public CompiledExpression getEquivalence() {
@@ -1216,6 +1225,12 @@ public class ExpressoTransformations {
 		@QonfigChildGetter(asType = "map-to", value = "combined-value")
 		public List<CombineWith<?>> getCombinedValues() {
 			return Collections.unmodifiableList(theCombinedValues);
+		}
+
+		/** @return The expression producing transformed values from source values */
+		@QonfigAttributeGetter(asType = "map-to")
+		public CompiledExpression getMap() {
+			return theMap;
 		}
 
 		/** @return The &lt;map-reverse> element to allow modification of the transformed model value by operations on the source value */
@@ -1229,8 +1244,10 @@ public class ExpressoTransformations {
 			super.update(session);
 			// This is quicker than retrieving and grabbing it from the add-on
 			String sourceAs = session.getAttributeText("source-as");
+			String previousResultAs = session.getAttributeText("previous-result-as");
 			ExWithElementModel.Def withElModel = getAddOn(ExWithElementModel.Def.class);
-			theSourceName = withElModel.getElementValueModelId(sourceAs);
+			theSourceAs = withElModel.getElementValueModelId(sourceAs);
+			thePreviousResultAs = previousResultAs == null ? null : withElModel.getElementValueModelId(previousResultAs);
 			theType = getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
 			isCached = session.getAttribute("cache", boolean.class);
 			isReEvalOnUpdate = session.getAttribute("re-eval-on-update", boolean.class);
@@ -1239,16 +1256,29 @@ public class ExpressoTransformations {
 			isManyToOne = session.getAttribute("many-to-one", boolean.class);
 			isOneToMany = session.getAttribute("one-to-many", boolean.class);
 
-			theMapWith = syncChild(MapWith.class, theMapWith, session, "map");
 			theEquivalence = getAttributeExpression("equivalence", session);
 			syncChildren(CombineWith.class, theCombinedValues, session.forChildren("combined-value"));
+			theMap = getValueExpression(session);
 			theReverse = syncChild(CompiledMapReverse.class, theReverse, session, "reverse");
 
 			for (CombineWith<?> combine : theCombinedValues)
 				withElModel.satisfyElementValueType(combine.getValueVariable(), ModelTypes.Value, //
 					(interp, env) -> interp.interpret(combine.getElementValue(), ModelTypes.Value.any()).getType());
-			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceName, ModelTypes.Value, //
+			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceAs, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			if (thePreviousResultAs != null) {
+				if (refersToSource(theMap.getExpression(), thePreviousResultAs.getName())) {
+					VariableType type = getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
+					if (type == null) {
+						reporting().at(session.attributes().get("previous-result-as").getContent())
+						.error("When the 'previous-result-as' variable is used to produce a value,"
+							+ " the 'type' of the operation must be also to avoid circularity");
+					}
+				}
+				withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(thePreviousResultAs,
+					ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getOrEvalTargetType()));
+			}
+
 		}
 
 		@Override
@@ -1270,11 +1300,11 @@ public class ExpressoTransformations {
 		protected static abstract class Interpreted<M1, S, T, MV1 extends M1, M2, MV2 extends M2, E extends ExElement>
 		extends ExElement.Interpreted.Abstract<E> implements CompiledTransformation.Interpreted<M1, S, T, MV1, M2, MV2, E> {
 			private TypeToken<S> theSourceType;
-			private TypeToken<T> theEvaluatedTargetType;
-			private MapWith.Interpreted<S, T, ?> theMapWith;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Equivalence<? super T>>> theEquivalence;
 			private final List<CombineWith.Interpreted<?, ?>> theCombinedValues;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theMap;
 			private CompiledMapReverse.Interpreted<S, T, ?> theReverse;
+			private boolean isTesting;
 
 			/**
 			 * @param definition The definition to interpret
@@ -1295,14 +1325,9 @@ public class ExpressoTransformations {
 				return theSourceType;
 			}
 
-			/** @return The type of values in the transformed model value */
-			public TypeToken<T> getEvaluatedTargetType() {
-				return theEvaluatedTargetType;
-			}
-
-			/** @return The &lt;map-with> operation that produces transformed values from source values */
-			public MapWith.Interpreted<S, T, ?> getMapWith() {
-				return theMapWith;
+			/** @return The expression producing transformed values from source values */
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getMap() {
+				return theMap;
 			}
 
 			/** @return The equivalence for the result value */
@@ -1315,6 +1340,23 @@ public class ExpressoTransformations {
 				return Collections.unmodifiableList(theCombinedValues);
 			}
 
+			TypeToken<T> getOrEvalTargetType() throws ExpressoInterpretationException {
+				if (theMap == null) {
+					TypeToken<T> evaluatedTT = getDefinition().getType() == null ? null
+						: (TypeToken<T>) getDefinition().getType().getType(getExpressoEnv());
+					if (evaluatedTT != null)
+						return evaluatedTT;
+					// ??? We need to do the combined values first, because the map-with may (and most likely does) use the combined value
+					// variables
+					syncChildren(getDefinition().getCombinedValues(), theCombinedValues, def -> def.interpret(this),
+						(i, vEnv) -> i.update(vEnv));
+					try (Transaction t = Invocation.asAction()) {
+						theMap = interpret(getDefinition().getMap(), ModelTypes.Value.<SettableValue<T>> anyAs());
+					}
+				}
+				return (TypeToken<T>) theMap.getType().getType(0);
+			}
+
 			/**
 			 * @return The &lt;map-reverse> element to allow modification of the transformed model value by operations on the source value
 			 */
@@ -1322,37 +1364,39 @@ public class ExpressoTransformations {
 				return theReverse;
 			}
 
+			public boolean isTesting() {
+				return isTesting;
+			}
+
 			@Override
 			public void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theMap = null;
 				theSourceType = (TypeToken<S>) sourceType.getType(0);
-				theEvaluatedTargetType = getDefinition().getType() == null ? null : (TypeToken<T>) getDefinition().getType().getType(env);
+				isTesting = env.isTesting();
 				super.update(env);
-				// ??? We need to do the combined values first, because the map-with may (and most likely does) use the combined value
-				// variables
-				syncChildren(getDefinition().getCombinedValues(), theCombinedValues, def -> def.interpret(this),
-					(i, vEnv) -> i.update(vEnv));
-				theMapWith = syncChild(getDefinition().getMapWith(), theMapWith, def -> def.interpret(this),
-					(m, mEnv) -> m.update(theSourceType, mEnv));
+				TypeToken<T> targetType = getOrEvalTargetType();
+				if (theMap == null)
+					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.forType(targetType));
 				if (getDefinition().getEquivalence() == null)
 					theEquivalence = null;
 				else {
 					theEquivalence = interpret(getDefinition().getEquivalence(),
 						ModelTypes.Value.forType(TypeTokens.get().keyFor(Equivalence.class)
-							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theMapWith.getTargetType()))));
+							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(targetType))));
 				}
 				theReverse = syncChild(getDefinition().getReverse(), theReverse, def -> def.interpret(this),
-					(r, rEnv) -> r.update(getDefinition().getSourceName(), theMapWith.getSourceType(), theMapWith.getTargetType(), rEnv));
+					(r, rEnv) -> r.update(getDefinition().getSourceName(), theSourceType, targetType, rEnv));
 			}
 
 			@Override
 			public TypeToken<T> getTargetValueType() {
-				return theMapWith.getTargetType();
+				return (TypeToken<T>) theMap.getType().getType(0);
 			}
 
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				List<InterpretedValueSynth<?, ?>> components = new ArrayList<>();
-				components.addAll(theMapWith.getComponents());
+				components.add(theMap);
 				if (theEquivalence != null)
 					components.add(theEquivalence);
 				if (theReverse != null)
@@ -1371,10 +1415,12 @@ public class ExpressoTransformations {
 		 */
 		public static abstract class Instantiator<S, T, MV1, MV2> implements CompiledTransformation.Instantiator<S, T, MV1, MV2> {
 			private final ModelInstantiator theLocalModel;
-			private final MapWith.Instantiator<S, T> theMapWith;
 			private final List<CombineWith.Instantiator<?>> theCombinedValues;
+			private final ModelValueInstantiator<SettableValue<T>> theMap;
+			private final S theDefaultSource;
 			private final CompiledMapReverse.Instantiator<S, T> theReverse;
 			private final ModelComponentId theSourceVariable;
+			private final ModelComponentId thePreviousResultVariable;
 			private final boolean isCached;
 			private final boolean isReEvalOnUpdate;
 			private final boolean isFireIfUnchanged;
@@ -1382,10 +1428,11 @@ public class ExpressoTransformations {
 			private final boolean isManyToOne;
 			private final boolean isOneToMany;
 			private final ModelValueInstantiator<SettableValue<Equivalence<? super T>>> theEquivalence;
+			private final boolean isTesting;
 
 			/**
 			 * @param localModel The instantiator for the local model of the transformation
-			 * @param mapWith The instantiator for the &lt;map-with> operator to produce transformed values from source values
+			 * @param map The instantiator for the map operation to produce transformed values from source values
 			 * @param combinedValues The instantiators for the &lt;combine-with> elements to combine with the source value to produce
 			 *        transformed values
 			 * @param reverse The instantiator for the &lt;map-reverse> element to allow modification of the transformed model value by
@@ -1399,15 +1446,19 @@ public class ExpressoTransformations {
 			 * @param oneToMany See {@link XformDef#isOneToMany()}
 			 * @param equivalence The equivalence for the transformed model value
 			 */
-			protected Instantiator(ModelInstantiator localModel, MapWith.Instantiator<S, T> mapWith,
+			protected Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
-				ModelComponentId sourceVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
-				boolean manyToOne, boolean oneToMany, ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
+				ModelComponentId sourceVariable, ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate,
+				boolean fireIfUnchanged, boolean nullToNull,
+				boolean manyToOne, boolean oneToMany, ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
+				boolean testing) {
 				theLocalModel = localModel;
-				theMapWith = mapWith;
+				theMap = map;
+				theDefaultSource = defaultSource;
 				theCombinedValues = combinedValues;
 				theReverse = reverse;
 				theSourceVariable = sourceVariable;
+				thePreviousResultVariable = previousResultVariable;
 				isCached = cached;
 				isReEvalOnUpdate = reEvalOnUpdate;
 				isFireIfUnchanged = fireIfUnchanged;
@@ -1415,12 +1466,13 @@ public class ExpressoTransformations {
 				isManyToOne = manyToOne;
 				isOneToMany = oneToMany;
 				theEquivalence = equivalence;
+				isTesting = testing;
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.instantiate();
-				theMapWith.instantiate();
+				theMap.instantiate();
 				for (CombineWith.Instantiator<?> combinedValue : theCombinedValues)
 					combinedValue.instantiate();
 				if (theReverse != null)
@@ -1434,9 +1486,12 @@ public class ExpressoTransformations {
 				ModelSetInstance models) throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
 				SettableValue<S> sourceV = SettableValue.<S> build()//
-					.withValue(TypeTokens.get().getDefaultValue(theMapWith.getSourceType()))//
+					.withValue(theDefaultSource)//
 					.build();
+				SettableValue<T> previousResultV = thePreviousResultVariable == null ? null : SettableValue.create();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
+				if (previousResultV != null)
+					ExFlexibleElementModelAddOn.satisfyElementValue(thePreviousResultVariable, models, previousResultV);
 				Transformation.ReversibleTransformationBuilder<S, T, ?> builder = precursor//
 					.cache(isCached)//
 					.reEvalOnUpdate(isReEvalOnUpdate)//
@@ -1449,17 +1504,17 @@ public class ExpressoTransformations {
 					builder = combinedValue.addTo(builder, models, modifications::add);
 				modifications = Collections.unmodifiableList(modifications);
 
-				SettableValue<T> targetV = theMapWith.getMap().get(models);
-				MaybeReversibleTransformation<S, T> transformation = theMapWith.buildTransformation(builder, sourceV, targetV,
+				SettableValue<T> targetV = theMap.get(models);
+				MaybeReversibleTransformation<S, T> transformation = buildTransformation(builder, sourceV, previousResultV, targetV,
 					modifications, models);
 
 				Transformation<S, T> finalTransformation;
 				if (theReverse != null)
 					finalTransformation = transformation.withReverse(//
-						theReverse.reverse(sourceV, modifications, transformation, models));
+						theReverse.reverse(sourceV, previousResultV, modifications, transformation, models));
 				else
 					finalTransformation = transformation.withReverse(//
-						theMapWith.reverse(sourceV, targetV, modifications, transformation, models));
+						reverse(sourceV, previousResultV, targetV, modifications, transformation, models));
 
 				if (theEquivalence != null) {
 					Equivalence<? super T> equivalence = theEquivalence.get(models).get();
@@ -1474,7 +1529,8 @@ public class ExpressoTransformations {
 					sourceModels = theLocalModel.wrap(sourceModels);
 					newModels = theLocalModel.wrap(newModels);
 				}
-				if (theMapWith.isDifferent(sourceModels, newModels))
+				SettableValue<T> map = theMap.get(sourceModels);
+				if (map != theMap.forModelCopy(map, sourceModels, newModels))
 					return true;
 				else if (theEquivalence != null) {
 					SettableValue<Equivalence<? super T>> eq = theEquivalence.get(sourceModels);
@@ -1487,213 +1543,6 @@ public class ExpressoTransformations {
 				if (theReverse != null && theReverse.isDifferent(sourceModels, newModels))
 					return true;
 				return false;
-			}
-		}
-
-		/**
-		 * Supports {@link Operation.EfficientCopyingInstantiator} for &lt;map-to> operations
-		 *
-		 * @param <S> The source type of the transformation
-		 * @param <T> The target type of the transformation
-		 * @param <MV1> The instance type of the source value
-		 * @param <MV2> The instance type of the transformed value
-		 */
-		public static abstract class EfficientCopyingInstantiator<S, T, MV1, MV2> extends Instantiator<S, T, MV1, MV2>
-		implements Operation.EfficientCopyingInstantiator<MV1, MV2> {
-			/**
-			 * @param localModel The instantiator for the local model of the transformation
-			 * @param mapWith The instantiator for the &lt;map-with> operator to produce transformed values from source values
-			 * @param combinedValues The instantiators for the &lt;combine-with> elements to combine with the source value to produce
-			 *        transformed values
-			 * @param reverse The instantiator for the &lt;map-reverse> element to allow modification of the transformed model value by
-			 *        operations on the source value
-			 * @param sourceVariable The model variable in which to publish the source value currently being transformed
-			 * @param cached See {@link XformDef#isCached()}
-			 * @param reEvalOnUpdate See {@link XformDef#isReEvalOnUpdate()}
-			 * @param fireIfUnchanged See {@link XformDef#isFireIfUnchanged()}
-			 * @param nullToNull See {@link XformDef#isNullToNull()}
-			 * @param manyToOne See {@link XformDef#isManyToOne()}
-			 * @param oneToMany See {@link XformDef#isOneToMany()}
-			 * @param equivalence The equivalence for the transformed model value
-			 */
-			protected EfficientCopyingInstantiator(ModelInstantiator localModel, MapWith.Instantiator<S, T> mapWith,
-				List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
-				ModelComponentId sourceVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull,
-				boolean manyToOne, boolean oneToMany, ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
-				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
-					manyToOne, oneToMany, equivalence);
-			}
-
-			@Override
-			public MV2 forModelCopy(MV2 prevValue, MV1 newSource, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				if (newSource == getSource(prevValue) && !isDifferent(sourceModels, newModels))
-					return prevValue;
-				else
-					return transform(newSource, newModels);
-			}
-		}
-	}
-
-	/**
-	 * A &lt;map-with> operation in a &lt;map-to> transform operation to produce transformed values from source values
-	 *
-	 * @param <E> The type of expresso element produced
-	 */
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "map-with", interpretation = MapWith.Interpreted.class)
-	public static class MapWith<E extends ExElement> extends ExElement.Def.Abstract<E> {
-		private CompiledExpression theMap;
-
-		/**
-		 * @param parent The &lt;map-to> parent of this element
-		 * @param qonfigType The Qonfig type of this element
-		 */
-		public MapWith(AbstractCompiledTransformation<?, ?, ?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
-		}
-
-		@Override
-		public AbstractCompiledTransformation<?, ?, ?> getParentElement() {
-			return (AbstractCompiledTransformation<?, ?, ?>) super.getParentElement();
-		}
-
-		/** @return The expression producing transformed values from source values */
-		@QonfigAttributeGetter
-		public CompiledExpression getMap() {
-			return theMap;
-		}
-
-		@Override
-		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			super.doUpdate(session);
-			theMap = getValueExpression(session);
-		}
-
-		/**
-		 * @param <S> The type of values in the source model value
-		 * @param <T> The type of values in the transformed model value
-		 * @param parent The interpreted &lt;map-to> parent for the interpreted map-with
-		 * @return The interpreted map-with
-		 */
-		public <S, T> Interpreted<S, T, ? extends E> interpret(AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?> parent) {
-			return new Interpreted<>(this, parent);
-		}
-
-		/**
-		 * Interpretation for {@link MapWith}
-		 *
-		 * @param <S> The type of values in the source model value
-		 * @param <T> The type of values in the transformed model value
-		 * @param <E> The type of expresso element produced
-		 */
-		protected static class Interpreted<S, T, E extends ExElement> extends ExElement.Interpreted.Abstract<E> {
-			private TypeToken<S> theSourceType;
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theMap;
-			private boolean isTesting;
-
-			/**
-			 * @param definition The definition to interpret
-			 * @param parent The parent &lt;map-to> element
-			 */
-			protected Interpreted(MapWith<? super E> definition, AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?> parent) {
-				super(definition, parent);
-			}
-
-			@Override
-			public MapWith<? super E> getDefinition() {
-				return (MapWith<? super E>) super.getDefinition();
-			}
-
-			@Override
-			public AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?> getParentElement() {
-				return (AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?>) super.getParentElement();
-			}
-
-			/** @return The expression producing transformed values from source values */
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getMap() {
-				return theMap;
-			}
-
-			/** @return The type of values in the source model value */
-			public TypeToken<S> getSourceType() {
-				return theSourceType;
-			}
-
-			/** @return The type of values in the target model value */
-			public TypeToken<T> getTargetType() {
-				return (TypeToken<T>) theMap.getType().getType(0);
-			}
-
-			/**
-			 * Initializes or updates this map-with
-			 *
-			 * @param sourceType The type of values in the source model value
-			 * @param env The expresso environment to use to interpret expressions
-			 * @throws ExpressoInterpretationException If this map-with could not be interpreted
-			 */
-			public void update(TypeToken<S> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theSourceType = sourceType;
-				super.update(env);
-				if (getParentElement().getEvaluatedTargetType() != null)
-					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.forType(getParentElement().getEvaluatedTargetType()));
-				else
-					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.<SettableValue<T>> anyAs());
-				isTesting = env.isTesting();
-			}
-
-			/** @return The expression components of this map-with */
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(theMap);
-			}
-
-			/**
-			 * @return The instantiated map-with
-			 * @throws ModelInstantiationException If this map-with could not be instantiated
-			 */
-			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(theSourceType, theMap.instantiate(), isTesting);
-			}
-		}
-
-		/**
-		 * Instantiator for a {@link MapWith}
-		 *
-		 * @param <S> The type of values in the source model value
-		 * @param <T> The type of values in the transformed model value
-		 */
-		public static class Instantiator<S, T> {
-			private final TypeToken<S> theSourceType;
-			private final ModelValueInstantiator<SettableValue<T>> theMap;
-			private final boolean isTesting;
-
-			/**
-			 * @param sourceType The type of values in the source model value
-			 * @param map The instantiator for the transformed value producer
-			 * @param testing Whether this instantiator is in a test environment
-			 */
-			public Instantiator(TypeToken<S> sourceType, ModelValueInstantiator<SettableValue<T>> map, boolean testing) {
-				theSourceType = sourceType;
-				theMap = map;
-				isTesting = testing;
-			}
-
-			/** @return THe type of values in the source model value */
-			public TypeToken<S> getSourceType() {
-				return theSourceType;
-			}
-
-			/** @return The instantiator for the transformed value producer */
-			public ModelValueInstantiator<SettableValue<T>> getMap() {
-				return theMap;
-			}
-
-			/**
-			 * Initializes model components in this map-with instantiator
-			 *
-			 * @throws ModelInstantiationException If any components of this instantiator could not be instantiated
-			 */
-			public void instantiate() throws ModelInstantiationException {
-				theMap.instantiate();
 			}
 
 			/**
@@ -1710,12 +1559,14 @@ public class ExpressoTransformations {
 			 * @throws ModelInstantiationException If the transformation could not be configured
 			 */
 			public MaybeReversibleTransformation<S, T> buildTransformation(ReversibleTransformationBuilder<S, T, ?> builder,
-				SettableValue<S> sourceValue, SettableValue<T> mappedValue,
+				SettableValue<S> sourceValue, SettableValue<T> previousResultValue, SettableValue<T> mappedValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, ModelSetInstance models)
 					throws ModelInstantiationException {
 				BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> mapFn = LambdaUtils
 					.printableBiFn((source, tvs) -> {
 						sourceValue.set(source, null);
+						if (previousResultValue != null)
+							previousResultValue.set(tvs.getPreviousResult());
 						for (CombineWith.TransformationModification<S, T> mod : modifications)
 							mod.prepareTransformOperation(tvs);
 						return mappedValue.get();
@@ -1736,7 +1587,8 @@ public class ExpressoTransformations {
 			 * @return The reverse operation
 			 * @throws ModelInstantiationException If the reverse operation could not be configured
 			 */
-			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, SettableValue<T> mappedValue,
+			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, SettableValue<T> previousResultValue,
+				SettableValue<T> mappedValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, MaybeReversibleTransformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException {
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
@@ -1746,18 +1598,26 @@ public class ExpressoTransformations {
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
 				reverseFn = (target, tvs) -> {
 					prepareTx(tvs, modifications);
+					if (previousResultValue != null)
+						previousResultValue.set(tvs.getPreviousResult());
 					mappedValue.set(target, null);
 					return sourceV.get();
 				};
 				enabledFn = tvs -> {
 					prepareTx(tvs, modifications);
+					if (previousResultValue != null)
+						previousResultValue.set(tvs.getPreviousResult());
 					return mappedValue.isEnabled().get();
 				};
 				acceptFn = (target, tvs) -> {
 					prepareTx(tvs, modifications);
+					if (previousResultValue != null)
+						previousResultValue.set(tvs.getPreviousResult());
 					return mappedValue.isAcceptable(target);
 				};
 				addFn = (target, tvs, test) -> {
+					if (previousResultValue != null)
+						previousResultValue.set(null);
 					return reverseFn.apply(target, tvs);
 				};
 				addAcceptFn = acceptFn;
@@ -1781,16 +1641,52 @@ public class ExpressoTransformations {
 				for (CombineWith.TransformationModification<S, T> mod : modifications)
 					mod.prepareTransformOperation(tvs);
 			}
+		}
 
+		/**
+		 * Supports {@link Operation.EfficientCopyingInstantiator} for &lt;map-to> operations
+		 *
+		 * @param <S> The source type of the transformation
+		 * @param <T> The target type of the transformation
+		 * @param <MV1> The instance type of the source value
+		 * @param <MV2> The instance type of the transformed value
+		 */
+		public static abstract class EfficientCopyingInstantiator<S, T, MV1, MV2> extends Instantiator<S, T, MV1, MV2>
+		implements Operation.EfficientCopyingInstantiator<MV1, MV2> {
 			/**
-			 * @param sourceModels The source models to compare
-			 * @param newModels The new models to compare
-			 * @return Whether this operation's instantiation differs from one model instance set to the next
-			 * @throws ModelInstantiationException If the differences could not be determined
+			 * @param localModel The instantiator for the local model of the transformation
+			 * @param map The instantiator for the &lt;map-with> operator to produce transformed values from source values
+			 * @param combinedValues The instantiators for the &lt;combine-with> elements to combine with the source value to produce
+			 *        transformed values
+			 * @param reverse The instantiator for the &lt;map-reverse> element to allow modification of the transformed model value by
+			 *        operations on the source value
+			 * @param sourceVariable The model variable in which to publish the source value currently being transformed
+			 * @param cached See {@link XformDef#isCached()}
+			 * @param reEvalOnUpdate See {@link XformDef#isReEvalOnUpdate()}
+			 * @param fireIfUnchanged See {@link XformDef#isFireIfUnchanged()}
+			 * @param nullToNull See {@link XformDef#isNullToNull()}
+			 * @param manyToOne See {@link XformDef#isManyToOne()}
+			 * @param oneToMany See {@link XformDef#isOneToMany()}
+			 * @param equivalence The equivalence for the transformed model value
 			 */
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<T> map = theMap.get(sourceModels);
-				return map != theMap.forModelCopy(map, sourceModels, newModels);
+			protected EfficientCopyingInstantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map,
+				S defaultSource, List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
+				ModelComponentId sourceVariable, ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate,
+				boolean fireIfUnchanged, boolean nullToNull,
+				boolean manyToOne, boolean oneToMany, ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
+				boolean testing) {
+				super(localModel, map, defaultSource, combinedValues, reverse, sourceVariable, previousResultVariable, cached,
+					reEvalOnUpdate, fireIfUnchanged,
+					nullToNull, manyToOne, oneToMany, equivalence, testing);
+			}
+
+			@Override
+			public MV2 forModelCopy(MV2 prevValue, MV1 newSource, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				if (newSource == getSource(prevValue) && !isDifferent(sourceModels, newModels))
+					return prevValue;
+				else
+					return transform(newSource, newModels);
 			}
 		}
 	}
@@ -2089,9 +1985,25 @@ public class ExpressoTransformations {
 			if (theAdd == null && theAddAccept != null)
 				reporting().warn("add-accept specified without add.  add-accept will be ignored");
 
-			isStateful = refersToSource(theReverse.getExpression(), getParentElement().getSourceName().getName())//
-				|| (theEnabled != null && refersToSource(theEnabled.getExpression(), getParentElement().getSourceName().getName()))//
-				|| (theAccept != null && refersToSource(theAccept.getExpression(), getParentElement().getSourceName().getName()));
+			boolean stateful = refersToSource(theReverse.getExpression(), getParentElement().getSourceName().getName());
+			if (!stateful && getParentElement().getPreviousResultAs() != null)
+				stateful = refersToSource(theReverse.getExpression(), getParentElement().getPreviousResultAs().getName());
+			if (!stateful && theEnabled != null) {
+				stateful = refersToSource(theEnabled.getExpression(), getParentElement().getSourceName().getName());
+				if (!stateful && getParentElement().getPreviousResultAs() != null)
+					stateful = refersToSource(theEnabled.getExpression(), getParentElement().getPreviousResultAs().getName());
+			}
+			if (!stateful && theAccept != null) {
+				stateful = refersToSource(theAccept.getExpression(), getParentElement().getSourceName().getName());
+				if (!stateful && getParentElement().getPreviousResultAs() != null)
+					stateful = refersToSource(theAccept.getExpression(), getParentElement().getPreviousResultAs().getName());
+			}
+			if (!stateful && theAdd != null) {
+				stateful = refersToSource(theAdd.getExpression(), getParentElement().getSourceName().getName());
+				if (!stateful && getParentElement().getPreviousResultAs() != null)
+					stateful = refersToSource(theAdd.getExpression(), getParentElement().getPreviousResultAs().getName());
+			}
+			isStateful = stateful;
 
 			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, E>, SettableValue<?>> satisfyElementValueType(theTargetVariable,
 				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getTargetType()));
@@ -2273,7 +2185,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public TransformReverse<S, T> reverse(SettableValue<S> sourceV,
+			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, SettableValue<T> previousResultV,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException {
 				models = theLocalModel.wrap(models);
@@ -2290,23 +2202,23 @@ public class ExpressoTransformations {
 				TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
 				enabledFn = enabledEvld == null ? null : LambdaUtils.printableFn(tvs -> {
-					prepareTx(tvs, isStateful, sourceV, targetV, null, modifications);
+					prepareTx(tvs, isStateful, sourceV, previousResultV, targetV, null, modifications);
 					return enabledEvld.get();
 				}, enabledEvld::toString, enabledEvld);
 				acceptFn = acceptEvld == null ? null : LambdaUtils.printableBiFn((target, tvs) -> {
-					prepareTx(tvs, isStateful, sourceV, targetV, target, modifications);
+					prepareTx(tvs, isStateful, sourceV, previousResultV, targetV, target, modifications);
 					return acceptEvld.get();
 				}, acceptEvld::toString, acceptEvld);
 				addFn = addEvld == null ? null : LambdaUtils.printableTriFn((target, tvs, test) -> {
-					prepareTx(tvs, isStateful, sourceV, targetV, target, modifications);
+					prepareTx(tvs, isStateful, sourceV, previousResultV, targetV, target, modifications);
 					return addEvld.get();
 				}, addEvld::toString, addEvld);
 				addAcceptFn = addAcceptEvld == null ? null : LambdaUtils.printableBiFn((target, tvs) -> {
-					prepareTx(tvs, isStateful, sourceV, targetV, target, modifications);
+					prepareTx(tvs, isStateful, sourceV, previousResultV, targetV, target, modifications);
 					return addAcceptEvld.get();
 				}, addAcceptEvld::toString, addAcceptEvld);
-				return createReverse(new ReverseParameters<>(sourceV, targetV, modifications, transformation, enabledFn, acceptFn, addFn,
-					addAcceptFn, isStateful), models);
+				return createReverse(new ReverseParameters<>(sourceV, previousResultV, targetV, modifications, transformation, enabledFn,
+					acceptFn, addFn, addAcceptFn, isStateful), models);
 			}
 
 			/**
@@ -2334,10 +2246,13 @@ public class ExpressoTransformations {
 			 *        prepare}
 			 */
 			protected static <S, T> void prepareTx(Transformation.TransformationValues<? extends S, ? extends T> tvs, boolean stateful,
-				SettableValue<S> sourceV, SettableValue<T> targetV, T target,
+				SettableValue<S> sourceV, SettableValue<T> previousResultV, SettableValue<T> targetV, T target,
 				List<CombineWith.TransformationModification<S, T>> modifications) {
-				if (stateful)
+				if (stateful) {
 					sourceV.set(tvs.getCurrentSource(), null);
+					if (previousResultV != null)
+						previousResultV.set(tvs.getPreviousResult());
+				}
 				targetV.set(target, null);
 				for (CombineWith.TransformationModification<S, T> mod : modifications)
 					mod.prepareTransformOperation(tvs);
@@ -2386,6 +2301,8 @@ public class ExpressoTransformations {
 		public static class ReverseParameters<S, T> {
 			/** The container to publish the source value in */
 			public final SettableValue<S> sourceValue;
+			/** The container to publish the previously-evaluated result value in */
+			public final SettableValue<T> previousResultValue;
 			/** The container to publish the target value in */
 			public final SettableValue<T> targetValue;
 			/** All modifications added by {@link ExpressoTransformations.CombineWith}s */
@@ -2405,6 +2322,7 @@ public class ExpressoTransformations {
 
 			/**
 			 * @param sourceValue The container to publish the source value in
+			 * @param previousResultValue The container to publish the previously-evaluated result value in
 			 * @param targetValue The container to publish the target value in
 			 * @param modifications All modifications added by {@link ExpressoTransformations.CombineWith}s
 			 * @param transformation The transformation
@@ -2414,7 +2332,7 @@ public class ExpressoTransformations {
 			 * @param addAcceptFn Whether the reverse operation can add a particular value to a collection
 			 * @param stateful Whether the reverse operation depends on the current source value
 			 */
-			public ReverseParameters(SettableValue<S> sourceValue, SettableValue<T> targetValue, //
+			public ReverseParameters(SettableValue<S> sourceValue, SettableValue<T> previousResultValue, SettableValue<T> targetValue, //
 				List<CombineWith.TransformationModification<S, T>> modifications, //
 				Transformation<S, T> transformation, //
 				Function<TransformationValues<? extends S, ? extends T>, String> enabledFn,
@@ -2422,6 +2340,7 @@ public class ExpressoTransformations {
 				TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> addFn,
 				BiFunction<T, TransformationValues<? extends S, ? extends T>, String> addAcceptFn, boolean stateful) {
 				this.sourceValue = sourceValue;
+				this.previousResultValue = previousResultValue;
 				this.targetValue = targetValue;
 				this.modifications = modifications;
 				this.transformation = transformation;
@@ -2542,6 +2461,7 @@ public class ExpressoTransformations {
 				throws ModelInstantiationException {
 				models = getLocalModel().wrap(models);
 				SettableValue<S> sourceV = parameters.sourceValue;
+				SettableValue<T> previousResultV = parameters.previousResultValue;
 				SettableValue<T> targetV = parameters.targetValue;
 				List<CombineWith.TransformationModification<S, T>> mods = parameters.modifications;
 				boolean stateful = parameters.stateful;
@@ -2549,7 +2469,7 @@ public class ExpressoTransformations {
 				SettableValue<S> reversedEvld = getReverse().get(models);
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
 				reverseFn = LambdaUtils.printableBiFn((target, tvs) -> {
-					prepareTx(tvs, stateful, sourceV, targetV, target, mods);
+					prepareTx(tvs, stateful, sourceV, previousResultV, targetV, target, mods);
 					return reversedEvld.get();
 				}, reversedEvld::toString, reversedEvld);
 				return new Transformation.SourceReplacingReverse<>(parameters.transformation, reverseFn, parameters.enabledFn,
@@ -2644,13 +2564,14 @@ public class ExpressoTransformations {
 				throws ModelInstantiationException {
 				models = getLocalModel().wrap(models);
 				SettableValue<S> sourceV = parameters.sourceValue;
+				SettableValue<T> previousResultV = parameters.previousResultValue;
 				SettableValue<T> targetV = parameters.targetValue;
 				List<CombineWith.TransformationModification<S, T>> mods = parameters.modifications;
 
 				ObservableAction reversedEvld = getReverse().get(models);
 				BiConsumer<T, Transformation.TransformationValues<? extends S, ? extends T>> reverseFn;
 				reverseFn = (target, tvs) -> {
-					prepareTx(tvs, true, sourceV, targetV, target, mods);
+					prepareTx(tvs, true, sourceV, previousResultV, targetV, target, mods);
 					reversedEvld.act(null);
 				};
 				return new Transformation.SourceModifyingReverse<>(reverseFn, parameters.enabledFn, parameters.acceptFn, parameters.addFn,
@@ -2750,10 +2671,6 @@ public class ExpressoTransformations {
 			protected void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType) throws ExpressoInterpretationException {
 				theSourceValueType = sourceType;
 				update(env);
-				theTargetValueType = null;
-				ExTyped.Interpreted<?> typed = getAddOn(ExTyped.Interpreted.class);
-				if (typed != null)
-					theTargetValueType = (TypeToken<T>) typed.getValueType();
 				if (theTargetValueType == null)
 					theTargetValueType = evaluateTargetType();
 			}
@@ -2761,7 +2678,12 @@ public class ExpressoTransformations {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
-				theTargetValueType = getAddOnValue(ExTyped.Interpreted.class, t -> t.getValueType());
+				theTargetValueType = null;
+				ExTyped.Interpreted<?> typed = getAddOn(ExTyped.Interpreted.class);
+				if (typed != null)
+					theTargetValueType = (TypeToken<T>) typed.getValueType();
+				else
+					theTargetValueType = expressoEnv.get(ExTyped.VALUE_TYPE_KEY, TypeToken.class);
 			}
 
 			/** @return The target type of the operation */
@@ -2934,8 +2856,18 @@ public class ExpressoTransformations {
 
 				theValue = interpret(getDefinition().getValue(),
 					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
-				syncChildren(getDefinition().getIfs(), theIfs, iff -> (ScalarOp.Interpreted<S, T>) iff.interpret(this),
-					(iff, env) -> iff.updateOp(env, getSourceValueType()));
+				ExTyped.Interpreted<T> typed = getAddOn(ExTyped.Interpreted.class);
+				Transaction typeConfig = Transaction.NONE;
+				if (typed != null && typed.getDefinition().getValueType() != null) {
+					// If the type is specified, tell all the children to evaluate with that type
+					typeConfig = expressoEnv.putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
+				}
+				try {
+					syncChildren(getDefinition().getIfs(), theIfs, iff -> (ScalarOp.Interpreted<S, T>) iff.interpret(this),
+						(iff, env) -> iff.updateOp(env, getSourceValueType()));
+				} finally {
+					typeConfig.close();
+				}
 			}
 
 			@Override
@@ -3203,8 +3135,18 @@ public class ExpressoTransformations {
 
 				theDefault = interpret(getDefinition().getDefault(), //
 					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
-				syncChildren(getDefinition().getCases(), theCases, def -> (ScalarOp.Interpreted<S, T>) def.interpret(this),
-					(interp, env) -> interp.updateOp(env, getSourceValueType()));
+				ExTyped.Interpreted<T> typed = getAddOn(ExTyped.Interpreted.class);
+				Transaction typeConfig = Transaction.NONE;
+				if (typed != null && typed.getDefinition().getValueType() != null) {
+					// If the type is specified, tell all the children to evaluate with that type
+					typeConfig = expressoEnv.putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
+				}
+				try {
+					syncChildren(getDefinition().getCases(), theCases, def -> (ScalarOp.Interpreted<S, T>) def.interpret(this),
+						(interp, env) -> interp.updateOp(env, getSourceValueType()));
+				} finally {
+					typeConfig.close();
+				}
 			}
 
 			@Override

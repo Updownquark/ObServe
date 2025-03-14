@@ -22,8 +22,6 @@ import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JTable;
-import javax.swing.event.ListDataEvent;
-import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
 
 import org.observe.Observable;
@@ -36,8 +34,10 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
+import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.qommons.ArgumentParsing;
+import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Colors;
 import org.qommons.QommonsUtils;
@@ -164,10 +164,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 	private final Function<? super T, ? extends X> theMap;
 
-	private final JButton theIncludeAllButton;
-	private final JButton theIncludeButton;
-	private final JButton theExcludeButton;
-	private final JButton theExcludeAllButton;
 	private ObservableTextField<TableContentControl> theSearchField;
 
 	private final SettableValue<TableContentControl> theFilterText;
@@ -187,7 +183,11 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> sourceTable,
 		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> destTable, //
 		Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
-		boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
+		boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName,
+		Consumer<? super ButtonEditor<? extends JButton, ?>> includeAllConfig, //
+			Consumer<? super ButtonEditor<? extends JButton, ?>> includeConfig, //
+				Consumer<? super ButtonEditor<? extends JButton, ?>> excludeConfig, //
+					Consumer<? super ButtonEditor<? extends JButton, ?>> excludeAllConfig) {
 		super(null); // No layout
 		theSourceRows = sourceRows;
 		theMap = map;
@@ -267,20 +267,12 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		}, true));
 
 		String pluralItemName = StringUtils.pluralize(theItemName);
-		theIncludeAllButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-right-double.png", 16, 16));
-		theIncludeButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-right.png", 16, 16));
-		theExcludeButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-left.png", 16, 16));
-		theExcludeAllButton = new JButton(ObservableSwingUtils.getFixedIcon(null, "/icons/arrow-left-double.png", 16, 16));
-		theIncludeAllButton.setToolTipText("Include all displayed " + pluralItemName);
-		theIncludeButton.setToolTipText("Include selected " + pluralItemName);
-		theExcludeButton.setToolTipText("Exclude selected " + pluralItemName);
-		theExcludeAllButton.setToolTipText("Exclude all " + pluralItemName);
-		theIncludeAllButton.setCursor(Cursor.getDefaultCursor());
-		theIncludeButton.setCursor(Cursor.getDefaultCursor());
-		theExcludeButton.setCursor(Cursor.getDefaultCursor());
-		theExcludeAllButton.setCursor(Cursor.getDefaultCursor());
 
 		Transaction t = anchor.instantiating();
+		ObservableCollection<SelectableValue<T, X>> selectedSourceValues = ObservableCollection.<SelectableValue<T, X>> build()//
+			.onEdt().build();
+		ObservableCollection<SelectableValue<T, X>> selectedIncludedValues = ObservableCollection.<SelectableValue<T, X>> build()//
+			.onEdt().build();
 		theLeftPanel = PanelPopulation
 			.populateHPanel((JPanel) null, new JustifiedBoxLayout(true).mainJustified().crossJustified().forceFill(true), until)//
 			.withName("OVS Source")//
@@ -294,18 +286,125 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				if (itemName != null)
 					srcTbl.withItemName(itemName);
 				srcTbl.withInitialSelection(sv -> sv.selected);
+				srcTbl.withSelection(selectedSourceValues);
 				sourceTable.accept(srcTbl.withCountTitle("available").withFiltering(theFilterText).fill());
 			})//
 			.getContainer();
+		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
+		theDisplayedValues = sourceModel.getRows();
+		ObservableValue<Integer> displayedAvailableCount = theDisplayedValues.flow()//
+			.filter(v -> v.included ? "Already included" : null)//
+			.collectActive(until)//
+			.observeSize();
+		ObservableValue<BiTuple<Integer, Integer>> displayedCountAndAvailable = theDisplayedValues.observeSize().transform(tx -> tx//
+			.combineWith(displayedAvailableCount)//
+			.combine(BiTuple::new));
+		ObservableValue<Integer> selectedAvailableCount = selectedSourceValues.flow()//
+			.filter(v -> v.included ? "Already included" : null)//
+			.collectActive(until)//
+			.observeSize();
+		ObservableValue<BiTuple<Integer, Integer>> selectedCountAndAvailable = selectedSourceValues.observeSize().transform(tx -> tx//
+			.combineWith(selectedAvailableCount)//
+			.combine(BiTuple::new));
+		ObservableValue<Integer> selectedExcludableCount = selectedIncludedValues.observeSize();
+		ObservableValue<BiTuple<Integer, Integer>> selectedCountAndExcludable = selectedIncludedValues.observeSize().transform(tx -> tx//
+			.combineWith(selectedExcludableCount)//
+			.combine(BiTuple::new));
+		ObservableValue<Integer> excludableCount = theIncludedValues.observeSize();
+
 		theMiddlePanel = PanelPopulation
 			.populateHPanel((JPanel) null,
 				new JustifiedBoxLayout(false).mainJustified().crossCenter().forceFill(true).setMargin(4, 2, 4, 2), until)//
 			.withName("OVS Source")//
 			.addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), bp -> bp.withName("OVS Buttons 2")//
-				.addComponent(null, theIncludeAllButton, null)//
-				.addComponent(null, theIncludeButton, null)//
-				.addComponent(null, theExcludeButton, null)//
-				.addComponent(null, theExcludeAllButton, null)//
+				.addButton(null, evt -> { // Include all button
+					selectCallbackLock[0] = true;
+					try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
+						for (SelectableValue<T, X> sv : theDisplayedValues) {
+							if (!sv.included)
+								sv.setIncluded(true);
+						}
+					} finally {
+						selectCallbackLock[0] = false;
+					}
+				}, btn -> {
+					btn.withIcon(null, "/icons/arrow-right-double.png", 16, 16)//
+					.withTooltip(displayedAvailableCount
+						.map(sz -> sz == 1 ? ("Include 1 " + itemName) : ("Include " + sz + " displayed " + pluralItemName)))//
+					.disableWith(displayedCountAndAvailable.map(caa -> {
+						if (caa.getValue1() == 0)
+							return "No " + pluralItemName + " displayed";
+						else if (caa.getValue2() == 0)
+							return "All displayed " + pluralItemName + " are already included";
+						else
+							return null;
+					}))//
+					.modifyComponent(c -> c.setCursor(Cursor.getDefaultCursor()));
+					if (includeAllConfig != null)
+						includeAllConfig.accept(btn);
+				})//
+				.addButton(null, evt -> { // Include selected button
+					selectCallbackLock[0] = true;
+					try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
+						for (SelectableValue<T, X> sv : theDisplayedValues) {
+							if (sv.selected && !sv.included)
+								sv.setIncluded(true);
+						}
+					} finally {
+						selectCallbackLock[0] = false;
+					}
+				}, btn -> {
+					btn.withIcon(null, "/icons/arrow-right.png", 16, 16)//
+					.withTooltip(selectedAvailableCount
+						.map(sz -> sz == 1 ? ("Include 1 selected " + itemName) : ("Include " + sz + " selected " + pluralItemName)))//
+					.disableWith(selectedCountAndAvailable.map(caa -> {
+						if (caa.getValue1() == 0)
+							return "No " + pluralItemName + " selected";
+						else if (caa.getValue2() == 0)
+							return "All selected " + pluralItemName + " are already included";
+						else
+							return null;
+					}))//
+					.modifyComponent(c -> c.setCursor(Cursor.getDefaultCursor()));
+					if (includeConfig != null)
+						includeConfig.accept(btn);
+				})//
+				.addButton(null, evt -> { // Exclude selected button
+					selectCallbackLock[0] = true;
+					try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
+						for (SelectableValue<T, X> sv : theIncludedValues) {
+							if (sv.selected)
+								sv.setIncluded(false);
+						}
+					} finally {
+						selectCallbackLock[0] = false;
+					}
+				}, btn -> {
+					btn.withIcon(null, "/icons/arrow-left.png", 16, 16)//
+					.withTooltip(selectedExcludableCount
+						.map(sz -> sz == 1 ? ("Exclude 1 selected " + itemName) : ("Exclude " + sz + " selected " + pluralItemName)))//
+					.disableWith(selectedExcludableCount.map(sz -> sz == 0 ? "No included " + pluralItemName + " selected" : null))//
+					.modifyComponent(c -> c.setCursor(Cursor.getDefaultCursor()));
+					if (excludeConfig != null)
+						excludeConfig.accept(btn);
+				})//
+				.addButton(null, evt -> { // Exclude all button
+					selectCallbackLock[0] = true;
+					try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
+						for (SelectableValue<T, X> sv : theIncludedValues)
+							sv.setIncluded(false);
+					} finally {
+						selectCallbackLock[0] = false;
+					}
+				}, btn -> {
+					btn.withIcon(null, "/icons/arrow-left-double.png", 16, 16)//
+					.withTooltip(
+						excludableCount.map(sz -> sz == 1 ? ("Exclude 1 " + itemName) : ("Exclude " + sz + " " + pluralItemName)))//
+					.disableWith(excludableCount.map(sz -> sz == 0 ? "No " + pluralItemName + " included" : null))//
+					.modifyComponent(c -> c.setCursor(Cursor.getDefaultCursor()));
+					if (excludeAllConfig != null)
+						excludeAllConfig.accept(btn);
+				})//
 				)//
 			.getContainer();
 		theRightPanel = PanelPopulation
@@ -322,6 +421,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				if (itemName != null)
 					destTbl.withItemName(itemName);
 				destTbl.withInitialSelection(sv -> sv.selected);
+				destTbl.withSelection(selectedIncludedValues);
 				destTable.accept(destTbl.withCountTitle("included").fill());
 			})//
 			.getContainer();
@@ -348,9 +448,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theMiddlePanel.addMouseListener(middleMouseListener);
 		theMiddlePanel.addMouseMotionListener(middleMouseListener);
 
-		ObservableTableModel<SelectableValue<T, X>> sourceModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
 		ObservableTableModel<SelectableValue<T, X>> destModel = (ObservableTableModel<SelectableValue<T, X>>) theDestTable.getModel();
-		theDisplayedValues = sourceModel.getRows();
 
 		subs.add(theDisplayedValues.subscribe(evt -> {
 			switch (evt.getType()) {
@@ -380,42 +478,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				break;
 			}
 		}, true));
-		subs.add(theIncludedValues.simpleChanges().act(__ -> checkButtonStates()));
-
-		ListDataListener sourceDataListener = new ListDataListener() {
-			@Override
-			public void intervalAdded(ListDataEvent e) {
-				checkButtonStates();
-			}
-
-			@Override
-			public void intervalRemoved(ListDataEvent e) {
-				checkButtonStates();
-			}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-			}
-		};
-		sourceModel.getRowModel().addListDataListener(sourceDataListener);
-		subs.add(() -> sourceModel.getRowModel().removeListDataListener(sourceDataListener));
-		ListDataListener destDataListener = new ListDataListener() {
-			@Override
-			public void intervalAdded(ListDataEvent e) {
-				checkButtonStates();
-			}
-
-			@Override
-			public void intervalRemoved(ListDataEvent e) {
-				checkButtonStates();
-			}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-			}
-		};
-		destModel.getRowModel().addListDataListener(destDataListener);
-		subs.add(() -> destModel.getRowModel().removeListDataListener(destDataListener));
 
 		int[] minMaxSelectionChange = new int[] { -1, -1 };
 		Object selectionUpdateId = new Object();
@@ -457,59 +519,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			} finally {
 				selectCallbackLock[0] = false;
 			}
-			checkButtonStates();
 		};
 		theDestTable.getSelectionModel().addListSelectionListener(rightLSL);
 		subs.add(() -> theDestTable.getSelectionModel().removeListSelectionListener(rightLSL));
 
-		checkButtonStates();
-
-		theIncludeAllButton.addActionListener(evt -> {
-			selectCallbackLock[0] = true;
-			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
-				for (SelectableValue<T, X> sv : theDisplayedValues) {
-					if (!sv.included)
-						sv.setIncluded(true);
-				}
-			} finally {
-				selectCallbackLock[0] = false;
-			}
-			checkButtonStates();
-		});
-		theIncludeButton.addActionListener(evt -> {
-			selectCallbackLock[0] = true;
-			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
-				for (SelectableValue<T, X> sv : theDisplayedValues) {
-					if (sv.selected && !sv.included)
-						sv.setIncluded(true);
-				}
-			} finally {
-				selectCallbackLock[0] = false;
-			}
-			checkButtonStates();
-		});
-		theExcludeButton.addActionListener(evt -> {
-			selectCallbackLock[0] = true;
-			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
-				for (SelectableValue<T, X> sv : theIncludedValues) {
-					if (sv.selected)
-						sv.setIncluded(false);
-				}
-			} finally {
-				selectCallbackLock[0] = false;
-			}
-			checkButtonStates();
-		});
-		theExcludeAllButton.addActionListener(evt -> {
-			selectCallbackLock[0] = true;
-			try (Transaction t2 = theIncludedValues.lock(true, evt); Transaction t3 = theDisplayedValues.lock(false, evt)) {
-				for (SelectableValue<T, X> sv : theIncludedValues)
-					sv.setIncluded(false);
-			} finally {
-				selectCallbackLock[0] = false;
-			}
-			checkButtonStates();
-		});
 		t.close();
 	}
 
@@ -538,7 +551,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		} finally {
 			selectCallbackLock[0] = false;
 		}
-		checkButtonStates();
 	}
 
 	@Override
@@ -649,26 +661,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		return theSearchField;
 	}
 
-	/** @return This selector's include all button */
-	public JButton getIncludeAllButton() {
-		return theIncludeAllButton;
-	}
-
-	/** @return This selector's include selected button */
-	public JButton getIncludeButton() {
-		return theIncludeButton;
-	}
-
-	/** @return This selector's exclude selected button */
-	public JButton getExcludeButton() {
-		return theExcludeButton;
-	}
-
-	/** @return This selector's exclude all button */
-	public JButton getExcludeAllButton() {
-		return theExcludeAllButton;
-	}
-
 	/** @return This selector's source table widget */
 	public JTable getSourceTable() {
 		return theSourceTable;
@@ -677,76 +669,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	/** @return This selector's included table widget */
 	public JTable getDestTable() {
 		return theDestTable;
-	}
-
-	<C> boolean testWithColumnFiltering(CategoryRenderStrategy<? super SelectableValue<T, X>, C> column, SelectableValue<T, X> value,
-		String text) {
-		String rendered;
-		if (column.getRenderer() != null)
-			rendered = column.getRenderer().renderAsText(
-				new ModelCell.Default<>(() -> value, column.getCategoryValue(value), 0, 0, false, false, false, false, false, false));
-		else
-			rendered = String.valueOf(column.getCategoryValue(value));
-		int textIdx = 0;
-		for (int i = 0; i < rendered.length() && textIdx < text.length(); i++) {
-			char rc = rendered.charAt(i);
-			char tc = text.charAt(textIdx);
-			if (Character.toLowerCase(rc) == Character.toLowerCase(tc))
-				textIdx++;
-			else if (textIdx > 0)
-				textIdx = 0;
-		}
-		return textIdx == text.length();
-	}
-
-	void checkButtonStates() {
-		int totalCount = theSourceRows.size();
-		int includedCount = theIncludedValues.size();
-
-		int excluded = totalCount - includedCount;
-		boolean hasSelection = !theSourceTable.getSelectionModel().isSelectionEmpty();
-		int selectedIncluded = 0;
-		for (int i = theDestTable.getSelectionModel().getMinSelectionIndex(); i <= theDestTable.getSelectionModel()
-			.getMaxSelectionIndex(); i++) {
-			if (theDestTable.getSelectionModel().isSelectedIndex(i))
-				selectedIncluded++;
-		}
-		int selectedExcluded = 0;
-		ObservableTableModel<SelectableValue<T, X>> srcModel = (ObservableTableModel<SelectableValue<T, X>>) theSourceTable.getModel();
-		for (int i = theSourceTable.getSelectionModel().getMinSelectionIndex(); i >= 0
-			&& i <= theSourceTable.getSelectionModel().getMaxSelectionIndex(); i++) {
-			if (i < srcModel.getRowModel().getSize() && theSourceTable.getSelectionModel().isSelectedIndex(i)
-				&& !srcModel.getRowModel().getElementAt(i).included)
-				selectedExcluded++;
-		}
-
-		String singItem = theItemName != null ? theItemName : "item";
-		String plurItem = theItemName != null ? StringUtils.pluralize(singItem) : "items";
-		theIncludeAllButton.setEnabled(excluded > 0);
-		if (excluded == 0)
-			theIncludeAllButton.setToolTipText("All " + plurItem + " included");
-		else if (excluded == 1)
-			theIncludeAllButton.setToolTipText("Include 1 " + singItem);
-		else
-			theIncludeAllButton.setToolTipText("Include all " + excluded + " excluded " + plurItem);
-
-		theIncludeButton.setEnabled(selectedExcluded > 0);
-		theIncludeButton.setToolTipText(
-			selectedExcluded > 0 ? "Include " + selectedExcluded + " selected " + (selectedExcluded == 1 ? singItem : plurItem)
-				: (hasSelection ? "All selected " + plurItem + " are included" : "No " + plurItem + " selected"));
-
-		theExcludeButton.setEnabled(selectedIncluded > 0);
-		theExcludeButton.setToolTipText(
-			selectedIncluded > 0 ? "Exclude " + selectedIncluded + " selected " + (selectedIncluded == 1 ? singItem : plurItem)
-				: (hasSelection ? "No included " + plurItem + " selected" : "No " + plurItem + " selected"));
-
-		theExcludeAllButton.setEnabled(includedCount > 0);
-		if (includedCount == 0)
-			theExcludeAllButton.setToolTipText("No " + plurItem + " included");
-		else if (includedCount == 1)
-			theExcludeAllButton.setToolTipText("Exclude 1 included " + singItem);
-		else
-			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included " + plurItem);
 	}
 
 	/**
@@ -784,6 +706,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		private Format<TableContentControl> theFilterFormat;
 		private boolean isFilterCommitOnType;
 		private String theItemName;
+		private Consumer<? super ButtonEditor<? extends JButton, ?>> theIncludeAllConfig;
+		private Consumer<? super ButtonEditor<? extends JButton, ?>> theIncludeConfig;
+		private Consumer<? super ButtonEditor<? extends JButton, ?>> theExcludeConfig;
+		private Consumer<? super ButtonEditor<? extends JButton, ?>> theExcludeAllConfig;
 
 		Builder(ObservableCollection<T> sourceRows, Consumer<TableBuilder<SelectableValue<T, X>, ?, ?>> sourceTable,
 			Consumer<TableBuilder<SelectableValue<T, X>, ?, ?>> destTable, Function<? super T, ? extends X> map) {
@@ -855,11 +781,31 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			return this;
 		}
 
+		public Builder<T, X> configureIncludeAll(Consumer<? super PanelPopulation.ButtonEditor<? extends JButton, ?>> config) {
+			theIncludeAllConfig = config;
+			return this;
+		}
+
+		public Builder<T, X> configureInclude(Consumer<? super PanelPopulation.ButtonEditor<? extends JButton, ?>> config) {
+			theIncludeConfig = config;
+			return this;
+		}
+
+		public Builder<T, X> configureExclude(Consumer<? super PanelPopulation.ButtonEditor<? extends JButton, ?>> config) {
+			theExcludeConfig = config;
+			return this;
+		}
+
+		public Builder<T, X> configureExcludeAll(Consumer<? super PanelPopulation.ButtonEditor<? extends JButton, ?>> config) {
+			theExcludeAllConfig = config;
+			return this;
+		}
+
 		/** @return The build value selector */
 		public ObservableValueSelector<T, X> build() {
 			return new ObservableValueSelector<>(theSourceRows.safe(ThreadConstraint.EDT, theUntil), //
 				theSourceTable, theDestTable, theMap, isReEvalOnUpdate, theUntil, isIncludedByDefault, theFilterFormat,
-				isFilterCommitOnType, theItemName);
+				isFilterCommitOnType, theItemName, theIncludeAllConfig, theIncludeConfig, theExcludeConfig, theExcludeAllConfig);
 		}
 	}
 

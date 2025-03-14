@@ -582,16 +582,11 @@ public class ObservableSwingUtils {
 	 * @param selection The selection value to sync with
 	 * @param until The observable to remove all the listeners
 	 * @param update Receives an integer model index whenever the selection value is updated
-	 * @param enforceSingleSelection Whether to set the list's {@link ListSelectionModel#setSelectionMode(int) selection mode} to
-	 *        {@link ListSelectionModel#SINGLE_SELECTION single selection}
 	 * @return The selection
 	 */
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
-		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, ModelUpdater update,
-		boolean enforceSingleSelection) {
+		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, ModelUpdater update) {
 		SettableValue<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
-		if (enforceSingleSelection)
-			selectionModel.get().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		boolean[] callbackLock = new boolean[1];
 		ListSelectionListener selListener = e -> {
 			ListSelectionModel selModel = selectionModel.get();
@@ -600,23 +595,67 @@ public class ObservableSwingUtils {
 			flushEQCache();
 			callbackLock[0] = true;
 			try {
-				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()
-					&& selModel.getMinSelectionIndex() < model.getSize()) {
-					E selectedValue = model.getElementAt(selModel.getMinSelectionIndex());
-					if (safeSelection.isAcceptable(selectedValue) == null)
-						safeSelection.set(selectedValue, e);
-				} else if (safeSelection.get() != null)
+				boolean clear = false;
+				int selIdx = selModel.getMinSelectionIndex();
+				if (selIdx >= 0 && selIdx == selModel.getMaxSelectionIndex()) { // One value selected
+					if (selIdx < model.getSize()) {
+						E selectedValue = model.getElementAt(selIdx);
+						// System.out.println("Selection model change to " + selectedValue);
+						if (safeSelection.isAcceptable(selectedValue) == null)
+							safeSelection.set(selectedValue, e);
+					} else if (selIdx < model.getSize() * 2//
+						&& equivalence.elementEquals(model.getElementAt(selIdx - model.getSize()), safeSelection.get())) {
+						/* This is likely a result of the intervalAdded method in the model listener below.
+						 * That listener was likely added before the selection model was notified of the added values,
+						 * so the correct selected index was pushed past the end of the model. */
+						selIdx -= model.getSize();
+						selModel.setSelectionInterval(selIdx, selIdx);
+					} else
+						clear = true;
+				} else
+					clear = true;
+				if (clear && safeSelection.get() != null) {
+					// System.out.println("Selection model change (cleared from " + safeSelection.get() + ")");
 					safeSelection.set(null, e);
+				}
 			} finally {
 				callbackLock[0] = false;
 			}
 		};
 		ListDataListener modelListener = new ListDataListener() {
 			@Override
-			public void intervalRemoved(ListDataEvent e) {}
+			public void intervalRemoved(ListDataEvent e) {
+			}
 
 			@Override
-			public void intervalAdded(ListDataEvent e) {}
+			public void intervalAdded(ListDataEvent e) {
+				// If the table selection is empty but the selected value is not null, then the selected value is added to the table,
+				// select it in the table
+				ListSelectionModel selModel = selectionModel.get();
+				if (!selModel.isSelectionEmpty())
+					return;
+				E selected = safeSelection.get();
+				if (selected == null)
+					return;
+				// System.out.print("Interval added for " + selected);
+				// boolean found = false;
+				for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
+					E value = model.getElementAt(i);
+					if (equivalence.elementEquals(value, selected)) {
+						// found = true;
+						// System.out.println(": found at " + i);
+						callbackLock[0] = true;
+						try {
+							selModel.addSelectionInterval(i, i);
+						} finally {
+							callbackLock[0] = false;
+						}
+						break;
+					}
+				}
+				// if (!found)
+				// System.out.println(": not found");
+			}
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
@@ -645,11 +684,27 @@ public class ObservableSwingUtils {
 				}
 			}
 		};
-		PropertyChangeListener selModelListener = evt -> {
-			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener);
-			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener);
-		};
 		selectionModel.get().addListSelectionListener(selListener);
+		PropertyChangeListener selModelListener = evt -> {
+			ListSelectionModel oldSM = (ListSelectionModel) evt.getOldValue();
+			ListSelectionModel newSM = (ListSelectionModel) evt.getNewValue();
+			if (oldSM == newSM)
+				return;
+			newSM.setSelectionMode(oldSM.getSelectionMode());
+			if (!oldSM.isSelectionEmpty() || !newSM.isSelectionEmpty()) {
+				newSM.setValueIsAdjusting(true);
+				newSM.clearSelection();
+				for (int i = oldSM.getMinSelectionIndex(); i <= oldSM.getMaxSelectionIndex(); i++) {
+					if (oldSM.isSelectedIndex(i))
+						newSM.setSelectionInterval(i, i);
+				}
+				newSM.setAnchorSelectionIndex(oldSM.getAnchorSelectionIndex());
+				newSM.setLeadSelectionIndex(oldSM.getLeadSelectionIndex());
+				newSM.setValueIsAdjusting(false);
+			}
+			oldSM.removeListSelectionListener(selListener);
+			newSM.addListSelectionListener(selListener);
+		};
 		if (component != null)
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
@@ -665,6 +720,7 @@ public class ObservableSwingUtils {
 					return;
 				} else if (evt.getOldValue() == evt.getNewValue()//
 					&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
+					&& selModel.getMinSelectionIndex() < model.getSize()//
 					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
 					if (update != null) {
 						Causable cause = Causable.simpleCause(Causable.broken(evt));
@@ -681,8 +737,12 @@ public class ObservableSwingUtils {
 					}
 					return;
 				}
+				// System.out.print("Selection changed to " + evt.getNewValue());
+				// boolean found = false;
 				for (int i = 0; i < model.getSize(); i++) {
 					if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
+						// found = true;
+						// System.out.println("@" + i);
 						selModel.setSelectionInterval(i, i);
 						Rectangle rowBounds = null;
 						if (component instanceof JTable)
@@ -694,6 +754,8 @@ public class ObservableSwingUtils {
 						break;
 					}
 				}
+				// if (!found)
+				// System.out.println(": not found");
 			} finally {
 				callbackLock[0] = false;
 			}

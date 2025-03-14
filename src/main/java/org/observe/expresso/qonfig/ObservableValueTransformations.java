@@ -85,7 +85,6 @@ public class ObservableValueTransformations {
 	static class DisabledValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
 		private CompiledExpression theDisablement;
-		private ModelComponentId theSourceVariable;
 
 		DisabledValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -99,13 +98,7 @@ public class ObservableValueTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			String sourceAs = session.getAttributeText("source-as");
-			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
-			theSourceVariable = sourceAs == null ? null : elModels.getElementValueModelId(sourceAs);
 			theDisablement = getAttributeExpression("with", session);
-			if (theSourceVariable != null)
-				elModels.satisfyElementValueType(theSourceVariable, ModelTypes.Value,
-					(interp, env) -> (ModelInstanceType<SettableValue<?>, SettableValue<?>>) ((Interpreted<?>) interp).getTargetType());
 		}
 
 		@Override
@@ -419,25 +412,27 @@ public class ObservableValueTransformations {
 			@Override
 			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, SettableValue<S>, SettableValue<T>> instantiate()
 				throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(), //
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMap().instantiate(), //
+					TypeTokens.get().getDefaultValue(getSourceType()), //
 					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
-					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
-						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
-						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
-						getEquivalence() == null ? null : getEquivalence().instantiate());
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(),
+						getDefinition().getPreviousResultAs(), getDefinition().isCached(), getDefinition().isReEvalOnUpdate(),
+						getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(), getDefinition().isManyToOne(),
+						getDefinition().isOneToMany(), getEquivalence() == null ? null : getEquivalence().instantiate(), isTesting());
 			}
 		}
 
 		static class Instantiator<S, T>
 		extends AbstractCompiledTransformation.EfficientCopyingInstantiator<S, T, SettableValue<S>, SettableValue<T>> {
 
-			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
-				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
-				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence) {
-				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
-					manyToOne, oneToMany, equivalence);
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable,
+				ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+				boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, boolean testing) {
+				super(localModel, map, defaultSource, combinedValues, reverse, sourceVariable, previousResultVariable, cached,
+					reEvalOnUpdate, fireIfUnchanged, nullToNull, manyToOne, oneToMany, equivalence, testing);
 			}
 
 			@Override
@@ -1417,8 +1412,7 @@ public class ObservableValueTransformations {
 			private final ModelValueInstantiator<Comparator<? super T>> theSorting;
 
 			FlattenedCollectionValueInstantiator(ModelInstanceType<? extends ObservableCollection<?>, CV> targetModelType,
-				boolean nonObservable, boolean array,
-				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
+				boolean nonObservable, boolean array, ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
 				ModelValueInstantiator<Comparator<? super T>> sorting) {
 				theTargetModelType = targetModelType;
 				isNonObservable = nonObservable;

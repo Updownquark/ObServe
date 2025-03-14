@@ -54,6 +54,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		private JustifiedBoxLayout.Alignment theMainAlign;
 		private JustifiedBoxLayout.Alignment theCrossAlign;
 		private int thePadding;
+		private boolean isShowInvisible;
 
 		/**
 		 * @param type The Qonfig type of this add-on
@@ -87,6 +88,11 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			return thePadding;
 		}
 
+		@QonfigAttributeGetter("show-invisible")
+		public boolean isShowInvisible() {
+			return isShowInvisible;
+		}
+
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
 			super.update(session, element);
@@ -94,6 +100,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
 			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"), session);
 			thePadding = Integer.parseInt(session.getAttributeText("padding"));
+			isShowInvisible = session.getAttribute("show-invisible", boolean.class);
 		}
 
 		@Override
@@ -132,6 +139,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theMainAlign;
 	private JustifiedBoxLayout.Alignment theCrossAlign;
 	private int thePadding;
+	private boolean isShowInvisible;
 
 	/** @param element The container whose contents to manage */
 	protected QuickInlineLayout(ExElement element) {
@@ -158,6 +166,10 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		return thePadding;
 	}
 
+	public boolean isShowInvisible() {
+		return isShowInvisible;
+	}
+
 	@Override
 	public Class<Interpreted> getInterpretationType() {
 		return Interpreted.class;
@@ -171,5 +183,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		theMainAlign = myInterpreted.getDefinition().getMainAlign();
 		theCrossAlign = myInterpreted.getDefinition().getCrossAlign();
 		thePadding = myInterpreted.getDefinition().getPadding();
+		isShowInvisible = myInterpreted.getDefinition().isShowInvisible();
 	}
 }

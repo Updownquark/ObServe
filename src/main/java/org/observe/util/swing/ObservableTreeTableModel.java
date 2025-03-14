@@ -6,7 +6,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 
 import javax.swing.JTable;
 import javax.swing.event.TreeModelEvent;
@@ -24,7 +23,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
-import org.qommons.ArrayUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -105,24 +104,26 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 
 	@Override
 	public Object getValueAt(Object treeValue, int columnIndex) {
-		return getColumnModel().getElementAt(columnIndex).getCategoryValue(theTreeModel.getBetterPath((T) treeValue, false));
+		if (columnIndex == getHierarchicalColumn())
+			return treeValue;
+		return getColumnModel().getElementAt(columnIndex).getCategoryValue(((ObservableTreeModel<T>.TreeNode) treeValue).getModelRow());
 	}
 
 	@Override
 	public boolean isCellEditable(Object treeValue, int columnIndex) {
-		CategoryRenderStrategy<? super BetterList<T>, Object> column = (CategoryRenderStrategy<? super BetterList<T>, Object>) getColumnModel()
-			.getElementAt(columnIndex);
-		BetterList<T> path = theTreeModel.getBetterPath((T) treeValue, false);
-		return column.getMutator().isEditable(path, column.getCategoryValue(path));
+		return isCellEditable(((ObservableTreeModel<T>.TreeNode) treeValue).getModelRow(), getColumnModel().getElementAt(columnIndex),
+			columnIndex);
+	}
+
+	private <C> boolean isCellEditable(ModelRow<BetterList<T>> modelRow, CategoryRenderStrategy<BetterList<T>, C> column, int columnIndex) {
+		ModelCell<BetterList<T>, C> cell = new ModelCell.RowWrapper<>(modelRow, column.getCategoryValue(modelRow), columnIndex, false,
+			false);
+		return column.getMutator().isEditable(cell);
 	}
 
 	@Override
 	public void setValueAt(Object newValue, Object treeValue, int columnIndex) {
-		BetterList<T> path = getTreeModel().getBetterPath((T) treeValue, false);
-		if (path == null) {
-			System.err.println("Could not find tree node " + treeValue);
-			return;
-		}
+		BetterList<T> path=((ObservableTreeModel<T>.TreeNode) treeValue).getValuePath();
 		CategoryRenderStrategy<BetterList<T>, Object> column = (CategoryRenderStrategy<BetterList<T>, Object>) getColumnModel()
 			.getElementAt(columnIndex);
 		MutableCollectionElement<BetterList<T>> element = new MutableCollectionElement<BetterList<T>>() {
@@ -175,8 +176,8 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	}
 
 	@Override
-	protected BetterList<T> getRow(int rowIndex, JTable table) {
-		return ObservableTreeModel.betterPath(((JXTreeTable) table).getPathForRow(rowIndex));
+	public BetterList<T> getRow(int rowIndex, JTable table) {
+		return ((ObservableTreeModel<T>.TreeNode) ((JXTreeTable) table).getPathForRow(rowIndex).getLastPathComponent()).getValuePath();
 	}
 
 	@Override
@@ -185,8 +186,8 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	}
 
 	@Override
-	protected boolean isLeaf(int rowIndex, Supplier<BetterList<T>> rowValue) {
-		return isLeaf(rowValue.get());
+	protected boolean isLeaf(int rowIndex, JTable table) {
+		return isLeaf(((JXTreeTable) table).getPathForRow(rowIndex).getLastPathComponent());
 	}
 
 	@Override
@@ -277,12 +278,13 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			callbackLock[0] = true;
 			try {
 				if (path != null) {
-					List<T> list = (List<T>) (List<?>) Arrays.asList(path.getPath());
-					BetterList<T> newSel = BetterList.of(list);
-					if (selection.isAcceptable(newSel) == null)
-						selection.set(newSel, e);
-				} else if (selection.get() != null)
-					selection.set(null, e);
+					BetterList<T> list = ObservableTreeModel.betterPath(path);
+					if (selection.isAcceptable(list) == null)
+						selection.set(list, e);
+				} else if (selection.get() != null) {
+					if (selection.isAcceptable(null) == null)
+						selection.set(null, e);
+				}
 			} finally {
 				callbackLock[0] = false;
 			}
@@ -301,6 +303,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			public void treeNodesChanged(TreeModelEvent e) {
 				if (callbackLock[0])
 					return;
+				ObservableSwingUtils.flushEQCache();
 				int parentRow = treeTable.getRowForPath(e.getTreePath());
 				if (parentRow < 0 || !treeTable.isExpanded(parentRow))
 					return;
@@ -311,7 +314,8 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 				TreePath selPath = selectionModel.getSelectionPath();
 				if (!e.getTreePath().isDescendant(selPath) || selPath.getPathCount() == e.getTreePath().getPathCount())
 					return;
-				Object selNode = selPath.getPathComponent(e.getTreePath().getPathCount());
+				ObservableTreeModel<T>.TreeNode selNode = (ObservableTreeModel<T>.TreeNode) selPath
+					.getPathComponent(e.getTreePath().getPathCount());
 				int found = -1;
 				for (int c = 0; c < e.getChildren().length; c++) {
 					if (e.getChildren()[c] == selNode) {
@@ -324,10 +328,12 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 				callbackLock[0] = true;
 				try {
 					List<T> list = new ArrayList<>(e.getPath().length + 1);
-					list.addAll((List<T>) (List<?>) Arrays.asList(e.getPath()));
-					list.add((T) e.getChildren()[found]);
-					if (selection.isAcceptable(BetterList.of(list)) == null)
-						selection.set(BetterList.of(list), e);
+					for (Object node : e.getPath())
+						list.add(((ObservableTreeModel<T>.TreeNode) node).get());
+					list.add(((ObservableTreeModel<T>.TreeNode) e.getChildren()[found]).get());
+					BetterList<T> betterList=BetterList.of(list);
+					if (selection.isAcceptable(betterList) == null)
+						selection.set(betterList, e);
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -344,12 +350,15 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 					list = null;
 				else {
 					TreePath path = treeTable.getPathForRow(selectionModel.getLeadSelectionRow());
-					list = (List<T>) (List<?>) Arrays.asList(path.getPath());
+					list = new ArrayList<>(path.getPathCount());
+					for (Object node : path.getPath())
+						list.add(((ObservableTreeModel<T>.TreeNode) node).get());
 				}
-				if (!Objects.equals(list, selection.get()) && selection.isAcceptable(BetterList.of(list)) == null) {
+				BetterList<T> betterList=list==null ? null : BetterList.of(list);
+				if (!Objects.equals(list, selection.get()) && selection.isAcceptable(betterList) == null) {
 					callbackLock[0] = true;
 					try {
-						selection.set(BetterList.of(list), e);
+						selection.set(betterList, e);
 					} finally {
 						callbackLock[0] = false;
 					}
@@ -357,7 +366,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			}
 		};
 		treeTable.getTreeTableModel().addTreeModelListener(modelListener);
-		selection.changes().takeUntil(until).act(evt -> ObservableSwingUtils.onEQ(() -> {
+		selection.changes().takeUntil(until).safe(ThreadConstraint.EDT).act(evt -> {
 			if (callbackLock[0])
 				return;
 			callbackLock[0] = true;
@@ -366,15 +375,14 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 					selectionModel.clearSelection();
 				} else if (evt.getOldValue() == evt.getNewValue() && !selectionModel.isSelectionEmpty()//
 					&& (selectionModel.getSelectionCount() == 1 || !singularOnly)//
-					&& equivalence.elementEquals((T) selectionModel.getLeadSelectionPath().getLastPathComponent(),
-						evt.getNewValue().getLast())) {
+					&& ObservableTreeModel.isSamePath(evt.getNewValue(), selectionModel.getLeadSelectionPath(), equivalence)) {
 					if (selectionModel.getLeadSelectionRow() == 0)
 						model.rootChanged();
 					else {
 						TreePath parentPath = selectionModel.getLeadSelectionPath().getParentPath();
 						int parentRow = treeTable.getRowForPath(parentPath);
 						int childIdx = treeTable.getRowForPath(selectionModel.getLeadSelectionPath()) - parentRow - 1;
-						ObservableCollection<? extends T> children = model.getNode((T) parentPath.getLastPathComponent(), false)
+						ObservableCollection<? extends T> children = ((ObservableTreeModel<T>.TreeNode) parentPath.getLastPathComponent())
 							.getChildren();
 						MutableCollectionElement<T> el = (MutableCollectionElement<T>) children
 							.mutableElement(children.getElement(childIdx).getElementId());
@@ -385,23 +393,32 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 						}
 					}
 				} else {
-					TreePath path = new TreePath(evt.getNewValue().toArray());
 					Runnable select = new Runnable() {
+						TreePath path;
 						int tries = 0;
 
 						@Override
 						public void run() {
-							if (model.getNode((T) path.getLastPathComponent(), false) != null && treeTable.isExpanded(path.getParentPath()))
-								selectionModel.setSelectionPath(path);
-							else if (++tries < path.getPathCount() + 5) {
-								for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
-									if (model.getNode((T) p.getLastPathComponent(), false) != null) {
+							if (callbackLock[0])
+								return;
+							callbackLock[0] = true;
+							try {
+								if (path == null)
+									path = model.getTreePath(evt.getNewValue(), equivalence);
+								if (path == null)
+									EventQueue.invokeLater(this);
+								else if (treeTable.isExpanded(path.getParentPath()))
+									selectionModel.setSelectionPath(path);
+								else if (++tries < path.getPathCount() + 5) {
+									for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
 										if (!treeTable.isExpanded(p))
 											treeTable.expandPath(p);
 										break;
 									}
+									EventQueue.invokeLater(this);
 								}
-								EventQueue.invokeLater(this);
+							} finally {
+								callbackLock[0] = false;
 							}
 						}
 					};
@@ -410,7 +427,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			} finally {
 				callbackLock[0] = false;
 			}
-		}));
+		});
 
 		until.take(1).act(__ -> {
 			selectionModel.removeTreeSelectionListener(selListener);
@@ -426,7 +443,8 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	 * @param multiSelection The tree paths to synchronize the tree selection with
 	 * @param until The observable to stop all listening
 	 */
-	public static <T> void syncSelection(JXTreeTable treeTable, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
+	public static <T> void syncSelection(JXTreeTable treeTable, ObservableCollection<BetterList<T>> multiSelection,
+		Equivalence<? super T> equivalence, Observable<?> until) {
 		// This method assumes multiSelection is already safe for the EDT
 
 		// Tree selection->collection
@@ -440,7 +458,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			try (Transaction t = multiSelection.lock(true, e)) {
 				CollectionUtils
 				.synchronize(multiSelection, Arrays.asList(selectionModel.getSelectionPaths()),
-					(better, treePath) -> isSamePath(better, treePath))//
+					(better, treePath) -> ObservableTreeModel.isSamePath(better, treePath, equivalence))//
 				.adjust(new CollectionUtils.CollectionSynchronizer<BetterList<T>, TreePath>() {
 					@Override
 					public boolean getOrder(ElementSyncInput<BetterList<T>, TreePath> element) {
@@ -490,7 +508,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 				callbackLock[0] = true;
 				try {
 					for (CollectionElement<BetterList<T>> selected : multiSelection.elements()) {
-						if (eventApplies(e, selected.get()))
+						if (ObservableTreeModel.eventApplies(e, selected.get(), equivalence))
 							multiSelection.mutableElement(selected.getElementId()).set(selected.get());
 					}
 				} finally {
@@ -515,6 +533,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 				}
 			}
 		};
+		ObservableTreeModel<T> treeModel = ((ObservableTreeTableModel<T>) treeTable.getTreeTableModel()).getTreeModel();
 		treeTable.getTreeTableModel().addTreeModelListener(modelListener);
 		// collection->tree selection
 		Subscription msSub = multiSelection.simpleChanges().act(evt -> {
@@ -525,7 +544,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 				TreePath[] selection = new TreePath[multiSelection.size()];
 				int i = 0;
 				for (BetterList<T> path : multiSelection)
-					selection[i++] = new TreePath(path.toArray());
+					selection[i++] = treeModel.getTreePath(path, equivalence);
 				selectionModel.setSelectionPaths(selection);
 			} finally {
 				callbackLock[0] = false;
@@ -537,24 +556,5 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			treeTable.getTreeTableModel().removeTreeModelListener(modelListener);
 			msSub.unsubscribe();
 		});
-	}
-
-	private static boolean isSamePath(BetterList<?> better, TreePath treePath) {
-		if (better.size() != treePath.getPathCount())
-			return false;
-		for (Object betterV : better.reverse()) {
-			if (!Objects.equals(betterV, treePath.getLastPathComponent()))
-				return false;
-			treePath = treePath.getParentPath();
-		}
-		return true;
-	}
-
-	private static boolean eventApplies(TreeModelEvent e, BetterList<?> path) {
-		if (path.size() <= e.getTreePath().getPathCount())
-			return false;
-		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath()))
-			return false;
-		return ArrayUtils.contains(e.getChildren(), path.get(e.getTreePath().getPathCount()));
 	}
 }

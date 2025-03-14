@@ -258,7 +258,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of elements to filter modification for
 	 */
 	public static class ModFilterer<T> {
-		private final String theUnmodifiableMessage;
+		private final Supplier<String> theUnmodifiableMessage;
 		private final boolean areUpdatesAllowed;
 		private final String theAddMessage;
 		private final String theRemoveMessage;
@@ -268,7 +268,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** @param options The mod-filtering options to copy */
 		public ModFilterer(ModFilterBuilder<T> options) {
-			theUnmodifiableMessage = options.getUnmodifiableMsg();
+			theUnmodifiableMessage = options.getUnmodifiableSupplier();
 			this.areUpdatesAllowed = options.areUpdatesAllowed();
 			theAddMessage = options.getAddMsg();
 			theRemoveMessage = options.getRemoveMsg();
@@ -279,7 +279,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		/** @return The message that this filter returns for modifications that are not prevented by other settings */
 		public String getUnmodifiableMessage() {
-			return theUnmodifiableMessage;
+			return theUnmodifiableMessage == null ? null : theUnmodifiableMessage.get();
 		}
 
 		/**
@@ -325,7 +325,7 @@ public class ObservableCollectionDataFlowImpl {
 		public String isEnabled() {
 			if (areUpdatesAllowed)
 				return null;
-			return theUnmodifiableMessage;
+			return getUnmodifiableMessage();
 		}
 
 		/**
@@ -351,11 +351,11 @@ public class ObservableCollectionDataFlowImpl {
 					if (msg == null)
 						msg = theAddMessage;
 					if (msg == null)
-						msg = theUnmodifiableMessage;
+						msg = getUnmodifiableMessage();
 				}
 			} else {
 				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly unmodifiable.
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			}
 			return msg;
 		}
@@ -387,13 +387,13 @@ public class ObservableCollectionDataFlowImpl {
 						throw new IllegalArgumentException(msg);
 					msg = theAddMessage;
 					if (msg == null)
-						msg = theUnmodifiableMessage;
+						msg = getUnmodifiableMessage();
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
 				}
 			} else {
 				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly unmodifiable.
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 				if (msg != null)
 					throw new UnsupportedOperationException(msg);
 			}
@@ -426,7 +426,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = theRemoveMessage;
 			if (msg == null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			return msg;
 		}
 
@@ -441,7 +441,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = theRemoveMessage;
 			if (msg == null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
 		}
@@ -455,7 +455,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theAddMessage != null)
 				return theAddMessage;
 			if (theUnmodifiableMessage != null)
-				return theUnmodifiableMessage;
+				return getUnmodifiableMessage();
 			return null;
 		}
 
@@ -473,7 +473,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null && theAddMessage != null)
 				msg = theAddMessage;
 			if (msg == null && theUnmodifiableMessage != null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			return msg;
 		}
 
@@ -491,7 +491,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null && theAddMessage != null)
 				msg = theAddMessage;
 			if (msg == null && theUnmodifiableMessage != null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
 		}
@@ -502,7 +502,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theMoveMessage != null)
 				msg = theMoveMessage;
 			if (msg == null && theUnmodifiableMessage != null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			return msg;
 		}
 
@@ -512,7 +512,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theMoveMessage != null)
 				msg = theMoveMessage;
 			if (msg == null && theUnmodifiableMessage != null)
-				msg = theUnmodifiableMessage;
+				msg = getUnmodifiableMessage();
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
 		}
@@ -943,17 +943,17 @@ public class ObservableCollectionDataFlowImpl {
 					return def.equivalence();
 				} else {
 					Function<? super I, ? extends T> map = LambdaUtils.printableFn(v -> {
-						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
+						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 						return engine.map(v, engine.get());
 					}, def::toString, def);
 					Equivalence<T> mappedEquivalence = sourceEquivalence.map( //
 						LambdaUtils.printablePred(v -> {
-							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
+							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getError() == null;
 						}, def + ".filter", def), map, //
 						LambdaUtils.printableFn(v -> {
-							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
+							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getReversed();
 						}, reverse::toString, reverse));
@@ -1295,7 +1295,10 @@ public class ObservableCollectionDataFlowImpl {
 		protected AbstractTransformedManager(CollectionOperation<E, ?, I> parent,
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
 			theParent = parent;
-			theEngine = transformation.createEngine(null, theParent.equivalence());
+			theEngine = transformation.createEngine(null, theParent.equivalence(), err -> {
+				System.out.println("Transformation error @" + getIdentity());
+				err.printStackTrace();
+			});
 			propagateUpdatesToParent = true;
 			theEquivalence = equivalence;
 		}

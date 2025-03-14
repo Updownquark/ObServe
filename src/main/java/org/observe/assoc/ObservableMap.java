@@ -264,6 +264,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					}
 
 					@Override
+					public long getStamp() {
+						return MapValueObservable.this.getStamp();
+					}
+
+					@Override
 					public CoreChangeSources getChangeSources() {
 						return changes().getChangeSources();
 					}
@@ -375,6 +380,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 							@Override
 							protected Object createIdentity() {
 								return Identifiable.wrap(Enabled.this.getIdentity(), "noInitChanges");
+							}
+
+							@Override
+							public long getStamp() {
+								return Enabled.this.getStamp();
 							}
 
 							@Override
@@ -502,6 +512,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					@Override
 					public CoreId getCoreId() {
 						return changes.getCoreId();
+					}
+
+					@Override
+					public long getStamp() {
+						return changes.getStamp();
 					}
 
 					@Override

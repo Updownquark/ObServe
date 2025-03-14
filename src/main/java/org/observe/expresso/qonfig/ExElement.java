@@ -4,6 +4,7 @@ import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -265,10 +266,12 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children,
-					(c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(), c2.reporting().getPosition().getPosition()));
+				Collections.sort(children, EL_INTERP_COMPARE);
 			return children == null ? Collections.emptyList() : children;
 		}
+
+		static final Comparator<ExElement.Interpreted<?>> EL_INTERP_COMPARE = (el1, el2) -> el1.reporting().getPosition()
+			.compareTo(el2.reporting().getPosition());
 
 		/**
 		 * @param element The element instance to get the children value in

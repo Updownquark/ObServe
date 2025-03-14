@@ -183,6 +183,18 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
 				theFormat = interpret(getDefinition().getFormat(), ModelTypes.Value.forType(formatType));
+				if (theFormat != null) {
+					TypeToken<?> formatValueType = theFormat.getType().getType(0).resolveType(Format.class.getTypeParameters()[0]);
+					boolean badType;
+					if (getDefinition().isTypeEditable())
+						badType = !TypeTokens.get().wrap(valueType).equals(TypeTokens.get().wrap(formatValueType));
+					else
+						badType = !TypeTokens.get().isAssignable(formatValueType, valueType);
+					if (badType) {
+						reporting().at(getDefinition().getFormat().getFilePosition()).error(
+							"Format of type " + formatValueType + " cannot be used for a text widget whose value is of type " + valueType);
+					}
+				}
 				isEditable = interpret(getDefinition().isEditable(), ModelTypes.Value.BOOLEAN);
 			}
 

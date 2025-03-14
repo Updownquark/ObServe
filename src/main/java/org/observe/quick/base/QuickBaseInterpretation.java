@@ -210,13 +210,13 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickCheckBoxMenuItem.Def::new));
 
 		// Dragging
-		interpreter.createWith(QuickDragging.TRANSFER_SOURCE, QuickDragging.TransferSource.Def.class,
-			ExElement.creator(QuickDragging.TransferSource.Def::new));
-		interpreter.createWith(QuickDragging.TRANSFER_ACCEPT, QuickDragging.TransferAccept.Def.class,
-			ExElement.creator(QuickDragging.TransferAccept.Def::new));
-		interpreter.createWith(QuickDragging.AS_OBJECT, QuickDragging.AsObject.Def.class,
-			ExElement.creator(QuickDragging.AsObject.Def::new));
-		interpreter.createWith(QuickDragging.AS_TEXT, QuickDragging.AsText.Def.class, ExElement.creator(QuickDragging.AsText.Def::new));
+		interpreter.createWith(QuickTransfer.TRANSFER_SOURCE, QuickTransfer.TransferSource.Def.class,
+			ExElement.creator(QuickTransfer.TransferSource.Def::new));
+		interpreter.createWith(QuickTransfer.TRANSFER_ACCEPT, QuickTransfer.TransferAccept.Def.class,
+			ExElement.creator(QuickTransfer.TransferAccept.Def::new));
+		interpreter.createWith(QuickTransfer.AS_OBJECT, QuickTransfer.AsObject.Def.class,
+			ExElement.creator(QuickTransfer.AsObject.Def::new));
+		interpreter.createWith(QuickTransfer.AS_TEXT, QuickTransfer.AsText.Def.class, ExElement.creator(QuickTransfer.AsText.Def::new));
 		return interpreter;
 	}
 

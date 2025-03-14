@@ -63,7 +63,10 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 		theValues = list;
 		theLock = list;
 		theChanges = new LightWeightObservable<ObservableCollectionEvent<E>>(
-			ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build()) {
+			ListenerList.build()//
+			.reentrancyError(() -> ObservableCollection.REENTRANT_EVENT_ERROR + ": " + getIdentity().toString())//
+			.forEachSafe(!theLock.getThreadConstraint().isDedicated())//
+			.build()) {
 			@Override
 			protected boolean isInternalState() {
 				return true;
@@ -97,7 +100,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 
 	@Override
 	public boolean isEventing() {
-		return theChanges.isEventing();
+		return theChanges.isEventing() || theLock.hasFinishingCauses();
 	}
 
 	@Override
@@ -232,7 +235,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
 					null, value, theLock.getUnfinishedCauses());
 				fire(event);
-			}
+			} else
+				theChanges.incrementStamp();
 			return el;
 		}
 	}
@@ -255,7 +259,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 						ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(valueEl,
 							theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
 						fire(event);
-					}
+					} else
+						theChanges.incrementStamp();
 					if (afterRemove != null)
 						afterRemove.run();
 				});
@@ -267,7 +272,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 						theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value,
 						theLock.getUnfinishedCauses());
 					fire(event);
-				}
+				} else
+					theChanges.incrementStamp();
 			}
 			return el;
 		}
@@ -301,8 +307,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 
 	@Override
 	public CoreChangeSources getChangeSources() {
-		// TODO Auto-generated method stub
-		return null;
+		return theChanges.getChangeSources();
 	}
 
 	void fire(ObservableCollectionEvent<E> evt) {
@@ -358,7 +363,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
 										element.get(), op, move));
-								}
+								} else
+									theChanges.incrementStamp();
 								return move;
 							}
 
@@ -374,7 +380,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
 										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null,
 										element.get(), op, data));
-								}
+								} else
+									theChanges.incrementStamp();
 							}
 						});
 					}
@@ -387,7 +394,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 				if (theChanges.isAnyoneListening()) {
 					fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
 						CollectionChangeType.set, old, value, theLock.getUnfinishedCauses()));
-				}
+				} else
+					theChanges.incrementStamp();
 			}
 
 			@Override
@@ -403,7 +411,8 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 					if (theChanges.isAnyoneListening()) {
 						fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
 							CollectionChangeType.remove, old, old, theLock.getUnfinishedCauses()));
-					}
+					} else
+						theChanges.incrementStamp();
 				}
 			}
 

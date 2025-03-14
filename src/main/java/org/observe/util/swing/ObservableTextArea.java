@@ -132,6 +132,11 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 		}
 	}
 
+	/** @return The observable editor for this text area */
+	public ObservableTextEditor<E> getEditor() {
+		return theEditor;
+	}
+
 	/** @return The value controlled by this text area */
 	public SettableValue<E> getValue() {
 		if (theEditor == null)

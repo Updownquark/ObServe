@@ -14,11 +14,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
+import java.util.function.LongSupplier;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -35,6 +36,8 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.BreakpointHere;
+import org.qommons.IntList;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -477,7 +480,9 @@ public abstract class Invocation implements ObservableExpression {
 				boolean ok = true;
 				boolean varArgs = false;
 				tva = TypeTokens.get().accumulate(impl.getMethodTypes(m), tvaResolver);
-				for (int a = 0; ok && a < option.size() - methodArgStart; a++) {
+				int parameters = option.size() - methodArgStart;
+				int varArgCount = 0;
+				for (int a = 0; ok && a < parameters; a++) {
 					int ma = a - methodArgStart;
 					if (ma < 0)
 						continue;
@@ -487,6 +492,8 @@ public abstract class Invocation implements ObservableExpression {
 						// Test var-args invocation first
 						TypeToken<?> ptComp = paramType.getComponentType();
 						varArgs = option.matchesType(a, ptComp, ExceptionHandler.placeHolder());
+						if (varArgs && varArgCount == 0)
+							varArgCount = parameters - ma;
 						if (varArgs && !tva.accumulate(ptComp, option.resolve(a, exHandler))) {
 							if (secondPass) {
 								if (methodErrors == null)
@@ -568,6 +575,13 @@ public abstract class Invocation implements ObservableExpression {
 					TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
 					ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
+					if (converter == null && targetType.getModelType() == ModelTypes.Value) {
+						// Accumulating with the return type pre-emptively can prevent us from doing some of the conversions we like,
+						// but if we're unable to convert without it, we might be able to with it.
+						tva.accumulate(TypeTokens.get().of(impl.getReturnType(m)), targetType.getType(0));
+						returnType = tva.resolve(impl.getReturnType(m));
+						converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
+					}
 					if (converter == null) {
 						if (secondPass) {
 							if (methodErrors == null)
@@ -585,7 +599,7 @@ public abstract class Invocation implements ObservableExpression {
 							// So bizarre, the methods call includes overridden methods, e.g. Comparable.compareTo() and String.compareTo()
 							specificity += TypeTokens.get().getTypeSpecificity(returnType.getType());
 						}
-						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
+						bestResult = new Invocation.MethodResult<>(m, o, false, varArgCount, specificity,
 							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
 				}
@@ -745,7 +759,6 @@ public abstract class Invocation implements ObservableExpression {
 		InvocationInstantiator(MethodResult<X, R> method, ModelValueInstantiator<? extends SettableValue<?>> context,
 			List<ModelValueInstantiator<? extends SettableValue<?>>> arguments, ExecutableImpl<X> impl, boolean caching,
 			ErrorReporting reporting, boolean testing) {
-			super();
 			theMethod = method;
 			theContext = context;
 			theArguments = arguments;
@@ -838,6 +851,7 @@ public abstract class Invocation implements ObservableExpression {
 		private final Invocation.ExecutableImpl<X> theImpl;
 		private final SettableValue<Object> theContext;
 		private final SettableValue<?>[] theArguments;
+		private final IntList thePrimitiveArguments;
 		protected final boolean isTesting;
 		private final Object theDefaultValue;
 
@@ -851,12 +865,22 @@ public abstract class Invocation implements ObservableExpression {
 			theArguments = arguments;
 			isTesting = testing;
 			theDefaultValue = defaultValue;
+			thePrimitiveArguments = new IntList(true, true);
+			Class<?>[] paramTypes = method.method.getParameterTypes();
+			int maxP = paramTypes.length - 1;
+			for (int a = 0; a < arguments.length; a++) {
+				// Allow for var args
+				if (paramTypes[Math.min(a, maxP)].isPrimitive())
+					thePrimitiveArguments.add(a);
+			}
 		}
 
 		protected Object invoke(boolean asAction)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			if (isUpdatingContext)
 				return theCachedValue;
+			boolean updateCtx = asAction && !isUpdatingContext && theContext != null && theImpl.updateContext();
+			long ctxStamp = updateCtx ? theContext.getStamp() : 0;
 			Object ctx = theContext == null ? null : theContext.get();
 			if (ctx == null && theContext != null) {
 				/* This would seem to be a problem, but actually it's pretty much entirely unavoidable
@@ -884,11 +908,19 @@ public abstract class Invocation implements ObservableExpression {
 				return theDefaultValue;
 			}
 			Object[] args = new Object[theArguments.length];
-			for (int a = 0; a < args.length; a++)
+			for (int a = 0; a < args.length; a++) {
 				args[a] = theArguments[a].get();
+				if (args[a] == null && thePrimitiveArguments.contains(a)) {
+					BreakpointHere.breakpoint();
+					theReporting.warn("Argument[" + a + "] is null");
+					return null;
+				}
+			}
 			Object returnValue = theMethod.invoke(ctx, args, theImpl);
-			if (asAction && !isUpdatingContext && theContext != null && theImpl.updateContext()
-				&& theContext.isAcceptable(theContext.get()) == null) {
+			/* For actions, this is likely a method call on some object which may have caused a change in that object.
+			 * However, the method may not have done anything to affect the observable chain.
+			 * So when possible, update the context, unless it has changed as a result of our call */
+			if (updateCtx && theContext.getStamp() == ctxStamp && theContext.isAcceptable(theContext.get()) == null) {
 				isUpdatingContext = true;
 				theCachedValue = returnValue;
 				try {
@@ -907,7 +939,17 @@ public abstract class Invocation implements ObservableExpression {
 			return returnValue;
 		}
 
-		protected <X2> SettableValue<X2> syntheticResultValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<?> changes) {
+		protected <X2> SettableValue<X2> syntheticResultValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<?> changes,
+			boolean stamped) {
+			LongSupplier stamp;
+			if (ctxV != null) {
+				SettableValue<?>[] stampArgs = new SettableValue[argVs.length + 1];
+				stampArgs[0] = ctxV;
+				System.arraycopy(argVs, 0, stampArgs, 1, argVs.length);
+				stamp = () -> Stamped.compositeStamp(stampArgs);
+			} else {
+				stamp = () -> Stamped.compositeStamp(argVs);
+			}
 			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(() -> {
 				try {
 					return (X2) invoke(false);
@@ -915,27 +957,25 @@ public abstract class Invocation implements ObservableExpression {
 					theReporting.error(null, e);
 					return (X2) theDefaultValue;
 				}
-			}, () -> {
-				if (ctxV != null)
-					return Stamped.compositeStamp(Stream.concat(Stream.of(ctxV), Arrays.stream(argVs)).mapToLong(Stamped::getStamp),
-						argVs.length + 1);
-				else
-					return Stamped.compositeStamp(Arrays.asList(argVs));
-			}, changes, () -> this);
-			String location = theReporting.getFileLocation().getPosition(0).toShortString();
+			}, stamp, changes, () -> this);
+			String location = theReporting.getFileLocation() == null ? "" : theReporting.getPosition().toShortString() + ": ";
+			SettableValue<X2> value;
 			if (isCaching) {
-				return SettableValue.asSettable(backing.cached(), //
-					__ -> location + ": " + theImpl + "s are not reversible");
+				value = SettableValue.asSettable(backing.cached(), //
+					__ -> location + theImpl + "s are not reversible");
 			} else {
-				long[] stamp = new long[1];
-				return SettableValue.asSettable(ObservableValue.of(//
+				long[] cacheStamp = new long[1];
+				value = SettableValue.asSettable(ObservableValue.of(//
 					() -> {
-						stamp[0]++;
+						cacheStamp[0]++;
 						return backing.get();
-					}, () -> Stamped.compositeStamp(backing.getStamp(), stamp[0]), //
+					}, () -> Stamped.compositeOf2Stamps(stamp.getAsLong(), cacheStamp[0]), //
 					changes, () -> this), //
-					__ -> location + ": " + theImpl + "s are not reversible");
+					__ -> location + theImpl + "s are not reversible");
 			}
+			if (stamped && isCaching)
+				value = (SettableValue<X2>) new ObservableStampedValue<>((SettableValue<Stamped>) value);
+			return value;
 		}
 
 		public Invocation.MethodResult<X, R> getMethod() {
@@ -954,11 +994,81 @@ public abstract class Invocation implements ObservableExpression {
 		public String toString() {
 			StringBuilder str = new StringBuilder();
 			if (theContext != null)
-				str.append(theContext).append('.');
+				str.append(theContext.getIdentity()).append('.');
 			str.append(theMethod.method.getName()).append('(');
-			StringUtils.print(str, ", ", Arrays.asList(theArguments), StringBuilder::append);
+			StringUtils.print(str, ", ", Arrays.asList(theArguments), (sb, arg) -> sb.append(arg.getIdentity()));
 			str.append(')');
 			return str.toString();
+		}
+	}
+
+	static class ObservableStampedValue<T extends Stamped> extends SettableValue.WrappingSettableValue<T> {
+		private long theCachedContainerStamp;
+		private long theCachedValueStamp;
+		private long thePublishedStamp;
+		private T theCachedValue;
+
+		ObservableStampedValue(SettableValue<T> wrapped) {
+			super(wrapped);
+			theCachedContainerStamp = theCachedValueStamp = -1;
+		}
+
+		@Override
+		public T get() {
+			long wrappedStamp = super.getStamp();
+			if (theCachedContainerStamp != -1 && wrappedStamp == theCachedContainerStamp)
+				return theCachedValue;
+			theCachedContainerStamp = wrappedStamp;
+			T value = super.get();
+			if (value == theCachedValue) {
+				long valueStamp = value == null ? 0 : value.getStamp();
+				if (theCachedValueStamp == -1 || valueStamp != theCachedValueStamp) {
+					theCachedValueStamp = valueStamp;
+					thePublishedStamp = wrappedStamp;
+				}
+			} else {
+				theCachedValue = value;
+				theCachedValueStamp = value == null ? 0 : value.getStamp();
+				thePublishedStamp = wrappedStamp;
+			}
+			return theCachedValue;
+		}
+
+		@Override
+		public long getStamp() {
+			long wrappedStamp = super.getStamp();
+			if (theCachedContainerStamp != -1 && wrappedStamp == theCachedContainerStamp)
+				return thePublishedStamp;
+			T value = super.get();
+			if (theCachedValue == value) {
+				long valueStamp = value == null ? 0 : value.getStamp();
+				if (valueStamp == theCachedValueStamp)
+					return thePublishedStamp;
+				theCachedValueStamp = valueStamp;
+				theCachedContainerStamp = thePublishedStamp = wrappedStamp;
+			} else {
+				theCachedValue = value;
+				theCachedValueStamp = value == null ? 0 : value.getStamp();
+				theCachedContainerStamp = thePublishedStamp = wrappedStamp;
+			}
+			return wrappedStamp;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			long[] listenerStamp = new long[1];
+			return super.noInitChanges().filter(evt -> {
+				if (evt.isUpdate()) {
+					if (evt.getNewValue() == null)
+						return false;
+					long newStamp = evt.getNewValue().getStamp();
+					if (newStamp == listenerStamp[0])
+						return false; // Not actually changed--swallow the update
+					listenerStamp[0] = newStamp;
+				} else if (evt.getNewValue() != null)
+					listenerStamp[0] = evt.getNewValue().getStamp();
+				return true;
+			});
 		}
 	}
 
@@ -1063,10 +1173,13 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		static class ThingInstantiator<X extends Executable, M, MV extends M> extends InvocationInstantiator<X, MV, M, MV> {
+			private final boolean isStamped;
+
 			ThingInstantiator(MethodResult<X, MV> method, ModelValueInstantiator<? extends SettableValue<?>> context,
 				List<ModelValueInstantiator<? extends SettableValue<?>>> arguments, ExecutableImpl<X> impl, boolean caching,
 				ErrorReporting reporting, boolean testing) {
 				super(method, context, arguments, impl, caching, reporting, testing);
+				isStamped = impl.isStamped(method.method);
 			}
 
 			@Override
@@ -1078,7 +1191,7 @@ public abstract class Invocation implements ObservableExpression {
 				else
 					defaultValue = null;
 				SettableValue<Object> value = new InvocationInstance<>(getMethod(), isCaching, theReporting, theImpl,
-					(SettableValue<Object>) ctxV, argVs, isTesting, defaultValue).syntheticResultValue(ctxV, argVs, changes);
+					(SettableValue<Object>) ctxV, argVs, isTesting, defaultValue).syntheticResultValue(ctxV, argVs, changes, isStamped);
 				return getMethod().converter.convert(value);
 			}
 		}
@@ -1090,6 +1203,8 @@ public abstract class Invocation implements ObservableExpression {
 		Type getReturnType(M method);
 
 		TypeVariable<?>[] getMethodTypes(M method);
+
+		boolean isStamped(M method);
 
 		Object execute(M method, Object context, Object[] args)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException;
@@ -1110,6 +1225,11 @@ public abstract class Invocation implements ObservableExpression {
 			@Override
 			public TypeVariable<?>[] getMethodTypes(Method method) {
 				return method.getTypeParameters();
+			}
+
+			@Override
+			public boolean isStamped(Method method) {
+				return Stamped.class.isAssignableFrom(method.getReturnType());
 			}
 
 			@Override
@@ -1150,6 +1270,11 @@ public abstract class Invocation implements ObservableExpression {
 			}
 
 			@Override
+			public boolean isStamped(Constructor<?> method) {
+				return Stamped.class.isAssignableFrom(method.getDeclaringClass());
+			}
+
+			@Override
 			public Object execute(Constructor<?> method, Object context, Object[] args)
 				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 				Object[] args2 = context == null ? args : ArrayUtils.add(args, 0, context);
@@ -1184,15 +1309,17 @@ public abstract class Invocation implements ObservableExpression {
 		 */
 		public final int argListOption;
 		private final boolean isArg0Context;
+		public final int varArgs;
 		/** The {@link TypeTokens#getTypeSpecificity(Type) specificity} of the method's parameters */
 		public final int specificity;
 		/** The convert to convert a {@link SettableValue} containing the invokable's return value to the target type */
 		public final ModelInstanceConverter<SettableValue<Object>, MV> converter;
 
-		MethodResult(M method, int argListOption, boolean arg0Context, int specificity,
+		MethodResult(M method, int argListOption, boolean arg0Context, int varArgs, int specificity,
 			ModelInstanceConverter<SettableValue<Object>, MV> converter) {
 			this.method = method;
 			this.argListOption = argListOption;
+			this.varArgs = varArgs;
 			isArg0Context = arg0Context;
 			this.specificity = specificity;
 			this.converter = converter;
@@ -1211,24 +1338,22 @@ public abstract class Invocation implements ObservableExpression {
 		public Object invoke(Object context, Object[] args, ExecutableImpl<M> impl)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			Object[] parameters;
-			if (isArg0Context || method.isVarArgs()) {
+			if (isArg0Context || varArgs > 0) {
 				parameters = new Object[method.getParameterCount()];
 				if (isArg0Context) {
 					context = args[0];
-					if (method.isVarArgs()) {
+					if (varArgs > 0) {
 						System.arraycopy(args, 1, parameters, 0, parameters.length - 1);
-						int lastArgLen = args.length - parameters.length;
 						Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(),
-							lastArgLen);
-						System.arraycopy(args, parameters.length, lastArg, 0, lastArgLen);
+							varArgs);
+						System.arraycopy(args, parameters.length, lastArg, 0, varArgs);
 						parameters[parameters.length - 1] = lastArg;
 					} else
 						System.arraycopy(args, 1, parameters, 0, parameters.length);
 				} else { // var args
 					System.arraycopy(args, 0, parameters, 0, parameters.length - 1);
-					int lastArgLen = args.length - parameters.length + 1;
-					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(), lastArgLen);
-					for (int srcI = parameters.length - 1, destI = 0; destI < lastArgLen; srcI++, destI++)
+					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(), varArgs);
+					for (int srcI = parameters.length - 1, destI = 0; destI < varArgs; srcI++, destI++)
 						Array.set(lastArg, destI, args[srcI]);
 					parameters[parameters.length - 1] = lastArg;
 				}

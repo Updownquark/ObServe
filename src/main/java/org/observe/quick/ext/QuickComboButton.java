@@ -1,5 +1,9 @@
 package org.observe.quick.ext;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -61,7 +65,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	public static class Def<B extends QuickComboButton<?>> extends QuickButton.Def<B> implements MultiValueRenderable.Def<B> {
 		private CompiledExpression theValues;
 		private ModelComponentId theActiveValueVariable;
-		private QuickWidget.Def<?> theRenderer;
+		private final List<QuickWidget.Def<?>> theRenderers;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -69,6 +73,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+			theRenderers = new ArrayList<>();
 		}
 
 		/** @return The values representing actions to present to the user */
@@ -85,8 +90,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 
 		/** @return The renderer to represent the action values */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
-		public QuickWidget.Def<?> getRenderer() {
-			return theRenderer;
+		public List<QuickWidget.Def<?>> getRenderers() {
+			return Collections.unmodifiableList(theRenderers);
 		}
 
 		@Override
@@ -99,10 +104,10 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
 
-			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
-			if (renderer == null)
-				renderer = session.metadata().get("default-renderer").get().peekFirst();
-			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
+			List<ExpressoQIS> renderers = session.forChildren("renderer");
+			if (renderers.isEmpty())
+				renderers = session.metadata().get("default-renderer").get();
+			syncChildren(QuickWidget.Def.class, theRenderers, renderers);
 		}
 
 		@Override
@@ -120,7 +125,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	public static class Interpreted<T, B extends QuickComboButton<T>> extends QuickButton.Interpreted<B>
 	implements MultiValueRenderable.Interpreted<T, B> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
-		private QuickWidget.Interpreted<?> theRenderer;
+		private final List<QuickWidget.Interpreted<?>> theRenderers;
 
 		/**
 		 * @param definition The definition to interpret
@@ -128,6 +133,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		 */
 		protected Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
+			theRenderers = new ArrayList<>();
 		}
 
 		@Override
@@ -160,8 +166,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		}
 
 		/** @return The renderer to represent the action values */
-		public QuickWidget.Interpreted<?> getRenderer() {
-			return theRenderer;
+		public List<QuickWidget.Interpreted<?>> getRenderers() {
+			return Collections.unmodifiableList(theRenderers);
 		}
 
 		@Override
@@ -169,7 +175,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 			super.doUpdate(env);
 			getOrInitValues();
 
-			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
+			syncChildren(getDefinition().getRenderers(), theRenderers, def -> def.interpret(this),
 				(r, rEnv) -> r.updateElement(rEnv));
 		}
 
@@ -183,12 +189,13 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	private SettableValue<ObservableCollection<T>> theValues;
 	private ModelComponentId theActiveValueVariable;
 	private SettableValue<SettableValue<T>> theActiveValue;
-	private QuickWidget theRenderer;
+	private List<QuickWidget> theRenderers;
 
 	/** @param id The element ID for this widget */
 	protected QuickComboButton(Object id) {
 		super(id);
 
+		theRenderers = new ArrayList<>();
 		theValues = SettableValue.<ObservableCollection<T>> build().build();
 		theActiveValue = SettableValue.<SettableValue<T>> build().build();
 	}
@@ -209,8 +216,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	}
 
 	/** @return The renderer to represent the action values */
-	public QuickWidget getRenderer() {
-		return theRenderer;
+	public List<QuickWidget> getRenderers() {
+		return Collections.unmodifiableList(theRenderers);
 	}
 
 	@Override
@@ -226,15 +233,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		theValuesInstantiator = myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate();
 		theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
 
-		if (theRenderer != null
-			&& (myInterpreted.getRenderer() == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getIdentity())) {
-			theRenderer.destroy();
-			theRenderer = null;
-		}
-		if (theRenderer == null && myInterpreted.getRenderer() != null)
-			theRenderer = myInterpreted.getRenderer().create();
-		if (theRenderer != null)
-			theRenderer.update(myInterpreted.getRenderer(), this);
+		syncChildren(myInterpreted.getRenderers(), theRenderers, r -> r.create(), QuickWidget::update);
 	}
 
 	@Override
@@ -242,8 +241,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		super.instantiated();
 		if (theValuesInstantiator != null)
 			theValuesInstantiator.instantiate();
-		if (theRenderer != null)
-			theRenderer.instantiated();
+		for (QuickWidget renderer : theRenderers)
+			renderer.instantiated();
 	}
 
 	@Override
@@ -252,8 +251,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		theValues.set(theValuesInstantiator == null ? null : theValuesInstantiator.get(myModels), null);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
 
-		if (theRenderer != null)
-			theRenderer.instantiate(myModels);
+		for (QuickWidget renderer : theRenderers)
+			renderer.instantiate(myModels);
 	}
 
 	@Override
@@ -263,8 +262,9 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
 		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
 
-		if (theRenderer != null)
-			copy.theRenderer = theRenderer.copy(copy);
+		copy.theRenderers = new ArrayList<>();
+		for (QuickWidget renderer : theRenderers)
+			copy.theRenderers.add(renderer.copy(copy));
 
 		return copy;
 	}

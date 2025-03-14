@@ -2,6 +2,7 @@ package org.observe.assoc.impl;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +34,8 @@ import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedCollection;
+import org.observe.collect.ObservableSortedCollectionImpl;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.CausalLock;
@@ -78,6 +81,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	private final BetterMap<ElementId, Set<KeyEntry>> theKeysBySourceElement;
 
+	private final boolean isValueSorted;
+
 	private long theStamp;
 	private int theValueSize;
 
@@ -100,6 +105,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		super(source, keyFlow, valueFlow, addKey);
 		theKeyManager = keyFlow.manageActive();
 		theValueManager = valueFlow.manageActive();
+
+		isValueSorted = valueFlow instanceof ObservableCollection.SortedDataFlow;
 
 		theKeyEntries = BetterTreeSet.<KeyEntry> buildTreeSet(KeyEntry::compareBySource).build();
 		theKeysBySourceElement = BetterHashMap.build().build();
@@ -265,13 +272,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	@Override
 	public ObservableMultiEntry<K, V> watch(K key) {
-		return new KeyValueCollection(key, null);
+		return isValueSorted ? new SortedKeyValueCollection(key, null) : new KeyValueCollection(key, null);
 	}
 
 	@Override
 	public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
 		MultiEntryHandle<K, V> entry = getEntryById(keyId);
-		return new KeyValueCollection(entry.getKey(), (KeyEntry) entry);
+		return isValueSorted ? new SortedKeyValueCollection(entry.getKey(), (KeyEntry) entry)
+			: new KeyValueCollection(entry.getKey(), (KeyEntry) entry);
 	}
 
 	@Override
@@ -1751,6 +1759,113 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public String toString() {
 			return BetterCollection.toString(this);
+		}
+	}
+
+	/** Implements {@link DefaultActiveMultiMap#get(Object)} if the map's values are sorted */
+	protected class SortedKeyValueCollection extends KeyValueCollection implements ObservableSortedCollection<V> {
+		SortedKeyValueCollection(K key, DefaultActiveMultiMap<S, K, V>.KeyEntry currentEntry) {
+			super(key, currentEntry);
+		}
+
+		@Override
+		public SortedKeyValueCollection alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Comparator<? super V> comparator() {
+			return ((Equivalence.ComparatorEquivalence<? super V>) theValueManager.equivalence()).comparator();
+		}
+
+		@Override
+		public CollectionElement<V> search(Comparable<? super V> search, SortedSearchFilter filter) {
+			try (Transaction t = lock(false, null)) {
+				KeyEntry entry = getCurrentEntry(false);
+				if (entry == null)
+					return null;
+				CollectionElement<ValueRef> found = entry.getValues().theValues.search(//
+					ref -> search.compareTo(ref.get()), filter);
+				if (found != null && filter != SortedSearchFilter.OnlyMatch && search.compareTo(found.get().get()) == 0) {
+					boolean next = filter.less.value;
+					CollectionElement<ValueRef> adj = entry.getValues().theValues.getAdjacentElement(found.getElementId(), next);
+					while (adj != null) {
+						if (search.compareTo(adj.get().get()) == 0) {
+							found = adj;
+							adj = entry.getValues().theValues.getAdjacentElement(found.getElementId(), next);
+						} else
+							break;
+					}
+				}
+				return entry.getValues().elementFor(found);
+			}
+		}
+
+		@Override
+		public int indexFor(Comparable<? super V> search) {
+			try (Transaction t = lock(false, null)) {
+				KeyEntry entry = getCurrentEntry(false);
+				return entry == null ? -1 : entry.getValues().theValues.indexFor(ref -> search.compareTo(ref.get()));
+			}
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return true;
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return false;
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<V, X> listener) {
+			return false;
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<V, X> listener) {
+			return false;
+		}
+
+		@Override
+		public ReversedSortedObservableMultiEntry<K, V> reverse() {
+			return new ReversedSortedObservableMultiEntry<>(this);
+		}
+	}
+
+	static class ReversedSortedObservableMultiEntry<K, V> extends ObservableSortedCollectionImpl.ReversedSortedCollection<V>
+	implements ObservableMultiEntry<K, V> {
+		ReversedSortedObservableMultiEntry(DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection source) {
+			super(source);
+		}
+
+		@Override
+		protected DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection getWrapped() {
+			return (DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection) super.getWrapped();
+		}
+
+		@Override
+		public ReversedSortedObservableMultiEntry<K, V> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public K getKey() {
+			return getWrapped().getKey();
+		}
+
+		@Override
+		public ElementId getKeyId() {
+			return getWrapped().getKeyId();
+		}
+
+		@Override
+		public DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection reverse() {
+			return getWrapped();
 		}
 	}
 }

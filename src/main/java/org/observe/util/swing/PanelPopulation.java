@@ -60,6 +60,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JTree;
+import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -136,19 +137,23 @@ public class PanelPopulation {
 	 * @return The API structure to add fields with
 	 */
 	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, Observable<?> until) {
+		return populateVPanel(panel, false, until);
+	}
+
+	public static <C extends Container> PanelPopulator<C, ?> populateVPanel(C panel, boolean showInvisible, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
 		if (panel == null)
 			panel = (C) new ConformingPanel();
-		return new PanelPopulationImpl.MigFieldPanel<>(null, panel, until == null ? Observable.empty() : until);
+		return new PanelPopulationImpl.MigFieldPanel<>(null, panel, showInvisible, until == null ? Observable.empty() : until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, String layoutType, Observable<?> until) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
-		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType), until);
+		return populateHPanel(panel, layoutType == null ? null : makeLayout(layoutType, false), until);
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
@@ -265,16 +270,20 @@ public class PanelPopulation {
 
 		<S> P addComponent(String fieldName, S component, Consumer<ComponentEditor<S, ?>> modify);
 
-		P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
+		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+			return addVPanel(false, panel);
+		}
+
+		P addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 		default P addHPanel(String fieldName, String layoutType, Consumer<PanelPopulator<JPanel, ?>> panel) {
-			return addHPanel(fieldName, makeLayout(layoutType), panel);
+			return addHPanel(fieldName, makeLayout(layoutType, false), panel);
 		}
 
 		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
-			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
+			return addCollapsePanel(vertical, makeLayout(layoutType, false), panel);
 		}
 
 		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel);
@@ -919,8 +928,8 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(null, new ConformingPanel(), getUntil());
+		default P addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
+			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(null, new ConformingPanel(), showInvisible, getUntil());
 			if (panel != null)
 				panel.accept(subPanel);
 			doAdd(subPanel);
@@ -929,7 +938,7 @@ public class PanelPopulation {
 
 		@Override
 		default P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
-			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(null, new ConformingPanel(), getUntil());
+			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(null, new ConformingPanel(), false, getUntil());
 			if (menu != null)
 				menu.accept(settingsMenu);
 			doAdd(settingsMenu, null, null, false);
@@ -940,7 +949,7 @@ public class PanelPopulation {
 		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel) {
 			JXCollapsiblePane cp = new JXCollapsiblePane(vertical ? JXCollapsiblePane.Direction.DOWN : JXCollapsiblePane.Direction.RIGHT,
 				new JustifiedBoxLayout(true).mainJustified().crossJustified());
-			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, layout);
+			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, false, layout);
 			panel.accept(collapsePanel);
 			doAdd(collapsePanel, null, null, false);
 			return (P) this;
@@ -987,6 +996,8 @@ public class PanelPopulation {
 		P disableWith(ObservableValue<String> disabled);
 
 		P visibleWhen(ObservableValue<Boolean> visible);
+
+		ObservableValue<String> getTooltipContents();
 
 		/**
 		 * Specifies that this component should fill the horizontal dimension of its panel (e.g. should expand so that there is no empty
@@ -1206,6 +1217,11 @@ public class PanelPopulation {
 		public ObservableValue<String> getTooltip() {
 			isTooltipHandled = true;
 			return theTooltip;
+		}
+
+		@Override
+		public ObservableValue<String> getTooltipContents() {
+			return theSettableTooltip.get();
 		}
 
 		@Override
@@ -1718,10 +1734,15 @@ public class PanelPopulation {
 			return withVTab(tabID, getTabCount(), panel, tabModifier);
 		}
 
-		P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier);
+		default P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
+			return withVTab(tabID, tabIndex, false, panel, tabModifier);
+		}
+
+		P withVTab(Object tabID, int tabIndex, boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel,
+			Consumer<TabEditor<?>> tabModifier);
 
 		default P withHTab(Object tabID, String layoutType, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
-			return withHTab(tabID, makeLayout(layoutType), panel, tabModifier);
+			return withHTab(tabID, makeLayout(layoutType, false), panel, tabModifier);
 		}
 
 		default P withHTab(Object tabID, LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
@@ -1773,20 +1794,28 @@ public class PanelPopulation {
 	}
 
 	public interface SplitPane<P extends SplitPane<P>> extends ComponentEditor<JSplitPane, P> {
-		P firstV(Consumer<PanelPopulator<?, ?>> vPanel);
+		default P firstV(Consumer<PanelPopulator<?, ?>> vPanel) {
+			return firstV(false, vPanel);
+		}
+
+		P firstV(boolean showInvisible, Consumer<PanelPopulator<?, ?>> vPanel);
 
 		default P firstH(String layoutType, Consumer<PanelPopulator<?, ?>> hPanel) {
-			return firstH(makeLayout(layoutType), hPanel);
+			return firstH(makeLayout(layoutType, false), hPanel);
 		}
 
 		P firstH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel);
 
 		P first(Component component);
 
-		P lastV(Consumer<PanelPopulator<?, ?>> vPanel);
+		default P lastV(Consumer<PanelPopulator<?, ?>> vPanel) {
+			return lastV(false, vPanel);
+		}
+
+		P lastV(boolean showInvisible, Consumer<PanelPopulator<?, ?>> vPanel);
 
 		default P lastH(String layoutType, Consumer<PanelPopulator<?, ?>> hPanel) {
-			return lastH(makeLayout(layoutType), hPanel);
+			return lastH(makeLayout(layoutType, false), hPanel);
 		}
 
 		P lastH(LayoutManager layout, Consumer<PanelPopulator<?, ?>> hPanel);
@@ -1831,20 +1860,28 @@ public class PanelPopulation {
 	}
 
 	public interface ScrollPane<P extends ScrollPane<P>> extends ComponentEditor<JScrollPane, P> {
-		P withVContent(Consumer<PanelPopulator<?, ?>> panel);
+		default P withVContent(Consumer<PanelPopulator<?, ?>> panel) {
+			return withVContent(false, panel);
+		}
+
+		P withVContent(boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel);
 
 		default P withHContent(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
-			return withHContent(makeLayout(layoutType), panel);
+			return withHContent(makeLayout(layoutType, false), panel);
 		}
 
 		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
 
 		P withContent(Component component);
 
-		P withVRowHeader(Consumer<PanelPopulator<?, ?>> panel);
+		default P withVRowHeader(Consumer<PanelPopulator<?, ?>> panel) {
+			return withVRowHeader(false, panel);
+		}
+
+		P withVRowHeader(boolean showInvisible, Consumer<PanelPopulator<?, ?>> panel);
 
 		default P withHRowHeader(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
-			return withHRowHeader(makeLayout(layoutType), panel);
+			return withHRowHeader(makeLayout(layoutType, false), panel);
 		}
 
 		P withHRowHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
@@ -1852,7 +1889,7 @@ public class PanelPopulation {
 		P withRowHeader(Component component);
 
 		default P withHColumnHeader(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
-			return withHColumnHeader(makeLayout(layoutType), panel);
+			return withHColumnHeader(makeLayout(layoutType, false), panel);
 		}
 
 		P withHColumnHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
@@ -1885,6 +1922,17 @@ public class PanelPopulation {
 		P withSelection(SettableValue<R> selection, boolean enforceSingleSelection);
 
 		P withSelection(ObservableCollection<R> selection);
+
+		/**
+		 * @param mode
+		 *        <ul>
+		 *        <li>{@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        <li>{@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        <li>or {@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        </ul>
+		 * @return This builder
+		 */
+		P withSelectionMode(int mode);
 
 		List<R> getSelection();
 
@@ -1942,9 +1990,28 @@ public class PanelPopulation {
 
 		P scrollable(boolean scrollable);
 
-		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
+		P rowSelection(boolean rowSelection);
 
-		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, Object, R>> accept);
+		P columnSelection(boolean columnSelection);
+
+		/**
+		 * @param mode
+		 *        <ul>
+		 *        <li>{@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        <li>{@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        <li>or {@link ListSelectionModel#SINGLE_SELECTION}</li>
+		 *        </ul>
+		 * @return This builder
+		 */
+		P withColumnSelectionMode(int mode);
+
+		P withColumnSelection(SettableValue<Object> selection, boolean enforceSingleSelection);
+
+		P withColumnSelection(ObservableCollection<Object> selection);
+
+		P dragSourceRow(Consumer<? super Dragging.TransferSource<R, ?>> source);
+
+		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, ?>> accept);
 
 		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
 	}
@@ -1995,6 +2062,8 @@ public class PanelPopulation {
 		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
 		P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod);
+
+		P withDraggableRows(boolean draggable, Runnable postDrag);
 	}
 
 	public interface DataAction<R, A extends DataAction<R, A>> {
@@ -2176,9 +2245,9 @@ public class PanelPopulation {
 
 		P withTreeOption(Consumer<? super PanelPopulator<?, ?>> panel);
 
-		P dragSourcePath(Consumer<? super Dragging.TransferSource<BetterList<F>>> source);
+		P dragSourcePath(Consumer<? super Dragging.TransferSource<BetterList<F>, F>> source);
 
-		P dragAcceptPath(Consumer<? super Dragging.TransferAccepter<BetterList<F>, Object, BetterList<F>>> accept);
+		P dragAcceptPath(Consumer<? super Dragging.TransferAccepter<BetterList<F>, F>> accept);
 	}
 
 	public interface TreeEditor<F, P extends TreeEditor<F, P>> extends AbstractTreeEditor<F, JTree, P> {
@@ -2192,13 +2261,13 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P dragSourcePath(Consumer<? super TransferSource<BetterList<F>>> source) {
-			return dragSourceRow(source);
+		default P dragSourcePath(Consumer<? super TransferSource<BetterList<F>, F>> source) {
+			return dragSourceRow((Consumer<? super TransferSource<BetterList<F>, ?>>) source);
 		}
 
 		@Override
-		default P dragAcceptPath(Consumer<? super TransferAccepter<BetterList<F>, Object, BetterList<F>>> accept) {
-			return dragAcceptRow(accept);
+		default P dragAcceptPath(Consumer<? super TransferAccepter<BetterList<F>, F>> accept) {
+			return dragAcceptRow((Consumer<? super TransferAccepter<BetterList<F>, ?>>) accept);
 		}
 	}
 
@@ -2307,10 +2376,14 @@ public class PanelPopulation {
 		 */
 		P withCloseAction(int closeAction);
 
-		P withVContent(Consumer<PanelPopulator<?, ?>> content);
+		default P withVContent(Consumer<PanelPopulator<?, ?>> content) {
+			return withVContent(false, content);
+		}
+
+		P withVContent(boolean showInvisible, Consumer<PanelPopulator<?, ?>> content);
 
 		default P withHContent(String layoutType, Consumer<PanelPopulator<?, ?>> content) {
-			return withHContent(layoutType == null ? null : makeLayout(layoutType), content);
+			return withHContent(layoutType == null ? null : makeLayout(layoutType, false), content);
 		}
 
 		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> content);
@@ -2386,8 +2459,8 @@ public class PanelPopulation {
 		MIG_LAYOUT_CREATOR = creator;
 	}
 
-	static LayoutManager2 createMigLayout(boolean withInsets, Supplier<String> err) {
-		String layoutConstraints = "fillx, hidemode 3";
+	static LayoutManager2 createMigLayout(boolean withInsets, boolean showInvisible, Supplier<String> err) {
+		String layoutConstraints = "fillx, hidemode " + (showInvisible ? 0 : 3);
 		if (!withInsets)
 			layoutConstraints += ", insets 0";
 		LayoutManager2 migLayout;
@@ -2401,13 +2474,13 @@ public class PanelPopulation {
 		return migLayout;
 	}
 
-	static LayoutManager makeLayout(String layoutType) {
+	static LayoutManager makeLayout(String layoutType, boolean showInvisible) {
 		LayoutManager layout;
 		if (layoutType == null)
 			layoutType = "box";
 		switch (layoutType.toLowerCase()) {
 		case "mig":
-			layout = createMigLayout(false, () -> "use addHPanel(String, LayoutManager, Consumer)");
+			layout = createMigLayout(false, showInvisible, () -> "use addHPanel(String, LayoutManager, Consumer)");
 			break;
 		case "ctr":
 		case "center":

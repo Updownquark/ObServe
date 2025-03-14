@@ -98,19 +98,22 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="custom-text-format" extends="format" inherits="type-required,with-element-model">
 			<element-model>
 				<?DOC The variable containing the text specified by the user?>
-				<value name-attribute="text-name" />
+				<value name-attribute="text-as" />
 				<?DOC The variable containing the value to format?>
-				<value name-attribute="format-value-name" />
+				<value name-attribute="format-value-as" />
 			</element-model>
 			<?DOC <html>The name of the variable to place the text to parse in.<br>
-				If not specified, the format will only be able to print, but not parse.?>
-			<attribute name="text-name" type="identifier" specify="optional" />
+				If not specified, the format will only be able to print, not parse.?>
+			<attribute name="text-as" type="identifier" specify="optional" />
 			<?DOC The name of the variable to place the value to format in?>
-			<attribute name="format-value-name" type="identifier" />
-			<?DOC <html>The expression to parse the text into a value.  Generally this will be an invocation to external code.<br>
-				If not specified, the format will only be able to print, but not parse.?>
+			<attribute name="format-value-as" type="identifier" />
+			<?DOC For the current text, a message describing why it cannot be parsed to a value, or null if it can?>
+			<attribute name="can-parse" type="expression" default="null" />
+			<?DOC <html>The expression to parse the current text into a value.  Generally this will be an invocation to external code.<br>
+				If not specified, the format will only be able to print, not parse.?>
 			<attribute name="parse" type="expression" specify="optional" />
-			<?DOC The expression to print the value to format?>
+			<?DOC <html>The expression to print the current format value to a string.  Generally this will be an invocation to external code.<br>
+				This expression may throw a parse exception.?>
 			<attribute name="print" type="expression" />
 		</element-def>
 		<?DOC Text format for a file path?>
@@ -174,6 +177,8 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attr-mod name="typed.type" specify="forbidden" />
 			<?DOC The grouping separator to place between every 3 digits in the integer?>
 			<attribute name="grouping-separator" type="string" specify="optional" />
+			<?DOC Whether the user may enter a blank (empty) value, which will be parsed to null?>
+			<attribute name="allow-empty" type="boolean" default="false" />
 		</element-def>
 		<?DOC A customizable format for long integers?>
 		<element-def name="long-format" extends="int-format" />
@@ -265,6 +270,18 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="filter-value-name" type="identifier" default="filterValue" />
 			<?DOC A test against the current parsed value to determine whether it passes the filter?>
 			<attribute name="test" type="expression" />
+		</element-def>
+
+		<?DOC A format that is a comma-separated sequence of values parsed by a component format?>
+		<element-def name="list-format" extends="format">
+			<?DOC The component format to parse/print each element in the sequence?>
+			<attribute name="component-format" type="expression" />
+			<?DOC Whether each value in the format must be distinct (no repeats)?>
+			<attribute name="distinct" type="boolean" default="false" />
+			<?DOC The delimiter to separate values in the list?>
+			<attribute name="delimiter" type="expression" default="`,`" />
+			<?DOC A sequence to insert after the delimiter (e.g. whitespace in a UI text field)?>
+			<attribute name="post-delimiter" type="expression" default="` `" />
 		</element-def>
 
 		<?DOC A format to determine how certain types of values are persisted in a &lt;config> model?>

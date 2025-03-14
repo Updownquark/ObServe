@@ -295,7 +295,8 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 			try (Transaction t = event.use()) {
 				theChanges.onNext(event);
 			}
-		}
+		} else
+			theChanges.incrementStamp();
 		boolean fireWithParent;
 		if (theParentContentRef == null)
 			fireWithParent = false;
@@ -388,6 +389,11 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		@Override
 		public CoreId getCoreId() {
 			return theConfig.getCoreId();
+		}
+
+		@Override
+		public long getStamp() {
+			return theConfig.getStamp();
 		}
 
 		@Override

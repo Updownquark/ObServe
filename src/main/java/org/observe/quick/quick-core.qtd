@@ -110,12 +110,14 @@
 			Renderers are typically not first-class children in their parent, but are only used to paint, or render, themselves.<br>
 			Typically, they do not receive user interaction such as clicks and cannot receive focus.?>
 		<add-on name="renderer" requires="widget" abstract="true" />
-		<?DOC A widget with a renderer?>
+		<?DOC A widget with a renderer, or possibly multiple renderers, only one of which is used at a time.<br>
+			If multiple renderers are specified, all but one of their visible attributes should be set.<br>
+			In this way, a rendering widget may specify different renderers for different kinds of rendered values.?>
 		<add-on name="rendering" abstract="true">
 			<?DOC Optionally rendering widgets may specify a renderer to be used by default if one is not specified on the element?>
-			<element-meta name="default-renderer" type="widget" inherits="renderer" min="0" />
+			<element-meta name="default-renderer" type="widget" inherits="renderer" min="0" max="inf" />
 			<?DOC The widget used to render each value for this rendering widget?>
-			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
+			<child-def name="renderer" type="widget" inherits="renderer" min="0" max="inf" />
 		</add-on>
 	</add-ons>
 

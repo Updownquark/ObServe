@@ -49,6 +49,17 @@ public interface Observer<T> {
 		}
 	}
 
+	/** An {@link Observer} that doesn't care about the fired value */
+	@FunctionalInterface
+	interface NoArgObserver extends SimpleObserver<Object> {
+		@Override
+		default void onNext(Object value) {
+			run();
+		}
+
+		void run();
+	}
+
 	/**
 	 * @param <T> The type of value the observer expects
 	 * @param observer The observer implementation

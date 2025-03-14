@@ -124,7 +124,7 @@ public interface QuickContentDialog extends QuickDialog {
 	QuickDialog copy(ExElement parent);
 
 	/** Abstract {@link QuickContentDialog} implementation */
-	public static abstract class Abstract extends QuickDialog.Abstract implements QuickContentDialog {
+	public static abstract class Abstract extends ExElement.Abstract implements QuickContentDialog {
 		private QuickWidget theContent;
 
 		/** @param id The element ID of the dialog */

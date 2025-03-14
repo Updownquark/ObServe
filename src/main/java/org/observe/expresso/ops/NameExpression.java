@@ -562,8 +562,7 @@ public class NameExpression implements ObservableExpression, Named {
 			} else if (isFinal) {
 				theMappedValue = ObservableValue.of(getStatic());
 			} else
-				theMappedValue = ObservableValue.of(LambdaUtils.printableSupplier(this::getStatic, theField::getName, null), this::getStamp,
-					theChanges);
+				theMappedValue = ObservableValue.of(LambdaUtils.printableSupplier(this::getStatic, theField::getName, null), theChanges);
 			theDefaultValue = defaultValue;
 			theReporting = reporting;
 		}

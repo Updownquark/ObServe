@@ -406,5 +406,10 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 			return super.set(value);
 		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
+		}
 	}
 }

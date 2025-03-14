@@ -12,21 +12,37 @@
 				<value name="tableOddRow" type="Color">`light-gray`</value>
 				<value name="tableRowSelected" type="Color">`cornflower-blue`</value>
 				<value name="tableOddRowSelected" type="Color">`steel-blue`</value>
+				<value name="errorColor" type="Color">`light-coral`</value>
+				<value name="warnColor" type="Color">`orange`</value>
 			</model>
 		</models>
 	</head>
 
+	<!--
+		Under normal circumstances, this is taken care of by the editor itself.
+		but if another style affects the widget (such as if it is a renderer or editor for a cell in a table),
+		the color as directly set by the widget will be ignored.  So we need to do it here as well.
+	-->
+	<style element="editable-text-widget">
+		<style if="error!=null">
+			<style attr="color">baseColors.errorColor</style>
+		</style>
+		<style if="warning!=null">
+			<style attr="color">baseColors.warnColor</style>
+		</style>
+	</style>
+
 	<!-- Nice UI for table row colors -->
-	<style attr="widget.color">
-		<style element="tabular-widget">
-			<style child="columns">
-				<style if="selected">baseColors.tableRowSelected</style>
-				<style if="rowIndex % 2 == 1">
-					<style>baseColors.tableOddRow</style>
-					<style if="selected">baseColors.tableOddRowSelected</style>
-				</style>
-				<style>baseColors.tableRowDefault</style>
+	<style element="tabular-widget">
+		<style child="columns">
+			<style if="selected">
+				<style attr="widget.color">baseColors.tableRowSelected</style>
+				<style attr="with-text.font-color">`white`</style>
 			</style>
+			<style if="rowIndex % 2 == 1" attr="widget.color">baseColors.tableOddRow
+				<style if="selected">baseColors.tableOddRowSelected</style>
+			</style>
+			<style attr="widget.color">baseColors.tableRowDefault</style>
 		</style>
 	</style>
 

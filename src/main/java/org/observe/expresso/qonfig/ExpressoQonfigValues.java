@@ -50,7 +50,6 @@ import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.Collec
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -356,12 +355,14 @@ public class ExpressoQonfigValues {
 		public static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
 			private final ModelValueInstantiator<SettableValue<T>> theInit;
 			private final T theDefaultValue;
+			private final String theAlias;
 
 			Instantiator(SimpleValueDef.Interpreted<T> parent, ModelValueInstantiator<SettableValue<T>> init)
 				throws ModelInstantiationException {
 				super(parent);
 				theInit = parent.getInit() == null ? null : parent.getInit().instantiate();
 				theDefaultValue = (T) TypeTokens.get().getDefaultValue(parent.getType().getType(0));
+				theAlias = getModelPath() + ":" + parent.toString();
 			}
 
 			@Override
@@ -380,7 +381,8 @@ public class ExpressoQonfigValues {
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				if (getElementValue() != null)
-					return getElementValue().get(models);
+					return getElementValue().get(models)//
+						.alias(theAlias);
 				else {
 					SettableValue.Builder<T> builder = SettableValue.build();
 					if (getModelPath() != null)
@@ -390,7 +392,8 @@ public class ExpressoQonfigValues {
 						builder.withValue(initV.get());
 					} else
 						builder.withValue(theDefaultValue);
-					return builder.build();
+					return builder.build()//
+						.alias(theAlias);
 				}
 			}
 
@@ -398,7 +401,8 @@ public class ExpressoQonfigValues {
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				if (getElementValue() != null)
-					return getElementValue().forModelCopy(value, sourceModels, newModels);
+					return getElementValue().forModelCopy(value, sourceModels, newModels)//
+						.alias(theAlias);
 				else
 					return value; // Independent (fundamental) value
 			}
@@ -567,6 +571,7 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<ObservableAction> theSave;
 			private final ModelComponentId theTargetAs;
 			private final List<Action.Instantiator> thePostActions;
+			private final ErrorReporting theReporting;
 
 			Instantiator(FieldValueDef.Interpreted<T> interpreted, List<Action.Instantiator> postActions)
 				throws ModelInstantiationException {
@@ -576,6 +581,7 @@ public class ExpressoQonfigValues {
 				theSave = interpreted.getSave().instantiate();
 				theTargetAs = interpreted.getDefinition().getTargetAs();
 				thePostActions = postActions;
+				theReporting = interpreted.reporting();
 			}
 
 			/** @return The expression to get this value from */
@@ -620,7 +626,7 @@ public class ExpressoQonfigValues {
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, models, targetAs);
 				ModelSetInstance fModels = models;
 				List<ObservableAction> postActions = QommonsUtils.filterMapE(thePostActions, null, a -> a.get(fModels));
-				return new FieldValue<>(reporting(), source, save, targetAs, postActions);
+				return new FieldValue<>(theReporting, source, save, targetAs, postActions);
 			}
 
 			@Override
@@ -641,7 +647,7 @@ public class ExpressoQonfigValues {
 				else {
 					SettableValue<T> targetAs = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theTargetAs, newModels, targetAs);
-					return new FieldValue<>(reporting(), newSource, newSave, targetAs, Collections.unmodifiableList(postActions));
+					return new FieldValue<>(theReporting, newSource, newSave, targetAs, Collections.unmodifiableList(postActions));
 				}
 			}
 		}
@@ -656,7 +662,7 @@ public class ExpressoQonfigValues {
 
 			FieldValue(ErrorReporting reporting, SettableValue<T> source, ObservableAction save, SettableValue<T> sourceAs,
 				List<ObservableAction> postActions) {
-				super(source, new SimpleObservable<>());
+				super(source.alias(reporting.toString()), new SimpleObservable<>());
 				theReporting = reporting;
 				theSource = source;
 				theSave = save;
@@ -696,13 +702,15 @@ public class ExpressoQonfigValues {
 					return value;
 				try {
 					isSetting = true;
+					long preStamp = getStamp();
 					theSourceAs.set(value);
 					theSave.act(getRootCausable());
 					for (ObservableAction postAction : thePostActions) {
 						if (postAction.isEnabled().get() == null)
 							postAction.act(getRootCausable());
 					}
-					((SimpleObservable<Void>) getRefresh()).onNext(null);
+					if (preStamp == getStamp()) // Only refresh if none of the save or the actual actions caused an event
+						((SimpleObservable<Void>) getRefresh()).onNext(null);
 				} catch (RuntimeException e) {
 					theReporting.error(e.getMessage(), e);
 					throw e;
@@ -713,14 +721,13 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public Object getIdentity() {
+				return theSource.getIdentity();
+			}
+
+			@Override
 			protected Object createIdentity() {
-				if (theReporting != null) { // Don't really understand why this is null but don't feel like investigating now
-					return Identifiable.buildId()//
-						.id(theSource.getIdentity())//
-						.appendS(theReporting::toString)//
-						.build();
-				} else
-					return theSource.getIdentity();
+				return theSource.getIdentity();
 			}
 		}
 	}
@@ -998,6 +1005,7 @@ public class ExpressoQonfigValues {
 		 */
 		public static abstract class Instantiator<T, C extends ObservableCollection<T>> extends ModelValueElement.Abstract<C> {
 			private final List<CollectionElement.CollectionPopulator<T>> theElements;
+			private final String theAlias;
 
 			/**
 			 * @param interpreted The interpretation to instantiate
@@ -1008,6 +1016,7 @@ public class ExpressoQonfigValues {
 				throws ModelInstantiationException {
 				super(interpreted);
 				theElements = elements;
+				theAlias = getModelPath() + ":" + interpreted.toString();
 			}
 
 			/** @return Elements defined to initialize this collection */
@@ -1031,20 +1040,22 @@ public class ExpressoQonfigValues {
 			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				if (getElementValue() != null)
-					return getElementValue().get(models);
+					return (C) getElementValue().get(models)//
+						.alias(theAlias);
 				ObservableCollectionBuilder<T, ?> builder = create(models);
 				if (getModelPath() != null)
 					builder.withDescription(getModelPath());
 				C collection = (C) builder.build();
 				for (CollectionElement.CollectionPopulator<T> element : theElements)
 					element.populateCollection(collection, models);
-				return collection;
+				return (C) collection.alias(theAlias);
 			}
 
 			@Override
 			public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				if (getElementValue() != null)
-					return getElementValue().forModelCopy(value, sourceModels, newModels);
+					return (C) getElementValue().forModelCopy(value, sourceModels, newModels)//
+						.alias(theAlias);
 				// Configured elements are merely initialized, not slaved, and the collection may have been modified
 				// since it was created. There's no sense to making a re-initialized copy here.
 				return value;
@@ -1226,7 +1237,7 @@ public class ExpressoQonfigValues {
 			}
 
 			/** @return The sorting specified for the collection */
-			public ModelValueInstantiator<Comparator<? super T>> getSort() {
+			public ModelValueInstantiator<Comparator<? super T>> comparator() {
 				return theSort;
 			}
 
@@ -1759,6 +1770,7 @@ public class ExpressoQonfigValues {
 		 */
 		public static abstract class Instantiator<K, V, M extends ObservableMap<K, V>> extends ModelValueElement.Abstract<M> {
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
+			private final String theAlias;
 
 			/**
 			 * @param interpreted The interpretation to instantiate
@@ -1769,8 +1781,8 @@ public class ExpressoQonfigValues {
 				throws ModelInstantiationException {
 				super(interpreted);
 				theEntries = elements;
+				theAlias = getModelPath() + ":" + interpreted.toString();
 			}
-
 
 			/** @return Entries defined to initialize this map */
 			public List<MapEntry.MapPopulator<K, V>> getEntries() {
@@ -1792,7 +1804,7 @@ public class ExpressoQonfigValues {
 				M map = (M) builder.buildMap();
 				for (MapEntry.MapPopulator<K, V> entry : theEntries)
 					entry.populateMap(map, models);
-				return map;
+				return (M) map.alias(theAlias);
 			}
 
 			@Override
@@ -2117,6 +2129,7 @@ public class ExpressoQonfigValues {
 		 */
 		public static abstract class Instantiator<K, V, M extends ObservableMultiMap<K, V>> extends ModelValueElement.Abstract<M> {
 			private final List<MapEntry.MapPopulator<K, V>> theEntries;
+			private final String theAlias;
 
 			/**
 			 * @param interpreted The interpretation to instantiate
@@ -2127,6 +2140,7 @@ public class ExpressoQonfigValues {
 				throws ModelInstantiationException {
 				super(interpreted);
 				theEntries = entries;
+				theAlias = getModelPath() + ":" + interpreted.toString();
 			}
 
 			/** @return The entries to populate this map initially */
@@ -2149,7 +2163,7 @@ public class ExpressoQonfigValues {
 				M map = (M) builder.build(models.getUntil());
 				for (MapEntry.MapPopulator<K, V> entry : theEntries)
 					entry.populateMultiMap(map, models);
-				return map;
+				return (M) map.alias(theAlias);
 			}
 
 			@Override
@@ -2693,9 +2707,13 @@ public class ExpressoQonfigValues {
 		public static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
 			private ModelValueInstantiator<SettableValue<ThreadConstraint>> onThread;
 			private boolean isAlwaysEnabled;
+			private final ErrorReporting theReporting;
 
 			Instantiator(Action.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
+				onThread = interpreted.getOnThread() == null ? null : interpreted.getOnThread().instantiate();
+				isAlwaysEnabled = interpreted.getDefinition().isAlwaysEnabled();
+				theReporting = interpreted.reporting();
 			}
 
 			@Override
@@ -2714,14 +2732,6 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
-				super.doUpdate(interpreted);
-				Action.Interpreted myInterpreted = (Action.Interpreted) interpreted;
-				onThread = myInterpreted.getOnThread() == null ? null : myInterpreted.getOnThread().instantiate();
-				isAlwaysEnabled = myInterpreted.getDefinition().isAlwaysEnabled();
-			}
-
-			@Override
 			public void instantiate() throws ModelInstantiationException {
 				getElementValue().instantiate();
 				if (onThread != null)
@@ -2733,7 +2743,8 @@ public class ExpressoQonfigValues {
 				instantiate(models);
 				ObservableAction action = getElementValue().get(models);
 				if (onThread != null || isAlwaysEnabled)
-					return new ModifiedAction(action, onThread == null ? null : onThread.get(models), isAlwaysEnabled, reporting());
+					return new ModifiedAction(action, onThread == null ? null : onThread.get(models), isAlwaysEnabled, getModelPath(),
+						theReporting);
 				else
 					return action;
 			}
@@ -2749,7 +2760,7 @@ public class ExpressoQonfigValues {
 							: getOnThread().forModelCopy(((ModifiedAction) value).onThread, sourceModels, newModels);
 						if (async.theWrapped == newWrapped && async.onThread == newOnThread)
 							return async;
-						return new ModifiedAction(newWrapped, newOnThread, isAlwaysEnabled, reporting());
+						return new ModifiedAction(newWrapped, newOnThread, isAlwaysEnabled, getModelPath(), theReporting);
 					} else
 						return get(newModels);
 				} else if (value instanceof ModifiedAction)
@@ -2763,13 +2774,15 @@ public class ExpressoQonfigValues {
 			final ObservableAction theWrapped;
 			final SettableValue<ThreadConstraint> onThread;
 			final boolean isAlwaysEnabled;
+			private final String theModelPath;
 			private final ErrorReporting theReporting;
 
-			ModifiedAction(ObservableAction wrapped, SettableValue<ThreadConstraint> onThread, boolean alwaysEnabled,
+			ModifiedAction(ObservableAction wrapped, SettableValue<ThreadConstraint> onThread, boolean alwaysEnabled, String modelPath,
 				ErrorReporting reporting) {
 				theWrapped = wrapped;
 				this.onThread = onThread;
 				isAlwaysEnabled = alwaysEnabled;
+				theModelPath = modelPath;
 				theReporting = reporting;
 			}
 
@@ -2786,8 +2799,16 @@ public class ExpressoQonfigValues {
 				}
 
 				QommonsTimer.TaskHandle[] handle = new QommonsTimer.TaskHandle[1];
+				long[] firstReInvoke = new long[1];
 				Runnable task = () -> {
 					if (theWrapped.isEventing()) {
+						long now = System.currentTimeMillis();
+						if (firstReInvoke[0] == 0)
+							firstReInvoke[0] = now;
+						else if (now - firstReInvoke[0] > 1000) {
+							theReporting.error("This is a long-running task and cannot be re-invoked while it is still running");
+							return;
+						}
 						handle[0].runImmediately();
 						return;
 					}
@@ -2837,7 +2858,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public String toString() {
-				return theWrapped.toString();
+				return theModelPath + ":" + theReporting;
 			}
 		}
 	}
@@ -2939,10 +2960,12 @@ public class ExpressoQonfigValues {
 		/** {@link ActionGroup} instantiator */
 		public static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
 			private final List<Action.Instantiator> theActions;
+			private final String thePrint;
 
 			Instantiator(ActionGroup.Interpreted interpreted) throws ModelInstantiationException, RuntimeException {
 				super(interpreted);
 				theActions = QommonsUtils.filterMapE(interpreted.getActions(), null, a -> a.create());
+				thePrint = getModelPath() + ":" + interpreted;
 			}
 
 			/** @return The actions to perform */
@@ -2971,7 +2994,7 @@ public class ExpressoQonfigValues {
 				ObservableAction[] actions = new ObservableAction[theActions.size()];
 				for (int i = 0; i < actions.length; i++)
 					actions[i] = theActions.get(i).get(models);
-				return new GroupAction(actions);
+				return new GroupAction(actions, thePrint);
 			}
 
 			@Override
@@ -2987,7 +3010,7 @@ public class ExpressoQonfigValues {
 						different = true;
 				}
 				if (different)
-					return new GroupAction(actionCopies);
+					return new GroupAction(actionCopies, thePrint);
 				else
 					return value;
 			}
@@ -2996,13 +3019,15 @@ public class ExpressoQonfigValues {
 		static class GroupAction implements ObservableAction {
 			private final ObservableAction[] theActions;
 			private final ObservableValue<String> theEnabled;
+			private final String thePrint;
 
-			GroupAction(ObservableAction[] actions) {
+			GroupAction(ObservableAction[] actions, String print) {
 				theActions = actions;
 				ObservableValue<String>[] actionsEnabled = new ObservableValue[actions.length];
 				for (int i = 0; i < actions.length; i++)
 					actionsEnabled[i] = actions[i].isEnabled();
 				theEnabled = ObservableValue.firstValue(v -> v != null, null, actionsEnabled);
+				thePrint = print;
 			}
 
 			ObservableAction[] getActions() {
@@ -3032,6 +3057,11 @@ public class ExpressoQonfigValues {
 			public ObservableValue<String> isEnabled() {
 				return theEnabled;
 			}
+
+			@Override
+			public String toString() {
+				return thePrint;
+			}
 		}
 	}
 
@@ -3046,7 +3076,7 @@ public class ExpressoQonfigValues {
 		private CompiledExpression theBefore;
 		private CompiledExpression theWhile;
 		private CompiledExpression theFinally;
-		private final List<ModelValueElement.CompiledSynth<ObservableAction, ?>> theBody;
+		private final List<Action> theBody;
 
 		/**
 		 * @param parent The parent element of this value element
@@ -3083,7 +3113,7 @@ public class ExpressoQonfigValues {
 
 		/** @return The actions to perform as long as the condition is true */
 		@QonfigChildGetter("body")
-		public List<ModelValueElement.CompiledSynth<ObservableAction, ?>> getBody() {
+		public List<Action> getBody() {
 			return Collections.unmodifiableList(theBody);
 		}
 
@@ -3094,7 +3124,7 @@ public class ExpressoQonfigValues {
 			theBefore = getAttributeExpression("before-while", session);
 			theWhile = getAttributeExpression("while", session);
 			theFinally = getAttributeExpression("finally", session);
-			syncChildren(ModelValueElement.CompiledSynth.class, theBody, session.forChildren("body"));
+			syncChildren(Action.class, theBody, session.forChildren("body"));
 		}
 
 		@Override
@@ -3118,7 +3148,7 @@ public class ExpressoQonfigValues {
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theBefore;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theWhile;
 			private InterpretedValueSynth<ObservableAction, ObservableAction> theFinally;
-			private final List<ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>> theBody;
+			private final List<Action.Interpreted> theBody;
 
 			Interpreted(Loop definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -3151,7 +3181,7 @@ public class ExpressoQonfigValues {
 			}
 
 			/** @return The actions to perform as long as the condition is true */
-			public List<ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>> getBody() {
+			public List<Action.Interpreted> getBody() {
 				return Collections.unmodifiableList(theBody);
 			}
 
@@ -3175,7 +3205,7 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					this.syncChildren(getDefinition().getBody(), theBody,
-						(def, bEnv) -> (ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ?>) def.interpret(bEnv),
+						(def, bEnv) -> def.interpretValue(this),
 						(b, bEnv) -> b.updateValue(bEnv));
 				}
 			}
@@ -3188,7 +3218,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<ObservableAction> create() throws ModelInstantiationException {
+			public Instantiator create() throws ModelInstantiationException {
 				return new Instantiator(this);
 			}
 		}
@@ -3199,8 +3229,9 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<? extends ObservableAction> theInit;
 			private final ModelValueInstantiator<? extends ObservableAction> theBefore;
 			private final ModelValueInstantiator<SettableValue<Boolean>> theWhile;
-			private final List<? extends ModelValueInstantiator<? extends ObservableAction>> theBody;
+			private final List<Action.Instantiator> theBody;
 			private final ModelValueInstantiator<? extends ObservableAction> theFinally;
+			private final ErrorReporting theWhileReporting;
 
 			Instantiator(Loop.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -3208,8 +3239,9 @@ public class ExpressoQonfigValues {
 				theInit = interpreted.getInit() == null ? null : interpreted.getInit().instantiate();
 				theBefore = interpreted.getBefore() == null ? null : interpreted.getBefore().instantiate();
 				theWhile = interpreted.getWhile().instantiate();
-				theBody = QommonsUtils.filterMapE(interpreted.getBody(), null, e -> e.instantiate());
+				theBody = QommonsUtils.filterMapE(interpreted.getBody(), null, e -> e.create());
 				theFinally = interpreted.getFinally() == null ? null : interpreted.getFinally().instantiate();
+				theWhileReporting = interpreted.reporting().at(interpreted.getDefinition().getWhile().getFilePosition());
 			}
 
 			ModelInstantiator getLocalModels() {
@@ -3232,7 +3264,7 @@ public class ExpressoQonfigValues {
 			}
 
 			/** @return The actions to perform as long as the condition is true */
-			public List<? extends ModelValueInstantiator<? extends ObservableAction>> getBody() {
+			public List<Action.Instantiator> getBody() {
 				return theBody;
 			}
 
@@ -3264,15 +3296,17 @@ public class ExpressoQonfigValues {
 				ObservableAction before = theBefore == null ? null : theBefore.get(models);
 				SettableValue<Boolean> condition = theWhile.get(models);
 				List<ObservableAction> body = new ArrayList<>(theBody.size());
-				for (ModelValueInstantiator<? extends ObservableAction> b : theBody)
+				for (Action.Instantiator b : theBody)
 					body.add(b.get(models));
 				ObservableAction last = theFinally == null ? null : theFinally.get(models);
-				return new LoopAction(init, before, condition, Collections.unmodifiableList(body), last);
+				return new LoopAction(init, before, condition, Collections.unmodifiableList(body), last, theWhileReporting);
 			}
 
 			@Override
 			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
+				sourceModels = theLocalModels.wrap(sourceModels);
+				newModels = theLocalModels.wrap(newModels);
 				LoopAction loop = (LoopAction) value;
 				ObservableAction initS = loop.getInit();
 				ObservableAction initA = theInit == null ? null
@@ -3286,8 +3320,8 @@ public class ExpressoQonfigValues {
 				List<ObservableAction> execAs = new ArrayList<>(theBody.size());
 				for (int i = 0; i < theBody.size(); i++) {
 					ObservableAction bodyS = loop.getBody().get(i);
-					ObservableAction bodyA = ((ModelValueInstantiator<ObservableAction>) theBody.get(i)).forModelCopy(bodyS, sourceModels,
-						newModels);
+					ObservableAction bodyA = theBody.get(i).forModelCopy(bodyS, sourceModels, newModels);
+					execAs.add(bodyA);
 					different |= bodyS != bodyA;
 				}
 				ObservableAction finallyS = loop.getFinally();
@@ -3295,7 +3329,7 @@ public class ExpressoQonfigValues {
 					: ((ModelValueInstantiator<ObservableAction>) theFinally).forModelCopy(finallyS, sourceModels, newModels);
 				different |= finallyS != finallyA;
 				if (different)
-					return new LoopAction(initA, beforeA, whileA, execAs, finallyA);
+					return new LoopAction(initA, beforeA, whileA, execAs, finallyA, theWhileReporting);
 				else
 					return value;
 			}
@@ -3307,14 +3341,16 @@ public class ExpressoQonfigValues {
 			private final ObservableValue<Boolean> theCondition;
 			private final List<ObservableAction> theBody;
 			private final ObservableAction theFinally;
+			private final ErrorReporting theWhileReporting;
 
 			public LoopAction(ObservableAction init, ObservableAction before, ObservableValue<Boolean> condition,
-				List<ObservableAction> body, ObservableAction finallly) {
+				List<ObservableAction> body, ObservableAction finallly, ErrorReporting whileReporting) {
 				theInit = init;
 				theBeforeCondition = before;
 				theCondition = condition;
 				theBody = body;
 				theFinally = finallly;
+				theWhileReporting = whileReporting;
 			}
 
 			public ObservableAction getInit() {
@@ -3351,14 +3387,25 @@ public class ExpressoQonfigValues {
 
 					try {
 						// Prevent infinite loops. This structure isn't terribly efficient, so I think this should be sufficient.
-						int count = 0;
-						while (count < 1_000_000) {
+						long count = 0;
+						long conditionStamp = theCondition.getStamp();
+						while (true) {
 							if (theBeforeCondition != null)
 								theBeforeCondition.act(cause2);
 							if (!Boolean.TRUE.equals(theCondition.get()))
 								break;
 							for (ObservableAction body : theBody)
 								body.act(cause2);
+							count++;
+							if (count % 10_000 == 0) {
+								long newConditionStamp = theCondition.getStamp();
+								if (conditionStamp == newConditionStamp) {
+									theWhileReporting
+									.error("This loop seems to be infinite--the 'while' condition is not affected by the body");
+									break;
+								} else
+									conditionStamp = newConditionStamp;
+							}
 						}
 					} finally {
 						if (theFinally != null)
@@ -3527,7 +3574,7 @@ public class ExpressoQonfigValues {
 				// Easiest path forward for this right now is to make an unpersisted ObservableConfig and use it to back the value set.
 				// TODO At some point I should come back and make an in-memory implementation and use it here.
 				ObservableConfig config = ObservableConfig.createRoot("root", null,
-					__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
+					__ -> new FastFailLockingStrategy());
 				return config.asValue(theType).buildEntitySet(null);
 			}
 

@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
+import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
@@ -150,9 +151,10 @@ public class CastExpression implements ObservableExpression {
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> new ConvertedInstantiator<>(vc, converter)), valueType,
 				valueContainer);
-		} else if (!TypeTokens.get().isAssignable(sourceType, valueType)//
-			&& !TypeTokens.get().isAssignable(valueType, sourceType)) {
-			exHandler.handle1(() -> new ExpressoInterpretationException("Cannot cast value of type " + sourceType + " to " + valueType,
+		} else if (!TypeTokens.getRawType(sourceType).isInterface() && !TypeTokens.getRawType(valueType).isInterface()
+			&& !TypeTokens.get().isAssignable(sourceType, valueType) && !TypeTokens.get().isAssignable(valueType, sourceType)) {
+			exHandler.handle1(() -> new ExpressoInterpretationException(
+				"Cannot cast value of type " + sourceType + " to " + valueType + "--types are incompatible",
 				reporting.getPosition(), getExpressionLength() - 1));
 			return null;
 		} else {
@@ -237,6 +239,7 @@ public class CastExpression implements ObservableExpression {
 					if (v == null || theCastClass.isInstance(v))
 						return (T) v;
 					else {
+						BreakpointHere.breakpoint();
 						theReporting.error("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + theCastClass);
 						return null;
 					}

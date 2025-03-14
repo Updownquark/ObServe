@@ -92,6 +92,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickSettingsMenu.SETTINGS_MENU, QuickSettingsMenu.Def.class, ExElement.creator(QuickSettingsMenu.Def::new));
 		interpreter.createWith(QuickTiledPane.TILED_PANE, QuickTiledPane.Def.class, ExElement.creator(QuickTiledPane.Def::new));
 		interpreter.createWith(QuickSuperTable.SUPER_TABLE, QuickSuperTable.Def.class, ExElement.creator(QuickSuperTable.Def::new));
+		interpreter.createWith(QuickSuperTable.WITH_ROW_DRAGGING, QuickSuperTable.WithRowDragging.Def.class,
+			ExElement.creator(QuickSuperTable.WithRowDragging.Def::new));
 		interpreter.createWith(QuickSuperTable.ADAPTIVE_HEIGHT, QuickSuperTable.AdaptiveHeight.Def.class,
 			ExElement.creator(QuickSuperTable.AdaptiveHeight.Def::new));
 		interpreter.createWith(QuickValueSelector.VALUE_SELECTOR, QuickValueSelector.Def.class,

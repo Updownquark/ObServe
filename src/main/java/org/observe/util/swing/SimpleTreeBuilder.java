@@ -25,6 +25,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.TransferHandler;
 import javax.swing.tree.TreeCellRenderer;
+import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
@@ -47,7 +48,6 @@ import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
-import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterList;
 
@@ -113,17 +113,40 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	private boolean isRootVisible;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
-	private Dragging.SimpleTransferSource<BetterList<F>> theDragSource;
-	private Dragging.SimpleTransferAccepter<BetterList<F>, Object, BetterList<F>> theDragAccepter;
+	private Dragging.SimpleTransferSource<BetterList<F>, F> theDragSource;
+	private Dragging.SimpleTransferAccepter<BetterList<F>, F> theDragAccepter;
 
 	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
-		super(null, new JTree(model), until);
+		super(null, new MyTree<>(model), until);
 		theRenderer = new CategoryRenderStrategy<>("Tree", (Class<F>) Object.class,
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
 		isRootVisible = true;
 		theActions = new ArrayList<>();
 		theActionsOnTop = true;
+	}
+
+	static class MyTree<T> extends JTree {
+		public MyTree(ObservableTreeModel<T> newModel) {
+			super(newModel);
+		}
+
+		@Override
+		public ObservableTreeModel<T> getModel() {
+			return (ObservableTreeModel<T>) super.getModel();
+		}
+
+		@Override
+		public void setModel(TreeModel newModel) {
+			if (getModel() != null)
+				throw new IllegalStateException("Models can't be switched out");
+			super.setModel(newModel);
+		}
+
+		@Override
+		public boolean isPathEditable(TreePath path) {
+			return super.isPathEditable(path) && getModel().isPathEditable(path);
+		}
 	}
 
 	static abstract class PPTreeModel<F> extends ObservableTreeModel<F> {
@@ -135,19 +158,14 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 		}
 
 		@Override
-		public void valueForPathChanged(TreePath path, Object newValue) {
-		}
-
-		@Override
 		public boolean isLeaf(Object node) {
+			ObservableTreeModel<F>.TreeNode treeNode = (ObservableTreeModel<F>.TreeNode) node;
 			Predicate<? super F> leafTest = theLeafTest;
 			if (leafTest != null)
-				return leafTest.test((F) node);
+				return leafTest.test(treeNode.get());
 			Predicate<? super BetterList<F>> leafTest2 = theLeafTest2;
 			if (leafTest2 != null) {
-				BetterList<F> path = getBetterPath((F) node, false);
-				if (path != null)
-					return leafTest2.test(path);
+				return leafTest2.test(treeNode.getValuePath());
 			}
 			return false;
 		}
@@ -193,10 +211,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	@Override
 	public List<BetterList<F>> getSelection() {
 		TreePath[] selection = getEditor().getSelectionPaths();
-		if (selection == null)
+		if (selection == null || selection.length == 0)
 			return BetterList.empty();
 		return BetterList.of(Arrays.stream(selection)//
-			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
+			.map(ObservableTreeModel::betterPath));
 	}
 
 	@Override
@@ -207,7 +225,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
 		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false, getUntil());
+		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, false, getUntil());
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -226,7 +244,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	}
 
 	@Override
-	public P dragSourcePath(Consumer<? super TransferSource<BetterList<F>>> source) {
+	public P dragSourcePath(Consumer<? super TransferSource<BetterList<F>, F>> source) {
 		if (theDragSource == null)
 			theDragSource = new SimpleTransferSource<>();
 		// if (source == null)
@@ -237,7 +255,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	}
 
 	@Override
-	public P dragAcceptPath(Consumer<? super TransferAccepter<BetterList<F>, Object, BetterList<F>>> accept) {
+	public P dragAcceptPath(Consumer<? super TransferAccepter<BetterList<F>, F>> accept) {
 		if (theDragAccepter == null)
 			theDragAccepter = new SimpleTransferAccepter<>();
 		// if (accept == null)
@@ -288,6 +306,12 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	}
 
 	@Override
+	public P withSelectionMode(int mode) {
+		getEditor().getSelectionModel().setSelectionMode(mode);
+		return (P) this;
+	}
+
+	@Override
 	public P withValueSelection(SettableValue<F> selection, boolean enforceSingleSelection) {
 		theValueSingleSelection = selection;
 		isSingleSelection = enforceSingleSelection;
@@ -331,8 +355,16 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	@Override
 	protected Component createComponent() {
 		int[] hoveredRow = new int[] { -1 };
+		JTree tree = getEditor();
+		ObservableTreeModel<F> model = (ObservableTreeModel<F>) tree.getModel();
+		model.withRenderer(theRenderer).withStatus(tree::getRowForPath, tree::isExpanded, tree.getSelectionModel()::isPathSelected);
+
 		if (theRenderer.getRenderer() != null)
 			getEditor().setCellRenderer(new ObservableTreeCellRenderer<>(theRenderer.getRenderer(), hoveredRow));
+		if (theRenderer.getMutator().getEditor() != null) {
+			getEditor().setEditable(true);
+			getEditor().setCellEditor(theRenderer.getMutator().getEditor());
+		}
 		CategoryMouseListener<? super BetterList<F>, ? super F> mouseListener = theRenderer.getMouseListener();
 		MouseAdapter mouse = new MouseAdapter() {
 			@Override
@@ -443,14 +475,13 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 		// We also need to control the actions if nothing else
 		ObservableCollection<BetterList<F>> multiSelection = ObservableCollection.<BetterList<F>> build().build().safe(ThreadConstraint.EDT,
 			getUntil());
-		ObservableTreeModel.syncSelection(getEditor(), multiSelection, getUntil());
-		ObservableTreeModel<F> model = (ObservableTreeModel<F>) getEditor().getModel();
+		ObservableTreeModel.syncSelection(getEditor(), multiSelection, Equivalence.DEFAULT, getUntil());
 		if (theValueMultiSelection != null) {
 			ObservableCollection<F> modelValueSel = multiSelection.flow()//
 				.<F> transform(tx -> tx//
 					.cache(false).reEvalOnUpdate(false).fireIfUnchanged(true)//
 					.map(path -> path == null ? null : path.getLast())//
-					.replaceSource(value -> model.getBetterPath(value, true), null))//
+					.replaceSource(value -> model.getValuePath(value, true), null))//
 				.collect();
 			Subscription sub = ObservableCollectionSynchronization.synchronize(modelValueSel, theValueMultiSelection)//
 				.synchronize();
@@ -467,7 +498,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 			ObservableTreeModel.syncSelection(getEditor(), theValueSingleSelection//
 				.safe(ThreadConstraint.EDT, getUntil()).//
 				<BetterList<F>> transformReversible(tx -> tx//
-					.map(v -> model.getBetterPath(v, true))//
+					.map(v -> model.getValuePath(v, true))//
 					.withReverse(path -> path == null ? null : path.getLast())),
 				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
@@ -492,17 +523,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 						hasButtons = true;
 				}
 			}
-			multiSelection.simpleChanges().act(e -> {
-				List<BetterList<F>> copy = QommonsUtils.unmodifiableCopy(multiSelection);
-				for (Object action : theActions) {
-					if (action instanceof SimpleDataAction)
-						((SimpleDataAction<BetterList<F>, ?>) action).updateSelection(copy, e);
-				}
-			});
-			List<BetterList<F>> copy = QommonsUtils.unmodifiableCopy(multiSelection);
 			for (Object action : theActions) {
 				if (action instanceof SimpleDataAction)
-					((SimpleDataAction<BetterList<F>, ?>) action).updateSelection(copy, null);
+					((SimpleDataAction<BetterList<F>, ?>) action).init(multiSelection);
 			}
 
 			if (hasPopups) {
@@ -535,8 +558,8 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 			comp = scroll;
 
 		// Set up transfer handling (DnD, copy/paste)
-		Dragging.TransferSource<F> valueDragSource = null;
-		Dragging.TransferAccepter<BetterList<F>, F, F> valueDragAccept = null;
+		Dragging.TransferSource<BetterList<F>, F> valueDragSource = null;
+		Dragging.TransferAccepter<BetterList<F>, F> valueDragAccept = null;
 		if (theRenderer != null) {
 			valueDragSource = theRenderer.getDragSource();
 			if (theRenderer.getMutator() != null)
@@ -582,33 +605,25 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 		@Override
 		public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row,
 			boolean hasFocus) {
-			Supplier<BetterList<F>> modelValue = () -> {
-				TreePath path = tree.getPathForRow(row);
-				if (path != null && path.getLastPathComponent() == value)
-					return ObservableTreeModel.betterPath(path);
-				else {
-					// This can happen when this is called from an expand/collapse event, as the state may not have been updated
-					return ((ObservableTreeModel<F>) tree.getModel()).getBetterPath((F) value, false);
-				}
-			};
+			ObservableTreeModel<F>.TreeNode node = (ObservableTreeModel<F>.TreeNode) value;
+			Supplier<BetterList<F>> modelValue = node::getValuePath;
 			boolean hovered = theHoveredRowColumn[0] == row;
-			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus, hovered, hovered,
-				expanded, leaf);
+			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) node.getRenderValue(), row, 0, selected, hasFocus,
+				hovered, hovered, expanded, leaf);
 			return theRenderer.getCellRendererComponent(tree, cell, null);
 		}
 	}
 
 	class TreeBuilderTransferHandler extends TransferHandler {
 		private final JTree theTree;
-		private final Dragging.TransferSource<BetterList<F>> thePathSource;
-		private final Dragging.TransferAccepter<BetterList<F>, Object, BetterList<F>> thePathAccepter;
-		private final Dragging.TransferSource<F> theNodeSource;
-		private final Dragging.TransferAccepter<BetterList<F>, F, F> theNodeAccepter;
+		private final Dragging.TransferSource<BetterList<F>, F> thePathSource;
+		private final Dragging.TransferAccepter<BetterList<F>, F> thePathAccepter;
+		private final Dragging.TransferSource<BetterList<F>, F> theNodeSource;
+		private final Dragging.TransferAccepter<BetterList<F>, F> theNodeAccepter;
 		private Icon theDragAppearance;
 
-		TreeBuilderTransferHandler(JTree tree, TransferSource<BetterList<F>> pathSource,
-			TransferAccepter<BetterList<F>, Object, BetterList<F>> pathAccepter, Dragging.TransferSource<F> nodeSource,
-			Dragging.TransferAccepter<BetterList<F>, F, F> nodeAccepter) {
+		TreeBuilderTransferHandler(JTree tree, TransferSource<BetterList<F>, F> pathSource, TransferAccepter<BetterList<F>, F> pathAccepter,
+			Dragging.TransferSource<BetterList<F>, F> nodeSource, Dragging.TransferAccepter<BetterList<F>, F> nodeAccepter) {
 			theTree = tree;
 			thePathSource = pathSource;
 			thePathAccepter = pathAccepter;
@@ -633,14 +648,17 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 
 			List<Transferable> transferables = new ArrayList<>(theTree.getSelectionCount());
 			for (TreePath path : theTree.getSelectionPaths()) {
+				BetterList<F> betterPath = ObservableTreeModel.betterPath(path);
+				ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> betterPath, betterPath.getLast(),
+					theTree.getRowForPath(path), 0, theTree.isPathSelected(path), false, false, false, theTree.isExpanded(path),
+					theTree.getModel().isLeaf(path.getLastPathComponent()));
 				if (thePathSource != null) {
-					BetterList<F> betterPath = ObservableTreeModel.betterPath(path);
-					Transferable pathT = thePathSource.createTransferable(betterPath);
+					Transferable pathT = thePathSource.createTransferable(cell);
 					if (pathT != null)
 						transferables.add(pathT);
 				}
 				if (theNodeSource != null) {
-					Transferable nodeT = theNodeSource.createTransferable((F) path.getLastPathComponent());
+					Transferable nodeT = theNodeSource.createTransferable(cell);
 					if (nodeT != null)
 						transferables.add(nodeT);
 				}
@@ -655,7 +673,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 
 		@Override
 		public Icon getVisualRepresentation(Transferable t) {
-			return theDragAppearance;
+			if (theDragAppearance != null)
+				return theDragAppearance;
+			return super.getVisualRepresentation(t);
 		}
 
 		@Override
@@ -687,15 +707,19 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 				beforeRow = false;
 			}
 
-			BetterList<F> targetPath = ObservableTreeModel.betterPath(theTree.getPathForRow(rowIndex));
+			Dragging.TransferWrapper wrapper = Dragging.wrap(support);
+			ObservableTreeModel<F>.TreeNode node = (ObservableTreeModel<F>.TreeNode) theTree.getPathForRow(rowIndex).getLastPathComponent();
+			BetterList<F> targetPath = node.getValuePath();
 			boolean selected = theTree.isRowSelected(rowIndex);
-			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> targetPath, targetPath.getLast(), rowIndex, 0, selected,
-				selected, false, false, theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(targetPath));
-			if (thePathAccepter != null && thePathAccepter.canAccept(cell, false, beforeRow, support, true)) {
+			ModelRow<BetterList<F>> modelRow = new ModelRow.Default<>(() -> targetPath, rowIndex, selected, selected, false,
+				theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(node));
+			Object renderValue = getRender() == null ? targetPath.getLast() : getRender().getCategoryValue(modelRow);
+			ModelCell<BetterList<F>, F> cell = new ModelCell.RowWrapper<>(modelRow, (F) renderValue, 0, false, selected);
+			if (thePathAccepter != null && thePathAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
 				theDragAppearance = thePathAccepter.getDragAppearance();
 				return true;
 			}
-			if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, support, true)) {
+			if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
 				theDragAppearance = theNodeAccepter.getDragAppearance();
 				return true;
 			}
@@ -725,19 +749,23 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 				beforeRow = false;
 			}
 
-			BetterList<F> targetPath = ObservableTreeModel.betterPath(theTree.getPathForRow(rowIndex));
+			Dragging.TransferWrapper wrapper = Dragging.wrap(support);
+			ObservableTreeModel<F>.TreeNode node = (ObservableTreeModel<F>.TreeNode) theTree.getPathForRow(rowIndex).getLastPathComponent();
+			BetterList<F> targetPath = node.getValuePath();
 			boolean selected = theTree.isRowSelected(rowIndex);
-			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> targetPath, targetPath.getLast(), rowIndex, 0, selected,
-				selected, false, false, theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(targetPath));
-			if (thePathAccepter != null && thePathAccepter.canAccept(cell, selected, beforeRow, support, true)) {
+			ModelRow<BetterList<F>> modelRow = new ModelRow.Default<>(() -> targetPath, rowIndex, selected, selected, false,
+				theTree.isExpanded(rowIndex), theTree.getModel().isLeaf(node));
+			Object renderValue = getRender() == null ? targetPath.getLast() : getRender().getCategoryValue(modelRow);
+			ModelCell<BetterList<F>, F> cell = new ModelCell.RowWrapper<>(modelRow, (F) renderValue, 0, false, selected);
+			if (thePathAccepter != null && thePathAccepter.canAccept(cell, selected, beforeRow, wrapper, true)) {
 				try {
-					thePathAccepter.accept(cell, false, beforeRow, support.getTransferable(), true, false);
+					thePathAccepter.accept(cell, false, beforeRow, wrapper, true, false);
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
-			} else if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, support, true)) {
+			} else if (theNodeAccepter != null && theNodeAccepter.canAccept(cell, false, beforeRow, wrapper, true)) {
 				try {
-					theNodeAccepter.accept(cell, false, beforeRow, support.getTransferable(), true, false);
+					theNodeAccepter.accept(cell, false, beforeRow, wrapper, true, false);
 				} catch (IOException e) {
 					e.printStackTrace();
 				}

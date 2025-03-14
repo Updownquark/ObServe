@@ -36,6 +36,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
 
@@ -149,6 +150,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			protected Object createIdentity() {
 				return Identifiable.wrap(ObservableValue.this.getIdentity(), "value");
+			}
+
+			@Override
+			public long getStamp() {
+				return ObservableValue.this.getStamp();
 			}
 
 			@Override
@@ -459,12 +465,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	/**
 	 * @param <X> The compile-time type of the value to wrap
 	 * @param value Supplies the value for the observable
-	 * @param stamp The stamp for the synthetic value
 	 * @param changes The observable that signals that the value may have changed
 	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
 	 */
-	public static <X> SyntheticObservable<X> of(Supplier<? extends X> value, LongSupplier stamp, Observable<?> changes) {
-		return of(value, stamp, changes, () -> Identifiable.wrap(changes.getIdentity(), "synthetic", value));
+	public static <X> SyntheticObservable<X> of(Supplier<? extends X> value, Observable<?> changes) {
+		return of(value, changes::getStamp, changes, () -> Identifiable.wrap(changes.getIdentity(), "->", value));
 	}
 
 	/**
@@ -553,7 +558,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		Observable<?>[] changes = new Observable[components.length];
 		for (int i = 0; i < components.length; i++)
 			changes[i] = components[i] == null ? null : components[i].noInitChanges();
-		return of(value, () -> Stamped.compositeStamp(Arrays.asList(components)), Observable.or(changes));
+		Observable<?> allChanges = Observable.or(changes);
+		return of(value, () -> Stamped.compositeStamp(Arrays.asList(components)), allChanges, allChanges::getIdentity);
 	}
 
 	/**
@@ -653,11 +659,22 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			try (Transaction t = theNoInitChanges.lock()) {
-				ObservableValueEvent<T> initEvent = theValue.createInitialEvent(theValue.get(), null);
-				try (Transaction eventT = initEvent.use()) {
-					observer.onNext(initEvent);
+				// Subscribe first, then fire the initial event.
+				// One would think this doesn't matter since we've got a lock,
+				// but it affects the order in which listeners are registered, e.g. for flattened values
+				Subscription sub = theNoInitChanges.subscribe(observer);
+				boolean success = false;
+				try {
+					ObservableValueEvent<T> initEvent = theValue.createInitialEvent(theValue.get(), null);
+					try (Transaction eventT = initEvent.use()) {
+						observer.onNext(initEvent);
+					}
+					success = true;
+				} finally {
+					if (!success)
+						sub.unsubscribe();
 				}
-				return theNoInitChanges.subscribe(observer);
+				return sub;
 			}
 		}
 
@@ -689,6 +706,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public Observable<ObservableValueEvent<T>> noInit() {
 			return theNoInitChanges;
+		}
+
+		@Override
+		public long getStamp() {
+			return theNoInitChanges.getStamp();
 		}
 
 		@Override
@@ -735,81 +757,89 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		public TransformedObservableValue(ObservableValue<S> source, Transformation<S, T> transformation) {
 			theSource = source;
 			theTransformation = transformation;
-			theEngine = theTransformation.createEngine(source, Equivalence.DEFAULT);
+			theEngine = theTransformation.createEngine(source, Equivalence.DEFAULT, err -> {
+				System.err.println("Transformation error @" + this);
+				err.printStackTrace();
+			});
 			theElement = theEngine.createElement(LambdaUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
-			theObservers = ListenerList.build().withInUse(new ListenerList.InUseListener() {
-				private Subscription theSourceSub;
-				private Subscription theTransformSub;
+			theObservers = ListenerList.build()//
+				.reentrancyError(() -> "Reentrancy not allowed: " + toString())//
+				.withInUse(new ListenerList.InUseListener() {
+					private Subscription theSourceSub;
+					private Subscription theTransformSub;
 
-				@Override
-				public void inUseChanged(boolean inUse) {
-					if (!inUse) {
-						// if (getTransformation().isCached()) {
-						// Set the stamp so the get() method doesn't need to re-evaluate after cessation of listening
-						// unless something actually changes
+					@Override
+					public void inUseChanged(boolean inUse) {
+						if (!inUse) {
+							// if (getTransformation().isCached()) {
+							// Set the stamp so the get() method doesn't need to re-evaluate after cessation of listening
+							// unless something actually changes
 
-						// Actually, it turns out that this can cause issues.
-						// If this unsubscription is due to a change that has affected the source value,
-						// the source may have changed without yet calling our listener, so setting this stamp would signify
-						// that we have the latest value, when actually it has changed.
-						// There's no way (right here) to detect this condition.
-						// The right way to do this would be to set the stamp each time an event fires,
-						// but stamp computation is not always super cheap.
-						// Instead, we'll just let the transformation re-evaluate.
-						// theSourceStamp = theSource.getStamp();
-						// }
-						Subscription.forAll(theSourceSub, theTransformSub).unsubscribe();
-						theSourceSub = null;
-						theTransformSub = null;
-						return;
-					}
-					try (Transaction t = Lockable.lockAll(theSource, theEngine)) {
-						theSourceSub = theSource.changes().act(evt -> {
-							try (Transaction t2 = theEngine.lock()) {
-								if (getTransformation().isCached())
-									theCachedSource = evt.getNewValue();
-								if (evt.isInitial()) {
-									// This call just makes sure the internal state is up-to-date,
-									// we don't have to do anything with the return values
-									getState();
-								} else {
-									BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(), theEngine.get());
-									if (!evt.isInitial() && change != null)
-										fire(change.getValue1(), change.getValue2(), evt);
+							// Actually, it turns out that this can cause issues.
+							// If this unsubscription is due to a change that has affected the source value,
+							// the source may have changed without yet calling our listener, so setting this stamp would signify
+							// that we have the latest value, when actually it has changed.
+							// There's no way (right here) to detect this condition.
+							// The right way to do this would be to set the stamp each time an event fires,
+							// but stamp computation is not always super cheap.
+							// Instead, we'll just let the transformation re-evaluate.
+							// theSourceStamp = theSource.getStamp();
+							// }
+							Subscription.forAll(theSourceSub, theTransformSub).unsubscribe();
+							theSourceSub = null;
+							theTransformSub = null;
+							return;
+						}
+						try (Transaction t = Lockable.lockAll(theSource, theEngine)) {
+							theSourceSub = theSource.changes().act(evt -> {
+								try (Transaction t2 = theEngine.lock()) {
+									if (getTransformation().isCached())
+										theCachedSource = evt.getNewValue();
+									if (evt.isInitial()) {
+										// This call just makes sure the internal state is up-to-date,
+										// we don't have to do anything with the return values
+										getState(false);
+									} else {
+										BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(),
+											theEngine.get(false));
+										if (!evt.isInitial() && change != null)
+											fire(change.getValue1(), change.getValue2(), evt);
+									}
 								}
-							}
-						});
-						theTransformSub = theEngine.noInitChanges().act(evt -> {
-							try (Transaction t2 = theSource.lock()) {
-								BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
-								if (change == null)
-									return;
-								T oldValue = change.getValue1();
-								T newValue;
-								// Check to see if the source is also changed such that we may not have received the change yet
-								if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
-									if (checkSourceChanged())
-										newValue = theElement.getCurrentValue(theEngine.getCachedState());
-									else
+							});
+							theTransformSub = theEngine.noInitChanges().act(evt -> {
+								try (Transaction t2 = theSource.lock()) {
+									BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
+									if (change == null)
+										return;
+									T oldValue = change.getValue1();
+									T newValue;
+									// Check to see if the source is also changed such that we may not have received the change yet
+									if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
+										if (checkSourceChanged())
+											newValue = theElement.getCurrentValue(theEngine.getCachedState());
+										else
+											newValue = change.getValue2();
+									} else
 										newValue = change.getValue2();
-								} else
-									newValue = change.getValue2();
-								if (change != null)
-									fire(oldValue, newValue, evt);
-							}
-						});
+									if (change != null)
+										fire(oldValue, newValue, evt);
+								}
+							});
+						}
 					}
-				}
 
-				private void fire(T oldValue, T newValue, Object cause) {
-					ObservableValueEvent<T> evt = createChangeEvent(oldValue, newValue, cause);
-					try (Transaction t = evt.use()) {
-						theObservers.forEach(//
-							obs -> obs.onNext(evt));
+					private void fire(T oldValue, T newValue, Object cause) {
+						if (oldValue == newValue && theObservers.isFiring())
+							return; // Avoid reentrancy error
+						ObservableValueEvent<T> evt = createChangeEvent(oldValue, newValue, cause);
+						try (Transaction t = evt.use()) {
+							theObservers.forEach(//
+								obs -> obs.onNext(evt));
+						}
 					}
-				}
-			}).build();
+				}).build();
 		}
 
 		/** @return The source value being transformed */
@@ -831,11 +861,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		 * Ensures that this value's state is up-to-date with any changes that may have occurred since the last poll, and returns the state
 		 * of this transformed value.
 		 *
+		 * @param withLock Whether a lock needs to be
 		 * @return A tuple containing the current transformed element and transformation state of the engine
 		 */
-		protected BiTuple<TransformedElement<S, T>, TransformationState> getState() {
+		protected BiTuple<TransformedElement<S, T>, TransformationState> getState(boolean withLock) {
 			Transformation.TransformationState cachedState = theEngine.getCachedState();
-			Transformation.TransformationState state = theEngine.get();
+			Transformation.TransformationState state = theEngine.get(withLock);
 			if (state != cachedState)
 				theElement.transformationStateChanged(cachedState, state);
 			// If the source is eventing, it's possible that we haven't received the event that will update us yet
@@ -846,11 +877,9 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		boolean checkSourceChanged() {
-			long stamp = theSource.getStamp();
-			if (stamp == -1 || stamp != theSourceStamp) {
+			if (theSourceStamp == -1 || theSource.getStamp() != theSourceStamp) {
 				try (Transaction t = lock()) {
-					stamp = theSource.getStamp();
-					theSourceStamp = stamp;
+					theSourceStamp = theSource.getStamp();
 					S source = theSource.get();
 					S oldSource = theCachedSource;
 					theCachedSource = source;
@@ -894,7 +923,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(theSource.getStamp(), theEngine.getStamp());
+			return Stamped.compositeOf2Stamps(theSource.getStamp(), theEngine.getStamp());
 		}
 
 		@Override
@@ -914,7 +943,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public T get() {
-			BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+			BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true);
 			TransformedElement<S, T> el = state.getValue1();
 			TransformationState tx = state.getValue2();
 			return el.getCurrentValue(tx);
@@ -961,6 +990,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				@Override
 				public CoreId getCoreId() {
 					return Lockable.getCoreId(theSource, theEngine);
+				}
+
+				@Override
+				public long getStamp() {
+					return Stamped.compositeOf2Stamps(theSource.getStamp(), theEngine.getStamp());
 				}
 
 				@Override
@@ -1116,6 +1150,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
+				public long getStamp() {
+					return Stamped.compositeOf2Stamps(theWrapped.getStamp(), theRefresh.getStamp());
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					return CoreChangeSources.of(theWrapped.noInitChanges(), theRefresh);
 				}
@@ -1126,6 +1165,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public boolean isEventing() {
 			return theWrapped.isEventing() || theRefresh.isEventing();
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeOf2Stamps(theWrapped.getStamp(), theRefresh.getStamp());
 		}
 
 		@Override
@@ -1280,6 +1324,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
+				public long getStamp() {
+					return RefreshEachValue.this.getStamp();
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					T value = getWrapped().get();
 					Observable<?> refresh = theRefresh.apply(value);
@@ -1301,6 +1350,18 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		protected Object createIdentity() {
 			return Identifiable.wrap(getWrapped().getIdentity(), "refreshEach", theRefresh);
 		}
+
+		@Override
+		public long getStamp() {
+			try (Transaction t = lock()) {
+				T value = get();
+				Observable<?> refresh = theRefresh.apply(value);
+				if (refresh == null)
+					return theWrapped.getStamp();
+				else
+					return Stamped.compositeStamp(theWrapped, refresh);
+			}
+		}
 	}
 
 	/**
@@ -1312,7 +1373,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final ThreadConstraint theThreading;
 		private T theLastEventedValue;
 		private ObservableValueEvent<T> theLastEvent;
-		private ThreadConstrainedLockingStrategy theLocking;
+		private CollectionLockingStrategy theLocking;
 		private final ListenerList<Consumer<ObservableValueEvent<T>>> theListeners;
 		private volatile boolean isEventing;
 
@@ -1321,7 +1382,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			if (!threading.supportsInvoke())
 				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
-			theLocking = new ThreadConstrainedLockingStrategy(threading);
+			theLocking = ThreadConstrainedLockingStrategy.get(threading);
 			theListeners = ListenerList.build().build();
 			SimpleObserver<ObservableValueEvent<T>> listener = evt -> {
 				theLastEvent = evt;
@@ -1400,6 +1461,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				@Override
 				public Transaction tryLock() {
 					return theLocking.tryLock(false, null);
+				}
+
+				@Override
+				public long getStamp() {
+					return SafeObservableValue.this.getStamp();
 				}
 
 				@Override
@@ -1506,6 +1572,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				@Override
 				public Transaction tryLock() {
 					return Transaction.NONE;
+				}
+
+				@Override
+				public long getStamp() {
+					return 0;
 				}
 
 				@Override
@@ -1645,6 +1716,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
+				public long getStamp() {
+					return 0;
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					return CoreChangeSources.empty();
 				}
@@ -1669,7 +1745,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	}
 
 	/**
-	 * Implements {@link ObservableValue#of(Supplier, LongSupplier, Observable)}
+	 * Implements {@link ObservableValue#of(Supplier, LongSupplier, Observable, Supplier)}
 	 *
 	 * @param <T> The type of this value
 	 */
@@ -1710,12 +1786,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
-			return changes(true, -1, null);
+			return changes(true);
 		}
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return changes(false, -1, null);
+			return changes(false);
 		}
 
 		@Override
@@ -1723,7 +1799,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return theChanges.isEventing();
 		}
 
-		Observable<ObservableValueEvent<T>> changes(boolean withInit, long stamp, T initialValue) {
+		Observable<ObservableValueEvent<T>> changes(boolean withInit) {
 			class SyntheticObservableChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
 				protected Object createIdentity() {
@@ -1736,15 +1812,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					class SyntheticChanges implements Observer<Object> {
-						T theCurrentValue;
+						T theCurrentValue = get();
 						boolean isInitialized;
 
 						void initialize() {
 							isInitialized = true;
-							if (stamp == getStamp())
-								theCurrentValue = initialValue;
-							else
-								theCurrentValue = theValue.get();
+							theCurrentValue = get();
 							if (withInit)
 								observer.onNext(createInitialEvent(theCurrentValue, null));
 						}
@@ -1760,10 +1833,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 								if (!withInit)
 									init = false;
 							}
+							ObservableValueEvent<T> evt;
 							if (init)
-								observer.onNext(createInitialEvent(newValue, value));
+								evt = createInitialEvent(newValue, value);
 							else
-								observer.onNext(createChangeEvent(oldValue, newValue, value));
+								evt = createChangeEvent(oldValue, newValue, value);
+							try (Transaction t = evt.use()) {
+								observer.onNext(evt);
+							}
 						}
 
 						@Override
@@ -1814,6 +1891,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
+				public long getStamp() {
+					return SyntheticObservable.this.getStamp();
+				}
+
+				@Override
 				public Observable<ObservableValueEvent<T>> noInit() {
 					if (withInit)
 						return noInitChanges();
@@ -1836,12 +1918,34 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		static class CachedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 			private final SyntheticObservable<T> theValue;
+			private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
 			private volatile T theCachedValue;
 			private volatile long theCachedStamp;
 
 			public CachedObservableValue(SyntheticObservable<T> value) {
 				theValue = value;
-				theCachedStamp = value.getStamp() - 1;
+				theListeners = ListenerList.build()//
+					.withInUse(new ListenerList.InUseListener() {
+						private Subscription theChangesSub;
+
+						@Override
+						public void inUseChanged(boolean inUse) {
+							if (!inUse) {
+								theChangesSub.unsubscribe();
+								theChangesSub = null;
+								return;
+							}
+							get(); // Update for initial value
+							theChangesSub = theValue.theChanges.act(cause -> {
+								ObservableValueEvent<T> evt = createChangeEvent(theCachedValue, get(), cause);
+								try (Transaction t = evt.use()) {
+									theListeners.forEach(//
+										l -> l.onNext(evt));
+								}
+							});
+						}
+					}).build();
+				theCachedStamp = -1;
 			}
 
 			@Override
@@ -1863,7 +1967,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			public T get() {
 				long newStamp = theValue.getStamp();
-				if (theCachedStamp != newStamp) {
+				if (theCachedStamp == -1 || theCachedStamp != newStamp) {
 					theCachedValue = theValue.get();
 					theCachedStamp = newStamp;
 				}
@@ -1872,7 +1976,58 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 			@Override
 			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return theValue.changes(false, theCachedStamp, theCachedValue);
+				class CachedSyntheticChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+					@Override
+					public boolean isEventing() {
+						return theListeners.isFiring();
+					}
+
+					@Override
+					protected Object createIdentity() {
+						return Identifiable.wrap(CachedObservableValue.this.getIdentity(), "noInitChanges");
+					}
+
+					@Override
+					public CoreId getCoreId() {
+						return theValue.getCoreId();
+					}
+
+					@Override
+					public ThreadConstraint getThreadConstraint() {
+						return theValue.getThreadConstraint();
+					}
+
+					@Override
+					public long getStamp() {
+						return CachedObservableValue.this.getStamp();
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+						return theListeners.add(observer, true)::run;
+					}
+
+					@Override
+					public boolean isSafe() {
+						return theValue.theChanges.isSafe();
+					}
+
+					@Override
+					public Transaction lock() {
+						return theValue.lock();
+					}
+
+					@Override
+					public Transaction tryLock() {
+						return theValue.tryLock();
+					}
+
+					@Override
+					public CoreChangeSources getChangeSources() {
+						return theValue.theChanges.getChangeSources();
+					}
+				}
+				return new CachedSyntheticChanges();
 			}
 
 			@Override
@@ -1887,7 +2042,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 			@Override
 			public boolean equals(Object obj) {
-				return theValue.equals(obj);
+				if (obj == this)
+					return true;
+				else if (obj instanceof CachedObservableValue)
+					return theValue.equals(((CachedObservableValue<?>) obj).theValue);
+				else
+					return theValue.equals(obj);
 			}
 
 			@Override
@@ -1934,7 +2094,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			long stamp = theValue.getStamp();
 			ObservableValue<? extends T> wrapped = theValue.get();
 			if (wrapped != null)
-				stamp = Stamped.compositeStamp(stamp, wrapped.getStamp());
+				stamp = Stamped.compositeOf2Stamps(stamp, wrapped.getStamp());
 			return stamp;
 		}
 
@@ -2138,6 +2298,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				try (Transaction t = theValue.lock()) {
 					return Lockable.getCoreId(theValue, theValue::get);
 				}
+			}
+
+			@Override
+			public long getStamp() {
+				return FlattenedObservableValue.this.getStamp();
 			}
 
 			@Override
@@ -2410,6 +2575,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
+			public long getStamp() {
+				return FirstObservableValue.this.getStamp();
+			}
+
+			@Override
 			public CoreChangeSources getChangeSources() {
 				Observable<?>[] applicable = new Observable[theValues.length];
 				int i = 0;
@@ -2501,6 +2671,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				return theValue.get().getThreadConstraint();
 			else
 				return ThreadConstraint.ANY; // Can't know
+		}
+
+		@Override
+		public long getStamp() {
+			Observable<?> value = theValue.get();
+			if (value == null)
+				return super.getStamp();
+			else
+				return Stamped.compositeOf2Stamps(super.getStamp(), value.getStamp());
 		}
 	}
 
@@ -2617,6 +2796,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					Runnable remove = theListeners.add(observer, true);
 					return remove::run;
+				}
+
+				@Override
+				public long getStamp() {
+					return LazyObservableValue.this.getStamp();
 				}
 
 				@Override

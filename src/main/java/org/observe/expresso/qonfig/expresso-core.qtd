@@ -40,7 +40,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<element-meta name="element-model" type="element-model" min="0" />
 		</add-on>
 		<?DOC Instances of this type may declare a &lt;model> element with local variables only available within the scope of the element?>
-		<add-on name="with-local-model" abstract="true">
+		<add-on name="with-local-model">
 			<?DOC The local model with values defined only for use within the element?>
 			<child-def name="model" type="model" min="0" />
 		</add-on>

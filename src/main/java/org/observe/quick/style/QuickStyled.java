@@ -123,8 +123,14 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 
 				// Find the nearest styled ancestor to inherit styles from
 				ExElement.Def<?> parent = element.getParentElement();
-				while (parent != null && parent.getAddOn(QuickStyled.Def.class) != null)
-					parent = parent.getParentElement();
+				if (parent == null)
+					parent = element.getPromise();
+				while (parent != null && parent.getAddOn(QuickStyled.Def.class) == null) {
+					ExElement.Def<?> p = parent.getParentElement();
+					if (p == null)
+						p = parent.getPromise();
+					parent = p;
+				}
 				QuickInstanceStyle.Def parentStyle = parent == null ? null
 					: parent.getAddOnValue(QuickStyled.Def.class, QuickStyled.Def::getStyle);
 				QuickCompiledStyle rootStyle = new QuickCompiledStyle.Default(styleTypes, element.getElement(), parentStyle,
@@ -649,6 +655,11 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 
 				void update(ModelSetInstance models) throws ModelInstantiationException {
 					theValueContainer.set(theInstantiator.evaluate(models), null);
+				}
+
+				@Override
+				public String toString() {
+					return theInstantiator.getAttribute().toString();
 				}
 			}
 		}

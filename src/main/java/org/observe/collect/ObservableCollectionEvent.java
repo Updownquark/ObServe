@@ -304,7 +304,22 @@ public interface ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 
 		@Override
 		public String toString() {
-			return getOldValue() + "->" + getNewValue();
+			StringBuilder str = new StringBuilder();
+			str.append('[').append(theIndex).append(']');
+			switch (getType()) {
+			case add:
+				str.append("+:").append(getNewValue());
+				break;
+			case remove:
+				str.append("-:").append(getOldValue());
+				break;
+			case set:
+				str.append(':').append(getOldValue()).append("->").append(getNewValue());
+				break;
+			}
+			if (getMovement() != null)
+				str.append("(move)");
+			return str.toString();
 		}
 	}
 

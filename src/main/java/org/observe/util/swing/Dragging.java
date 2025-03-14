@@ -3,10 +3,14 @@ package org.observe.util.swing;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.StringReader;
 import java.io.StringWriter;
+import java.lang.reflect.Array;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -14,7 +18,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -23,14 +26,71 @@ import java.util.stream.Stream;
 
 import javax.swing.Icon;
 import javax.swing.TransferHandler;
+import javax.swing.TransferHandler.DropLocation;
 import javax.swing.TransferHandler.TransferSupport;
 
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
-import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 
 public class Dragging {
+	public interface TransferWrapper {
+		public boolean isDrop();
+
+		public void setDropAction(int action);
+
+		public DropLocation getDropLocation();
+
+		public DataFlavor[] getDataFlavors();
+
+		public boolean isDataFlavorSupported(DataFlavor flavor);
+
+		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException;
+	}
+
+	public static DefaultTransferWrapper wrap(TransferSupport transfer) {
+		return new DefaultTransferWrapper(transfer);
+	}
+
+	public static class DefaultTransferWrapper implements TransferWrapper {
+		private final TransferSupport theTransfer;
+
+		public DefaultTransferWrapper(TransferSupport transfer) {
+			theTransfer = transfer;
+		}
+
+		@Override
+		public boolean isDrop() {
+			return theTransfer.isDrop();
+		}
+
+		@Override
+		public void setDropAction(int action) {
+			theTransfer.setDropAction(action);
+		}
+
+		@Override
+		public DropLocation getDropLocation() {
+			return theTransfer.getDropLocation();
+		}
+
+		@Override
+		public DataFlavor[] getDataFlavors() {
+			return theTransfer.getDataFlavors();
+		}
+
+		@Override
+		public boolean isDataFlavorSupported(DataFlavor flavor) {
+			return theTransfer.isDataFlavorSupported(flavor);
+		}
+
+		@Override
+		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+			return theTransfer.getTransferable().getTransferData(flavor);
+		}
+	}
+
 	public static class MultiFlavor extends DataFlavor {
 		public final DataFlavor single;
 
@@ -40,84 +100,309 @@ public class Dragging {
 		}
 	}
 
-	public interface TransferSource<E> {
-		<E2> TransferSource<E> forType(Class<E2> type, Predicate<? super E> filter, Function<? super E, ? extends E2> map,
-			Consumer<? super TransferSource<E2>> source);
+	public static class GridFlavor extends DataFlavor {
+		public final DataFlavor component;
+		public final int rows;
+		public final int columns;
 
-		TransferSource<E> draggable(boolean draggable);
+		public GridFlavor(DataFlavor component, int rows, int columns) {
+			super(Array.newInstance(Array.newInstance(component.getRepresentationClass(), 0).getClass(), 0).getClass(),
+				"Grid<" + component.getHumanPresentableName() + ">");
+			this.component = component;
+			this.rows = rows;
+			this.columns = columns;
+		}
+	}
 
-		TransferSource<E> copyable(boolean copyable);
+	public static class GridElementFlavor extends DataFlavor {
+		public final DataFlavor component;
+		public final int row;
+		public final int column;
 
-		TransferSource<E> movable(boolean movable);
+		public GridElementFlavor(DataFlavor component, int row, int column) {
+			super(component.getRepresentationClass(), "Grid<" + component.getHumanPresentableName() + ">[" + row + "][" + column + "]");
+			this.component = component;
+			this.row = row;
+			this.column = column;
+		}
+	}
 
-		default TransferSource<E> toFlavor(DataFlavor flavor, DataSourceTransform<? super E> transform) {
+	public static class GridElementTransferWrapper implements TransferWrapper {
+		private final TransferWrapper theWrapped;
+		private final int theRow;
+		private final int theColumn;
+
+		public GridElementTransferWrapper(TransferWrapper wrapped, int row, int column) {
+			theWrapped = wrapped;
+			theRow = row;
+			theColumn = column;
+		}
+
+		@Override
+		public boolean isDrop() {
+			return theWrapped.isDrop();
+		}
+
+		@Override
+		public void setDropAction(int action) {
+			theWrapped.setDropAction(action);
+		}
+
+		@Override
+		public DropLocation getDropLocation() {
+			return theWrapped.getDropLocation();
+		}
+
+		@Override
+		public DataFlavor[] getDataFlavors() {
+			DataFlavor[] flavors = theWrapped.getDataFlavors().clone();
+			for (int f = 0; f < flavors.length; f++)
+				flavors[f] = new GridElementFlavor(flavors[f], theRow, theColumn);
+			return flavors;
+		}
+
+		@Override
+		public boolean isDataFlavorSupported(DataFlavor flavor) {
+			return theWrapped.isDataFlavorSupported(new GridElementFlavor(flavor, theRow, theColumn));
+		}
+
+		@Override
+		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+			return theWrapped.getTransferData(new GridElementFlavor(flavor, theRow, theColumn));
+		}
+	}
+
+	public static class GridTransferable implements Transferable {
+		private final Transferable[][] theComponents;
+		private final Set<DataFlavor> theComponentFlavors;
+		private final GridFlavor[] theGridFlavors;
+
+		public GridTransferable(Transferable[][] components) {
+			theComponents = components;
+			Set<DataFlavor> componentFlavors = new LinkedHashSet<>(Arrays.asList(theComponents[0][0].getTransferDataFlavors()));
+			boolean first = true;
+			for (Transferable[] row : theComponents) {
+				for (Transferable t : row) {
+					if (first) {
+						first = false;
+						continue;
+					}
+					componentFlavors.retainAll(Arrays.asList(t.getTransferDataFlavors()));
+					if (componentFlavors.isEmpty())
+						break;
+				}
+				if (componentFlavors.isEmpty())
+					break;
+			}
+			theComponentFlavors = componentFlavors;
+			theGridFlavors = new GridFlavor[componentFlavors.size()];
+			int f = 0;
+			for (DataFlavor componentFlavor : componentFlavors)
+				theGridFlavors[f++] = new GridFlavor(componentFlavor, theComponents.length, theComponents[0].length);
+		}
+
+		@Override
+		public DataFlavor[] getTransferDataFlavors() {
+			return theGridFlavors;
+		}
+
+		@Override
+		public boolean isDataFlavorSupported(DataFlavor flavor) {
+			if (flavor instanceof GridElementFlavor) {
+				GridElementFlavor gef = (GridElementFlavor) flavor;
+				if (gef.row >= theComponents.length || gef.column >= theComponents[0].length)
+					return false;
+				flavor = ((GridElementFlavor) flavor).component;
+				return theComponentFlavors.contains(flavor);
+			} else
+				return ArrayUtils.contains(theGridFlavors, flavor);
+		}
+
+		@Override
+		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+			if (flavor instanceof GridElementFlavor) {
+				GridElementFlavor gef = (GridElementFlavor) flavor;
+				Transferable component = theComponents[gef.row][gef.column];
+				return component.getTransferData(gef.component);
+			} else {
+				GridFlavor gridFlavor = (GridFlavor) flavor;
+				Object[][] grid = (Object[][]) Array.newInstance(TypeTokens.get().wrap(gridFlavor.component.getRepresentationClass()),
+					gridFlavor.rows, gridFlavor.columns);
+				for (int r = 0; r < theComponents.length; r++) {
+					for (int c = 0; c < theComponents[r].length; c++)
+						grid[r][c] = theComponents[r][c].getTransferData(gridFlavor.component);
+				}
+				return grid;
+			}
+		}
+	}
+
+	public interface TransferSource<R, C> {
+		TransferSource<R, C> draggable(boolean draggable);
+
+		TransferSource<R, C> copyable(boolean copyable);
+
+		TransferSource<R, C> movable(boolean movable);
+
+		boolean isDraggable();
+
+		default TransferSource<R, C> toFlavor(DataFlavor flavor, DataSourceTransform<? super R, ? super C, ?> transform) {
 			advertiseFlavor(flavor);
 			return toFlavors(Arrays.asList(flavor), transform);
 		}
 
-		default TransferSource<E> toFlavors(Collection<? extends DataFlavor> flavors, DataSourceTransform<? super E> transform) {
+		default TransferSource<R, C> toFlavors(Collection<? extends DataFlavor> flavors,
+			DataSourceTransform<? super R, ? super C, ?> transform) {
 			for (DataFlavor f : flavors)
 				advertiseFlavor(f);
 			Set<DataFlavor> flavorSet = flavors instanceof Set ? (Set<DataFlavor>) flavors : new LinkedHashSet<>(flavors);
 			return toFlavorLike(flavorSet::contains, transform);
 		}
 
-		TransferSource<E> advertiseFlavor(DataFlavor flavor);
+		TransferSource<R, C> advertiseFlavor(DataFlavor flavor);
 
-		TransferSource<E> toFlavorLike(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform);
+		TransferSource<R, C> toFlavorLike(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super R, ? super C, ?> transform);
 
-		TransferSource<E> toObject(Class<E> type);
+		default TransferSource<R, C> columnToObject(Class<? super C> type) {
+			return toFlavor(new DataFlavor(type, type.getName()), new DataSourceTransform<R, C, C>() {
+				@Override
+				public boolean canTransform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) {
+					return true;
+				}
 
-		// TODO default this, supporting multiple text-based flavors
-		TransferSource<E> toText(Function<? super E, ? extends CharSequence> toString);
+				@Override
+				public C transform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) throws IOException {
+					return cell.getCellValue();
+				}
+			});
+		}
+
+		default TransferSource<R, C> rowToObject(Class<? super R> type) {
+			return toFlavor(new DataFlavor(type, type.getName()), new DataSourceTransform<R, C, R>() {
+				@Override
+				public boolean canTransform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) {
+					return true;
+				}
+
+				@Override
+				public R transform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) throws IOException {
+					return cell.getModelValue();
+				}
+			});
+		}
+
+		default TransferSource<R, C> toText(Function<? super C, ? extends CharSequence> toString) {
+			// TODO Support multiple text-based flavors
+			return toFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataSourceTransform<R, C, InputStream>() {
+				@Override
+				public boolean canTransform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) {
+					return true;
+				}
+
+				@Override
+				public InputStream transform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) {
+					return new ByteArrayInputStream(toString.apply(cell.getCellValue()).toString().getBytes(Charset.forName("UTF-8")));
+				}
+			});
+		}
 
 		int getSourceActions();
 
-		Transferable createTransferable(E value);
+		Transferable createTransferable(ModelCell<? extends R, ? extends C> value);
 	}
 
-	public interface DataSourceTransform<E> {
-		boolean canTransform(E value, DataFlavor flavor);
+	public interface DataSourceTransform<R, C, E> {
+		boolean canTransform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor);
 
-		Object transform(E value, DataFlavor flavor) throws IOException;
+		E transform(ModelCell<? extends R, ? extends C> cell, DataFlavor flavor) throws IOException;
 	}
 
-	public interface TransferAccepter<R, C, E> {
-		<E2> TransferAccepter<R, C, E> forType(Class<E2> type, Predicate<? super E2> filter, Function<? super E2, ? extends E> map,
-			Consumer<? super TransferAccepter<R, C, E2>> accept);
+	public interface TransferAccepter<R, C> {
+		TransferAccepter<R, C> draggable(boolean draggable);
 
-		TransferAccepter<R, C, E> draggable(boolean draggable);
+		TransferAccepter<R, C> pastable(boolean pastable);
 
-		TransferAccepter<R, C, E> pastable(boolean pastable);
+		boolean isDraggable();
 
-		TransferAccepter<R, C, E> appearance(Supplier<Icon> appearance);
+		TransferAccepter<R, C> appearance(Supplier<Icon> appearance);
 
-		default TransferAccepter<R, C, E> fromFlavor(DataFlavor flavor, DataAccepterTransform<R, C, ? extends E> data) {
+		default TransferAccepter<R, C> fromFlavor(DataFlavor flavor, DataAccepterTransform<R, ? super C, ?> data) {
 			return fromFlavors(Arrays.asList(flavor), data);
 		}
 
-		TransferAccepter<R, C, E> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<R, C, ? extends E> data);
+		TransferAccepter<R, C> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<R, ? super C, ?> data);
 
-		TransferAccepter<R, C, E> fromObject(Class<E> type);
+		default TransferAccepter<R, C> fromObject(Class<? super R> type) {
+			Class<? super R> wrapped = TypeTokens.get().wrap(type);
+			return fromObject(type, new DataAccepterTransform<R, C, R>() {
+				@Override
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+					List<? extends R> values, DataFlavor flavor) {
+					for (Object value : values) {
+						if (type.isPrimitive() && value == null)
+							return false;
+						if (value != null && !wrapped.isInstance(value))
+							return false;
+					}
+					return true;
+				}
 
-		TransferAccepter<R, C, E> fromObject(Class<E> type, DataAccepterTransform<R, C, ? extends E> action);
+				@Override
+				public List<? extends R> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter,
+					boolean aboveCenter, List<? extends R> values, DataFlavor flavor, boolean testOnly) throws IOException {
+					return values;
+				}
+			});
+		}
 
-		TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString);
+		default <E> TransferAccepter<R, C> fromObject(Class<E> type, DataAccepterTransform<R, ? super C, ? extends E> action) {
+			return fromFlavor(new DataFlavor(type, type.getName()), action);
+		}
+
+		default TransferAccepter<R, C> fromText(Function<? super CharSequence, ? extends R> fromString) {
+			return fromFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataAccepterTransform<R, C, InputStream>() {
+				@Override
+				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+					List<? extends InputStream> values, DataFlavor flavor) {
+					return true;
+				}
+
+				@Override
+				public List<? extends R> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter,
+					boolean aboveCenter, List<? extends InputStream> values, DataFlavor flavor, boolean testOnly) throws IOException {
+					List<R> transformed = new ArrayList<>(values.size());
+					char[] buffer = new char[1028];
+					for (InputStream value : values) {
+						StringWriter writer = new StringWriter();
+						Reader reader = new InputStreamReader(value, Charset.forName("UTF-8"));
+						int read = reader.read(buffer);
+						while (read >= 0) {
+							writer.write(buffer, 0, read);
+							read = reader.read(buffer);
+						}
+						transformed.add(fromString.apply(writer.toString()));
+					}
+					return transformed;
+				}
+			});
+		}
 
 		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-			TransferSupport transfer, boolean withMulti);
+			TransferWrapper transfer, boolean withMulti);
 
 		Icon getDragAppearance();
 
-		BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-			Transferable transferable, boolean withMulti, boolean testOnly) throws IOException;
+		BetterList<? extends R> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			TransferWrapper transfer, boolean withMulti, boolean testOnly) throws IOException;
 	}
 
 	public interface DataAccepterTransform<R, C, E> {
-		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, List<?> value,
+		boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			List<? extends E> value,
 			DataFlavor flavor);
 
-		List<E> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter, List<?> values,
+		List<? extends R> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			List<? extends E> values,
 			DataFlavor flavor, boolean testOnly) throws IOException;
 	}
 
@@ -125,10 +410,9 @@ public class Dragging {
 		boolean consume(ModelCell<? extends R, ? extends C> target, E incoming, boolean justTest);
 	}
 
-	static class SimpleTransferSource<E> implements TransferSource<E> {
+	static class SimpleTransferSource<R, C> implements TransferSource<R, C> {
 		private final Set<DataFlavor> theFlavors;
-		private final List<BiTuple<Predicate<? super DataFlavor>, DataSourceTransform<? super E>>> theTransforms;
-		private List<Filtered<E, ?>> theFiltered;
+		private final List<BiTuple<Predicate<? super DataFlavor>, DataSourceTransform<? super R, ? super C, ?>>> theTransforms;
 		private boolean isDraggable;
 		private boolean isCopyable;
 		private boolean isMovable;
@@ -141,77 +425,39 @@ public class Dragging {
 		}
 
 		@Override
-		public <E2> TransferSource<E> forType(Class<E2> type, Predicate<? super E> filter, Function<? super E, ? extends E2> map,
-			Consumer<? super TransferSource<E2>> source) {
-			if (theFiltered == null)
-				theFiltered = new ArrayList<>(3);
-			theFiltered.add(new Filtered<>(filter, map, source));
-			return this;
-		}
-
-		@Override
-		public TransferSource<E> draggable(boolean draggable) {
+		public TransferSource<R, C> draggable(boolean draggable) {
 			isDraggable = draggable;
 			return this;
 		}
 
 		@Override
-		public TransferSource<E> copyable(boolean copyable) {
+		public TransferSource<R, C> copyable(boolean copyable) {
 			isCopyable = copyable;
 			return this;
 		}
 
 		@Override
-		public TransferSource<E> movable(boolean movable) {
+		public TransferSource<R, C> movable(boolean movable) {
 			isMovable = movable;
 			return this;
 		}
 
 		@Override
-		public TransferSource<E> advertiseFlavor(DataFlavor flavor) {
+		public boolean isDraggable() {
+			return isDraggable;
+		}
+
+		@Override
+		public TransferSource<R, C> advertiseFlavor(DataFlavor flavor) {
 			theFlavors.add(flavor);
 			return this;
 		}
 
 		@Override
-		public TransferSource<E> toFlavorLike(Predicate<? super DataFlavor> flavors, DataSourceTransform<? super E> transform) {
+		public TransferSource<R, C> toFlavorLike(Predicate<? super DataFlavor> flavors,
+			DataSourceTransform<? super R, ? super C, ?> transform) {
 			theTransforms.add(new BiTuple<>(flavors, transform));
 			return this;
-		}
-
-		@Override
-		public TransferSource<E> toObject(Class<E> type) {
-			advertiseFlavor(new DataFlavor(type, type.getName()));
-			return toFlavorLike(
-				f -> f.getRepresentationClass() != null && type.isAssignableFrom(f.getRepresentationClass()),
-				new DataSourceTransform<E>() {
-					@Override
-					public boolean canTransform(Object value, DataFlavor flavor) {
-						if (!type.isInstance(value))
-							return false;
-						return true;
-					}
-
-					@Override
-					public Object transform(E value, DataFlavor flavor) {
-						return value;
-					}
-				});
-		}
-
-		@Override
-		public TransferSource<E> toText(Function<? super E, ? extends CharSequence> toString) {
-			return toFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataSourceTransform<E>() {
-				@Override
-				public boolean canTransform(Object value, DataFlavor flavor) {
-					return true;
-				}
-
-				@Override
-				public Object transform(E value, DataFlavor flavor) {
-					return new StringReader(toString.apply(value).toString());
-				}
-			});
 		}
 
 		@Override
@@ -225,54 +471,25 @@ public class Dragging {
 		}
 
 		@Override
-		public Transferable createTransferable(E value) {
-			return getFlavors(null, value);
-		}
-
-		SimpleTransferable<E> getFlavors(SimpleTransferable<E> t, E value) {
-			if (theFiltered != null) {
-				for (Filtered<E, ?> filtered : theFiltered) {
-					t = (SimpleTransferable<E>) filtered.getFlavors(t, value);
-				}
-			}
-			if (!theFlavors.isEmpty() || !theTransforms.isEmpty()) {
+		public Transferable createTransferable(ModelCell<? extends R, ? extends C> cell) {
+			SimpleTransferable<? extends R, ? extends C> t = null;
+			if (!theTransforms.isEmpty()) {
 				if (t == null)
-					t = new SimpleTransferable<>(value);
+					t = new SimpleTransferable<>(cell);
 				t.advertiseFlavors(theFlavors);
 				t.acceptFlavors(theTransforms);
 			}
 			return t;
 		}
-
-		static class Filtered<E, E2> {
-			private final Predicate<? super E> theFilter;
-			private final Function<? super E, ? extends E2> theMap;
-			private final Consumer<? super TransferSource<E2>> theValue;
-
-			Filtered(Predicate<? super E> filter, Function<? super E, ? extends E2> map,
-				Consumer<? super TransferSource<E2>> value) {
-				theFilter = filter;
-				theMap = map;
-				theValue = value;
-			}
-
-			SimpleTransferable<?> getFlavors(SimpleTransferable<?> t, E value) {
-				if (theFilter != null && !theFilter.test(value))
-					return t;
-				SimpleTransferSource<E2> src = new SimpleTransferSource<>();
-				theValue.accept(src);
-				return src.getFlavors((SimpleTransferable<E2>) t, theMap.apply(value));
-			}
-		}
 	}
 
-	static class SimpleTransferable<E> implements Transferable {
-		private final E theValue;
+	static class SimpleTransferable<R, C> implements Transferable {
+		private final ModelCell<R, C> theCell;
 		private final Set<DataFlavor> theFlavors;
-		private final List<BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super E>>> theTransforms;
+		private final List<BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super R, ? super C, ?>>> theTransforms;
 
-		SimpleTransferable(E value) {
-			theValue = value;
+		SimpleTransferable(ModelCell<R, C> cell) {
+			theCell = cell;
 			theFlavors = new LinkedHashSet<>();
 			theTransforms = new ArrayList<>();
 		}
@@ -281,7 +498,8 @@ public class Dragging {
 			theFlavors.addAll(flavors);
 		}
 
-		void acceptFlavors(List<? extends BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super E>>> transforms) {
+		void acceptFlavors(
+			List<? extends BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super R, ? super C, ?>>> transforms) {
 			theTransforms.addAll(transforms);
 		}
 
@@ -292,9 +510,9 @@ public class Dragging {
 
 		@Override
 		public boolean isDataFlavorSupported(DataFlavor flavor) {
-			for (BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super E>> transform : theTransforms) {
+			for (BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super R, ? super C, ?>> transform : theTransforms) {
 				if ((transform.getValue1() == null || transform.getValue1().test(flavor))//
-					&& transform.getValue2().canTransform(theValue, flavor))
+					&& transform.getValue2().canTransform(theCell, flavor))
 					return true;
 			}
 			return false;
@@ -302,23 +520,23 @@ public class Dragging {
 
 		@Override
 		public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
-			for (BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super E>> transform : theTransforms) {
+			for (BiTuple<Predicate<? super DataFlavor>, ? extends DataSourceTransform<? super R, ? super C, ?>> transform : theTransforms) {
 				if ((transform.getValue1() == null || transform.getValue1().test(flavor))//
-					&& transform.getValue2().canTransform(theValue, flavor))
-					return transform.getValue2().transform(theValue, flavor);
+					&& transform.getValue2().canTransform(theCell, flavor)) {
+					return transform.getValue2().transform(theCell, flavor);
+				}
 			}
 			throw new UnsupportedFlavorException(flavor);
 		}
 
 		@Override
 		public String toString() {
-			return String.valueOf(theValue);
+			return String.valueOf(theCell);
 		}
 	}
 
-	static class SimpleTransferAccepter<R, C, E> implements TransferAccepter<R, C, E> {
-		private List<BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>>> theFlavors;
-		private List<Filtered<R, C, E, ?>> theFiltered;
+	static class SimpleTransferAccepter<R, C> implements TransferAccepter<R, C> {
+		private List<BiTuple<Set<DataFlavor>, DataAccepterTransform<R, ? super C, ?>>> theFlavors;
 		private Supplier<Icon> theAppearance;
 		private boolean isDraggable;
 		private boolean isPastable;
@@ -329,143 +547,71 @@ public class Dragging {
 		}
 
 		@Override
-		public <E2> TransferAccepter<R, C, E> forType(Class<E2> type, Predicate<? super E2> filter,
-			Function<? super E2, ? extends E> map, Consumer<? super TransferAccepter<R, C, E2>> accept) {
-			if (theFiltered == null)
-				theFiltered = new ArrayList<>(3);
-			Predicate<E2> fFilter = filter == null ? type::isInstance : v -> {
-				if (!type.isInstance(v))
-					return false;
-				return filter.test(v);
-			};
-			SimpleTransferAccepter<R, C, E2> accepter = new SimpleTransferAccepter<>();
-			accept.accept(accepter);
-			theFiltered.add(new Filtered<>(fFilter, map, accepter));
-			return this;
-		}
-
-		@Override
-		public TransferAccepter<R, C, E> draggable(boolean draggable) {
+		public TransferAccepter<R, C> draggable(boolean draggable) {
 			isDraggable = draggable;
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<R, C, E> pastable(boolean pastable) {
+		public TransferAccepter<R, C> pastable(boolean pastable) {
 			isPastable = pastable;
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<R, C, E> appearance(Supplier<Icon> appearance) {
+		public boolean isDraggable() {
+			return isDraggable;
+		}
+
+		@Override
+		public TransferAccepter<R, C> appearance(Supplier<Icon> appearance) {
 			theAppearance = appearance;
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<R, C, E> fromFlavors(Collection<? extends DataFlavor> flavors,
-			DataAccepterTransform<R, C, ? extends E> data) {
+		public TransferAccepter<R, C> fromFlavors(Collection<? extends DataFlavor> flavors, DataAccepterTransform<R, ? super C, ?> data) {
 			Set<DataFlavor> flavorSet = new LinkedHashSet<>(flavors);
 			theFlavors.add(new BiTuple<>(flavorSet, data));
 			return this;
 		}
 
 		@Override
-		public TransferAccepter<R, C, E> fromObject(Class<E> type) {
-			Class<E> wrapped = TypeTokens.get().wrap(type);
-			return fromFlavor(new DataFlavor(type, type.getName()), new DataAccepterTransform<R, C, E>() {
-				@Override
-				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-					List<?> values, DataFlavor flavor) {
-					for (Object value : values) {
-						if (type.isPrimitive() && value == null)
-							return false;
-						if (value != null && !wrapped.isInstance(value))
-							return false;
-					}
-					return true;
-				}
-
-				@Override
-				public List<E> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-					List<?> values,
-					DataFlavor flavor, boolean testOnly) throws IOException {
-					return (List<E>) values;
-				}
-			});
-		}
-
-		@Override
-		public TransferAccepter<R, C, E> fromObject(Class<E> type, DataAccepterTransform<R, C, ? extends E> data) {
-			return fromFlavor(new DataFlavor(type, type.getName()), data);
-		}
-
-		@Override
-		public TransferAccepter<R, C, E> fromText(Function<? super CharSequence, ? extends E> fromString) {
-			return fromFlavor(DataFlavor.getTextPlainUnicodeFlavor(), new DataAccepterTransform<R, C, E>() {
-				@Override
-				public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-					List<?> values, DataFlavor flavor) {
-					return true;
-				}
-
-				@Override
-				public List<E> transform(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-					List<?> values,
-					DataFlavor flavor, boolean testOnly) throws IOException {
-					List<E> transformed = new ArrayList<>(values.size());
-					char[] buffer = new char[1028];
-					for (Object value : values) {
-						StringWriter writer = new StringWriter();
-						int read = ((Reader) value).read(buffer);
-						while (read >= 0) {
-							writer.write(buffer, 0, read);
-							read = ((Reader) value).read(buffer);
-						}
-						transformed.add(fromString.apply(writer.toString()));
-					}
-					return transformed;
-				}
-			});
-		}
-
-		@Override
 		public boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-			TransferSupport transfer, boolean withMulti) {
+			TransferWrapper transfer, boolean withMulti) {
 			if (transfer.isDrop()) {
 				if (!isDraggable)
 					return false;
 			} else if (!isPastable)
 				return false;
-			if (theFiltered != null) {
-				for (Filtered<R, C, E, ?> filtered : theFiltered) {
-					if (filtered.canAccept(targetCell, leftOfCenter, aboveCenter, transfer, withMulti))
-						return true;
-				}
-			}
-			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>> flavor : theFlavors) {
+			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, ? super C, ?>> flavor : theFlavors) {
 				for (DataFlavor f : flavor.getValue1()) {
 					DataFlavor f2 = null;
-					List<E> transferData = null;
+					List<?> transferData = null;
 					try {
 						if (transfer.isDataFlavorSupported(f)) {
 							f2 = f;
-							transferData = Collections.singletonList((E) transfer.getTransferable().getTransferData(f));
+							transferData = Collections.singletonList(transfer.getTransferData(f));
 						} else if (f instanceof MultiFlavor) {
 							f2 = f;
 							if (transfer.isDataFlavorSupported(((MultiFlavor) f).single)) {
-								transferData = (List<E>) transfer.getTransferable().getTransferData(f);
+								transferData = (List<?>) transfer.getTransferData(f);
 							}
 						} else if (withMulti) {
 							f2 = new MultiFlavor(f);
 							if (transfer.isDataFlavorSupported(f2))
-								transferData = (List<E>) transfer.getTransferable().getTransferData(f2);
+								transferData = (List<?>) transfer.getTransferData(f2);
 						}
-					} catch (IOException | UnsupportedFlavorException e) {
+					} catch (UnsupportedFlavorException e) {
+						// Blows my mind, but it seems that TransferSupport.isDataFlavorSupported(f) doesn't always call the method
+						// in the transferable, so my code doesn't get to call some of the filter methods until we actually try to get
+						// the transfer data, whereupon we have no choice but to throw an exception.
+						// So don't do anything here except try other flavors.
+					} catch (IOException e) {
 						e.printStackTrace();
-						continue;
 					}
-					if (flavor.getValue2().canAccept(targetCell, leftOfCenter, aboveCenter, transferData, f2))
+					if (transferData != null && ((DataAccepterTransform<R, ? super C, Object>) flavor.getValue2()).canAccept(targetCell,
+						leftOfCenter, aboveCenter, transferData, f2))
 						return true;
 				}
 			}
@@ -480,93 +626,45 @@ public class Dragging {
 		}
 
 		@Override
-		public BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-			Transferable transfer, boolean withMulti, boolean testOnly) throws IOException {
-			if (theFiltered != null) {
-				for (Filtered<R, C, E, ?> filtered : theFiltered) {
-					BetterList<E> data = filtered.accept(targetCell, leftOfCenter, aboveCenter, transfer, withMulti, testOnly);
-					if (data != null)
-						return data;
-				}
-			}
-			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, C, ? extends E>> flavor : theFlavors) {
+		public BetterList<? extends R> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
+			TransferWrapper transfer, boolean withMulti, boolean testOnly) throws IOException {
+			for (BiTuple<Set<DataFlavor>, DataAccepterTransform<R, ? super C, ?>> flavor : theFlavors) {
 				for (DataFlavor f : flavor.getValue1()) {
 					DataFlavor f2 = null;
-					List<E> transferData = null;
+					List<?> transferData = null;
 					try {
 						if (transfer.isDataFlavorSupported(f)) {
 							f2 = f;
-							transferData = Collections.singletonList((E) transfer.getTransferData(f));
+							transferData = Collections.singletonList(transfer.getTransferData(f));
 						} else if (f instanceof MultiFlavor) {
 							f2 = f;
 							if (transfer.isDataFlavorSupported(((MultiFlavor) f).single)) {
-								transferData = (List<E>) transfer.getTransferData(f);
+								transferData = (List<?>) transfer.getTransferData(f);
 							}
 						} else if (withMulti) {
 							f2 = new MultiFlavor(f);
 							if (transfer.isDataFlavorSupported(f2))
-								transferData = (List<E>) transfer.getTransferData(f2);
+								transferData = (List<?>) transfer.getTransferData(f2);
 						}
-					} catch (IOException | UnsupportedFlavorException e) {
+					} catch (UnsupportedFlavorException e) {
+						// Blows my mind, but it seems that TransferSupport.isDataFlavorSupported(f) doesn't always call the method
+						// in the transferable, so my code doesn't get to call some of the filter methods until we actually try to get
+						// the transfer data, whereupon we have no choice but to throw an exception.
+						// So don't do anything here except try other flavors.
+					} catch (IOException e) {
 						e.printStackTrace();
-						continue;
 					}
 					if (transferData != null) {
-						if (flavor.getValue2().canAccept(targetCell, leftOfCenter, aboveCenter, transferData, f2)) {
-							List<? extends E> data = flavor.getValue2().transform(targetCell, leftOfCenter, aboveCenter, transferData, f2,
-								false);
+						DataAccepterTransform<R, ? super C, Object> transform = (DataAccepterTransform<R, ? super C, Object>) flavor
+							.getValue2();
+						if (transform.canAccept(targetCell, leftOfCenter, aboveCenter, transferData, f2)) {
+							List<? extends R> data = transform.transform(targetCell, leftOfCenter, aboveCenter, transferData, f2, testOnly);
 							return BetterList.of(data);
 						}
 					}
 				}
 			}
 			return null;
-		}
-
-		static class Filtered<R, C, E, E2> {
-			private final Predicate<? super E2> theFilter;
-			private final Function<? super E2, ? extends E> theMap;
-			private final SimpleTransferAccepter<R, C, E2> theValue;
-
-			Filtered(Predicate<? super E2> filter, Function<? super E2, ? extends E> map, SimpleTransferAccepter<R, C, E2> value) {
-				theFilter = filter;
-				theMap = map;
-				theValue = value;
-			}
-
-			boolean canAccept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-				TransferSupport transfer, boolean withMulti) {
-				if (!theValue.canAccept(targetCell, leftOfCenter, aboveCenter, transfer, withMulti))
-					return false;
-				List<E2> data;
-				try {
-					data = theValue.accept(targetCell, leftOfCenter, aboveCenter, transfer.getTransferable(), withMulti, true);
-				} catch (IOException e) {
-					throw new IllegalStateException("Badly advertised support", e);
-				}
-				if (data == null)
-					throw new IllegalStateException("Badly advertised support");
-				if (theFilter != null) {
-					boolean anyPass = false;
-					for (E2 d : data) {
-						if (theFilter.test(d)) {
-							anyPass = true;
-							break;
-						}
-					}
-					if (!anyPass)
-						return false;
-				}
-				return true;
-			}
-
-			BetterList<E> accept(ModelCell<? extends R, ? extends C> targetCell, boolean leftOfCenter, boolean aboveCenter,
-				Transferable transferable, boolean withMulti, boolean testOnly) throws IOException {
-				BetterList<E2> data = theValue.accept(targetCell, leftOfCenter, aboveCenter, transferable, withMulti, testOnly);
-				if (data == null)
-					return null;
-				return QommonsUtils.filterMap(data, theFilter, theMap);
-			}
 		}
 	}
 

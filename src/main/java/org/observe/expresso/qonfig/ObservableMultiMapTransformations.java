@@ -1,5 +1,7 @@
 package org.observe.expresso.qonfig;
 
+import java.util.function.Function;
+
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
@@ -18,12 +20,16 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.MultiMapTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TransformInstantiator;
 import org.observe.expresso.qonfig.ObservableCollectionTransformations.CollectionFlowSourcedTransformInstantiator;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.MultiEntryHandle;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -382,6 +388,7 @@ public class ObservableMultiMapTransformations {
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
 		// interpreter.createWith(SingleMapTransform.SINGLE_MAP, MultiMapTransform.class, ExElement.creator(SingleMapTransform::new));
 		interpreter.createWith(MapTransform.MAP_TRANSFORM, MultiMapTransform.class, ExElement.creator(MapTransform::new));
+		interpreter.createWith(MultiEntrySet.MULTI_ENTRY_SET, MultiEntrySet.class, ExElement.creator(MultiEntrySet::new));
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
@@ -574,10 +581,8 @@ public class ObservableMultiMapTransformations {
 					theTargetModelType = (ModelType<M2>) ModelTypes.MultiMap;
 				else {
 					Operation<?, ?, ?> last = getOperations().get(getOperations().size() - 1);
-					throw new QonfigInterpretationException(
-						"The resulting model type of a key-type " + MAP_TRANSFORM + " operation must be a set or sorted-set, not "
-							+ targetModelType,
-						last.reporting().getPosition(), 0);
+					throw new QonfigInterpretationException("The resulting model type of a key-type " + MAP_TRANSFORM
+						+ " operation must be a set or sorted-set, not " + targetModelType, last.reporting().getPosition(), 0);
 				}
 			} else {
 				if (targetModelType == ModelTypes.Value) {
@@ -587,11 +592,12 @@ public class ObservableMultiMapTransformations {
 						theTargetModelType = (ModelType<M2>) ModelTypes.Map;
 				} else if (targetModelType == ModelTypes.Collection || targetModelType == ModelTypes.Set
 					|| targetModelType == ModelTypes.SortedCollection || targetModelType == ModelTypes.SortedSet) {
+					theTargetModelType = (ModelType<M2>) sourceModelType;
 				} else {
 					Operation<?, ?, ?> last = getOperations().get(getOperations().size() - 1);
 					throw new QonfigInterpretationException(
 						"The resulting model type of a value-type " + MAP_TRANSFORM
-							+ " operation must be a value, list, sorted-list, set or sorted-set, not " + targetModelType,
+						+ " operation must be a value, list, sorted-list, set or sorted-set, not " + targetModelType,
 						last.reporting().getPosition(), 0);
 				}
 			}
@@ -810,8 +816,7 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public MV2 transformFromFlow(MultiMapFlow<K, VS> flow, ModelSetInstance models)
-				throws ModelInstantiationException {
+			public MV2 transformFromFlow(MultiMapFlow<K, VS> flow, ModelSetInstance models) throws ModelInstantiationException {
 				return transform((MV1) flow.gather(), models);
 			}
 		}
@@ -824,16 +829,14 @@ public class ObservableMultiMapTransformations {
 				throws ModelInstantiationException {
 				super(interpreted);
 				for (int i = 0; i < getOperations().size(); i++) {
-					if (!(getOperations()
-						.get(i) instanceof ObservableCollectionTransformations.CollectionFlowToFlowTransformInstantiator))
+					if (!(getOperations().get(i) instanceof ObservableCollectionTransformations.CollectionFlowToFlowTransformInstantiator))
 						throw new ModelInstantiationException("This operation is not supported for " + MAP_TRANSFORM,
 							interpreted.getOperations().get(i).reporting().getPosition(), 0);
 				}
 			}
 
 			@Override
-			public MultiMapFlow<K, VT> transformToFlow(MV1 source, ModelSetInstance models)
-				throws ModelInstantiationException {
+			public MultiMapFlow<K, VT> transformToFlow(MV1 source, ModelSetInstance models) throws ModelInstantiationException {
 				return transformFlow((MultiMapFlow<K, VS>) source.flow(), models);
 			}
 
@@ -860,6 +863,148 @@ public class ObservableMultiMapTransformations {
 						throw mie;
 					throw e;
 				}
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = MultiEntrySet.MULTI_ENTRY_SET,
+		interpretation = MultiEntrySet.Interpreted.class)
+	static class MultiEntrySet<M extends ObservableMultiMap<?, ?>> extends ExElement.Def.Abstract<ExElement>
+	implements MultiMapTransform<M, ObservableCollection<?>, ExElement> {
+		public static final String MULTI_ENTRY_SET = "multi-entry-set";
+
+		private ModelComponentId theKeyAs;
+		private ModelComponentId theValuesAs;
+		private CompiledExpression theTransform;
+
+		public MultiEntrySet(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@QonfigAttributeGetter("key-as")
+		public ModelComponentId getKeyAs() {
+			return theKeyAs;
+		}
+
+		@QonfigAttributeGetter("values-as")
+		public ModelComponentId getValuesAs() {
+			return theValuesAs;
+		}
+
+		@QonfigAttributeGetter
+		public CompiledExpression getTransform() {
+			return theTransform;
+		}
+
+		@Override
+		public ModelType<ObservableCollection<?>> getTargetModelType() {
+			return ModelTypes.Collection;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<M> sourceModelType) throws QonfigInterpretationException {
+			String keyAs = session.getAttributeText("key-as");
+			String valuesAs = session.getAttributeText("values-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theKeyAs = elModels.getElementValueModelId(keyAs);
+			theValuesAs = elModels.getElementValueModelId(valuesAs);
+			elModels.<Interpreted<M, ?, ?, ?, ?>, SettableValue<?>> satisfyElementValueType(theKeyAs, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType().getType(0)));
+			elModels.<Interpreted<M, ?, ?, ?, ?>, ObservableCollection<?>> satisfyElementValueType(theValuesAs, ModelTypes.Collection,
+				(interp, env) -> ModelTypes.Collection.forType(interp.getSourceType().getType(1)));
+		}
+
+		@Override
+		public Interpreted<M, ?, ?, ?, ? extends ExElement> interpret(ExElement.Interpreted<?> parent)
+			throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<M1 extends ObservableMultiMap<?, ?>, K, V, M2 extends M1, T>
+		extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<M1, M2, ObservableCollection<?>, ObservableCollection<?>, ExElement> {
+			private ModelInstanceType<M1, M2> theSourceType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theTransform;
+
+			Interpreted(MultiEntrySet<M1> definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public MultiEntrySet<M1> getDefinition() {
+				return (MultiEntrySet<M1>) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getTransform() {
+				return theTransform;
+			}
+
+			public ModelInstanceType<M1, M2> getSourceType() {
+				return theSourceType;
+			}
+
+			@Override
+			public void update(ModelInstanceType<M1, M2> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theSourceType = sourceType;
+				theTransform = interpret(getDefinition().getTransform(), ModelTypes.Value.anyAs());
+			}
+
+			@Override
+			public ModelInstanceType<ObservableCollection<?>, ? extends ObservableCollection<?>> getTargetType() {
+				return getDefinition().getTargetModelType().forTypes(theTransform.getType().getType(0));
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theTransform);
+			}
+
+			@Override
+			public Instantiator<K, V, M2, T> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<K, V, M extends ObservableMultiMap<?, ?>, T>
+		implements ObservableCollectionTransformations.CollectionFlowTransformInstantiator<M, ObservableCollection<?>, T> {
+			private final ModelComponentId theKeyAs;
+			private final ModelComponentId theValuesAs;
+			private final ModelValueInstantiator<SettableValue<T>> theTransform;
+
+			Instantiator(Interpreted<?, K, V, M, T> interpreted) throws ModelInstantiationException {
+				theKeyAs = interpreted.getDefinition().getKeyAs();
+				theValuesAs = interpreted.getDefinition().getValuesAs();
+				theTransform = interpreted.getTransform().instantiate();
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+				theTransform.instantiate();
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				SettableValue<T> sourceT = theTransform.get(sourceModels);
+				return theTransform.forModelCopy(sourceT, sourceModels, newModels) == sourceT;
+			}
+
+			@Override
+			public CollectionDataFlow<?, ?, T> transformToFlow(M source, ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<K> key = SettableValue.create();
+				SettableValue<ObservableCollection<V>> valuesV = SettableValue.create();
+				ObservableCollection<V> valuesC = ObservableCollection.flattenValue(valuesV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theKeyAs, models, key);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theValuesAs, models, valuesC);
+				SettableValue<T> transform = theTransform.get(models);
+				ObservableSet<? extends MultiEntryHandle<K, V>> entrySet = ((ObservableMultiMap<K, V>) source).entrySet();
+				Function<MultiEntryHandle<K, V>, T> entryTransform = entry -> {
+					key.set(entry.getKey());
+					valuesV.set((ObservableCollection<V>) entry.getValues());
+					return transform.get();
+				};
+				return entrySet.flow()//
+					.map(entryTransform);
 			}
 		}
 	}

@@ -15,21 +15,18 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -38,6 +35,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSeparator;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.CaretListener;
 import javax.swing.text.BadLocationException;
@@ -76,8 +74,6 @@ import org.observe.quick.base.QuickColorChooser;
 import org.observe.quick.base.QuickComboBox;
 import org.observe.quick.base.QuickConfirm;
 import org.observe.quick.base.QuickCustomComponent;
-import org.observe.quick.base.QuickDragging;
-import org.observe.quick.base.QuickDragging.QuickDataFlavor;
 import org.observe.quick.base.QuickEditableTextWidget;
 import org.observe.quick.base.QuickField;
 import org.observe.quick.base.QuickFieldPanel;
@@ -112,10 +108,12 @@ import org.observe.quick.base.QuickTextArea;
 import org.observe.quick.base.QuickTextField;
 import org.observe.quick.base.QuickToggleButton;
 import org.observe.quick.base.QuickToggleButtons;
+import org.observe.quick.base.QuickTransfer;
 import org.observe.quick.base.QuickTree;
 import org.observe.quick.base.Sizeable;
 import org.observe.quick.base.StyledDocument;
 import org.observe.quick.base.TabularWidget;
+import org.observe.quick.base.TabularWidget.TableSelectionMode;
 import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
@@ -126,7 +124,6 @@ import org.observe.quick.swing.QuickSwingPopulator.WindowModifier;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.BgFontAdjuster;
-import org.observe.util.swing.Dragging;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.LayerLayout;
 import org.observe.util.swing.ModelCell;
@@ -197,7 +194,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 	 * @param <T> The type of data for the flavor
 	 * @param <F> The type of the QuickDataFlavor
 	 */
-	public interface QuickSwingDataFlavor<T, F extends QuickDragging.QuickDataFlavor<T>> {
+	public interface QuickSwingDataFlavor<T, F extends QuickTransfer.QuickDataFlavor<T>> {
 		/**
 		 * @param quick The instantiated QuickDataFlavor
 		 * @return The Swing DataFlavor represented by the Quick data flavor
@@ -292,14 +289,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickCheckBoxMenuItem.Interpreted.class, QuickSwingMenuPopulator.class, (quick, tx2) -> new SwingCheckBoxMenuItem<>());
 
 		// Data flavors
-		tx.with(QuickDragging.AsObject.Interpreted.class, QuickSwingDataFlavor.class, (quick, tx2) -> {
+		tx.with(QuickTransfer.AsObject.Interpreted.class, QuickSwingDataFlavor.class, (quick, tx2) -> {
 			TypeToken<?> dataType = quick.getDataType();
 			DataFlavor flavor = new DataFlavor(TypeTokens.getRawType(dataType), dataType.toString());
 			return __ -> flavor;
 		});
 		@SuppressWarnings("deprecation")
 		final DataFlavor plainText = DataFlavor.plainTextFlavor;
-		tx.with(QuickDragging.AsText.Interpreted.class, QuickSwingDataFlavor.class, (quick, tx2) -> {
+		tx.with(QuickTransfer.AsText.Interpreted.class, QuickSwingDataFlavor.class, (quick, tx2) -> {
 			String mimeType = quick.getDefinition().getMimeType();
 			DataFlavor flavor;
 			switch (mimeType) {
@@ -504,7 +501,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 				return new JustifiedBoxLayout(quick.isVertical())//
 					.setMainAlignment(quick.getMainAlign())//
 					.setCrossAlignment(quick.getCrossAlign())//
-					.setPadding(quick.getPadding());
+					.setPadding(quick.getPadding())//
+					.setShowingInvisible(quick.isShowInvisible());
 			}
 
 			@Override
@@ -725,7 +723,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			panel.addLabel(null, quick.getValue(), format, lbl -> {
 				component.accept(lbl);
 				lbl.disableWith(quick.getDisabled());
-				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
+				lbl.withIcon(quick.getAddOn(Iconized.class).getIcon().map(//
+					LambdaUtils.printableFn(img -> img == null ? null : new ImageIcon(img), "ImageIcon(Image)", null)));
 			});
 		}
 	}
@@ -748,10 +747,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTextField<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			Format<T> format = quick.getFormat().get();
+			if (format == null)
+				quick.reporting().error("Format cannot be null");
 			boolean commitOnType = quick.isCommitOnType();
 			Integer columns = quick.getColumns();
 			panel.addTextField(null, quick.getValue(), format, tf -> {
 				component.accept(tf);
+				boolean[] watching = new boolean[1];
 				tf.modifyEditor(tf2 -> {
 					try {
 						quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
@@ -764,10 +766,15 @@ public class QuickBaseSwing implements QuickInterpretation {
 						tf2.setCommitOnType(commitOnType);
 					if (columns != null)
 						tf2.withColumns(columns);
-					quick.isPassword().changes().takeUntil(tf.getUntil()).act(evt -> tf2.asPassword(evt.getNewValue() ? '*' : (char) 0));
-					quick.getEmptyText().changes().takeUntil(tf.getUntil()).act(evt -> tf2.setEmptyText(evt.getNewValue()));
-					quick.isEditable().changes().takeUntil(tf.getUntil())
-					.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+					if (!watching[0]) {
+						watching[0] = true;
+						quick.getFormat().changes().takeUntil(tf.getUntil()).act(evt -> tf2.getEditor().setFormat(evt.getNewValue()));
+						quick.isPassword().changes().takeUntil(tf.getUntil())
+						.act(evt -> tf2.asPassword(Boolean.TRUE.equals(evt.getNewValue()) ? '*' : (char) 0));
+						quick.getEmptyText().changes().takeUntil(tf.getUntil()).act(evt -> tf2.setEmptyText(evt.getNewValue()));
+						quick.isEditable().changes().takeUntil(tf.getUntil())
+						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+					}
 				});
 			});
 		}
@@ -790,6 +797,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			SettableValue<Integer> rows = quick.getRows();
 			Consumer<ComponentEditor<ObservableTextArea<T>, ?>> modifier = tf -> {
 				component.accept(tf);
+				boolean[] watching = new boolean[1];
 				tf.modifyEditor(tf2 -> {
 					if (tf2.getErrorState() != null) {
 						try {
@@ -802,12 +810,17 @@ public class QuickBaseSwing implements QuickInterpretation {
 					}
 					if (commitOnType)
 						tf2.setCommitOnType(commitOnType);
-					rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
-					QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
-					tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
-					quick.setTextAreaContext(ctx);
-					quick.isEditable().changes().takeUntil(tf.getUntil())
-					.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+					if (!watching[0]) {
+						watching[0] = true;
+						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
+						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
+						tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
+						quick.setTextAreaContext(ctx);
+						if (tf2.getEditor() != null)
+							quick.getFormat().changes().takeUntil(tf.getUntil()).act(evt -> tf2.getEditor().setFormat(evt.getNewValue()));
+						quick.isEditable().changes().takeUntil(tf.getUntil())
+						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+					}
 				});
 			};
 			if (theDocument != null) {
@@ -835,11 +848,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 						tf2.asHtml(quick.isHtml());
 						tf2.setCommitOnType(commitOnType);
 						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
-						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
-						tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
-						quick.setTextAreaContext(ctx);
-						quick.isEditable().changes().takeUntil(tf.getUntil())
-						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 					});
 				});
 			}
@@ -1105,7 +1113,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickFieldPanel quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			panel.addVPanel(p -> {
+			panel.addVPanel(quick.isShowInvisible(), p -> {
 				component.accept(p);
 				int c = 0;
 				for (QuickWidget content : quick.getContents()) {
@@ -1158,12 +1166,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 	}
 
 	static class SwingComboBox<T> extends QuickSwingPopulator.Abstract<QuickComboBox<T>> {
-		private QuickSwingPopulator<QuickWidget> theRenderer;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theRenderers;
 
 		SwingComboBox(QuickComboBox.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			if (interpreted.getRenderer() != null)
-				theRenderer = tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+			theRenderers=new HashMap<>();
+			for(QuickWidget.Interpreted<?> renderer : interpreted.getRenderers())
+				theRenderers.put(renderer.getIdentity(), tx.transform(renderer, QuickSwingPopulator.class));
 		}
 
 		@Override
@@ -1172,15 +1181,18 @@ public class QuickBaseSwing implements QuickInterpretation {
 			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
 			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.toString());
 			quick.setContext(tableCtx);
-			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> renderer = theRenderer == null ? null
+			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> renderer = theRenderers == null ? null
 				: new QuickSwingTablePopulation.QuickSwingRenderer<>(null, LambdaUtils.identity(), quick,
-					quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
+					quick.getValue(), quick.getRenderers(), tableCtx, () -> combo[0], theRenderers);
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
 				component.accept(cf);
-				if (theRenderer != null) {
+				if (theRenderers != null) {
 					cf.renderWith(renderer);
-					cf.withValueTooltip(v -> renderer.getTooltip(v, v));
+					cf.withValueTooltip(v -> {
+						ModelCell<T, T> cell = new ModelCell.Default<>(() -> v, v, 0, 0, false, false, false, false, false, true);
+						return renderer.getTooltip(cell);
+					});
 				}
 			});
 		}
@@ -1400,9 +1412,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 	 *
 	 * @param <R> The type of the row collection in the QuickTable widget
 	 * @param <R2> The type of the row collection handled by PanelPopulation
+	 * @param <C> The super-type of column IDs in the table
 	 */
-	public static class MappedTableConfig<R, R2> {
-		final QuickTable.Interpreted<R, ?> theTable;
+	public static class MappedTableConfig<R, R2, C> {
+		final QuickTable.Interpreted<R, C, ?> theTable;
 		final TriConsumer<R2, R, QuickWidget> theUpdate;
 		final Function<R2, R> theReverse;
 
@@ -1411,30 +1424,31 @@ public class QuickBaseSwing implements QuickInterpretation {
 		 * @param update The function to update a PanelPopulation value when a row changes in the Quick widget's row collection
 		 * @param reverse The function to produce a Quick widget's row value from a PanelPopulation row
 		 */
-		public MappedTableConfig(Interpreted<R, ?> table, TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse) {
+		public MappedTableConfig(Interpreted<R, C, ?> table, TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse) {
 			theTable = table;
 			theUpdate = update;
 			theReverse = reverse;
 		}
 	}
 
-	static class SwingTable<R, R2> extends QuickSwingPopulator.Abstract<QuickTable<R>> {
+	static class SwingTable<R, R2, C> extends QuickSwingPopulator.Abstract<QuickTable<R, C>> {
 		private final QuickSwingColumnSet<R, R2> theColumns;
+		private final Function<R2, R> theReverse;
 		private final Map<Object, QuickSwingTableAction<R, ValueAction<R>>> interpretedActions;
 		private final Map<Object, QuickSwingPopulator<QuickWidget>> interpretedOptions;
-		private final Function<R2, R> theReverse;
+		private final QuickSwingTransfer theDragging;
 
-		SwingTable(QuickTable.Interpreted<R, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingTable(QuickTable.Interpreted<R, C, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			this(interpreted, tx, null, (Function<R2, R>) LambdaUtils.identity());
 		}
 
-		SwingTable(MappedTableConfig<R, R2> config, Transformer<ExpressoInterpretationException> tx)
+		SwingTable(MappedTableConfig<R, R2, C> config, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			this(config.theTable, tx, config.theUpdate, config.theReverse);
 		}
 
-		SwingTable(QuickTable.Interpreted<R, ?> table, Transformer<ExpressoInterpretationException> tx,
+		SwingTable(QuickTable.Interpreted<R, C, ?> table, Transformer<ExpressoInterpretationException> tx,
 			TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse) throws ExpressoInterpretationException {
 			theReverse = reverse;
 			theColumns = new QuickSwingColumnSet<>(table, table.getColumns(), tx, update, reverse);
@@ -1445,14 +1459,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 				interpretedActions.put(action.getIdentity(), tx.transform(action, QuickSwingTableAction.class));
 			for (QuickWidget.Interpreted<?> option : table.getOptions())
 				interpretedOptions.put(option.getIdentity(), tx.transform(option, QuickSwingPopulator.class));
-			if (!table.getTransferSources().isEmpty())
-				table.getTransferSources().get(0).reporting().warn("Not implemented");
-			if (!table.getTransferAccepters().isEmpty())
-				table.getTransferAccepters().get(0).reporting().warn("Not implemented");
+			theDragging = new QuickSwingTransfer(table.getTransferSources(), table.getTransferAccepters(), tx);
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R> quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R, C> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(
 				quick.reporting().getPosition().toShortString());
@@ -1461,19 +1472,37 @@ public class QuickBaseSwing implements QuickInterpretation {
 				panel.getUntil());
 			panel.addTable((ObservableCollection<R2>) quick.getRows(), table -> {
 				component.accept(table);
-				populateTable(table, quick, columnPopulator);
+				populateTable(table, ctx, quick, columnPopulator);
 			});
 		}
 
-		protected void populateTable(TableBuilder<R2, ?, ?> table, QuickTable<R> quick,
+		protected void populateTable(TableBuilder<R2, ?, ?> table, TabularWidget.TabularContext<R> ctx, QuickTable<R, C> quick,
 			QuickSwingColumnSet<R, R2>.Populator columnPopulator) {
 			columnPopulator.populate(table);
+			switch (quick.getSelectionType()) {
+			case column:
+				table.rowSelection(false).columnSelection(true);
+				break;
+			case cell:
+				table.rowSelection(true).columnSelection(true);
+				break;
+			case row:
+			default:
+				table.rowSelection(true).columnSelection(false);
+				break;
+			}
+			table.withSelectionMode(swingSelectionMode(quick.getRowSelectionMode()));
+			table.withColumnSelectionMode(swingSelectionMode(quick.getColumnSelectionMode()));
 			if (LambdaUtils.isTrivial(theReverse)) {
 				if (quick.getSelection() != null)
 					table.withSelection((SettableValue<R2>) quick.getSelection(), false);
 				if (quick.getMultiSelection() != null)
 					table.withSelection((ObservableCollection<R2>) quick.getMultiSelection());
 			}
+			if (quick.getColumnSelection() != null)
+				table.withColumnSelection((SettableValue<Object>) quick.getColumnSelection(), false);
+			if (quick.getColumnMultiSelection() != null)
+				table.withColumnSelection((ObservableCollection<Object>) quick.getColumnMultiSelection());
 			table.withActionsOnTop(quick.isOptionsOnTop());
 			for (ExElement aao : quick.getActionsAndOptions()) {
 				if (aao instanceof ValueAction) {
@@ -1503,55 +1532,82 @@ public class QuickBaseSwing implements QuickInterpretation {
 				} else
 					aao.reporting().warn("Unrecognized action/option " + aao.getClass().getName());
 			}
+			theDragging.configureTransferSources(cell -> {
+				ctx.getActiveValue().set(theReverse.apply(cell.getModelValue()));
+				ctx.isSelected().set(cell.isSelected());
+				ctx.getRowIndex().set(cell.getRowIndex());
+				ctx.getColumnIndex().set(cell.getColumnIndex());
+			}, quick.getTransferSources(), table::dragSourceRow);
+			theDragging.configureTransferAccepters(cell -> {
+				if (cell != null) {
+					ctx.getActiveValue().set(theReverse.apply(cell.getModelValue()));
+					ctx.isSelected().set(cell.isSelected());
+					ctx.getRowIndex().set(cell.getRowIndex());
+					ctx.getColumnIndex().set(cell.getColumnIndex());
+				} else {
+					ctx.getActiveValue().set(null);
+					ctx.isSelected().set(false);
+					ctx.getRowIndex().set(0);
+					ctx.getColumnIndex().set(0);
+				}
+			}, quick.getTransferAccepters(), table::dragAcceptRow);
 			modifyTable(table, quick);
 		}
 
-		protected void modifyTable(TableBuilder<R2, ?, ?> table, QuickTable<R> quick) {
+		private static int swingSelectionMode(TableSelectionMode selectionMode) {
+			switch (selectionMode) {
+			case single:
+				return ListSelectionModel.SINGLE_SELECTION;
+			case contiguous:
+				return ListSelectionModel.SINGLE_INTERVAL_SELECTION;
+			case general:
+			default:
+				return ListSelectionModel.MULTIPLE_INTERVAL_SELECTION;
+			}
+		}
+
+		protected void modifyTable(TableBuilder<R2, ?, ?> table, QuickTable<R, C> quick) {
 		}
 	}
 
 	static class SwingTree<N, T extends QuickTree<N>> extends QuickSwingPopulator.Abstract<T> {
-		private QuickSwingPopulator<QuickWidget> theRenderer;
-		private QuickSwingPopulator<QuickWidget> theEditor;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theRenderers;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theEditors;
 		private Map<Object, QuickSwingTableAction<BetterList<N>, ?>> interpretedActions;
 		private final Map<Object, QuickSwingPopulator<QuickWidget>> interpretedOptions;
-		private final Map<Object, QuickSwingDataFlavor<N, ?>> theDataFlavors;
+		private final QuickSwingTransfer theDragging;
 
 		SwingTree(QuickTree.Interpreted<N, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			if (interpreted.getTreeColumn() == null) {
-				theRenderer = null;
-				theEditor = null;
+				theRenderers = theEditors = Collections.emptyMap();
 			} else {
-				theRenderer = interpreted.getTreeColumn().getRenderer() == null ? null
-					: tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
-				if (interpreted.getTreeColumn().getEditing() == null || interpreted.getTreeColumn().getEditing().getEditor() == null)
-					theEditor = null;
-				else
-					theEditor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+				theRenderers = new HashMap<>();
+				theEditors = new HashMap<>();
+				for (QuickWidget.Interpreted<?> renderer : interpreted.getTreeColumn().getRenderers())
+					theRenderers.put(renderer.getIdentity(), tx.transform(renderer, QuickSwingPopulator.class));
+				if (interpreted.getTreeColumn().getEditing() != null)
+					for (QuickWidget.Interpreted<?> editor : interpreted.getTreeColumn().getEditing().getEditors())
+						theEditors.put(editor.getIdentity(), tx.transform(editor, QuickSwingPopulator.class));
 			}
 
 			interpretedActions = new HashMap<>();
 			interpretedOptions = new HashMap<>();
-			theDataFlavors=new HashMap<>();
 			for (ValueAction.Interpreted<BetterList<N>, ?> action : interpreted.getActions())
 				interpretedActions.put(action.getIdentity(), tx.transform(action, QuickSwingTableAction.class));
 			for (QuickWidget.Interpreted<?> option : interpreted.getOptions())
 				interpretedOptions.put(option.getIdentity(), tx.transform(option, QuickSwingPopulator.class));
-			for (QuickDragging.TransferSource.Interpreted<BetterList<N>, ?> ts : interpreted.getTransferSources()) {
-				for (QuickDragging.QuickDataFlavor.Interpreted<?, ?> flavor : ts.getFlavors())
-					theDataFlavors.put(flavor.getIdentity(), tx.transform(flavor, QuickSwingDataFlavor.class));
-			}
-			for (QuickDragging.TransferAccept.Interpreted<BetterList<N>, ?> ts : interpreted.getTransferAccepters()) {
-				for (QuickDragging.QuickDataFlavor.Interpreted<?, ?> flavor : ts.getFlavors())
-					theDataFlavors.put(flavor.getIdentity(), tx.transform(flavor, QuickSwingDataFlavor.class));
+			theDragging = new QuickSwingTransfer(interpreted.getTransferSources(), interpreted.getTransferAccepters(), tx);
+			if (interpreted.getTreeColumn() != null) {
+				theDragging.withSources(interpreted.getTreeColumn().getTransferSources(), tx);
+				theDragging.withAccepters(interpreted.getTreeColumn().getTransferAccepters(), tx);
 			}
 		}
 
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, T quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			MultiValueRenderable.MultiValueRenderContext<BetterList<N>> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>();
+			TabularWidget.TabularContext<BetterList<N>> ctx = new TabularWidget.TabularContext.Default<>(quick.reporting().toString());
 			quick.setContext(ctx);
 			ValueHolder<PanelPopulation.TreeEditor<N, ?>> treeHolder = new ValueHolder<>();
 			InterpretedSwingTableColumn<BetterList<N>, BetterList<N>, N> treeColumn = getTreeColumn(quick, treeHolder, ctx,
@@ -1567,16 +1623,20 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 		protected static <N> BiFunction<? super BetterList<N>, Observable<?>, ObservableCollection<? extends N>> childrenProducer(
 			QuickTree<N> quick) {
-			Map<BetterList<N>, ObservableCollection<? extends N>> childrenCache = new HashMap<>();
+			Map<BetterList<N>, CachedPathChildren<N>> childrenCache = new HashMap<>();
 			return (parentPath, nodeUntil) -> {
-				ObservableCollection<? extends N> children = childrenCache.get(parentPath);
-				if (children != null)
-					return children;
+				CachedPathChildren<N> children = childrenCache.get(parentPath);
+				if (children != null) {
+					children.refresh.onNext(null);
+					return children.children;
+				}
 				try {
-					children = quick.getModel().getChildren(ObservableValue.of(parentPath), nodeUntil);
+					SimpleObservable<Void> refresh = new SimpleObservable<>();
+					children = new CachedPathChildren<>(//
+						quick.getModel().getChildren(ObservableValue.of(parentPath).refresh(refresh), nodeUntil), refresh);
 					childrenCache.put(parentPath, children);
 					nodeUntil.take(1).act(__ -> childrenCache.remove(parentPath));
-					return children;
+					return children.children;
 				} catch (ModelInstantiationException e) {
 					quick.reporting().error("Could not create children for " + parentPath, e);
 					return null;
@@ -1584,43 +1644,28 @@ public class QuickBaseSwing implements QuickInterpretation {
 			};
 		}
 
+		static class CachedPathChildren<N> {
+			final ObservableCollection<? extends N> children;
+			final SimpleObservable<Void> refresh;
+
+			CachedPathChildren(ObservableCollection<? extends N> children, SimpleObservable<Void> refresh) {
+				this.children = children;
+				this.refresh = refresh;
+			}
+		}
+
 		protected InterpretedSwingTableColumn<BetterList<N>, BetterList<N>, N> getTreeColumn(QuickTree<N> quick,
 			ValueHolder<? extends PanelPopulation.AbstractTreeEditor<N, ?, ?>> treeHolder,
-				MultiValueRenderable.MultiValueRenderContext<BetterList<N>> ctx, Observable<?> until) throws ModelInstantiationException {
+				TabularWidget.TabularContext<BetterList<N>> ctx, Observable<?> until) throws ModelInstantiationException {
 			if (quick.getTreeColumn() == null)
 				return null;
-			TabularWidget.TabularContext<BetterList<N>> tableCtx = new TabularWidget.TabularContext<BetterList<N>>() {
-				private final SettableValue<Integer> theRow = SettableValue.<Integer> build().withDescription("row").withValue(0).build();
-				private final SettableValue<Integer> theColumn = SettableValue.<Integer> build().withDescription("column").withValue(0)
-					.build();
-
-				@Override
-				public SettableValue<BetterList<N>> getActiveValue() {
-					return ctx.getActiveValue();
-				}
-
-				@Override
-				public SettableValue<Boolean> isSelected() {
-					return ctx.isSelected();
-				}
-
-				@Override
-				public SettableValue<Integer> getRowIndex() {
-					return theRow;
-				}
-
-				@Override
-				public SettableValue<Integer> getColumnIndex() {
-					return theColumn;
-				}
-			};
 			return new InterpretedSwingTableColumn<>(quick,
-				(QuickTableColumn<BetterList<N>, N>) quick.getTreeColumn().getColumns().getFirst(), null, LambdaUtils.identity(), tableCtx,
-				until, treeHolder, theRenderer, theEditor);
+				(QuickTableColumn<BetterList<N>, N>) quick.getTreeColumn().getColumns().getFirst(), null, LambdaUtils.identity(), ctx,
+				until, treeHolder, theRenderers, theEditors, theDragging);
 		}
 
 		protected void populateTree(PanelPopulation.AbstractTreeEditor<N, ?, ?> tree, QuickTree<N> quick,
-			MultiValueRenderable.MultiValueRenderContext<BetterList<N>> leafCtx) {
+			MultiValueRenderable.MultiValueRenderContext<BetterList<N>> ctx) {
 			if (quick.getSelection() != null)
 				tree.withSelection(quick.getSelection(), false);
 			if (quick.getMultiSelection() != null)
@@ -1630,10 +1675,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			if (quick.getNodeMultiSelection() != null)
 				tree.withValueSelection(quick.getNodeMultiSelection());
 			tree.withLeafTest2(path -> {
-				try (Transaction t = QuickCoreSwing.rendering()) {
-					leafCtx.getActiveValue().set(path, null);
-					return quick.getModel().isLeaf(path);
-				}
+				ctx.getActiveValue().set(path, null);
+				return quick.getModel().isLeaf(path);
 			});
 			tree.withRootVisible(quick.isRootVisible());
 			for (ExElement aao : quick.getActionsAndOptions()) {
@@ -1665,124 +1708,19 @@ public class QuickBaseSwing implements QuickInterpretation {
 				} else
 					aao.reporting().warn("Unrecognized action/option " + aao.getClass().getName());
 			}
-			if (!quick.getTransferSources().isEmpty()) {
-				tree.dragSourcePath(dragSrc -> {
-					for (QuickDragging.TransferSource<BetterList<N>, ?> ts : quick.getTransferSources()) {
-						try {
-							configureTransferSource(quick, dragSrc, ts);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
-					}
-				});
-			}
-			if (!quick.getTransferAccepters().isEmpty()) {
-				tree.dragAcceptPath(dragAccept -> {
-					for (QuickDragging.TransferAccept<BetterList<N>, ?> ts : quick.getTransferAccepters()) {
-						try {
-							configureTransferAccept(quick, dragAccept, ts);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
-					}
-				});
-			}
-		}
-
-		protected <F> void configureTransferSource(QuickTree<N> tree, Dragging.TransferSource<BetterList<N>> dragSrc,
-			QuickDragging.TransferSource<BetterList<N>, F> ts) throws ModelInstantiationException {
-			Set<DataFlavor> flavors = new LinkedHashSet<>();
-			for (QuickDragging.QuickDataFlavor<? extends F> flavor : ts.getFlavors()) {
-				QuickSwingDataFlavor<F, QuickDataFlavor<F>> swingFlavor = (QuickSwingDataFlavor<F, QuickDataFlavor<F>>) theDataFlavors
-					.get(flavor.getIdentity());
-				if (swingFlavor != null)
-					flavors.add(swingFlavor.getFlavor((QuickDataFlavor<F>) flavor));
-			}
-			dragSrc.draggable(ts.isDraggable());
-			dragSrc.copyable(ts.isCopyable());
-			dragSrc.movable(ts.isMovable());
-			SettableValue<BetterList<N>> activeValue = tree.getTransferActiveValue();
-			SettableValue<Boolean> canTransform = ts.canTransform();
-			SettableValue<F> transform = ts.getTransform();
-			dragSrc.toFlavors(flavors, new Dragging.DataSourceTransform<BetterList<N>>() {
-				@Override
-				public boolean canTransform(BetterList<N> value, DataFlavor flavor) {
-					activeValue.set(value);
-					return canTransform.get();
+			theDragging.configureTransferSources(cell -> {
+				ctx.getActiveValue().set(cell.getModelValue());
+				ctx.isSelected().set(cell.isSelected());
+			}, quick.getTransferSources(), tree::dragSourcePath);
+			theDragging.configureTransferAccepters(cell -> {
+				if (cell != null) {
+					ctx.getActiveValue().set(cell.getModelValue());
+					ctx.isSelected().set(cell.isSelected());
+				} else {
+					ctx.getActiveValue().set(null);
+					ctx.isSelected().set(false);
 				}
-
-				@Override
-				public Object transform(BetterList<N> value, DataFlavor flavor) throws IOException {
-					activeValue.set(value);
-					return transform.get();
-				}
-			});
-		}
-
-		protected <F> void configureTransferAccept(QuickTree<N> tree,
-			Dragging.TransferAccepter<BetterList<N>, Object, BetterList<N>> dragSrc, QuickDragging.TransferAccept<BetterList<N>, F> ts)
-				throws ModelInstantiationException {
-			Set<DataFlavor> flavors = new LinkedHashSet<>();
-			for (QuickDragging.QuickDataFlavor<? extends F> flavor : ts.getFlavors()) {
-				QuickSwingDataFlavor<F, QuickDataFlavor<F>> swingFlavor = (QuickSwingDataFlavor<F, QuickDataFlavor<F>>) theDataFlavors
-					.get(flavor.getIdentity());
-				if (swingFlavor != null)
-					flavors.add(swingFlavor.getFlavor((QuickDataFlavor<F>) flavor));
-			}
-			dragSrc.draggable(ts.isDraggable());
-			dragSrc.pastable(ts.isPasteable());
-			SettableValue<BetterList<N>> activeValue = tree.getTransferActiveValue();
-			SettableValue<Boolean> activeSelected = tree.getTransferSelectedValue();
-			SettableValue<F> transferValue = ts.getTransferValue();
-			ObservableCollection<F> transferValues = ts.getTransferValues();
-			SettableValue<Boolean> canAccept = ts.canAccept();
-			boolean canAcceptSingle = ts.isCanAcceptOpOnSingle();
-			ObservableAction accept = ts.getAccept();
-			boolean acceptSingle = ts.isAcceptOpOnSingle();
-			dragSrc.fromFlavors(flavors, new Dragging.DataAccepterTransform<BetterList<N>, Object, BetterList<N>>() {
-				@Override
-				public boolean canAccept(ModelCell<? extends BetterList<N>, ? extends Object> targetCell, boolean leftOfCenter,
-					boolean aboveCenter, List<?> values, DataFlavor flavor) {
-					if (canAcceptSingle) {
-						for (Object value : values) {
-							activeValue.set(targetCell.getModelValue());
-							activeSelected.set(targetCell.isSelected());
-							transferValue.set((F) value);
-
-							if (!canAccept.get())
-								return false;
-						}
-						return true;
-					} else {
-						transferValues.clear();
-						transferValues.addAll((List<F>) values);
-						return canAccept.get();
-					}
-				}
-
-				@Override
-				public List<BetterList<N>> transform(ModelCell<? extends BetterList<N>, ? extends Object> targetCell, boolean leftOfCenter,
-					boolean aboveCenter, List<?> values, DataFlavor flavor, boolean testOnly) throws IOException {
-					if (acceptSingle) {
-						for (Object value : values) {
-							activeValue.set(targetCell.getModelValue());
-							activeSelected.set(targetCell.isSelected());
-							transferValue.set((F) value);
-
-							accept.act(null);
-						}
-					} else {
-						transferValues.clear();
-						transferValues.addAll((List<F>) values);
-						accept.act(null);
-					}
-					return BetterList.empty();
-				}
-			});
-			// Here we're relying on the fact that the active value, etc. have been pre-set by the canAccept method above
-			// TODO Icon offset
-			ObservableValue<Icon> icon = ts.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img));
-			dragSrc.appearance(icon);
+			}, quick.getTransferAccepters(), tree::dragAcceptPath);
 		}
 	}
 
@@ -1857,10 +1795,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 					}
 
 					@Override
-					public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+					public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> vPanel) {
 						if (isFirst) {
 							isFirst = false;
-							s.firstV((Consumer<PanelPopulator<?, ?>>) (Consumer<?>) vPanel);
+							s.firstV(showInvisible, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) vPanel);
 						} else
 							s.lastV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 						return this;
@@ -1898,6 +1836,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				component.accept(s);
 				try {
 					theContent.populate(new ScrollPopulator(s), quick.getContents().getFirst());
+					s.scrollable(quick.isScrollingVertically(), quick.isScrollingHorizontally());
 					if (theRowHeader != null)
 						theRowHeader.populate(new ScrollRowHeaderPopulator(s), quick.getRowHeader());
 					if (theColumnHeader != null)
@@ -1939,8 +1878,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-				theScroll.withVContent(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVContent(showInvisible, p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 				return this;
 			}
 		}
@@ -1976,8 +1915,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-				theScroll.withVRowHeader(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVRowHeader(showInvisible, p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 				return this;
 			}
 		}
@@ -2013,7 +1952,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> vPanel) {
 				throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
 			}
 		}
@@ -2259,6 +2198,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 						swingWindow.setCurrentDirectory(dir);
 					swingWindow.setDialogTitle(theTitle.get());
 
+					swingWindow.setFileFilter(new QuickFileFilter(dialog));
+
 					int result;
 					if (dialog.isOpen())
 						result = swingWindow.showOpenDialog(parent);
@@ -2294,6 +2235,29 @@ public class QuickBaseSwing implements QuickInterpretation {
 				windowClosed(window);
 			}
 		};
+	}
+
+	static class QuickFileFilter extends javax.swing.filechooser.FileFilter {
+		private final QuickFileChooser theFileChooser;
+
+		QuickFileFilter(QuickFileChooser fileChooser) {
+			theFileChooser = fileChooser;
+		}
+
+		@Override
+		public boolean accept(File f) {
+			if (f == null)
+				return false;
+			else if (f.isDirectory())
+				return true;
+			else
+				return theFileChooser.isFileAllowed(f) == null;
+		}
+
+		@Override
+		public String getDescription() {
+			return theFileChooser.getFileDescrip().get();
+		}
 	}
 
 	static <D extends GeneralDialog> QuickSwingDialog<D> interpretGeneralDialog(GeneralDialog.Interpreted<D> interpreted,
@@ -2363,8 +2327,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 
 		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			theWindow.withVContent(p -> panel.accept((PanelPopulator<JPanel, ?>) p));
+		public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
+			theWindow.withVContent(showInvisible, p -> panel.accept((PanelPopulator<JPanel, ?>) p));
 			return this;
 		}
 	}
@@ -2453,8 +2417,9 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabsEditor.withVTab(theTab.getTabValue(), theTabIndex, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
+			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theTabsEditor.withVTab(theTab.getTabValue(), theTabIndex, showInvisible,
+					tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
 					this::configureTab);
 				return this;
 			}
@@ -2522,7 +2487,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 
 		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+		public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
 			PanelPopulation.PanelPopulator<JPanel, ?> populator = PanelPopulation.populateVPanel(null, theUntil);
 			panel.accept(populator);
 			theExtractedComponent = populator.getComponent();

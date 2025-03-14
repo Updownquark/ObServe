@@ -18,17 +18,20 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import org.observe.Observer.NoArgObserver;
 import org.observe.Observer.SimpleObserver;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MappedCollection;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
@@ -39,7 +42,7 @@ import org.qommons.threading.QommonsTimer;
  *
  * @param <T> The type of values this observable provides
  */
-public interface Observable<T> extends Lockable, Identifiable, Eventable {
+public interface Observable<T> extends Lockable, Identifiable, Eventable, Stamped {
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
 	 *
@@ -53,6 +56,23 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 * @return The subscription for the action
 	 */
 	default Subscription act(SimpleObserver<? super T> action) {
+		return subscribe(action);
+	}
+
+	/**
+	 * <p>
+	 * Subscribes to this observable with an observer that takes no arguments.
+	 * </p>
+	 * <p>
+	 * Note that this method adds an additional frame to the call stack over {@link #subscribe(Observer)} or {@link #act(SimpleObserver)}.
+	 * So if performance matters, this method should only be used with a method reference lambda (e.g.
+	 * <code>observable.act0(MyClass::myMethod)</code>) where a call stack frame for the listener can be avoided.
+	 * </p>
+	 *
+	 * @param action The action to perform each time this observable fires
+	 * @return The subscription for the action
+	 */
+	default Subscription act0(NoArgObserver action) {
 		return subscribe(action);
 	}
 
@@ -225,7 +245,14 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
-		return new OrObservable<>(Arrays.asList(obs));
+		switch (obs.length) {
+		case 0:
+			return empty();
+		case 1:
+			return (Observable<V>) obs[0];
+		default:
+			return new OrObservable<>(Arrays.asList(obs));
+		}
 	}
 
 	/**
@@ -285,6 +312,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			@Override
 			public CoreId getCoreId() {
 				return CoreId.EMPTY;
+			}
+
+			@Override
+			public long getStamp() {
+				return 0;
 			}
 
 			@Override
@@ -360,6 +392,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return CoreId.EMPTY;
+		}
+
+		@Override
+		public long getStamp() {
+			return 0;
 		}
 
 		@Override
@@ -462,7 +499,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	abstract class WrappingObservable<F, T> extends AbstractIdentifiable implements Observable<T> {
 		protected final Observable<F> theWrapped;
 
-		public WrappingObservable(Observable<F> wrapped) {
+		protected WrappingObservable(Observable<F> wrapped) {
 			theWrapped = wrapped;
 		}
 
@@ -498,6 +535,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return theWrapped.getCoreId();
+		}
+
+		@Override
+		public long getStamp() {
+			return theWrapped.getStamp();
 		}
 
 		@Override
@@ -789,6 +831,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public boolean equals(Object obj) {
 			return obj instanceof Observable && getIdentity().equals(((Observable<?>) obj).getIdentity());
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(Arrays.asList(theComposed));
 		}
 
 		@Override
@@ -1105,14 +1152,14 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 */
 	class SafeObservable<T> extends WrappingObservable<T, T> {
 		private final ThreadConstraint theThreading;
-		private final ThreadConstrainedLockingStrategy theLocking;
+		private final CollectionLockingStrategy theLocking;
 
 		public SafeObservable(Observable<T> wrapped, ThreadConstraint threading) {
 			super(wrapped);
 			if (!threading.supportsInvoke())
 				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
-			theLocking = new ThreadConstrainedLockingStrategy(threading);
+			theLocking = ThreadConstrainedLockingStrategy.get(threading);
 		}
 
 		@Override
@@ -1288,6 +1335,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(getComponents());
 		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(getComponents());
+		}
 	}
 
 	/**
@@ -1350,8 +1402,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	/** Implements {@link Observable#onVmShutdown()} */
 	class VmShutdownObservable extends AbstractIdentifiable implements Observable<Void> {
 		public static final VmShutdownObservable INSTANCE = new VmShutdownObservable();
+		private final ListenerList<Runnable> theListeners;
+		private volatile boolean isShutdown;
 
 		private VmShutdownObservable() {
+			theListeners = ListenerList.build().build();
+			Thread hook = new Thread(() -> {
+				isShutdown = true;
+				theListeners.forEach(Runnable::run);
+			}, "ObServe Shutdown");
+			Runtime.getRuntime().addShutdownHook(hook);
 		}
 
 		@Override
@@ -1371,12 +1431,10 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super Void> observer) {
-			Thread hook = new Thread(() -> {
+			return theListeners.add(() -> {
 				observer.onNext(null);
 				observer.onCompleted(null);
-			}, "VM Shutdown");
-			Runtime.getRuntime().addShutdownHook(hook);
-			return () -> Runtime.getRuntime().removeShutdownHook(hook);
+			}, false)::run;
 		}
 
 		@Override
@@ -1402,6 +1460,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return CoreId.EMPTY;
+		}
+
+		@Override
+		public long getStamp() {
+			return isShutdown ? 1 : 0;
 		}
 
 		@Override
@@ -1445,6 +1508,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			Function<? super Duration, ? extends T> value, Consumer<? super T> postAction) {
 			theTimer = timer;
 			theTask = QommonsTimer.getCommonInstance().build(this::fire, interval, true);
+			if (initDelay != null && initDelay.isNegative())
+				throw new IllegalArgumentException("Initial delay must be >=0");
 			theInitDelay = initDelay;
 			theObservers = ListenerList.build().withInUse(inUse -> {
 				if (inUse) {
@@ -1453,11 +1518,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 				theTask.setActive(inUse);
 			}).build();
-			if (theInitDelay != null) {
-				if (initDelay.isNegative())
-					throw new IllegalArgumentException("Initial delay must be >=0");
-				theInitDelay = initDelay;
-			}
 			if (interval.compareTo(Duration.ofMillis(1)) < 0)
 				throw new IllegalArgumentException("Interval must be >=1ms");
 			if (until != null && theInitDelay != null && until.compareTo(theInitDelay.plus(interval)) < 0)
@@ -1552,6 +1612,19 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return CoreId.EMPTY;
+		}
+
+		@Override
+		public long getStamp() {
+			if (theTask.isActive())
+				return theTask.getExecutionCount();
+			Instant start = theStartTime;
+			if (start == null)
+				start = Instant.EPOCH;
+			if (theInitDelay != null)
+				start = start.plus(theInitDelay);
+			Instant now = Instant.now();
+			return TimeUtils.divide(TimeUtils.between(start, now), theTask.getFrequency());
 		}
 
 		@Override

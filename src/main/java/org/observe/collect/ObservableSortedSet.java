@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Spliterator;
+import java.util.function.Consumer;
 
 import org.observe.Equivalence;
 import org.observe.ObservableValue;
@@ -261,6 +262,22 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	 */
 	static <E> ObservableSortedSet<E> create(Comparator<? super E> compare) {
 		return create(createDefaultBacking(compare));
+	}
+
+	/**
+	 * Sometimes this create method is nicer than using {@link #build(Comparator)} because that method usually requires the type to be
+	 * specified explicitly, but this the compiler can often fill in the type for this method.
+	 *
+	 * @param <E> The type for the set
+	 * @param compare The comparator to use to sort the set's values
+	 * @param build Configuration for the set
+	 * @return The built collection
+	 */
+	static <E> ObservableSortedSet<E> create(Comparator<? super E> compare,
+		Consumer<ObservableCollectionBuilder.DistinctSortedBuilder<E, ?>> build) {
+		ObservableCollectionBuilder.DistinctSortedBuilder<E, ?> builder = build(compare);
+		build.accept(builder);
+		return builder.build();
 	}
 
 	/**

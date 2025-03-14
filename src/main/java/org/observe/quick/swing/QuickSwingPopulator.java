@@ -58,6 +58,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 */
 	void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify);
 
+	void modify(ComponentEditor<?, ?> component, W widget);
+
 	/**
 	 * Abstract {@link QuickSwingPopulator} implementation
 	 *
@@ -97,12 +99,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				doPopulate((PanelPopulator<?, ?>) panel, quick, comp -> {
 					modified[0] = true;
 					if (comp != null) {
-						try {
-							for (ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modifier : theModifiers)
-								modifier.accept(comp, quick);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
+						modify(comp, quick);
 					}
 				});
 			} catch (CheckedExceptionWrapper w) {
@@ -118,6 +115,16 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		@Override
 		public void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify) {
 			theModifiers.add(modify);
+		}
+
+		@Override
+		public void modify(ComponentEditor<?, ?> component, W widget) {
+			try {
+				for (ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modifier : theModifiers)
+					modifier.accept(component, widget);
+			} catch (ModelInstantiationException e) {
+				throw new CheckedExceptionWrapper(e);
+			}
 		}
 	}
 

@@ -3,7 +3,6 @@ package org.observe;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
-import java.util.function.Function;
 
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
@@ -37,22 +36,16 @@ public class VetoableSettableValue<T> extends Identifiable.AbstractIdentifiable 
 	private volatile long theStamp;
 	private boolean isAlive;
 
-	VetoableSettableValue(String description, boolean nullable, ListenerList.Builder listening,
-		Function<Object, Transactable> lock, T initialValue) {
+	VetoableSettableValue(String description, boolean nullable,
+		AbstractEventableBuilder.EventableData<? super VetoableSettableValue<T>> eventableData, T initialValue) {
 		theDescription = description;
 		isNullable = nullable;
-		if (lock == null)
-			theLock = null;
-		else {
-			Transactable tLock = lock.apply(this);
-			if (tLock instanceof CausalLock)
-				theLock = (CausalLock) tLock;
-			else
-				theLock = new DefaultCausalLock(tLock);
-			// We secure this list ourselves, so no need for any thread-safety
-			listening.forEachSafe(false).allowReentrant().withFastSize(false).withSync(false);
-		}
-		theListeners = listening.build();
+		Transactable tLock = eventableData.getLock(this);
+		if (tLock instanceof CausalLock)
+			theLock = (CausalLock) tLock;
+		else
+			theLock = new DefaultCausalLock(tLock);
+		theListeners = eventableData.getListening(this).build();
 		theValue = initialValue;
 		isAlive = true;
 	}
@@ -266,6 +259,11 @@ public class VetoableSettableValue<T> extends Identifiable.AbstractIdentifiable 
 		@Override
 		public CoreId getCoreId() {
 			return theLock == null ? CoreId.EMPTY : theLock.getCoreId();
+		}
+
+		@Override
+		public long getStamp() {
+			return VetoableSettableValue.this.getStamp();
 		}
 
 		@Override

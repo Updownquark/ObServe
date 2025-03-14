@@ -12,20 +12,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.BiTuple;
-import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
-import org.qommons.Stamped;
-import org.qommons.StringUtils;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transaction;
-import org.qommons.TriConsumer;
-import org.qommons.TriFunction;
+import org.qommons.*;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -299,6 +290,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	public int getArgIndex(ObservableValue<?> arg) throws IllegalArgumentException {
 		Integer index = theArgs.get(arg);
 		if (index == null) {
+			BreakpointHere.breakpoint();
 			theArgs.get(arg); // Debugging
 			throw new IllegalArgumentException("Unrecognized argument: " + arg);
 		}
@@ -330,10 +322,12 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * @param sourceValue The source value being transformed
 	 * @param sourceEquivalence The equivalence to use for the source values. This can affect the behavior of the transformation via flags
 	 *        like {@link #isReEvalOnUpdate() re-eval-on-update}.
+	 * @param errorLogging A handler for exceptions that occur during transformations
 	 * @return An engine to drive a transformed observable structure
 	 */
-	public Engine<S, T> createEngine(ObservableValue<S> sourceValue, Equivalence<? super S> sourceEquivalence) {
-		return new EngineImpl<>(this, hasArg(sourceValue), sourceEquivalence);
+	public Engine<S, T> createEngine(ObservableValue<S> sourceValue, Equivalence<? super S> sourceEquivalence,
+		Consumer<RuntimeException> errorLogging) {
+		return new EngineImpl<>(this, hasArg(sourceValue), sourceEquivalence, errorLogging);
 	}
 
 	@Override
@@ -1891,6 +1885,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		/** @return The cached transformation state in this engine */
 		TransformationState getCachedState();
 
+		@Override
+		default TransformationState get() {
+			return get(true);
+		}
+
+		TransformationState get(boolean withLock);
+
 		/** @return The transformation definition of this engine */
 		Transformation<S, T> getTransformation();
 
@@ -2170,8 +2171,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		private volatile StampedArgValues theCachedValues;
 		private final ListenerList<Observer<? super ObservableValueEvent<TransformationState>>> theChanges;
 		final Equivalence<? super S> theSourceEquivalence;
+		private final Consumer<RuntimeException> theErrorLogging;
 
-		EngineImpl(Transformation<S, T> transformation, boolean selfCombined, Equivalence<? super S> sourceEquivalence) {
+		EngineImpl(Transformation<S, T> transformation, boolean selfCombined, Equivalence<? super S> sourceEquivalence,
+			Consumer<RuntimeException> errorLogging) {
 			theTransformation = transformation;
 			isSelfCombined = selfCombined;
 			theSourceEquivalence = sourceEquivalence;
@@ -2208,7 +2211,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 									}
 									if (cached == null || stamp != cached.stamp) {
 										boolean[] initialized = new boolean[1];
-										arg.changes().act(Observer.printableObserver(evt -> {
+										theArgSubs[i] = arg.changes().act(Observer.printableObserver(evt -> {
 											if (evt.isInitial()) {
 												if (initialized[0])
 													throw new IllegalStateException("Multiple initialization events from " + arg);
@@ -2221,7 +2224,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 											throw new IllegalStateException("Value " + args[i] + " did not fire an initial event");
 										theCachedValues = new StampedArgValues(values.clone(), stamps, stamp);
 									} else {
-										arg.noInitChanges().act(evt -> {
+										theArgSubs[i] = arg.noInitChanges().act(evt -> {
 											argChanged(index, arg, evt, values, stamps, allInitialized[0], otherLocks);
 										});
 									}
@@ -2282,6 +2285,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					}
 				}).build();
 			}
+			theErrorLogging = errorLogging;
 		}
 
 		@Override
@@ -2341,12 +2345,12 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
-		public TransformationState get() {
+		public TransformationState get(boolean withLock) {
 			if (theChanges == null) // No args to listen to
 				return theCachedValues;
 			else if (!theChanges.isEmpty() && !isEventing())
 				return theCachedValues; // Up-to-date
-			try (Transaction t = lock()) {
+			try (Transaction t = withLock ? lock() : Transaction.NONE) {
 				StampedArgValues cache = theCachedValues;
 				if (!theChanges.isEmpty() && !isEventing())
 					return cache; // Up-to-date
@@ -2416,6 +2420,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				}
 
 				@Override
+				public long getStamp() {
+					return EngineImpl.this.getStamp();
+				}
+
+				@Override
 				public CoreChangeSources getChangeSources() {
 					return CoreChangeSources.of(theTransformation.getArgs(), ObservableValue::noInitChanges);
 				}
@@ -2476,7 +2485,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			} catch (RuntimeException e) {
 				if (theTransformation.isTesting())
 					throw e;
-				e.printStackTrace();
+				if (theErrorLogging != null)
+					theErrorLogging.accept(e);
+				else
+					e.printStackTrace();
 				return null; // This will probably cause problems, but at least the works aren't gummed up
 			}
 		}
@@ -2689,7 +2701,6 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					() -> sourceVal, sourceVal, null, initState.get(), false);
 			}
 
-
 			@Override
 			public S getSourceValue() {
 				init();
@@ -2794,10 +2805,12 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			}
 
 			@Override
-			void cacheSource(S source) {}
+			void cacheSource(S source) {
+			}
 
 			@Override
-			void cacheResult(T result) {}
+			void cacheResult(T result) {
+			}
 		}
 	}
 }

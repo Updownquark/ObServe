@@ -353,7 +353,7 @@ public class AppPopulation {
 			} else {
 				boolean[] printed = new boolean[1];
 				config.watch(ObservableConfigPath.buildPath(ObservableConfigPath.ANY_NAME).multi(true).build())
-					.act(Observer.printableObserver(__ -> {
+				.act(Observer.printableObserver(__ -> {
 					if (!printed[0]) {
 						System.out.println("WARNING: This application has not configured config persistence");
 						printed[0] = true;
@@ -514,8 +514,7 @@ public class AppPopulation {
 						theLatestRelease = null;
 					getWindow().setSize(600, 400);
 				});
-				theLatestVersionValue = ObservableValue.of(() -> theLatestRelease, () -> 1, // Hopefully nobody asks for the stamp
-					shown);
+				theLatestVersionValue = ObservableValue.of(() -> theLatestRelease, shown);
 				getWindow().addComponentListener(new ComponentAdapter() {
 					@Override
 					public void componentShown(ComponentEvent e) {

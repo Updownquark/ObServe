@@ -9,7 +9,6 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
-import org.qommons.TransactableBuilder;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 
@@ -25,16 +24,12 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	}
 
 	/** Builds {@link SimpleObservable}s */
-	public static class Builder extends TransactableBuilder.Default<Builder> {
-		private ListenerList.Builder theListening;
-		private ThreadConstraint theThreadConstraint;
+	public static class Builder extends AbstractEventableBuilder<SimpleObservable<?>, Builder> {
 		private boolean isInternalState;
 		private Object theIdentity;
 
 		Builder() {
 			super("observable");
-			theListening = ListenerList.build();
-			theThreadConstraint = ThreadConstraint.ANY;
 		}
 
 		/**
@@ -46,41 +41,9 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 			return this;
 		}
 
-		/**
-		 * @param listening The listening configuration for the observable
-		 * @return This builder
-		 */
-		public Builder withListening(ListenerList.Builder listening) {
-			theListening = listening;
-			return this;
-		}
-
-		/**
-		 * @param listening Adjusts the listening configuration for the observable
-		 * @return This builder
-		 */
-		public Builder withListening(Function<ListenerList.Builder, ListenerList.Builder> listening) {
-			theListening = listening.apply(theListening);
-			return this;
-		}
-
-		/**
-		 * @param lock The lock to ensure thread safety for the observable's firing (may be null to configure a non-thread safe observable)
-		 * @return This builder
-		 */
-		public Builder withLocking(ReentrantReadWriteLock lock) {
-			return withLocking(o -> Transactable.transactable(lock, o, theThreadConstraint));
-		}
-
 		/** @return The observable */
 		public <T> SimpleObservable<T> build() {
 			return build(null);
-		}
-
-		@Override
-		public Builder withThreadConstraint(ThreadConstraint constraint) {
-			theThreadConstraint = constraint;
-			return this;
 		}
 
 		/**
@@ -88,8 +51,7 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 		 * @return The observable
 		 */
 		public <T> SimpleObservable<T> build(Consumer<? super Observer<? super T>> onSubscribe) {
-			return new SimpleObservable<>(onSubscribe, theIdentity, getDescription(), isInternalState, //
-				getLocker(), theListening);
+			return new SimpleObservable<>(onSubscribe, theIdentity, getDescription(), isInternalState, buildData());
 		}
 	}
 
@@ -110,17 +72,6 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, boolean safe) {
 		this(onSubscribe, null, null, internalState, safe ? new ReentrantReadWriteLock() : null, null);
-	}
-
-	/**
-	 * @param onSubscribe The function to notify when a subscription is added to this observable
-	 * @param description A description of this observable's purpose
-	 * @param internalState Whether this observable is firing changes for some valued state
-	 * @param lock The lock for this observable
-	 */
-	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, String description, boolean internalState,
-		Function<Object, Transactable> lock) {
-		this(onSubscribe, null, description, internalState, lock, null);
 	}
 
 	/**
@@ -158,6 +109,22 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
 		theLock = lock == null ? null : lock.apply(this);
+	}
+
+	/**
+	 * @param onSubscribe The function to notify when a subscription is added to this observable
+	 * @param identity The identity for this observable
+	 * @param description A description of this observable's purpose
+	 * @param internalState Whether this observable is firing changes for some valued state
+	 * @param eventableData The eventable data from the builder
+	 */
+	protected SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description,
+		boolean internalState, AbstractEventableBuilder.EventableData<? super SimpleObservable<T>> eventableData) {
+		super(obs -> eventableData.getListening((SimpleObservable<T>) obs).build());
+		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
+		theOnSubscribe = onSubscribe;
+		isInternalState = internalState;
+		theLock = eventableData.getLock(this);
 	}
 
 	/** @return This observable's lock */

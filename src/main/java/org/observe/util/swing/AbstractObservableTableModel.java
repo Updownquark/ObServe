@@ -133,14 +133,14 @@ public abstract class AbstractObservableTableModel<R> {
 	protected abstract Transaction lockRows(boolean write, Object cause);
 
 	/**
-	 * @param index The index of the row to get
+	 * @param rowIndex The index of the row to get
 	 * @return The row value at the given index
 	 */
-	protected abstract R getRow(int rowIndex, JTable table);
+	public abstract R getRow(int rowIndex, JTable table);
 
 	protected abstract boolean isExpanded(int rowIndex, JTable table);
 
-	protected abstract boolean isLeaf(int rowIndex, Supplier<R> rowValue);
+	protected abstract boolean isLeaf(int rowIndex, JTable table);
 
 	/**
 	 * @param table The JTable to link with the supplementary (more than just model) functionality of the {@link AbstractObservableTableModel}
@@ -184,7 +184,7 @@ public abstract class AbstractObservableTableModel<R> {
 	 */
 	public TableHookup hookUp(JTable table, TableRenderContext ctx) {
 		LinkedList<Subscription> subs = new LinkedList<>();
-		TableMouseListener<R> ml = new TableMouseListener<R>(table) {
+		TableMouseListener<R> ml = new TableMouseListener<R>(table, this) {
 			@Override
 			protected ListenerList<RowMouseListener<? super R>> getRowListeners() {
 				return theRowMouseListeners;
@@ -228,6 +228,16 @@ public abstract class AbstractObservableTableModel<R> {
 			@Override
 			protected boolean isCellSelected(int rowIndex, int columnIndex) {
 				return table.isCellSelected(rowIndex, columnIndex);
+			}
+
+			@Override
+			protected String getEditorTooltip(ModelCell<R, ?> cell) {
+				Component editor = table.getEditorComponent();
+				if (editor instanceof JComponent && table.getEditingRow() == cell.getRowIndex()
+					&& table.getEditingColumn() == cell.getColumnIndex()) {
+					return ((JComponent) editor).getToolTipText();
+				}
+				return null;
 			}
 
 			@Override
@@ -418,26 +428,26 @@ public abstract class AbstractObservableTableModel<R> {
 					int column = table.getSelectedColumn();
 					if (column < 0)
 						return null;
-					CategoryRenderStrategy<? super R, C> category = (CategoryRenderStrategy<? super R, C>) getColumn(column);
+					CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
 					if (category.getKeyListener() == null)
 						return null;
 
 					R rowValue = getRow(row, table);
-					C colValue = category.getCategoryValue(rowValue);
+					ModelRow<R> modelRow = new ModelRow.Default<>(() -> rowValue, row, table.getSelectionModel().isSelectedIndex(row),
+						ml.getHoveredRow() == row, false, isExpanded(row, table), isLeaf(row, table));
+					C colValue = category.getCategoryValue(modelRow);
 					boolean enabled;
+					boolean selected = table.isCellSelected(row, column);
+					boolean cellHovered = modelRow.isRowHovered() && ml.getHoveredColumn() == column;
+					ModelCell<R, C> cell = new ModelCell.RowWrapper<>(modelRow, colValue, column, cellHovered, selected);
 					if (category.getMutator().getEditability() != null) {
-						enabled = category.getMutator().isEditable(rowValue, colValue);
+						enabled = category.getMutator().isEditable(cell);
 					} else {
 						enabled = true;
 					}
 					if (!enabled) {
 						return null;
 					}
-					boolean selected = table.isCellSelected(row, column);
-					boolean rowHovered = ml.getHoveredRow() == row;
-					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
-					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
-						rowHovered, cellHovered, isExpanded(row, table), isLeaf(row, () -> rowValue));
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
@@ -468,10 +478,10 @@ public abstract class AbstractObservableTableModel<R> {
 			tblColumn.setIdentifier(column.getIdentifier());
 		else
 			tblColumn.setIdentifier(column);
-		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(this, table, column, ctx, hoveredRow, hoveredColumn));
+		tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(this, column, ctx, hoveredRow, hoveredColumn));
 		if (column.getMutator().getEditor() != null)
 			tblColumn.setCellEditor(column.getMutator().getEditor()
-				.withCellTooltip(column.getTooltipFn())//
+				.withCellTooltip(column.getMutator().getEditorTooltip() != null ? column.getMutator().getEditorTooltip() : null)//
 				.withHovering(hoveredRow, hoveredColumn));
 		// This is done by the advanced column layout ability in AbstractSimpleTableBuilder
 		// if (column.getMinWidth() >= 0)
@@ -486,7 +496,6 @@ public abstract class AbstractObservableTableModel<R> {
 
 	private static class ObservableTableCellRenderer<R, C> implements TableCellRenderer, TreeCellRenderer {
 		private final AbstractObservableTableModel<R> theModel;
-		private final JTable theTable;
 		private final CategoryRenderStrategy<R, C> theColumn;
 		private final TableRenderContext theContext;
 		private ComponentDecorator theDecorator;
@@ -494,11 +503,10 @@ public abstract class AbstractObservableTableModel<R> {
 		private IntSupplier theHoveredRow;
 		private IntSupplier theHoveredColumn;
 
-		ObservableTableCellRenderer(AbstractObservableTableModel<R> model, JTable table, CategoryRenderStrategy<R, C> column,
+		ObservableTableCellRenderer(AbstractObservableTableModel<R> model, CategoryRenderStrategy<R, C> column,
 			TableRenderContext ctx,
 			IntSupplier hoveredRow, IntSupplier hoveredColumn) {
 			theModel = model;
-			theTable = table;
 			theColumn = column;
 			theContext = ctx;
 			theHoveredRow = hoveredRow;
@@ -509,6 +517,7 @@ public abstract class AbstractObservableTableModel<R> {
 		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row,
 			int column) {
 			int modelRow = table.convertRowIndexToModel(row);
+			// System.out.println("Table[" + row + "/" + modelRow + "]=" + value);
 			int modelColumn = table.convertColumnIndexToModel(column);
 			return getCellRendererComponent(table, theModel.getRow(row, table), //
 				modelRow, modelColumn, value, isSelected, hasFocus, true, true, row, column);
@@ -517,6 +526,7 @@ public abstract class AbstractObservableTableModel<R> {
 		@Override
 		public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row,
 			boolean hasFocus) {
+			// System.out.println("Tree[" + row + "]=" + value);
 			return getCellRendererComponent(tree, (R) value, row, 0, value, selected, hasFocus, expanded, leaf, row, 0);
 		}
 
@@ -531,37 +541,10 @@ public abstract class AbstractObservableTableModel<R> {
 			boolean rowHovered = theHoveredRow.getAsInt() == row;
 			boolean cellHovered = rowHovered && theHoveredColumn.getAsInt() == column;
 			Supplier<R> rowValue;
-			if (modelRow >= 0) {
-				rowValue = new Supplier<R>() {
-					private R theCachedValue;
-					private boolean isCached;
-
-					@Override
-					public R get() {
-						if (!isCached) {
-							theCachedValue = theModel.getRow(modelRow, theTable);
-							if (theCachedValue == null) {
-								if (theModel instanceof ObservableTreeTableModel) {
-									// Convert the model value to a path
-									theCachedValue = (R) ((ObservableTreeTableModel<R>) theModel).getTreeModel().getBetterPath(modelValue,
-										false);
-								} else
-									theCachedValue = modelValue;
-							}
-							isCached = true;
-						}
-						return theCachedValue;
-					}
-				};
-			} else {
-				R fModelValue;
-				if (theModel instanceof ObservableTreeTableModel) {
-					// Convert the model value to a path
-					fModelValue = (R) ((ObservableTreeTableModel<R>) theModel).getTreeModel().getBetterPath(modelValue, false);
-				} else
-					fModelValue = modelValue;
-				rowValue = LambdaUtils.constantSupplier(fModelValue, fModelValue::toString, fModelValue);
-			}
+			if (modelValue instanceof ObservableTreeModel.TreeNode) {
+				rowValue = () -> (R) ((ObservableTreeModel<?>.TreeNode) modelValue).getValuePath();
+			} else
+				rowValue = LambdaUtils.constantSupplier(modelValue, modelValue::toString, modelValue);
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowValue, (C) value, //
 				row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,
@@ -678,9 +661,10 @@ public abstract class AbstractObservableTableModel<R> {
 			}
 
 			private void checkToolTip(ModelRow<R> row, ModelCell<R, C> cell, CategoryRenderStrategy<R, C> category) {
-				if (row != null && category != null)
-					setToolTip(category.getTooltip(cell), false);
-				else if (category != null) // Column header
+				if (row != null && category != null) {
+					String editTT = cell == null ? null : getEditorTooltip(cell);
+					setToolTip(editTT != null ? editTT : category.getTooltip(cell), false);
+				} else if (category != null) // Column header
 					setToolTip(category.getHeaderTooltip(), true);
 			}
 
@@ -762,13 +746,15 @@ public abstract class AbstractObservableTableModel<R> {
 			}
 		}
 
-		private final Component theComponent;
+		private final JTable theTable;
+		private final AbstractObservableTableModel<R> theModel;
 		private MouseClickStruct<?> thePrevious;
 		private int theHoveredRow = -1;
 		private int theHoveredColumn = -1;
 
-		protected TableMouseListener(Component component) {
-			theComponent = component;
+		protected TableMouseListener(JTable table, AbstractObservableTableModel<R> model) {
+			theTable = table;
+			theModel=model;
 		}
 
 		protected abstract ListenerList<RowMouseListener<? super R>> getRowListeners();
@@ -786,6 +772,8 @@ public abstract class AbstractObservableTableModel<R> {
 		protected abstract boolean isRowSelected(int rowIndex);
 
 		protected abstract boolean isCellSelected(int rowIndex, int columnIndex);
+
+		protected abstract String getEditorTooltip(ModelCell<R, ?> cell);
 
 		protected abstract <C> void setToolTip(String tooltip, boolean header);
 
@@ -832,7 +820,7 @@ public abstract class AbstractObservableTableModel<R> {
 
 		@Override
 		public void hierarchyChanged(HierarchyEvent e) {
-			if (!theComponent.isShowing())
+			if (!theTable.isShowing())
 				setHover(-1, -1);
 		}
 
@@ -875,10 +863,11 @@ public abstract class AbstractObservableTableModel<R> {
 					null);
 			}
 
-			C colValue = category.getCategoryValue(rowValue);
+			ModelRow<R> modelRow = new ModelRow.Default<>(() -> rowValue, row, theTable.getSelectionModel().isSelectedIndex(row),
+				theHoveredRow == row, false, theModel.isExpanded(row, theTable), theModel.isLeaf(row, theTable));
+			C colValue = category.getCategoryValue(modelRow);
 			boolean selected = isCellSelected(row, column);
-			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true, true,
-				true);
+			ModelCell<R, C> cell = new ModelCell.RowWrapper<>(modelRow, colValue, column, theHoveredColumn == column, selected);
 			return new MouseClickStruct<>(cell, cell, category);
 		}
 	}

@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
+import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -90,7 +91,7 @@ import org.qommons.ex.CheckedExceptionWrapper;
 /** Quick interpretation of the core toolkit for Swing */
 public class QuickCoreSwing implements QuickInterpretation {
 	static {
-		ObservableSwingUtils.systemLandF();
+		EventQueue.invokeLater(ObservableSwingUtils::systemLandF);
 	}
 
 	private static class QuickSwingComponentData {
@@ -104,23 +105,6 @@ public class QuickCoreSwing implements QuickInterpretation {
 	}
 
 	private static final WeakHashMap<Component, QuickSwingComponentData> QUICK_SWING_WIDGETS = new WeakHashMap<>();
-
-	private static int isRendering;
-
-	/**
-	 * Tells this architecture that some component using erasure is rendering a value
-	 *
-	 * @return The transaction to close when the rendering ends
-	 */
-	public static Transaction rendering() {
-		isRendering++;
-		return () -> isRendering--;
-	}
-
-	/** @return Whether some component using erasure is currently {@link #rendering() rendering} */
-	public static boolean isRendering() {
-		return isRendering > 0;
-	}
 
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
@@ -208,7 +192,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 								// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
 								// }
 								if (debugBG)
-									System.out.println("BG of " + id + " is " + bg);
+									System.out.println("BG(renderer) of " + id + " is " + bg + " (" + color + ")");
 								pm.setBackground(bg);
 								pm.setOpaque(bg == null ? null : true);
 							}
@@ -220,7 +204,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							Color bg = color.get();
 							if (debugBG)
-								System.out.println("BG of " + id + " is " + bg);
+								System.out.println("BG of " + id + " is " + bg + " (" + color + ")");
 							scd.propertyMgr.setBackground(bg);
 							scd.propertyMgr.setOpaque(bg == null ? null : true);
 							try {
@@ -282,18 +266,26 @@ public class QuickCoreSwing implements QuickInterpretation {
 						} else
 							defaultCursor[0] = component[0].getCursor();
 					});
-					Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
-						adjustFont(pmDecorator.reset(), w.getStyle());
+					final Causable.CausableKey repaint = Causable.key((__, ___) -> component[0].repaint());
+					color.noInitChanges().act(evt -> {
 						for (ComponentPropertyManager<?> pm : propertyManagers) {
-							pm.setFont(pmDecorator::adjust);
-							pm.setForeground(pmDecorator.getForeground());
-							Color bg = color.get();
+							Color bg = evt.getNewValue();
 							if (debugBG)
 								System.out.println("BG of " + id + " is " + bg);
 							pm.setBackground(bg);
 							pm.setOpaque(bg == null ? null : true);
 						}
-						if (component[0] != null && !isRendering())
+						if (!renderer && component[0] != null) {
+							evt.getRootCausable().onFinish(repaint);
+						}
+					});
+					Observable.onRootFinish(fontChanges(w.getStyle())).act(__ -> {
+						adjustFont(pmDecorator.reset(), w.getStyle());
+						for (ComponentPropertyManager<?> pm : propertyManagers) {
+							pm.setFont(pmDecorator::adjust);
+							pm.setForeground(pmDecorator.getForeground());
+						}
+						if (!renderer && component[0] != null)
 							component[0].repaint();
 					});
 				}
@@ -343,18 +335,20 @@ public class QuickCoreSwing implements QuickInterpretation {
 			}
 		});
 		tx.with(QuickBorder.LineBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
+			boolean renderer = iBorder.getParentElement().getAddOn(QuickRenderer.Interpreted.class) != null;
 			return (deco, border, component) -> {
 				ObservableValue<Color> color = border.getStyle().getBorderColor().map(c -> c != null ? c : Color.black);
 				ObservableValue<Integer> thick = border.getStyle().getBorderThickness().map(t -> t != null ? t : 1);
 				deco.withLineBorder(color.get(), thick.get(), false);
 				Observable.or(color.noInitChanges(), thick.noInitChanges()).act(__ -> {
 					deco.withLineBorder(color.get(), thick.get(), false);
-					if (component[0] != null && !isRendering())
+					if (!renderer && component[0] != null)
 						component[0].repaint();
 				});
 			};
 		});
 		tx.with(QuickBorder.TitledBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
+			boolean renderer = iBorder.getParentElement().getAddOn(QuickRenderer.Interpreted.class) != null;
 			return (deco, border, component) -> {
 				QuickBorder.TitledBorder titled = (QuickBorder.TitledBorder) border;
 				ObservableValue<Color> color = titled.getStyle().getBorderColor().map(c -> c != null ? c : Color.black);
@@ -373,7 +367,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 					revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
 					// This call will just modify the thickness of the titled border
 					deco.withLineBorder(color.get(), thick.get(), false);
-					if (component[0] != null && !isRendering())
+					if (!renderer && component[0] != null)
 						component[0].repaint();
 				});
 			};

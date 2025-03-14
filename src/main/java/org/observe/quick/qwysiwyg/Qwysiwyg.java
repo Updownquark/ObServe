@@ -69,6 +69,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Colors;
+import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.SelfDescribed;
 import org.qommons.Stamped;
@@ -103,6 +104,8 @@ import org.qommons.io.SimpleXMLParser.XmlAttribute;
 import org.qommons.io.SimpleXMLParser.XmlCdata;
 import org.qommons.io.SimpleXMLParser.XmlComment;
 import org.qommons.io.SimpleXMLParser.XmlDeclaration;
+import org.qommons.io.SimpleXMLParser.XmlElementContent;
+import org.qommons.io.SimpleXMLParser.XmlElementOpen;
 import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
 import org.qommons.io.SimpleXMLParser.XmlParseException;
 import org.qommons.io.SimpleXMLParser.XmlProcessingInstruction;
@@ -1031,7 +1034,7 @@ public class Qwysiwyg {
 				}
 
 				@Override
-				public void handleElementOpen(String elementName, PositionedContent openEnd) {
+				public void handleElementOpen(String elementName, XmlElementOpen openEnd) {
 					stack.removeLast().end(openEnd.getPosition(openEnd.length()));
 					DocumentComponent contentComponent = stack.getLast().addChild(openEnd.getPosition(openEnd.length()))//
 						.color(ELEMENT_VALUE_COLOR);
@@ -1049,7 +1052,8 @@ public class Qwysiwyg {
 				}
 
 				@Override
-				public void handleElementContent(String elementName, PositionedContent elementValue) {}
+				public void handleElementContent(String elementName, XmlElementContent elementValue) {
+				}
 
 				@Override
 				public void handleCDataContent(String elementName, XmlCdata cdata) {
@@ -1372,15 +1376,17 @@ public class Qwysiwyg {
 				}
 				if (value instanceof Stamped)
 					component.instanceTooltip(
-						ObservableValue.of(() -> String.valueOf(value), ((Stamped) value)::getStamp, update));
+						ObservableValue.of(() -> String.valueOf(value), ((Stamped) value)::getStamp, update, update::getIdentity));
 				else {
 					long[] stamp = new long[1];
 					if (update != null) {
 						update.takeUntil(models.getUntil()).act(__ -> stamp[0]++);
-						component.instanceTooltip(ObservableValue.of(() -> String.valueOf(value), () -> stamp[0], update));
+						component
+						.instanceTooltip(ObservableValue.of(() -> String.valueOf(value), () -> stamp[0], update, update::getIdentity));
 					} else {
 						component.instanceTooltip(
-							ObservableValue.of(() -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
+							ObservableValue.of(() -> String.valueOf(value), () -> stamp[0]++, Observable.empty(),
+								() -> Identifiable.wrap(component, "tooltip")));
 					}
 				}
 			}

@@ -621,21 +621,35 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		case remove:
 			switch (event.getType()) {
 			case add:
-				int oldSize = tracker.changes.size();
-				boolean replace = true;
-				if (oldSize == 1) {
-					E oldValue = tracker.changes.remove(collIndex);
-					if (tracker.changes.size() == 0) {
-						replace = false;
-						debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
-						newTracker = new SessionChangeTracker<>(CollectionChangeType.set);
-						newTracker.changes.add(collIndex, oldValue, event.getNewValue(), null);
-					}
-				}
-				if (replace) {
-					debug(s -> s.append("Add after removes, flushing ").append(tracker).append(", now tracking ").append(event));
-					newTracker = replace(tracker, event, observer);
-				}
+				/* The following commented code, activating after the only element the a collection was removed and then
+				 * a new element being added,
+				 * had the effect of combining the 2 events into a single set.
+				 *
+				 * I think this operation makes a lot of sense if we could be sure that the collection will still have
+				 * a single element when changes are finished, but in other cases this sometimes has unintended consequences
+				 * and is generally weird.
+				 *
+				 * Since our business here is tracking changes, we have access to the information we need to do this.
+				 * We could in this spot add the singular addition to the tracker, but not as a set event as in the code below.
+				 * Then if future adds come in, we could fire the remove and accumulate further adds,
+				 * but if no further adds come in, we could fire the set event.
+				 * But I don't want to bother with this right now.
+				 */
+				// int oldSize = tracker.changes.size();
+				// boolean replace = true;
+				// if (oldSize == 1) {
+				// E oldValue = tracker.changes.remove(collIndex);
+				// if (tracker.changes.size() == 0) {
+				// replace = false;
+				// debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
+				// newTracker = new SessionChangeTracker<>(CollectionChangeType.set);
+				// newTracker.changes.add(collIndex, oldValue, event.getNewValue(), null);
+				// }
+				// }
+				// if (replace) {
+				debug(s -> s.append("Add after removes, flushing ").append(tracker).append(", now tracking ").append(event));
+				newTracker = replace(tracker, event, observer);
+					// }
 				break;
 			case remove:
 				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue(), event.getMovement());
@@ -748,6 +762,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	@Override
 	public CoreId getCoreId() {
 		return collection.getCoreId();
+	}
+
+	@Override
+	public long getStamp() {
+		return collection.getStamp();
 	}
 
 	@Override

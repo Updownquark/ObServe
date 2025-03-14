@@ -22,7 +22,6 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	private final CausalLock theLock;
 
 	private final boolean isNullable;
-	private long theStamp;
 	private T theValue;
 
 	/**
@@ -33,7 +32,7 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	 * @param initialValue The initial value for this value
 	 */
 	protected SimpleSettableValue(String description, boolean nullable, Function<Object, Transactable> lock,
-		ListenerList.Builder listening, T initialValue) {
+		Function<? super SettableValue<T>, ListenerList.Builder> listening, T initialValue) {
 		isNullable = nullable;
 		initIdentity(Identifiable.baseId(description, this));
 		if (lock == null)
@@ -46,6 +45,19 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 				theLock = new DefaultCausalLock(tLock);
 		}
 		theEventer = createEventer(theLock, listening);
+		theValue = initialValue;
+	}
+
+	protected SimpleSettableValue(String description, boolean nullable,
+		AbstractEventableBuilder.EventableData<? super SimpleSettableValue<T>> eventableData, T initialValue) {
+		isNullable = nullable;
+		initIdentity(Identifiable.baseId(description, this));
+		Transactable tLock = eventableData.getLock(this);
+		if (tLock instanceof CausalLock)
+			theLock = (CausalLock) tLock;
+		else
+			theLock = new DefaultCausalLock(tLock);
+		theEventer = createEventer(theLock, eventableData);
 		theValue = initialValue;
 	}
 
@@ -92,7 +104,12 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 
 	@Override
 	public long getStamp() {
-		return theStamp;
+		return theEventer.getStamp();
+	}
+
+	@Override
+	public boolean isEventing() {
+		return theEventer.isEventing();
 	}
 
 	@Override
@@ -110,7 +127,7 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 			// If no one's listening, there's no reason to lock anything or make any events.
 			T old = theValue;
 			theValue = value;
-			theStamp++;
+			theEventer.incrementStamp();
 			return old;
 		}
 		// If we're currently in an unlocked state, we can avoid creating 2 causables (one for the root lock, and one for the event)
@@ -120,9 +137,10 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 			ObservableValueEvent<T> evt = createChangeEvent(theValue, value, getCurrentCauses());
 			try (Transaction evtT = evt.use(); Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, evt)) {
 				T old = theValue;
-				if (value == old && theEventer.isEventing())
+				if (value == old && theEventer.isEventing()) {
+					theEventer.incrementStamp();
 					return old; // Don't throw errors on recursive updates
-				theStamp++;
+				}
 				theValue = value;
 				Collection<Cause> causes = getUnfinishedCauses();
 				if (old == evt.getOldValue() && causes.size() == 1 && causes.iterator().next() == evt)
@@ -138,9 +156,10 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 		} else {
 			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, null)) {
 				T old = theValue;
-				if (value == old && theEventer.isEventing())
+				if (value == old && theEventer.isEventing()) {
+					theEventer.incrementStamp();
 					return old; // Don't throw errors on recursive updates
-				theStamp++;
+				}
 				theValue = value;
 				ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
 				try (Transaction evtT = evt.use()) {
@@ -168,8 +187,20 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	 * @param listening Listening options for this value
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock, ListenerList.Builder listening) {
-		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock, listening);
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock,
+		Function<? super SettableValue<T>, ListenerList.Builder> listening) {
+		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock,
+			listening == null ? null : listening.apply(this));
+	}
+
+	/**
+	 * @param lock The lock for this value
+	 * @return The observable for this value to use to fire its initial and change events
+	 */
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock,
+		AbstractEventableBuilder.EventableData<? super SimpleSettableValue<T>> eventableData) {
+		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock,
+			eventableData.getListening(this));
 	}
 
 	@Override

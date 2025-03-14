@@ -1,5 +1,7 @@
 package org.observe.quick.ext;
 
+import java.util.List;
+
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -117,10 +119,12 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getValueType()));
 
-			ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
-			if (renderer == null)
-				renderer = session.metadata().get("default-renderer").get().peekFirst();
-			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer, null);
+			List<ExpressoQIS> renderer = session.forChildren("renderer");
+			if (renderer.isEmpty())
+				renderer = session.metadata().get("default-renderer").get();
+			if (renderer.size() > 1)
+				reporting().error("Multiple renderers not supported for " + getQonfigType());
+			theRenderer = syncChild(QuickWidget.Def.class, theRenderer, renderer.get(0), null);
 			isConstantSizing = session.getAttribute("constant-size", boolean.class);
 		}
 

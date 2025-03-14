@@ -313,7 +313,7 @@ public class BetterBorderLayout implements LayoutManager2 {
 			BreakpointHere.breakpoint();
 		Component[] components = parent.getComponents();
 
-		// First, compile all the relevante component sizes
+		// First, compile all the relevant component sizes
 		QuickBorderLayout.Region[] compRegions = new QuickBorderLayout.Region[components.length];
 		Dimension[][] compSizes = new Dimension[components.length][3];
 		int compIdx = 0;
@@ -373,7 +373,7 @@ public class BetterBorderLayout implements LayoutManager2 {
 		pref.height -= insets.top - insets.bottom;
 		Dimension min = null, max = null;
 		double wStretch;
-		if (parentSize.width < pref.width) {
+		if (parentSize.width < pref.width) { // Need to squish horizontally
 			min = layoutSize(parent, -1, ci -> compSizes[ci][0]);
 			min.width = Math.max(0, min.width - insets.left - insets.right);
 			min.height = Math.max(0, min.height - insets.top - insets.bottom);
@@ -381,7 +381,7 @@ public class BetterBorderLayout implements LayoutManager2 {
 				wStretch = -1;
 			else
 				wStretch = -(parentSize.width - min.width) * 1.0 / (pref.width - min.width);
-		} else if (parentSize.width > pref.width) {
+		} else if (parentSize.width > pref.width) { // Need to stretch horizontally
 			max = layoutSize(parent, 1, ci -> compSizes[ci][2]);
 			max.width -= insets.left - insets.right;
 			max.height -= insets.top - insets.bottom;
@@ -392,14 +392,14 @@ public class BetterBorderLayout implements LayoutManager2 {
 		} else
 			wStretch = 0;
 		double hStretch;
-		if (parentSize.height < pref.height) {
+		if (parentSize.height < pref.height) { // Need to squish vertically
 			if (min == null)
 				min = layoutSize(parent, -1, ci -> compSizes[ci][0]);
 			if (parentSize.height <= min.height)
 				hStretch = -1;
 			else
 				hStretch = -(parentSize.height - min.height) * 1.0 / (pref.height - min.height);
-		} else if (parentSize.height > pref.height) {
+		} else if (parentSize.height > pref.height) { // Need to stretch vertically
 			if (max == null)
 				max = layoutSize(parent, 1, ci -> compSizes[ci][2]);
 			if (parentSize.height > max.height)
@@ -413,14 +413,14 @@ public class BetterBorderLayout implements LayoutManager2 {
 		if (wStretch == 0) {
 			compWidth = ci -> compSizes[ci][1].width;
 		} else if (wStretch < 0) {
-			compWidth = ci -> (int) Math.round(compSizes[ci][0].width + (compSizes[ci][1].width - compSizes[ci][0].width) * wStretch);
+			compWidth = ci -> (int) Math.round(compSizes[ci][0].width + (compSizes[ci][1].width - compSizes[ci][0].width) * -wStretch);
 		} else {
 			compWidth = ci -> (int) Math.round(compSizes[ci][1].width + (compSizes[ci][2].width - compSizes[ci][1].width) * wStretch);
 		}
 		if (hStretch == 0) {
 			compHeight = ci -> compSizes[ci][1].height;
 		} else if (hStretch < 0) {
-			compHeight = ci -> (int) Math.round(compSizes[ci][0].height + (compSizes[ci][1].height - compSizes[ci][0].height) * hStretch);
+			compHeight = ci -> (int) Math.round(compSizes[ci][0].height + (compSizes[ci][1].height - compSizes[ci][0].height) * -hStretch);
 		} else {
 			compHeight = ci -> (int) Math.round(compSizes[ci][1].height + (compSizes[ci][2].height - compSizes[ci][1].height) * hStretch);
 		}

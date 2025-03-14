@@ -1,6 +1,8 @@
 package org.observe.quick.swing;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -32,6 +34,7 @@ public class QuickSwingColumnSet<R, R2> {
 	private final Function<R2, R> theReverse;
 	private final Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
 	private final Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
+	private final QuickSwingTransfer theDragging;
 	private boolean renderersInitialized;
 
 	/**
@@ -47,46 +50,68 @@ public class QuickSwingColumnSet<R, R2> {
 		TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse) throws ExpressoInterpretationException {
 		theUpdate = update;
 		theReverse = reverse;
+		theDragging = new QuickSwingTransfer();
 		Subscription sub;
 		try {
 			sub = columns.subscribe(evt -> {
-				boolean renderer = false;
+				int renderer = -1;
 				try {
 					switch (evt.getType()) {
 					case add:
-						renderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						renderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+						renderer = 0;
+						for (QuickWidget.Interpreted<?> r : evt.getNewValue().getRenderers()) {
+							renderers.put(r.getIdentity(), tx.transform(r, QuickSwingPopulator.class));
+							renderer++;
+						}
+						renderer = -1;
+						theDragging.withSources(evt.getNewValue().getTransferSources(), tx);
+						theDragging.withAccepters(evt.getNewValue().getTransferAccepters(), tx);
+						if (evt.getNewValue().getEditing() != null) {
+							for (QuickWidget.Interpreted<?> editor : evt.getNewValue().getEditing().getEditors())
+								editors.put(editor.getIdentity(), tx.transform(editor, QuickSwingPopulator.class));
+						}
+
 						break;
 					case remove:
+						for (QuickWidget.Interpreted<?> r : evt.getNewValue().getRenderers())
+							renderers.remove(r.getIdentity());
 						renderers.remove(evt.getOldValue().getIdentity());
 						editors.remove(evt.getOldValue().getIdentity());
+						theDragging.removeSources(evt.getNewValue().getTransferSources());
+						theDragging.removeAccepters(evt.getNewValue().getTransferAccepters());
 						break;
 					case set:
 						if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
+							for (QuickWidget.Interpreted<?> r : evt.getNewValue().getRenderers())
+								renderers.remove(r.getIdentity());
 							renderers.remove(evt.getOldValue().getIdentity());
 							editors.remove(evt.getOldValue().getIdentity());
+							theDragging.removeSources(evt.getNewValue().getTransferSources());
+							theDragging.removeAccepters(evt.getNewValue().getTransferAccepters());
 						}
-						renderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						renderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+						renderer = 0;
+						for (QuickWidget.Interpreted<?> r : evt.getNewValue().getRenderers()) {
+							renderers.put(r.getIdentity(), tx.transform(r, QuickSwingPopulator.class));
+							renderer++;
+						}
+						renderer = -1;
+						theDragging.withSources(evt.getNewValue().getTransferSources(), tx);
+						theDragging.withAccepters(evt.getNewValue().getTransferAccepters(), tx);
+						if (evt.getNewValue().getEditing() != null) {
+							for (QuickWidget.Interpreted<?> editor : evt.getNewValue().getEditing().getEditors())
+								editors.put(editor.getIdentity(), tx.transform(editor, QuickSwingPopulator.class));
+						}
 						break;
 					}
 				} catch (ExpressoInterpretationException e) {
-					if (renderersInitialized)
-						(renderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
-						.at(e.getErrorOffset()).error(e.getMessage(), e);
-					else
+					if (renderersInitialized) {
+						if (renderer >= 0)
+							evt.getNewValue().getRenderers().get(renderer).reporting().at(e.getErrorOffset()).error(e.getMessage(), e);
+						else {
+							QuickWidget.Interpreted<?> editor = evt.getNewValue().getEditing().getEditors().get(0);
+							editor.reporting().at(e.getErrorOffset()).error(e.getMessage(), e);
+						}
+					} else
 						throw new CheckedExceptionWrapper(e);
 				}
 			}, true);
@@ -129,8 +154,7 @@ public class QuickSwingColumnSet<R, R2> {
 				.<InterpretedSwingTableColumn<R, R2, ?>> map(column -> {
 					try {
 						return new InterpretedSwingTableColumn<>(parent, column, theUpdate, theReverse, ctx, until,
-							() -> theParentComponent, renderers.get(column.getColumnSet().getIdentity()),
-							editors.get(column.getColumnSet().getIdentity()));
+							() -> theParentComponent, renderers, editors, theDragging);
 					} catch (ModelInstantiationException e) {
 						if (tableInitialized) {
 							column.getColumnSet().reporting().error(e.getMessage(), e);
@@ -140,17 +164,22 @@ public class QuickSwingColumnSet<R, R2> {
 					}
 				})//
 				.refreshEach(column -> {
-					QuickWidget renderer = column.getColumn().getRenderer();
-					return renderer == null ? null : renderer.getRepaint();
+					if (column == null)
+						return null;
+					List<Observable<?>> refresh = new ArrayList<>();
+					refresh.add(column.getColumn().getName().noInitChanges());
+					for (QuickWidget renderer : column.getColumn().getRenderers()) {
+						if (renderer.getRepaint() != null)
+							refresh.add(renderer.getRepaint());
+					}
+					if (column.getColumn().getHeaderTooltip() != null)
+						refresh.add(column.getColumn().getHeaderTooltip().noInitChanges());
+
+					return Observable.or(refresh.toArray(new Observable[refresh.size()]));
 				})//
 				.filter(column -> column == null ? "Column failed to create" : null)//
 				.catchUpdates(ThreadConstraint.ANY)//
 				.collectActive(until);
-			Subscription columnsSub = theSwingTableColumns.subscribe(evt -> {
-				if (evt.getNewValue() != null)
-					evt.getNewValue().init(theSwingTableColumns, evt.getElementId());
-			}, true);
-			until.take(1).act(__ -> columnsSub.unsubscribe());
 			theRenderStrategies = theSwingTableColumns.flow()//
 				.<CategoryRenderStrategy<R2, ?>> map(column -> column.getCRS())//
 				.collect();
