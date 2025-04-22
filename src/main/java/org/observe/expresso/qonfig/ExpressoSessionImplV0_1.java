@@ -1,9 +1,11 @@
 package org.observe.expresso.qonfig;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 
 import org.observe.expresso.BinaryOperatorSet;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.JavaExpressoParser;
@@ -128,7 +130,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		qis.setExpressoParser(new JavaExpressoParser());
 		InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.class.getName());
 		InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.CoreSession.class.getName());
-		qis.setExpressoEnv(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
+		qis.setExpressoEnv(coreSession.getElement().getDocument().getLocation(), InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
 			.at(coreSession.getElement().getFilePosition())//
 			.withOperators(null, BinaryOperatorSet.STANDARD_JAVA.copy()//
 				.with("||", Object.class, Object.class, OBJECT_OR)//
@@ -139,7 +141,8 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	@Override
 	public ExpressoQIS viewOfChild(ExpressoQIS parent, CoreSession coreSession) throws QonfigInterpretationException {
 		ExpressoQIS child = new ExpressoQIS(coreSession);
-		child.setExpressoEnv(child.getExpressoEnv().clearAttributes());
+		for (Map.Entry<String, CompiledExpressoEnv> env : child.getExpressoEnvs().entrySet())
+			child.setExpressoEnv(env.getKey(), env.getValue().clearAttributes());
 		return child;
 	}
 
@@ -147,7 +150,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	public ExpressoQIS parallelView(ExpressoQIS parallel, CoreSession coreSession) {
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(parallel.getExpressoParser());
-		qis.setExpressoEnv(parallel.getExpressoEnv());
+		qis.getExpressoEnvs().putAll(parallel.getExpressoEnvs());
 		return qis;
 	}
 

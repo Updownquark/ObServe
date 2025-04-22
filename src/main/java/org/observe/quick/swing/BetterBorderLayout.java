@@ -15,9 +15,9 @@ import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
+import org.observe.quick.QuickSize;
 import org.observe.quick.base.QuickBorderLayout;
 import org.observe.quick.base.QuickBorderLayout.Region;
-import org.observe.quick.base.QuickSize;
 import org.observe.util.swing.PanelPopulation;
 import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;

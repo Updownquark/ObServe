@@ -5,10 +5,10 @@ import java.util.Collections;
 import java.util.List;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -71,6 +71,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private CompiledExpression thePathMultiSelection;
 		private CompiledExpression theNodeSelection;
 		private CompiledExpression theNodeMultiSelection;
+		private CompiledExpression theExpandAll;
+		private CompiledExpression theCollapseAll;
 		private final List<ExElement.Def<?>> theActionsAndOptions;
 		private boolean isRootVisible;
 		private final List<QuickTransfer.TransferSource.Def> theTransferSources;
@@ -138,6 +140,16 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theNodeMultiSelection;
 		}
 
+		@QonfigAttributeGetter(asType = TREE, value = "expand-all")
+		public CompiledExpression getExpandAll() {
+			return theExpandAll;
+		}
+
+		@QonfigAttributeGetter(asType = TREE, value = "collapse-all")
+		public CompiledExpression getCollapseAll() {
+			return theCollapseAll;
+		}
+
 		/**
 		 * @return The list containing the {@link #getActions() actions} and {@link #getOptions() table options} for this table, in order of
 		 *         their specification in the file
@@ -190,6 +202,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			thePathMultiSelection = getAttributeExpression("multi-selection", session);
 			theNodeSelection = getAttributeExpression("node-selection", session);
 			theNodeMultiSelection = getAttributeExpression("node-multi-selection", session);
+			theExpandAll = getAttributeExpression("expand-all", session);
+			theCollapseAll = getAttributeExpression("collapse-all", session);
 			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
 			isRootVisible = session.getAttribute("root-visible", boolean.class);
@@ -220,6 +234,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<BetterList<N>>> thePathMultiSelection;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theNodeSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<N>> theNodeMultiSelection;
+		private InterpretedValueSynth<Observable<?>, Observable<?>> theExpandAll;
+		private InterpretedValueSynth<Observable<?>, Observable<?>> theCollapseAll;
 		private final List<ExElement.Interpreted<?>> theActionsAndOptions;
 		private final List<QuickTransfer.TransferSource.Interpreted<BetterList<N>, ?>> theTransferSources;
 		private final List<QuickTransfer.TransferAccept.Interpreted<BetterList<N>, ?>> theTransferAccepters;
@@ -266,6 +282,14 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theNodeMultiSelection;
 		}
 
+		public InterpretedValueSynth<Observable<?>, Observable<?>> getExpandAll() {
+			return theExpandAll;
+		}
+
+		public InterpretedValueSynth<Observable<?>, Observable<?>> getCollapseAll() {
+			return theCollapseAll;
+		}
+
 		@Override
 		public TypeToken<BetterList<N>> getValueType() throws ExpressoInterpretationException {
 			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
@@ -277,7 +301,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		 */
 		public TypeToken<N> getNodeType() throws ExpressoInterpretationException {
 			if (theNodeType == null)
-				theNodeType = (TypeToken<N>) theModel.getNodeType(getExpressoEnv());
+				theNodeType = (TypeToken<N>) theModel.getNodeType();
 			return theNodeType;
 		}
 
@@ -325,7 +349,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
 			if (theModel != null && theModel.getIdentity() != getDefinition().getModel().getIdentity()) {
 				theModel.destroy();
 				theModel = null;
@@ -333,20 +357,22 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			if (theModel == null)
 				theModel = getDefinition().getModel().interpret(this);
 
-			super.doUpdate(env);
+			super.doUpdate();
 
 			getNodeType(); // Initialize root
 			// Even though we already instantiated the model above, we need this call to delegate to the appropriate environment
-			theModel = syncChild(getDefinition().getModel(), theModel, def -> def.interpret(this), (m, mEnv) -> m.updateModel(env));
+			theModel = syncChild(getDefinition().getModel(), theModel, def -> def.interpret(this), m -> m.updateModel());
 			theTreeColumn = syncChild(getDefinition().getTreeColumn(), theTreeColumn,
 				def -> (QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N>) def.<BetterList<N>> interpret(this),
-				(c, cEnv) -> c.updateColumns(cEnv));
+				c -> c.updateColumns());
 			TypeToken<N> nodeType = getNodeType();
 			TypeToken<BetterList<N>> pathType = TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(nodeType);
 			thePathSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(pathType));
 			thePathMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(pathType));
 			theNodeSelection = interpret(getDefinition().getNodeSelection(), ModelTypes.Value.forType(nodeType));
 			theNodeMultiSelection = interpret(getDefinition().getNodeMultiSelection(), ModelTypes.Collection.forType(nodeType));
+			theExpandAll = interpret(getDefinition().getExpandAll(), ModelTypes.Event.any());
+			theCollapseAll = interpret(getDefinition().getCollapseAll(), ModelTypes.Event.any());
 
 			syncChildren(getDefinition().getActionsAndOptions(), theActionsAndOptions, def -> {
 				if (def instanceof ValueAction.Def)
@@ -355,18 +381,18 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 					return ((QuickWidget.Def<?>) def).interpret(this);
 				else
 					throw new IllegalStateException("Whats this? " + def.getClass().getName());
-			}, (interp, env2) -> {
+			}, interp -> {
 				if (interp instanceof ValueAction.Interpreted)
-					((ValueAction.Interpreted<BetterList<N>, ?>) interp).updateAction(env2);
+					((ValueAction.Interpreted<BetterList<N>, ?>) interp).updateAction();
 				else
-					((QuickWidget.Interpreted<?>) interp).updateElement(env2);
+					((QuickWidget.Interpreted<?>) interp).updateElement();
 			});
 			syncChildren(getDefinition().getTransferSources(), theTransferSources,
 				def -> (QuickTransfer.TransferSource.Interpreted<BetterList<N>, ?>) def.interpret(this),
-				(interp, env2) -> interp.updateTransferSource(env2, getNodeType()));
+				interp -> interp.updateTransferSource(getNodeType()));
 			syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
 				def -> (QuickTransfer.TransferAccept.Interpreted<BetterList<N>, ?>) def.interpret(this),
-				(interp, env2) -> interp.updateTransferAccepter(env2, getNodeType()));
+				interp -> interp.updateTransferAccepter(getNodeType()));
 		}
 
 		@Override
@@ -382,16 +408,20 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	private ModelValueInstantiator<ObservableCollection<BetterList<N>>> thePathMultiSelectionInstantiator;
 	private ModelValueInstantiator<SettableValue<N>> theNodeSelectionInstantiator;
 	private ModelValueInstantiator<ObservableCollection<N>> theNodeMultiSelectionInstantiator;
+	private ModelValueInstantiator<Observable<?>> theExpandAllInstantiator;
+	private ModelValueInstantiator<Observable<?>> theCollapseAllInstantiator;
 	private boolean isRootVisible;
 
 	private SettableValue<SettableValue<BetterList<N>>> thePathSelection;
 	private SettableValue<ObservableCollection<BetterList<N>>> thePathMultiSelection;
 	private SettableValue<SettableValue<N>> theNodeSelection;
 	private SettableValue<ObservableCollection<N>> theNodeMultiSelection;
+	private SettableValue<Observable<?>> theExpandAll;
+	private SettableValue<Observable<?>> theCollapseAll;
 	private QuickTableColumn.SingleColumnSet<BetterList<N>, N> theTreeColumn;
 
-	private SettableValue<SettableValue<BetterList<N>>> theActivePath;
-	private SettableValue<SettableValue<Boolean>> isSelected;
+	private SettableValue<BetterList<N>> theActivePath;
+	private SettableValue<Boolean> isSelected;
 
 	private ObservableCollection<ExElement> theActionsAndOptions;
 	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
@@ -403,12 +433,14 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	/** @param id The element ID for this widget */
 	protected QuickTree(Object id) {
 		super(id);
-		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
-		thePathSelection = SettableValue.<SettableValue<BetterList<N>>> build().build();
-		thePathMultiSelection = SettableValue.<ObservableCollection<BetterList<N>>> build().build();
-		theNodeSelection = SettableValue.<SettableValue<N>> build().build();
-		theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
-		theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
+		isSelected = SettableValue.create(b -> b.withValue(false));
+		thePathSelection = SettableValue.create();
+		thePathMultiSelection = SettableValue.create();
+		theNodeSelection = SettableValue.create();
+		theNodeMultiSelection = SettableValue.create();
+		theExpandAll = SettableValue.create();
+		theCollapseAll = SettableValue.create();
+		theActivePath = SettableValue.create();
 		theActionsAndOptions = ObservableCollection.create();
 		theTransferSources = new ArrayList<>();
 		theTransderAccepters = new ArrayList<>();
@@ -430,9 +462,13 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	@Override
-	public void setContext(MultiValueRenderContext<BetterList<N>> ctx) throws ModelInstantiationException {
-		theActivePath.set(ctx.getActiveValue(), null);
-		isSelected.set(ctx.isSelected(), null);
+	public SettableValue<BetterList<N>> getActiveValue() {
+		return theActivePath;
+	}
+
+	@Override
+	public SettableValue<Boolean> isSelected() {
+		return isSelected;
 	}
 
 	@Override
@@ -453,6 +489,14 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	/** @return The values of the selected nodes */
 	public ObservableCollection<N> getNodeMultiSelection() {
 		return ObservableCollection.flattenValue(theNodeMultiSelection);
+	}
+
+	public Observable<?> getExpandAll() {
+		return ObservableValue.flattenObservableValue(theExpandAll);
+	}
+
+	public Observable<?> getCollapseAll() {
+		return ObservableValue.flattenObservableValue(theCollapseAll);
 	}
 
 	/** @return The tree column to render and handle interactions with values in the tree */
@@ -513,6 +557,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		theNodeSelectionInstantiator = myInterpreted.getNodeSelection() == null ? null : myInterpreted.getNodeSelection().instantiate();
 		theNodeMultiSelectionInstantiator = myInterpreted.getNodeMultiSelection() == null ? null
 			: myInterpreted.getNodeMultiSelection().instantiate();
+		theExpandAllInstantiator = myInterpreted.getExpandAll() == null ? null : myInterpreted.getExpandAll().instantiate();
+		theCollapseAllInstantiator = myInterpreted.getCollapseAll() == null ? null : myInterpreted.getCollapseAll().instantiate();
 
 		isRootVisible = myInterpreted.getDefinition().isRootVisible();
 
@@ -557,6 +603,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeSelectionInstantiator.instantiate();
 		if (theNodeMultiSelectionInstantiator != null)
 			theNodeMultiSelectionInstantiator.instantiate();
+		if (theExpandAllInstantiator != null)
+			theExpandAllInstantiator.instantiate();
+		if (theCollapseAllInstantiator != null)
+			theCollapseAllInstantiator.instantiate();
 		if (theTreeColumn != null)
 			theTreeColumn.instantiated();
 		for (ExElement aao : theActionsAndOptions)
@@ -568,16 +618,18 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActivePath));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected, () -> false));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActivePath);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, isSelected);
 		theModel.instantiate(myModels);
 		thePathSelection.set(thePathSelectionInstantiator == null ? null : thePathSelectionInstantiator.get(myModels), null);
 		thePathMultiSelection.set(thePathMultiSelectionInstantiator == null ? null : thePathMultiSelectionInstantiator.get(myModels), null);
 		theNodeSelection.set(theNodeSelectionInstantiator == null ? null : theNodeSelectionInstantiator.get(myModels), null);
 		theNodeMultiSelection.set(theNodeMultiSelectionInstantiator == null ? null : theNodeMultiSelectionInstantiator.get(myModels), null);
+		theExpandAll.set(theExpandAllInstantiator == null ? null : theExpandAllInstantiator.get(myModels));
+		theCollapseAll.set(theCollapseAllInstantiator == null ? null : theCollapseAllInstantiator.get(myModels));
 
 		if (theTreeColumn != null)
 			theTreeColumn.instantiate(myModels);
@@ -599,26 +651,25 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			ts.instantiate(myModels);
 		for (QuickTransfer.TransferAccept<BetterList<N>, ?> ta : theTransderAccepters)
 			ta.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override
 	public QuickTree<N> copy(ExElement parent) {
 		QuickTree<N> copy = (QuickTree<N>) super.copy(parent);
 		copy.theModel = theModel.copy(copy);
-		if (thePathSelection != null)
-			copy.thePathSelection = SettableValue.<SettableValue<BetterList<N>>> build().build();
-		if (thePathMultiSelection != null)
-			copy.thePathMultiSelection = SettableValue.<ObservableCollection<BetterList<N>>> build().build();
-		if (theNodeSelection != null)
-			copy.theNodeSelection = SettableValue.<SettableValue<N>> build().build();
-		if (theNodeMultiSelection != null)
-			copy.theNodeMultiSelection = SettableValue.<ObservableCollection<N>> build().build();
+		copy.thePathSelection = SettableValue.create();
+		copy.thePathMultiSelection = SettableValue.create();
+		copy.theNodeSelection = SettableValue.create();
+		copy.theNodeMultiSelection = SettableValue.create();
+		copy.theExpandAll = SettableValue.create();
+		copy.theCollapseAll = SettableValue.create();
 
 		if (theTreeColumn != null)
 			copy.theTreeColumn = theTreeColumn.copy(copy);
 
-		copy.theActivePath = SettableValue.<SettableValue<BetterList<N>>> build().build();
-		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theActivePath = SettableValue.create();
+		copy.isSelected = SettableValue.create(b -> b.withValue(false));
 		copy.theActionsAndOptions = ObservableCollection.create();
 
 		for (ExElement aao : theActionsAndOptions)

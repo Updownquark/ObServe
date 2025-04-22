@@ -193,4 +193,17 @@ public class ComponentPropertyManager<C extends Component> {
 			property.getValue().remove(property.getKey());
 		theProperties.clear();
 	}
+
+	/**
+	 * @param c The component to check
+	 * @param property The property to check
+	 * @return Whether the given property of the given component is currently being managed by an instance of this class
+	 */
+	public static boolean isManaged(Component c, String property) {
+		for (PropertyChangeListener listener : c.getPropertyChangeListeners(property)) {
+			if (listener instanceof ComponentPropertyManager)
+				return true;
+		}
+		return false;
+	}
 }

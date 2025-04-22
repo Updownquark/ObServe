@@ -179,16 +179,15 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		/**
 		 * Initializes or updates this document
 		 *
-		 * @param env the expresso environment for interpreting expressions
 		 * @throws ExpressoInterpretationException If this document could not be interpreted
 		 */
-		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateDocument() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theSelectionStartValue = interpret(getDefinition().getSelectionStartValue(), ModelTypes.Value.forType(getValueType()));
 			theSelectionStartOffset = interpret(getDefinition().getSelectionStartOffset(), ModelTypes.Value.forType(int.class));
@@ -276,14 +275,15 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theSelectionStartValue.set(theSelectionStartValueInstantiator == null ? null : theSelectionStartValueInstantiator.get(myModels),
 			null);
 		theSelectionStartOffset.set(theSelectionStartOffsetInstantiator == null ? null : theSelectionStartOffsetInstantiator.get(myModels),
 			null);
 		theSelectionEndValue.set(theSelectionEndValueInstantiator == null ? null : theSelectionEndValueInstantiator.get(myModels), null);
 		theSelectionEndOffset.set(theSelectionEndOffsetInstantiator == null ? null : theSelectionEndOffsetInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override
@@ -413,10 +413,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 				throws ExpressoInterpretationException {
 				return new Interpreted(this, (TextStyleElement.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
-					getWrapped().interpret(parentEl, parent, env));
+					getWrapped().interpret(parentEl, parent));
 			}
 		}
 
@@ -453,9 +453,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+			public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 				throws ExpressoInterpretationException {
-				super.update(env, styleSheet, appCache);
+				super.update(element, styleSheet, appCache);
+				InterpretedExpressoEnv env = element.getDefaultEnv();
 				QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 				theColor = get(cache.getAttribute(getDefinition().getColor(), Color.class, env));
 				theMouseCursor = get(cache.getAttribute(getDefinition().getMouseCursor(), MouseCursor.class, env));

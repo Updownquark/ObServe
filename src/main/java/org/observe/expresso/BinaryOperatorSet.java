@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 
@@ -314,7 +315,7 @@ public class BinaryOperatorSet {
 		private final TypeTokens.TypeConverter<S, S, T, T> theConverter;
 
 		CastOp(Class<S> sourceType, Class<T> targetType) {
-			theConverter = TypeTokens.get().primitiveKeyFor(targetType).getPrimitiveCast(sourceType);
+			theConverter = TypeTokens.get().primitiveKeyFor(targetType).getPrimitiveCast(sourceType, false);
 		}
 
 		/**
@@ -1280,6 +1281,54 @@ public class BinaryOperatorSet {
 			}
 		}
 		return ret;
+	}
+
+	/**
+	 * @param other The other binary operator set to compare to
+	 * @return True if this operator set contains all operators in the other set, with or without extras
+	 */
+	public boolean containsAll(BinaryOperatorSet other) {
+		if (this == other)
+			return true;
+		int missing = theOperators.size() - other.theOperators.size();
+		if (missing < 0)
+			return false;
+		for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
+			ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> otherOp = other.theOperators.get(op.getKey());
+			if (otherOp == null) {
+				missing--;
+				if (missing < 0)
+					return false; // other has something we don't
+				else
+					continue;
+			}
+			if (!containsAll(op.getValue(), otherOp, (m11, m12) -> {
+				return containsAll(m11, m12, (m21, m22) -> {
+					return containsAll(m21, m22, Object::equals);
+				});
+			}))
+				return false;
+		}
+		return true;
+	}
+
+	private static <T> boolean containsAll(ClassMap<T> map1, ClassMap<T> map2, BiPredicate<T, T> containment) {
+		int missing = map1.size() - map2.size();
+		if (missing < 0)
+			return false;
+		for (BiTuple<Class<?>, T> entry1 : map1.getAllEntries()) {
+			T value2 = map2.get(entry1.getValue1(), TypeMatch.EXACT);
+			if (value2 == null) {
+				missing--;
+				if (missing < 0)
+					return false;
+				else
+					continue;
+			}
+			if (!containment.test(entry1.getValue2(), value2))
+				return false;
+		}
+		return true;
 	}
 
 	@Override

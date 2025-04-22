@@ -1,7 +1,6 @@
 package org.observe.dbug.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExElement;
 
 public interface DbugAction extends ExElement {
@@ -10,7 +9,7 @@ public interface DbugAction extends ExElement {
 	}
 
 	public interface Interpreted<A extends DbugAction> extends ExElement.Interpreted<A> {
-		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateAction() throws ExpressoInterpretationException;
 
 		A create();
 	}

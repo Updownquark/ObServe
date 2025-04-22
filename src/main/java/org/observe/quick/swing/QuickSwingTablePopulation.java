@@ -56,11 +56,10 @@ import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.QuickTableColumn;
-import org.observe.quick.base.TabularWidget;
-import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.quick.base.ValueAction;
 import org.observe.quick.base.ValueAction.Multi;
 import org.observe.quick.base.ValueAction.Single;
+import org.observe.quick.swing.QuickSwingColumnSet.TabularContext;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
@@ -107,15 +106,16 @@ class QuickSwingTablePopulation {
 		private final Function<R2, R> theReverse;
 		final CategoryRenderStrategy<R2, C> theCRS;
 
-		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TriConsumer<R2, R, QuickWidget> update,
+		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, boolean virtual,
+			TriConsumer<R2, R, QuickWidget> update,
 			Function<R2, R> reverse, TabularContext<R> context, Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent,
 				Map<Object, QuickSwingPopulator<QuickWidget>> swingRenderers, Map<Object, QuickSwingPopulator<QuickWidget>> swingEditors,
 				QuickSwingTransfer dragging)
 					throws ModelInstantiationException {
 			theColumn = column;
 			theReverse = reverse;
-			QuickSwingTableColumn<R, R2, C> renderer = new QuickSwingTableColumn<>(update, theReverse, quickParent, column, context, parent,
-				swingRenderers, swingEditors);
+			QuickSwingTableColumn<R, R2, C> renderer = new QuickSwingTableColumn<>(update, theReverse, quickParent, column, virtual,
+				context, parent, swingRenderers, swingEditors);
 			theCRS = renderer.getCRS();
 			Integer width = column.getWidth();
 			if (column.getMinWidth() != null)
@@ -154,16 +154,16 @@ class QuickSwingTablePopulation {
 			if (column.getEditing() != null)
 				theCRS.withMutation(renderer::mutation);
 			dragging.configureTransferSources(cell -> {
-				context.getActiveValue().set(theReverse.apply(cell.getModelValue()));
-				context.isSelected().set(cell.isSelected());
-				context.getRowIndex().set(cell.getRowIndex());
-				context.getColumnIndex().set(cell.getColumnIndex());
+				context.activeValue.set(theReverse.apply(cell.getModelValue()));
+				context.selected.set(cell.isSelected());
+				context.rowIndex.set(cell.getRowIndex());
+				context.columnIndex.set(cell.getColumnIndex());
 			}, column.getTransferSources(), theCRS::dragSource);
 			dragging.configureTransferAccepters(cell -> {
-				context.getActiveValue().set(theReverse.apply(cell.getModelValue()));
-				context.isSelected().set(cell.isSelected());
-				context.getRowIndex().set(cell.getRowIndex());
-				context.getColumnIndex().set(cell.getColumnIndex());
+				context.activeValue.set(theReverse.apply(cell.getModelValue()));
+				context.selected.set(cell.isSelected());
+				context.rowIndex.set(cell.getRowIndex());
+				context.columnIndex.set(cell.getColumnIndex());
 			}, column.getTransferAccepters(), theCRS.getMutator()::dragAccept);
 		}
 
@@ -179,14 +179,16 @@ class QuickSwingTablePopulation {
 	static class QuickSwingRenderComponent<R, R2, C> {
 		private final QuickSwingRenderer<R, R2, C> theSwingRenderer;
 		private final QuickWidget theRenderer;
+		private final boolean isVirtual;
 		private ObservableCellRenderer<R2, C> theDelegate;
 		private SimpleComponentEditor<?, ?> theComponent;
 		private Runnable thePreRender;
 		private ObservableValue<String> theTooltip;
 
-		QuickSwingRenderComponent(QuickSwingRenderer<R, R2, C> swingRenderer, QuickWidget renderer) {
+		QuickSwingRenderComponent(QuickSwingRenderer<R, R2, C> swingRenderer, QuickWidget renderer, boolean virtual) {
 			theSwingRenderer = swingRenderer;
 			theRenderer = renderer;
+			isVirtual = virtual;
 		}
 
 		public QuickSwingRenderer<R, R2, C> getSwingRenderer() {
@@ -241,6 +243,10 @@ class QuickSwingTablePopulation {
 		public ObservableValue<String> getTooltipValue() {
 			return theTooltip;
 		}
+
+		public boolean isVirtual() {
+			return isVirtual;
+		}
 	}
 
 	static class QuickSwingRenderer<R, R2, C> extends AbstractObservableCellRenderer<R2, C> {
@@ -251,7 +257,7 @@ class QuickSwingTablePopulation {
 		private final List<QuickSwingRenderComponent<R, R2, C>> theRenderers;
 		private final SimpleObservable<Void> theRenderUntil;
 		private final QuickWithBackground.BackgroundContext theRendererContext;
-		protected final TabularWidget.TabularContext<R> theRenderTableContext;
+		protected final TabularContext<R> theRenderTableContext;
 		private final Supplier<C> theValue;
 
 		Supplier<String> isEnabled;
@@ -261,8 +267,8 @@ class QuickSwingTablePopulation {
 		private JLabel theDefaultRenderer;
 
 		QuickSwingRenderer(TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse, QuickWidget quickParent, Supplier<C> value,
-			List<QuickWidget> renderers, TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
-				Map<Object, QuickSwingPopulator<QuickWidget>> swingRenderers) throws ModelInstantiationException {
+			List<QuickWidget> renderers, TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
+				Map<Object, QuickSwingPopulator<QuickWidget>> swingRenderers, boolean virtual) throws ModelInstantiationException {
 			theUpdate = update;
 			theReverse = reverse;
 			theQuickParent = quickParent;
@@ -275,7 +281,7 @@ class QuickSwingTablePopulation {
 			theRendererContext = new QuickWithBackground.BackgroundContext.Default();
 			for (QuickWidget renderer : renderers) {
 				renderer.setContext(theRendererContext);
-				QuickSwingRenderComponent<R, R2, C> component = new QuickSwingRenderComponent<>(this, renderer);
+				QuickSwingRenderComponent<R, R2, C> component = new QuickSwingRenderComponent<>(this, renderer, virtual);
 				swingRenderers.get(renderer.getIdentity()).populate(new SwingCellPopulator<>(component), renderer);
 				if (component.hasRenderer())
 					theRenderers.add(component);
@@ -312,7 +318,7 @@ class QuickSwingTablePopulation {
 			return theQuickParent;
 		}
 
-		public TabularWidget.TabularContext<R> getContext() {
+		public TabularContext<R> getContext() {
 			return theRenderTableContext;
 		}
 
@@ -368,26 +374,29 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		void setRowContext(ModelRow<? extends R2> row, TabularWidget.TabularContext<R> tableCtx, boolean withValue, Object cause) {
+		void setRowContext(ModelRow<? extends R2> row, TabularContext<R> tableCtx, boolean withValue, Object cause) {
 			R reversed = theReverse.apply(row.getModelValue());
-			if (withValue || tableCtx.getActiveValue().get() != reversed) {
+			if (withValue || tableCtx.activeValue.get() != reversed) {
 				// Had an issue with trees where the path was actually the same, but not identical.
 				// If the active value is eventing, that almost certainly means it's being populated with the same value currently.
-				if (tableCtx.getActiveValue().isEventing()) {
-					if (!Objects.equals(tableCtx.getActiveValue().get(), reversed))
+				if (tableCtx.activeValue.isEventing()) {
+					if (!Objects.equals(tableCtx.activeValue.get(), reversed))
 						theQuickParent.reporting()
-						.error("Got some mixed up observables: " + tableCtx.getActiveValue().get() + "->" + reversed);
+						.error("Got some mixed up observables: " + tableCtx.activeValue.get() + "->" + reversed);
 				} else
-					tableCtx.getActiveValue().set(reversed, cause);
+					tableCtx.activeValue.set(reversed, cause);
 			}
-			tableCtx.isSelected().set(row.isSelected(), cause);
-			tableCtx.getRowIndex().set(row.getRowIndex(), cause);
+			if (tableCtx.selected.get().booleanValue() != row.isSelected())
+				tableCtx.selected.set(row.isSelected(), cause);
+			if (tableCtx.rowIndex.get().intValue() != row.getRowIndex())
+				tableCtx.rowIndex.set(row.getRowIndex(), cause);
 		}
 
-		void setCellContext(ModelCell<? extends R2, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx, boolean withValue) {
+		void setCellContext(ModelCell<? extends R2, ? extends C> cell, TabularContext<R> tableCtx, boolean withValue) {
 			try (Causable.CausableInUse cause = Causable.cause()) {
 				setRowContext(cell, tableCtx, withValue, cause);
-				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
+				if (tableCtx.columnIndex.get().intValue() != cell.getColumnIndex())
+					tableCtx.columnIndex.set(cell.getColumnIndex(), cause);
 				if (tableCtx == theRenderTableContext && theRendererContext != null) {
 					theRendererContext.isHovered().set(cell.isCellHovered(), cause);
 					theRendererContext.isFocused().set(cell.isCellFocused(), cause);
@@ -401,7 +410,7 @@ class QuickSwingTablePopulation {
 				}
 				if (isRenderingEnabled) {
 					String enabled = isEnabled == null ? null : isEnabled.get();
-					if (enabled != null)
+					if (enabled != null && !enabled.equals(cell.isEnabled()))
 						cell.setEnabled(enabled);
 				}
 			}
@@ -606,18 +615,14 @@ class QuickSwingTablePopulation {
 		private final QuickTableColumn<R, C> theColumn;
 		private final CategoryRenderStrategy<R2, C> theCRS;
 
-		private final QuickTableColumn.ColumnEditContext<R, C> theEditContext;
+		private final TabularContext<R> theEditContext;
 		private final List<CompositeCellEditorComponent<R, R2, C>> theEditors;
 
-		private final QuickMouseListener.MouseButtonListenerContext theMouseContext;
-		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
-		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
-
 		QuickSwingTableColumn(TriConsumer<R2, R, QuickWidget> update, Function<R2, R> reverse, QuickWidget quickParent,
-			QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
-				Map<Object, QuickSwingPopulator<QuickWidget>> swingRenderers, Map<Object, QuickSwingPopulator<QuickWidget>> swingEditors)
-					throws ModelInstantiationException {
-			super(update, reverse, quickParent, column.getValue(), column.getRenderers(), ctx, parent, swingRenderers);
+			QuickTableColumn<R, C> column, boolean virtual, QuickSwingColumnSet.TabularContext<R> ctx,
+			Supplier<? extends ComponentEditor<?, ?>> parent, Map<Object, QuickSwingPopulator<QuickWidget>> swingRenderers,
+				Map<Object, QuickSwingPopulator<QuickWidget>> swingEditors) throws ModelInstantiationException {
+			super(update, reverse, quickParent, column.getValue(), column.getRenderers(), ctx, parent, swingRenderers, virtual);
 			theColumn = column;
 
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), TypeTokens.getRawType(column.getType()), row -> {
@@ -628,9 +633,9 @@ class QuickSwingTablePopulation {
 			}, true);
 
 			if (theColumn.getEditing() != null) {
-				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(
-					theColumn.getEditing().reporting().getPosition().toShortString());
-				theColumn.getEditing().setEditorContext(theEditContext);
+				QuickTableColumn.ColumnEditing<R, C> editing = theColumn.getEditing();
+				theEditContext = new TabularContext<>(editing.getEditRowValue(), editing.getRowIndex(), editing.getColumnIndex(),
+					editing.isSelected());
 				theEditors = new ArrayList<>(theColumn.getEditing().getEditors().size());
 				for (int e = 0; e < theColumn.getEditing().getEditors().size(); e++) {
 					QuickWidget editor = theColumn.getEditing().getEditors().get(e);
@@ -648,24 +653,6 @@ class QuickSwingTablePopulation {
 				theEditContext = null;
 			}
 
-			theMouseContext = new QuickMouseListener.MouseButtonListenerContext.Default();
-			theKeyTypeContext = new QuickKeyListener.KeyTypedContext.Default();
-			theKeyCodeContext = new QuickKeyListener.KeyCodeContext.Default();
-
-			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
-				for (QuickEventListener listener : renderer.getRenderer().getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
-						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
-					else if (listener instanceof QuickMouseListener)
-						((QuickMouseListener) listener).setListenerContext(theMouseContext);
-					else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
-						((QuickKeyListener.QuickKeyTypedListener) listener).setListenerContext(theKeyTypeContext);
-					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
-						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
-					else
-						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
-				}
-			}
 			if (!theEditors.isEmpty())
 				setEnabled(() -> {
 					String msg = theColumn.getEditing().isEditable().get();
@@ -693,7 +680,7 @@ class QuickSwingTablePopulation {
 		}
 
 		SettableValue<C> getEditorValue() {
-			return theEditContext.getEditColumnValue();
+			return theColumn.getEditing().getEditColumnValue();
 		}
 
 		@Override
@@ -718,17 +705,21 @@ class QuickSwingTablePopulation {
 							return false;
 					} else if (theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() != null)
 						return false;
-					return cellEditor.checkEditor();
+					if (cellEditor.checkEditor()) {
+						setEditCell(cell);
+						return true;
+					} else
+						return false;
 				});
 				if (theColumn.getEditing().isAcceptable() != null) {
 					mutation.filterAccept((rowEl, colValue) -> {
 						render(rowEl.get(), colValue, theEditContext);
-						theEditContext.getEditColumnValue().set(colValue, null);
+						getEditorValue().set(colValue, null);
 						return theColumn.getEditing().isAcceptable().get();
 					});
 				} else {
 					mutation.filterAccept((rowEl, colValue) -> {
-						render(rowEl.get(), colValue, theRenderTableContext);
+						render(rowEl.get(), colValue, theEditContext);
 						return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
 					});
 				}
@@ -737,7 +728,7 @@ class QuickSwingTablePopulation {
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
 						render(rowValue, colValue, theEditContext);
-						theEditContext.getEditColumnValue().set(colValue, null);
+						getEditorValue().set(colValue, null);
 						editType.getCommit().act(null);
 					});
 					mutation.withRowUpdate(editType.isRowUpdate());
@@ -747,13 +738,13 @@ class QuickSwingTablePopulation {
 					if (LambdaUtils.isTrivial(theReverse)) {
 						mutation.withRowValueSwitch((rowValue, colValue) -> {
 							render(rowValue, colValue, theEditContext);
-							theEditContext.getEditColumnValue().set(colValue, null);
+							getEditorValue().set(colValue, null);
 							return (R2) editType.getReplacement().get();
 						});
 					} else if (theUpdate != null) {
 						mutation.mutateAttribute((rowValue, colValue) -> {
 							render(rowValue, colValue, theEditContext);
-							theEditContext.getEditColumnValue().set(colValue, null);
+							getEditorValue().set(colValue, null);
 							theUpdate.accept(rowValue, editType.getReplacement().get(), getQuickParent());
 						});
 					} else {
@@ -772,28 +763,28 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		void render(R2 rowValue, C colValue, TabularWidget.TabularContext<R> ctx) {
+		void render(R2 rowValue, C colValue, TabularContext<R> ctx) {
 			R rv = theReverse.apply(rowValue);
-			if (ctx.getActiveValue().get() != rv)
-				ctx.getActiveValue().set(rv, null);
-			if (ctx.getRowIndex().get().intValue() != 0)
-				ctx.getRowIndex().set(0, null);
-			if (ctx.getColumnIndex().get().intValue() != 0)
-				ctx.getColumnIndex().set(0, null);
-			if (ctx.isSelected().get())
-				ctx.isSelected().set(false, null);
+			if (ctx.activeValue.get() != rv)
+				ctx.activeValue.set(rv, null);
+			if (ctx.rowIndex.get().intValue() != 0)
+				ctx.rowIndex.set(0, null);
+			if (ctx.columnIndex.get().intValue() != 0)
+				ctx.columnIndex.set(0, null);
+			if (ctx.selected.get())
+				ctx.selected.set(false, null);
 		}
 
 		void setEditCell(ModelCell<? extends R2, ? extends C> cell) {
 			setCellContext(cell, theEditContext, false);
-			// theEditContext.getActiveValue().set(theReverse.apply(cell.getModelValue()), null);
+			// theEditContext.activeValue.set(theReverse.apply(cell.getModelValue()), null);
 		}
 
 		String isEditAcceptable(ModelCell<R2, C> cell, C editValue) {
 			if (cell == null)
 				return "Nothing being edited";
 			setEditCell(cell);
-			theEditContext.getEditColumnValue().set(editValue, null);
+			getEditorValue().set(editValue, null);
 			return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(editValue);
 		}
 
@@ -805,7 +796,6 @@ class QuickSwingTablePopulation {
 			KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 			if (code == null)
 				return;
-			theKeyCodeContext.getKeyCode().set(code, e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -815,7 +805,11 @@ class QuickSwingTablePopulation {
 						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 							continue;
-						else if (!keyL.testFilter())
+						keyL.isAltPressed().set(e.isAltDown(), e);
+						keyL.isCtrlPressed().set(e.isControlDown(), e);
+						keyL.isShiftPressed().set(e.isShiftDown(), e);
+						keyL.getEventKeyCode().set(code, e);
+						if (!keyL.testFilter())
 							continue;
 						keyL.getAction().act(e);
 					}
@@ -834,7 +828,6 @@ class QuickSwingTablePopulation {
 			KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 			if (code == null)
 				return;
-			theKeyCodeContext.getKeyCode().set(code, e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -844,7 +837,11 @@ class QuickSwingTablePopulation {
 						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 							continue;
-						else if (!keyL.testFilter())
+						keyL.isAltPressed().set(e.isAltDown(), e);
+						keyL.isCtrlPressed().set(e.isControlDown(), e);
+						keyL.isShiftPressed().set(e.isShiftDown(), e);
+						keyL.getEventKeyCode().set(code, e);
+						if (!keyL.testFilter())
 							continue;
 						keyL.getAction().act(e);
 					}
@@ -861,7 +858,6 @@ class QuickSwingTablePopulation {
 				return;
 			setCellContext(cell, theRenderTableContext, true);
 			char ch = e.getKeyChar();
-			theKeyTypeContext.getTypedChar().set(ch, e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -871,7 +867,11 @@ class QuickSwingTablePopulation {
 						QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
 						if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
 							continue;
-						else if (!keyL.testFilter())
+						keyL.isAltPressed().set(e.isAltDown(), e);
+						keyL.isCtrlPressed().set(e.isControlDown(), e);
+						keyL.isShiftPressed().set(e.isShiftDown(), e);
+						keyL.getTypedChar().set(ch, e);
+						if (!keyL.testFilter())
 							continue;
 						keyL.getAction().act(e);
 					}
@@ -903,9 +903,6 @@ class QuickSwingTablePopulation {
 			if (eventButton == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -917,7 +914,13 @@ class QuickSwingTablePopulation {
 							continue;
 						else if (mouseL.getClickCount() > 0 && e.getClickCount() != mouseL.getClickCount())
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						mouseL.getEventButton().set(eventButton, e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -936,9 +939,6 @@ class QuickSwingTablePopulation {
 			if (eventButton == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -948,7 +948,13 @@ class QuickSwingTablePopulation {
 						QuickMouseListener.QuickMousePressedListener mouseL = (QuickMouseListener.QuickMousePressedListener) listener;
 						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						mouseL.getEventButton().set(eventButton, e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -967,9 +973,6 @@ class QuickSwingTablePopulation {
 			if (eventButton == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -979,7 +982,13 @@ class QuickSwingTablePopulation {
 						QuickMouseListener.QuickMouseReleasedListener mouseL = (QuickMouseListener.QuickMouseReleasedListener) listener;
 						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						mouseL.getEventButton().set(eventButton, e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -995,8 +1004,6 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -1006,7 +1013,12 @@ class QuickSwingTablePopulation {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -1022,8 +1034,6 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -1033,7 +1043,12 @@ class QuickSwingTablePopulation {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -1049,8 +1064,6 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			setCellContext(cell, theRenderTableContext, true);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
 			String tt = getTooltip();
 			for (QuickSwingRenderComponent<R, R2, C> renderer : getRenderers()) {
 				if (!renderer.getRenderer().isVisible().get())
@@ -1060,7 +1073,12 @@ class QuickSwingTablePopulation {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
 							continue;
-						else if (!mouseL.testFilter())
+						mouseL.isAltPressed().set(e.isAltDown(), e);
+						mouseL.isCtrlPressed().set(e.isControlDown(), e);
+						mouseL.isShiftPressed().set(e.isShiftDown(), e);
+						mouseL.getEventX().set(e.getX(), e);
+						mouseL.getEventY().set(e.getY(), e);
+						if (!mouseL.testFilter())
 							continue;
 						mouseL.getAction().act(e);
 					}
@@ -1137,7 +1155,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public boolean isSyntheticRenderer() {
-			return true;
+			return theRenderer.isVirtual();
 		}
 
 		@Override
@@ -1343,8 +1361,11 @@ class QuickSwingTablePopulation {
 						if (enabled == null && theRenderer.getRenderer() instanceof QuickValueWidget)
 							enabled = ((QuickValueWidget<?>) theRenderer.getRenderer()).getDisabled().get();
 						label[0].setEnabled(enabled == null);
-						cell.setEnabled(null); // Don't let the super class muck with our style
 						editor.decorate(label[0]);
+						// I'm adding this condition. It wasn't here before, but then I had an issue
+						// with a combo table renderer's cells looking enabled when they were disabled.
+						if (!theRenderer.getSwingRenderer().isRenderingEnabled())
+							cell.setEnabled(null); // Don't let the super class muck with our style
 						return label[0];
 					}
 				};
@@ -1889,8 +1910,14 @@ class QuickSwingTablePopulation {
 							boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
 							ModelCell<C, C> cell = new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered,
 								hovered, true, true);
-							if (theRenderer.getSwingRenderer().isRenderingEnabled())
-								cell.setEnabled(theEditor.getTableColumn().isEditAcceptable(getCellEditor().getEditingCell(), value));
+							if (index >= 0 || theEditor.getTableColumn().isRenderingEnabled()) {
+								ModelCell<R2, C> editCell = getCellEditor().getEditingCell();
+								if (editCell != null) {
+									theEditor.getTableColumn().setEditCell(editCell);
+									String enabled = theEditor.getTableColumn().isEditAcceptable(getCellEditor().getEditingCell(), value);
+									cell.setEnabled(enabled);
+								}
+							}
 							return renderer.getCellRendererComponent(list, cell, CellRenderContext.DEFAULT);
 						}
 					});
@@ -2010,6 +2037,7 @@ class QuickSwingTablePopulation {
 							try (Transaction t = ctx.getActionValues().lock(true, null)) {
 								CollectionUtils.synchronize(ctx.getActionValues(), values, (av, v) -> Objects.equals(av, reverse.apply(v)))//
 								.simple(reverse)//
+									.commonUses(true, true)//
 								.rightOrder()//
 								.adjust();
 							}

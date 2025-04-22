@@ -13,6 +13,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.InterpretedStyleValue.StyleValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
@@ -116,7 +117,7 @@ public interface QuickInterpretedStyle {
 	 * @param appCache The application cache
 	 * @throws ExpressoInterpretationException If this style could not be interpreted
 	 */
-	void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
+	void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
 		throws ExpressoInterpretationException;
 
 	/** Default implementation */
@@ -141,15 +142,16 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+		public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet,
 			QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
 			theDeclaredValues.clear();
 			for (QuickStyleValue value : getDefinition().getDeclaredValues())
-				theDeclaredValues.add(value.interpret(env, styleSheet, appCache));
-			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+				theDeclaredValues.add(value.interpret(element, styleSheet, appCache));
+			InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
+			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
 			for (QuickStyleAttributeDef attr : getDefinition().getAttributesWithValues()) {
-				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, env);
-				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, env, styleSheet, appCache));
+				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, defaultEnv);
+				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, element, styleSheet, appCache));
 			}
 			theAttributesByName.clear();
 			for (QuickStyleAttribute<?> attr : theValues.keySet())
@@ -242,9 +244,9 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+		public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet,
 			QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-			theWrapped.update(env, styleSheet, appCache);
+			theWrapped.update(element, styleSheet, appCache);
 		}
 
 		@Override

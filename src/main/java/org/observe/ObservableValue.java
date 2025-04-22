@@ -20,7 +20,6 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import org.observe.Observer.SimpleObserver;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
@@ -447,10 +446,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param until An observable to cease the safe observable's synchronization with this value
 	 * @return An observable value with same value as this one, but is safe for use on the given thread and fires its events there
 	 */
-	default ObservableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
+	default ObservableValue<T> safe(ThreadConstraint threading) {
 		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE || threading == ThreadConstraint.ANY)
 			return this;
-		return new SafeObservableValue<>(this, threading, until);
+		return new SafeObservableValue<>(this, threading);
 	}
 
 	/**
@@ -799,7 +798,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									if (evt.isInitial()) {
 										// This call just makes sure the internal state is up-to-date,
 										// we don't have to do anything with the return values
-										getState(false);
+										getState(false, true);
 									} else {
 										BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(),
 											theEngine.get(false));
@@ -817,7 +816,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									T newValue;
 									// Check to see if the source is also changed such that we may not have received the change yet
 									if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
-										if (checkSourceChanged())
+										if (checkSourceChanged(evt.getNewValue()))
 											newValue = theElement.getCurrentValue(theEngine.getCachedState());
 										else
 											newValue = change.getValue2();
@@ -862,28 +861,37 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		 * of this transformed value.
 		 *
 		 * @param withLock Whether a lock needs to be
+		 * @param init Whether this call is from the initialization of listening
 		 * @return A tuple containing the current transformed element and transformation state of the engine
 		 */
-		protected BiTuple<TransformedElement<S, T>, TransformationState> getState(boolean withLock) {
+		protected BiTuple<TransformedElement<S, T>, TransformationState> getState(boolean withLock, boolean init) {
 			Transformation.TransformationState cachedState = theEngine.getCachedState();
 			Transformation.TransformationState state = theEngine.get(withLock);
 			if (state != cachedState)
 				theElement.transformationStateChanged(cachedState, state);
-			// If the source is eventing, it's possible that we haven't received the event that will update us yet
-			if (!theTransformation.isCached() || (!theSource.isEventing() && !theObservers.isEmpty()))
-				return new BiTuple<>(theElement, state);
-			checkSourceChanged();
+			boolean checkSource;
+			if (init)
+				checkSource = true;
+			else if (!theTransformation.isCached())
+				checkSource = false;
+			else if (theSource.isEventing() || theObservers.isEmpty()) {
+				// If the source is eventing, it's possible that we haven't received the event that will update us yet
+				checkSource = true;
+			} else
+				checkSource = false;
+			if (checkSource)
+				checkSourceChanged(state);
 			return new BiTuple<>(theElement, state);
 		}
 
-		boolean checkSourceChanged() {
+		boolean checkSourceChanged(Transformation.TransformationState state) {
 			if (theSourceStamp == -1 || theSource.getStamp() != theSourceStamp) {
 				try (Transaction t = lock()) {
 					theSourceStamp = theSource.getStamp();
 					S source = theSource.get();
 					S oldSource = theCachedSource;
 					theCachedSource = source;
-					theElement.sourceChanged(oldSource, source, theEngine.get());
+					theElement.sourceChanged(oldSource, source, state);
 				}
 				return true;
 			} else
@@ -943,7 +951,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public T get() {
-			BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true);
+			BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
 			TransformedElement<S, T> el = state.getValue1();
 			TransformationState tx = state.getValue2();
 			return el.getCurrentValue(tx);
@@ -1365,53 +1373,72 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	}
 
 	/**
-	 * Implements {@link ObservableValue#safe(ThreadConstraint, Observable)}
+	 * Implements {@link ObservableValue#safe(ThreadConstraint)}
 	 *
 	 * @param <T> The type of the value
 	 */
 	class SafeObservableValue<T> extends WrappingObservableValue<T, T> {
 		private final ThreadConstraint theThreading;
 		private T theLastEventedValue;
-		private ObservableValueEvent<T> theLastEvent;
+		private final AtomicReference<ObservableValueEvent<T>> theLastEvent;
 		private CollectionLockingStrategy theLocking;
 		private final ListenerList<Consumer<ObservableValueEvent<T>>> theListeners;
 		private volatile boolean isEventing;
 
-		public SafeObservableValue(ObservableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
+		private Subscription theWrappedSubscription;
+
+		public SafeObservableValue(ObservableValue<T> wrapped, ThreadConstraint threading) {
 			super(wrapped);
 			if (!threading.supportsInvoke())
 				throw new IllegalArgumentException("Thread constraints for safe structures must be invokable");
 			theThreading = threading;
+			theLastEvent = new AtomicReference<>();
 			theLocking = ThreadConstrainedLockingStrategy.get(threading);
-			theListeners = ListenerList.build().build();
-			SimpleObserver<ObservableValueEvent<T>> listener = evt -> {
-				theLastEvent = evt;
-				if (theThreading.isEventThread())
-					fire(evt, true);
-				else
-					theThreading.invoke(() -> fire(evt, false));
-			};
-			if (until == null)
-				wrapped.changes().act(listener);
-			else
-				wrapped.changes().takeUntil(until).act(listener);
+			theListeners = ListenerList.build()//
+				.withInUse(inUse -> {
+					if (inUse) {
+						theWrappedSubscription = wrapped.changes().act(evt -> {
+							if (theThreading.isEventThread()) {
+								theLastEvent.set(null);
+								fire(evt, true);
+							} else {
+								theLastEvent.set(evt);
+								theThreading.invoke(() -> fire(evt, false));
+							}
+						});
+					} else {
+						Subscription wrapSub = theWrappedSubscription;
+						theWrappedSubscription = null;
+						if (wrapSub != null)
+							wrapSub.unsubscribe();
+					}
+				})//
+				.build();
 		}
 
 		private void fire(ObservableValueEvent<T> evt, boolean fromEventThread) {
-			if (theLastEvent != evt)
-				return;
-			if (!fromEventThread)
-				evt = createChangeEvent(theLastEventedValue, evt.getNewValue(), Causable.broken(evt));
-			else if (theLastEventedValue != evt.getOldValue())
-				evt = createChangeEvent(theLastEventedValue, evt.getNewValue(), evt);
+			if (!fromEventThread && !theLastEvent.compareAndSet(evt, null))
+				return; // Another event has happened--don't bother with this one
+
+			ObservableValueEvent<T> toFire;
+			if (evt.isInitial())
+				toFire = null;
+			else if (fromEventThread) {
+				if (evt.getOldValue() == theLastEventedValue)
+					toFire = evt;
+				else
+					toFire = createChangeEvent(theLastEventedValue, evt.getNewValue(), evt);
+			} else
+				toFire = createChangeEvent(theLastEventedValue, evt.getNewValue(), Causable.broken(evt));
 			theLastEventedValue = evt.getNewValue();
-			isEventing = true;
-			try (Transaction t = evt == theLastEvent ? Transaction.NONE : evt.use()) {
-				ObservableValueEvent<T> fEvt = evt;
-				theListeners.forEach(//
-					listener -> listener.accept(fEvt));
-			} finally {
-				isEventing = false;
+			if (toFire != null) {
+				isEventing = true;
+				try (Transaction t = toFire == evt ? Transaction.NONE : toFire.use()) {
+					theListeners.forEach(//
+						listener -> listener.accept(toFire));
+				} finally {
+					isEventing = false;
+				}
 			}
 		}
 
@@ -1818,8 +1845,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						void initialize() {
 							isInitialized = true;
 							theCurrentValue = get();
-							if (withInit)
-								observer.onNext(createInitialEvent(theCurrentValue, null));
+							if (withInit) {
+								ObservableValueEvent<T> evt = createInitialEvent(theCurrentValue, null);
+								try (Transaction t = evt.use()) {
+									observer.onNext(evt);
+								}
+							}
 						}
 
 						@Override
@@ -1828,12 +1859,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							T newValue = theValue.get();
 							T oldValue = theCurrentValue;
 							theCurrentValue = newValue;
+							ObservableValueEvent<T> evt;
 							if (init) {
 								isInitialized = true;
 								if (!withInit)
 									init = false;
 							}
-							ObservableValueEvent<T> evt;
 							if (init)
 								evt = createInitialEvent(newValue, value);
 							else
@@ -2474,7 +2505,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									toFire = null;
 								else if (nextIndex < theValues.length) {
 									toFire = null;
-									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(//
+										new ElementFirstObserver(nextIndex));
 								} else {
 									T def;
 									try {
@@ -2535,7 +2567,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						return true;
 					}
 				}
-				valueSubs[0] = theValues[0].changes().subscribe(new ElementFirstObserver(0));
+				valueSubs[0] = theValues[0].changes().subscribe(//
+					new ElementFirstObserver(0));
 				return () -> {
 					Subscription.forAll(valueSubs).unsubscribe();
 				};

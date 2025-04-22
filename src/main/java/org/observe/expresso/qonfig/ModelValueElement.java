@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import java.lang.ref.WeakReference;
 import java.util.Iterator;
 
 import org.observe.expresso.CompiledExpressoEnv;
@@ -13,6 +14,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
@@ -274,15 +276,16 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 				}
 
 				@Override
-				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				protected void doUpdate() throws ExpressoInterpretationException {
+					InterpretedExpressoEnv env = getDefaultEnv();
 					if (getDefinition().getValueType() != null) {
-						TypeToken<?> valueType = getDefinition().getValueType().getType(env);
+						TypeToken<?> valueType = interpretType(getDefinition().getValueType());
 						if (getDefinition().useWrapperType())
 							valueType = TypeTokens.get().wrap(valueType);
 						theTargetType = (ModelInstanceType<M, MV>) getDefinition().getModelType(env).forTypes(valueType);
 					} else
 						theTargetType = getDefinition().getModelType(env).anyAs();
-					super.doUpdate(env);
+					super.doUpdate();
 				}
 			}
 		}
@@ -364,22 +367,23 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 				}
 
 				@Override
-				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				protected void doUpdate() throws ExpressoInterpretationException {
+					InterpretedExpressoEnv env = getDefaultEnv();
 					ModelInstanceType<?, ?> type;
 					if (getDefinition().getValueType1() != null) {
-						TypeToken<?> valueType1 = getDefinition().getValueType1().getType(env);
+						TypeToken<?> valueType1 = interpretType(getDefinition().getValueType1());
 						if (getDefinition().useWrapperType())
 							valueType1 = TypeTokens.get().wrap(valueType1);
 						if (getDefinition().getValueType2() != null) {
-							TypeToken<?> valueType2 = getDefinition().getValueType2().getType(env);
+							TypeToken<?> valueType2 = interpretType(getDefinition().getValueType2());
 							if (getDefinition().useWrapperType())
 								valueType2 = TypeTokens.get().wrap(valueType2);
 							type = getDefinition().getModelType(env).forTypes(valueType1, valueType2);
 						} else
-							type = getDefinition().getModelType(env).forTypes(getDefinition().getValueType1().getType(env),
-								TypeTokens.get().WILDCARD);
+							type = getDefinition().getModelType(env).forTypes(//
+								interpretType(getDefinition().getValueType1()), TypeTokens.get().WILDCARD);
 					} else if (getDefinition().getValueType2() != null) {
-						TypeToken<?> valueType2 = getDefinition().getValueType2().getType(env);
+						TypeToken<?> valueType2 = interpretType(getDefinition().getValueType2());
 						if (getDefinition().useWrapperType())
 							valueType2 = TypeTokens.get().wrap(valueType2);
 						type = getDefinition().getModelType(env).forTypes(TypeTokens.get().WILDCARD, valueType2);
@@ -387,7 +391,7 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 						type = getDefinition().getModelType(env).any();
 					theTargetType = (ModelInstanceType<M, MV>) type;
 
-					super.doUpdate(env);
+					super.doUpdate();
 				}
 			}
 		}
@@ -466,12 +470,12 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				if (getDefinition().getElementValue() == null
 					|| getDefinition().getElementValue().getExpression() == ObservableExpression.EMPTY)
 					theValue = null;
@@ -560,6 +564,7 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 	public abstract class Abstract<MV> extends ExElement.Abstract implements ModelValueElement<MV> {
 		private final String theModelPath;
 		private ModelValueInstantiator<?> theElementValue;
+		private WeakReference<ModelSetInstance> theCurrentModels;
 
 		/**
 		 * @param interpreted The interpretation to instantiate
@@ -587,5 +592,16 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 			if (theElementValue != null)
 				theElementValue.instantiate();
 		}
+
+		@Override
+		public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			if (theCurrentModels == null || theCurrentModels.get() != models) {
+				theCurrentModels = new WeakReference<>(models);
+				instantiate(models);
+			}
+			return evaluate(models);
+		}
+
+		protected abstract MV evaluate(ModelSetInstance models) throws ModelInstantiationException;
 	}
 }

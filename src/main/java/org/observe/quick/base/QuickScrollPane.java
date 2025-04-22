@@ -1,7 +1,6 @@
 package org.observe.quick.base;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -111,13 +110,13 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theRowHeader = syncChild(getDefinition().getRowHeader(), theRowHeader, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+				r -> r.updateElement());
 			theColumnHeader = syncChild(getDefinition().getColumnHeader(), theColumnHeader, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+				r -> r.updateElement());
 		}
 
 		@Override
@@ -186,12 +185,13 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		if (theRowHeader != null)
 			theRowHeader.instantiate(myModels);
 		if (theColumnHeader != null)
 			theColumnHeader.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

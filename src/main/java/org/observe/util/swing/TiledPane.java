@@ -211,6 +211,8 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 							e.getXOnScreen(), e.getYOnScreen(), e.getClickCount(), e.isPopupTrigger(), e.getButton());
 					}
 					deepest.dispatchEvent(copy);
+					if (copy.isConsumed())
+						e.consume();
 				}
 			}
 
@@ -219,12 +221,12 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 					return null;
 				if (!(parent instanceof Container))
 					return parent;
-				for (int c = ((Container) parent).getComponentCount() - 1; c >= 0; c--) {
+				for (int c = 0; c < ((Container) parent).getComponentCount(); c++) {
 					Component comp = ((Container) parent).getComponent(c);
 					if (comp.isVisible() && comp.getBounds().contains(x, y)) {
 						if (comp instanceof Container) {
 							parent = comp;
-							c = ((Container) parent).getComponentCount();
+							c = -1;
 							x -= parent.getX();
 							y -= parent.getY();
 						} else
@@ -531,9 +533,10 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	protected void paintChildren(Graphics g) {
 		Rectangle clip = g.getClipBounds();
 		TiledPanelRenderMC<T> cell = new TiledPanelRenderMC<>();
-		int row = -1;
-		for (CollectionElement<T> value : theValues.elements()) {
-			row++;
+		// Painting is done in reverse order, to give lower-index widgets higher visibility
+		int row = theValues.size();
+		for (CollectionElement<T> value : theValues.elements().reverse()) {
+			row--;
 			Rectangle bounds = theValueBounds.get(row);
 			if (bounds == null || !clip.intersects(bounds))
 				continue;

@@ -149,7 +149,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(v -> v != null, null, //
+				return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, //
 					SettableValue.this.isEnabled(), //
 					value.refresh(noInitChanges())
 					.map(LambdaUtils.printableFn(v -> isAcceptable(v), () -> "acceptableTo(" + this + ")", null))//
@@ -184,23 +184,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return A settable value that rejects values that return other than null for the given test
 	 */
 	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
-		return new WrappingSettableValue<T>(this) {
-			@Override
-			public T set(T value) throws IllegalArgumentException {
-				String error = accept.apply(value);
-				if (error != null)
-					throw new IllegalArgumentException(error);
-				return getWrapped().set(value);
-			}
-
-			@Override
-			public String isAcceptable(T value) {
-				String error = accept.apply(value);
-				if (error != null)
-					return error;
-				return getWrapped().isAcceptable(value);
-			}
-		};
+		return new FilterAcceptValue<>(this, accept);
 	}
 
 	/**
@@ -429,10 +413,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	@Override
-	default SettableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
+	default SettableValue<T> safe(ThreadConstraint threading) {
 		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
 			return this;
-		return new SafeSettableValue<>(this, threading, until);
+		return new SafeSettableValue<>(this, threading);
 	}
 
 	/**
@@ -703,6 +687,45 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
+	 * Implements {@link SettableValue#filterAccept(Function)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	public class FilterAcceptValue<T> extends WrappingSettableValue<T> {
+		private final Function<? super T, String> theFilter;
+
+		/**
+		 * @param wrapped The value to filter
+		 * @param filter The filter for the {@link #isAcceptable(Object)} and {@link #set(Object)} methods
+		 */
+		public FilterAcceptValue(SettableValue<T> wrapped, Function<? super T, String> filter) {
+			super(wrapped);
+			theFilter = filter;
+		}
+
+		@Override
+		public T set(T value) throws IllegalArgumentException {
+			String error = theFilter.apply(value);
+			if (error != null)
+				throw new IllegalArgumentException(error);
+			return getWrapped().set(value);
+		}
+
+		@Override
+		public String isAcceptable(T value) {
+			String error = theFilter.apply(value);
+			if (error != null)
+				return error;
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(getWrapped().getIdentity(), "filterAccept", theFilter);
+		}
+	};
+
+	/**
 	 * Implements {@link SettableValue#transformReversible(Function)}
 	 *
 	 * @param <S> The type of the source value
@@ -748,7 +771,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.firstValue(e -> e != null, () -> null, //
 				transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
-					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true);
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
 					return state.getValue1().isEnabled(state.getValue2());
 				}, "enabled", "enabled"))), //
 				getSource().isEnabled());
@@ -757,7 +780,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public String isAcceptable(T value) {
 			try (Transaction t = lock()) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false);
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false, false);
 				ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
 				if (rq.getError() != null)
 					return rq.getError();
@@ -768,7 +791,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 			try (Transaction t = lock(true, null)) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false);
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false, false);
 				S source = state.getValue1()//
 					.set(//
 						value, state.getValue2(), false)
@@ -1000,17 +1023,15 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	/**
-	 * Implements {@link SettableValue#safe(ThreadConstraint, Observable)}
+	 * Implements {@link SettableValue#safe(ThreadConstraint)}
 	 *
 	 * @param <T> The type of the value
 	 */
 	class SafeSettableValue<T> extends SafeObservableValue<T> implements SettableValue<T> {
-		private final Observable<?> theUntil;
 		private ObservableValue<String> isEnabled;
 
-		public SafeSettableValue(SettableValue<T> wrapped, ThreadConstraint threading, Observable<?> until) {
-			super(wrapped, threading, until);
-			theUntil = until;
+		public SafeSettableValue(SettableValue<T> wrapped, ThreadConstraint threading) {
+			super(wrapped, threading);
 		}
 
 		@Override
@@ -1067,7 +1088,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 				synchronized (this) {
 					enabled = isEnabled;
 					if (enabled == null)
-						isEnabled = enabled = getWrapped().isEnabled().safe(getThreadConstraint(), theUntil);
+						isEnabled = enabled = getWrapped().isEnabled().safe(getThreadConstraint());
 				}
 			}
 			return enabled;
@@ -1370,7 +1391,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(s -> s != null, () -> null, isEnabled, getWrapped().isEnabled());
+			return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, isEnabled, getWrapped().isEnabled());
 		}
 	}
 

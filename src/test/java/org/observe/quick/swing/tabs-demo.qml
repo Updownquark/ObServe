@@ -36,15 +36,16 @@
 			<column name="`Value`" value="row" />
 		</table>
 		<tabs fill="true" selected="app.selectedTab">
-			<box tab-id="&quot;First&quot;" tab-name="`First`" layout="inline-layout" orientation="vertical" cross-align="leading">
+			<box tab-id="id" tab-name="`First`" layout="inline-layout" orientation="vertical" cross-align="leading">
 				<model>
+					<value name="id">`First`</value>
 					<transform name="tabSet1Size" source="app.tabSet1">
 						<size />
 					</transform>
 					<transform name="tabSet2Size" source="app.tabSet2">
 						<size />
 					</transform>
-					<hook name="selectHook" on="tabSelected">app.isFirstSelected=tabSelected</hook>
+					<hook name="selectHook" on="selectedTab">app.isFirstSelected=(selectedTab==id)</hook>
 				</model>
 				<label>This is a static tab</label>
 				<label value="&quot;There are &quot;+(2+tabSet1Size+tabSet2Size)+&quot; tabs total.&quot;" />
@@ -58,15 +59,15 @@
 					</box>
 				</box>
 			</tab-set>
-			<box tab-id="&quot;Second&quot;" tab-name="`Second`" layout="inline-layout" orientation="vertical" cross-align="leading">
+			<box tab-id="id" tab-name="`Second`" layout="inline-layout" orientation="vertical" cross-align="leading">
 				<model>
-					<hook name="selectHook" on="tabSelected">app.isSecondSelected=tabSelected</hook>
+					<value name="id">`Second`</value>
+					<hook name="selectHook" on="selectedTab">app.isSecondSelected=(selectedTab==id)</hook>
 				</model>
 				<label>This is also a static tab</label>
 			</box>
 			<tab-set values="app.tabSet2">
-				<box tab-name="&quot;Tab 2:&quot;+tabId" tab-icon="&quot;/icons/&quot;+tabId+&quot;.png&quot;"
-					on-select="System.out.println(&quot;Selected Tab 2:&quot;+tabId)"
+				<box tab-name="&quot;Tab 2:&quot;+tabId" tab-icon="`/icons/`+tabId+`.png$16x16`"
 					layout="inline-layout" orientation="vertical" cross-align="leading">
 					<label>This is also a Dynamic tab</label>
 					<box layout="inline-layout" orientation="horizontal">

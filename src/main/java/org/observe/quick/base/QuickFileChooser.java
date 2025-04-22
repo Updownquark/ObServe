@@ -7,7 +7,6 @@ import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -176,13 +175,13 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		}
 
 		@Override
-		public void updateDialog(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			update(expressoEnv);
+		public void updateDialog() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theDirectory = interpret(getDefinition().getDirectory(), ModelTypes.Value.forType(File.class));
 			theFileDescrip = ExpressoTransformations.parseFilter(getDefinition().getFileDescrip(), this, true);
@@ -266,7 +265,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	 * @param file The file to test
 	 * @return Whether this file chooser's on-select action can handle the given file
 	 */
-	public String isFileAllowed(File file) {
+	public synchronized String isFileAllowed(File file) {
 		try (Transaction t = theChosenFiles.lock(true, null)) {
 			theChosenFiles.clear();
 			theChosenFiles.add(file);
@@ -321,8 +320,8 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		if (theDirectoryInstantiator != null)
 			theDirectory.set(theDirectoryInstantiator.get(myModels), null);
@@ -336,6 +335,7 @@ public class QuickFileChooser extends ExElement.Abstract implements QuickDialog 
 		theOnSelect.set(theOnSelectInstantiator.get(myModels), null);
 		theOnCancel.set(theOnCancelInstantiator == null ? ObservableAction.DO_NOTHING : theOnCancelInstantiator.get(myModels), null);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theChosenFilesVariable, myModels, theChosenFiles);
+		return myModels;
 	}
 
 	@Override

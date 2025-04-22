@@ -7,6 +7,7 @@ import java.util.function.BiFunction;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
+import org.observe.expresso.BinaryOperatorSet;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -16,6 +17,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
+import org.observe.expresso.UnaryOperatorSet;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
@@ -48,6 +50,30 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	/** {@link #NAME} and {@link #VERSION} combined */
 	public static final String CORE = "Quick-Core v0.1";
 
+	static {
+		TypeTokens.get().addSupplementaryCast(Integer.class, QuickSize.class, new TypeTokens.SupplementaryCast<Integer, QuickSize>() {
+			@Override
+			public TypeToken<? extends QuickSize> getCastType(TypeToken<? extends Integer> sourceType) {
+				return TypeTokens.get().of(QuickSize.class);
+			}
+
+			@Override
+			public QuickSize cast(Integer source) {
+				return source == null ? null : QuickSize.ofPixels(source.intValue());
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public String canCast(Integer source) {
+				return null;
+			}
+		});
+	}
+
 	@SuppressWarnings("unused")
 	private QonfigToolkit theCoreToolkit;
 
@@ -79,9 +105,11 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				CompiledExpressoEnv env = exS.getExpressoEnv();
-				env = env.withNonStructuredParser(Image.class, new ImageParser());
-				exS.setExpressoEnv(env);
+					for (String doc : exS.getExpressoEnvs().keySet()) {
+						CompiledExpressoEnv env = exS.getExpressoEnv(doc);
+						env = env.withNonStructuredParser(Image.class, new ImageParser());
+						exS.setExpressoEnv(doc, env);
+					}
 				return null;
 			}
 
@@ -91,6 +119,34 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 				return value;
 			}
 		});
+		interpreter.modifyWith(QuickDocument.QUICK, QuickDocument.Def.class,
+			new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
+			@Override
+			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+					for (String doc : exS.getExpressoEnvs().keySet()) {
+						CompiledExpressoEnv env = exS.getExpressoEnv(doc);
+						env = env//
+							.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
+							.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()));
+						exS.setExpressoEnv(doc, env);
+					}
+				return null;
+			}
+
+			@Override
+			public QuickDocument.Def modifyValue(QuickDocument.Def value, CoreSession session, Object prepared)
+				throws QonfigInterpretationException {
+				return value;
+			}
+		});
+
+		interpreter.createWith(Positionable.H_POSITIONABLE, Positionable.Def.Horizontal.class,
+			ExAddOn.creator(Positionable.Def.Horizontal::new));
+		interpreter.createWith(Positionable.V_POSITIONABLE, Positionable.Def.Vertical.class,
+			ExAddOn.creator(Positionable.Def.Vertical::new));
+		interpreter.createWith(Sizeable.H_SIZEABLE, Sizeable.Def.Horizontal.class, ExAddOn.creator(Sizeable.Def.Horizontal::new));
+		interpreter.createWith(Sizeable.V_SIZEABLE, Sizeable.Def.Vertical.class, ExAddOn.creator(Sizeable.Def.Vertical::new));
 
 		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, ExElement.creator(QuickDocument.Def::new));
 		interpreter.createWith(QuickAbstractWindow.ABSTRACT_WINDOW, QuickAbstractWindow.Def.Default.class,
@@ -136,6 +192,39 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith("renderer", QuickRenderer.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickRenderer.Def(ao, (QuickWidget.Def<?>) p)));
 		return interpreter;
+	}
+
+	private static UnaryOperatorSet unaryOps(UnaryOperatorSet unaryOps) {
+		return unaryOps.copy()//
+			.with("-", QuickSize.class, s -> new QuickSize(-s.percent, s.pixels), s -> new QuickSize(-s.percent, s.pixels),
+				"Size negation operator")//
+			.build();
+	}
+
+	private static BinaryOperatorSet binaryOps(BinaryOperatorSet binaryOps) {
+		return binaryOps.copy()//
+			.with("+", QuickSize.class, Double.class, (s, d) -> new QuickSize(s.percent, s.pixels + (int) Math.round(d)),
+				(s, d, o) -> new QuickSize(s.percent, s.pixels - (int) Math.round(d)), null, "Size addition operator")//
+			.with("-", QuickSize.class, Double.class, (p, d) -> new QuickSize(p.percent, p.pixels - (int) Math.round(d)),
+				(s1, s2, o) -> new QuickSize(s1.percent, s1.pixels + (int) Math.round(s2)), null, "Size subtraction operator")//
+			.with("+", QuickSize.class, QuickSize.class, QuickSize::plus,
+				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels), null, "Size addition operator")//
+			.with("-", QuickSize.class, QuickSize.class, QuickSize::minus,
+				(s1, s2, o) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels), null, "Size subtraction operator")//
+			.with("*", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)),
+				(s, d, o) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)), null, "Size multiplication operator")//
+			.with2("*", Double.class, QuickSize.class, QuickSize.class,
+				(d, s) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), (d, s, o) -> {
+					if (s == null)
+						return Double.NaN;
+					if (s.percent != 0.0f)
+						return o.percent * 1.0 / s.percent;
+					else
+						return o.pixels * 1.0 / s.pixels;
+				}, null, "Size multiplication operator")//
+			.with("/", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)),
+				(s, d, o) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), null, "Size division operator")//
+			.build();
 	}
 
 	static class ImageParser extends NonStructuredParser.Simple<Image> {
@@ -235,11 +324,11 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 					copy.withAll(inheritedCopy);
 			} else if (modelId == targetVariable.getOwnerId()) {
 				ModelSetInstance componentCopy = model.copy(until).build();
-				copy.with(componentCopy);
+				copy.withAll(componentCopy);
 				if (copy != rootCopy)
-					rootCopy.with(componentCopy);
+					rootCopy.withAll(componentCopy);
 			} else if (model.getInheritance().contains(targetVariable.getOwnerId())) {
-				copy.with(copyModels(model, rootCopy, targetVariable, until).build());
+				copy.withAll(copyModels(model, rootCopy, targetVariable, until).build());
 			}
 		}
 		return copy;

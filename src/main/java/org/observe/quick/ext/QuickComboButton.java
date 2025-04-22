@@ -7,7 +7,6 @@ import java.util.List;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -171,12 +170,12 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			getOrInitValues();
 
 			syncChildren(getDefinition().getRenderers(), theRenderers, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+				r -> r.updateElement());
 		}
 
 		@Override
@@ -188,7 +187,7 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	private ModelValueInstantiator<ObservableCollection<T>> theValuesInstantiator;
 	private SettableValue<ObservableCollection<T>> theValues;
 	private ModelComponentId theActiveValueVariable;
-	private SettableValue<SettableValue<T>> theActiveValue;
+	private SettableValue<T> theActiveValue;
 	private List<QuickWidget> theRenderers;
 
 	/** @param id The element ID for this widget */
@@ -196,8 +195,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		super(id);
 
 		theRenderers = new ArrayList<>();
-		theValues = SettableValue.<ObservableCollection<T>> build().build();
-		theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		theValues = SettableValue.create();
+		theActiveValue = SettableValue.create();
 	}
 
 	/** @return The values representing actions to present to the user */
@@ -215,14 +214,19 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 		return null;
 	}
 
-	/** @return The renderer to represent the action values */
-	public List<QuickWidget> getRenderers() {
-		return Collections.unmodifiableList(theRenderers);
+	@Override
+	public SettableValue<T> getActiveValue() {
+		return theActiveValue;
 	}
 
 	@Override
-	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException {
-		theActiveValue.set(ctx.getActiveValue(), null);
+	public SettableValue<Boolean> isSelected() {
+		return SettableValue.create(b -> b.withValue(false));
+	}
+
+	/** @return The renderer to represent the action values */
+	public List<QuickWidget> getRenderers() {
+		return Collections.unmodifiableList(theRenderers);
 	}
 
 	@Override
@@ -246,21 +250,22 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theValues.set(theValuesInstantiator == null ? null : theValuesInstantiator.get(myModels), null);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActiveValue);
 
 		for (QuickWidget renderer : theRenderers)
 			renderer.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override
 	protected QuickComboButton<T> clone() {
 		QuickComboButton<T> copy = (QuickComboButton<T>) super.clone();
 
-		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
-		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
+		copy.theValues = SettableValue.create();
+		copy.theActiveValue = SettableValue.create();
 
 		copy.theRenderers = new ArrayList<>();
 		for (QuickWidget renderer : theRenderers)

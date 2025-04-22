@@ -132,8 +132,9 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theInit = theInitInstantiator == null ? null : theInitInstantiator.get(models);
+		return models;
 	}
 }

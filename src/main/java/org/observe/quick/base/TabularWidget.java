@@ -373,9 +373,9 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				theRowType = (TypeToken<R>) getAddOn(ExWithElementModel.Interpreted.class).getElement().getExpressoEnv().getModels()
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
+				theRowType = (TypeToken<R>) getAddOn(ExWithElementModel.Interpreted.class).getElement().getDefaultEnv().getModels()
 					.getComponent(getDefinition().getActiveValueVariable()).interpreted().getType().getType(0);
 				theRowSelection = interpret(getDefinition().getSelection(), ModelTypes.Value.forType(getValueType()));
 				theRowMultiSelection = interpret(getDefinition().getMultiSelection(), ModelTypes.Collection.forType(getValueType()));
@@ -406,10 +406,10 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 				}
 				syncChildren(getDefinition().getTransferSources(), theTransferSources,
 					def -> (QuickTransfer.TransferSource.Interpreted<R, ?>) def.interpret(this),
-					(ts, env2) -> ts.updateTransferSource(env2, theRowType));
+					ts -> ts.updateTransferSource(theRowType));
 				syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
 					def -> (QuickTransfer.TransferAccept.Interpreted<R, ?>) def.interpret(this),
-					(ts, env2) -> ts.updateTransferAccepter(env2, theRowType));
+					ts -> ts.updateTransferAccepter(theRowType));
 			}
 
 			@Override
@@ -422,60 +422,6 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 
 			@Override
 			public abstract W create();
-		}
-	}
-
-	/**
-	 * Model context for a {@link TabularWidget}
-	 *
-	 * @param <R> The row type of the tabular widget
-	 */
-	public interface TabularContext<R> extends MultiValueRenderContext<R> {
-		/** @return The row index of the current row */
-		SettableValue<Integer> getRowIndex();
-
-		/** @return The column index of the current cell */
-		SettableValue<Integer> getColumnIndex();
-
-		/**
-		 * Default {@link TabularContext} implementation
-		 *
-		 * @param <R> The row type of the tabular widget
-		 */
-		public class Default<R> extends MultiValueRenderContext.Default<R> implements TabularContext<R> {
-			private final SettableValue<Integer> theRowIndex;
-			private final SettableValue<Integer> theColumnIndex;
-
-			/**
-			 * @param renderValue The value of the current row
-			 * @param selected Whether the current row is selected
-			 * @param rowIndex The row index of the current row
-			 * @param columnIndex The column index of the current cell
-			 */
-			public Default(SettableValue<R> renderValue, SettableValue<Boolean> selected, SettableValue<Integer> rowIndex,
-				SettableValue<Integer> columnIndex) {
-				super(renderValue, selected);
-				theRowIndex = rowIndex;
-				theColumnIndex = columnIndex;
-			}
-
-			/** @param descrip A description of this context for debugging */
-			public Default(String descrip) {
-				this(SettableValue.<R> build().withDescription(descrip + ".rowValue").build(), //
-					SettableValue.<Boolean> build().withValue(false).withDescription(descrip + ".selected").build(),
-					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".rowIndex").build(), //
-					SettableValue.<Integer> build().withValue(0).withDescription(descrip + ".columnIndex").build());
-			}
-
-			@Override
-			public SettableValue<Integer> getRowIndex() {
-				return theRowIndex;
-			}
-
-			@Override
-			public SettableValue<Integer> getColumnIndex() {
-				return theColumnIndex;
-			}
 		}
 	}
 
@@ -506,17 +452,17 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 	/** @return The IDs of the columns the user has selected in the table for which the ID is specified */
 	ObservableCollection<C> getColumnMultiSelection();
 
-	/**
-	 * @param ctx The model context for this tabular widget
-	 * @throws ModelInstantiationException If the model context could not be installed
-	 */
-	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
-
 	/** @return The columns to represent attributes of each row */
 	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumns();
 
 	/** @return All columns from all sources in this table */
 	ObservableCollection<QuickTableColumn<R, ?>> getAllColumns();
+
+	/** @return The row index of the current row */
+	SettableValue<Integer> getRowIndex();
+
+	/** @return The column index of the current cell */
+	SettableValue<Integer> getColumnIndex();
 
 	/**
 	 * Abstract {@link TabularWidget} implementation
@@ -548,18 +494,18 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 		private SettableValue<ObservableCollection<R>> theMultiSelection;
 		private SettableValue<SettableValue<C>> theColumnSelection;
 		private SettableValue<ObservableCollection<C>> theColumnMultiSelection;
-		private SettableValue<SettableValue<R>> theActiveValue;
-		private SettableValue<SettableValue<Boolean>> isSelected;
-		private SettableValue<SettableValue<Integer>> theRowIndex;
-		private SettableValue<SettableValue<Integer>> theColumnIndex;
+		private SettableValue<R> theActiveValue;
+		private SettableValue<Boolean> isSelected;
+		private SettableValue<Integer> theRowIndex;
+		private SettableValue<Integer> theColumnIndex;
 
 		/** @param id The element ID for this widget */
 		protected Abstract(Object id) {
 			super(id);
 			theActiveValue = SettableValue.create();
-			isSelected = SettableValue.create();
-			theRowIndex = SettableValue.create();
-			theColumnIndex = SettableValue.create();
+			isSelected = SettableValue.create(b -> b.withValue(false));
+			theRowIndex = SettableValue.create(b -> b.withValue(0));
+			theColumnIndex = SettableValue.create(b -> b.withValue(0));
 			theColumnSets = ObservableCollection.create();
 			theColumns = theColumnSets.flow().<QuickTableColumn<R, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 				.collect();
@@ -649,16 +595,23 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 		}
 
 		@Override
-		public void setContext(TabularContext<R> ctx) throws ModelInstantiationException {
-			setContext((MultiValueRenderContext<R>) ctx);
-			theRowIndex.set(ctx.getRowIndex(), null);
-			theColumnIndex.set(ctx.getColumnIndex(), null);
+		public SettableValue<R> getActiveValue() {
+			return theActiveValue;
 		}
 
 		@Override
-		public void setContext(MultiValueRenderContext<R> ctx) throws ModelInstantiationException {
-			theActiveValue.set(ctx.getActiveValue(), null);
-			isSelected.set(ctx.isSelected(), null);
+		public SettableValue<Boolean> isSelected() {
+			return isSelected;
+		}
+
+		@Override
+		public SettableValue<Integer> getRowIndex() {
+			return theRowIndex;
+		}
+
+		@Override
+		public SettableValue<Integer> getColumnIndex() {
+			return theColumnIndex;
 		}
 
 		@Override
@@ -764,13 +717,13 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
-			ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
-			ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected));
-			ExFlexibleElementModelAddOn.satisfyElementValue(theRowIndexVariable, myModels, SettableValue.flatten(theRowIndex));
-			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnIndexVariable, myModels, SettableValue.flatten(theColumnIndex));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActiveValue);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, isSelected);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theRowIndexVariable, myModels, theRowIndex);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnIndexVariable, myModels, theColumnIndex);
 
 			theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels));
 			theMultiSelection.set(theMultiSelectionInstantiator == null ? null : theMultiSelectionInstantiator.get(myModels));
@@ -784,6 +737,7 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 				ts.instantiate(myModels);
 			for (QuickTransfer.TransferAccept<R, ?> ta : theTransferAccepters)
 				ta.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -795,9 +749,9 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 				.collect();
 
 			copy.theActiveValue = SettableValue.create();
-			copy.isSelected = SettableValue.create();
-			copy.theRowIndex = SettableValue.create();
-			copy.theColumnIndex = SettableValue.create();
+			copy.isSelected = SettableValue.create(b -> b.withValue(false));
+			copy.theRowIndex = SettableValue.create(b -> b.withValue(0));
+			copy.theColumnIndex = SettableValue.create(b -> b.withValue(0));
 
 			copy.theSelection = SettableValue.create();
 			copy.theMultiSelection = SettableValue.create();

@@ -288,7 +288,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			} while (!theFlushLock.compareAndSet(false, true));
 		}
 		try {
-			doHandleEvent(evt);
+			if (doHandleEvent(evt))
+				return; // Completely handled--no need to schedule flush
 		} finally {
 			theFlushLock.set(false);
 		}
@@ -296,9 +297,9 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		scheduleFlush();
 	}
 
-	private void doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
+	private boolean doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (isFinished)
-			return;
+			return true;
 		if (!hasQueuedEvents() && theThreadConstraint.isEventThread()) {
 			// If the event is happening on the event thread and we don't have any cached changes,
 			// we can just execute the change directly without any batching or thread worries.
@@ -324,7 +325,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				}
 				theStamp = theCollection.getStamp();
 			}
-			return;
+			return true;
 		}
 		switch (evt.getType()) {
 		case add:
@@ -336,12 +337,12 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			break;
 		case remove:
 			if (theAddedElements.remove(evt.getElementId()))
-				return;
+				return false;
 			if (evt.getMovement() != null)
 				theMidMoveCount++;
 			ElementRef<E> found = findRef(evt.getElementId());
 			if (found == null)
-				return; // Should not happen, but if there are errors down the line the state could get messed up
+				return false; // Should not happen, but if there are errors down the line the state could get messed up
 			found.move = evt.getMovement();
 			found.isRemoved = true;
 			theRemovedElements.add(found);
@@ -363,7 +364,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			break;
 		case set:
 			if (theAddedElements.contains(evt.getElementId()))
-				return;
+				return false;
 			found = findRef(evt.getElementId());
 			if (!found.isChanged) {
 				found.isChanged = true;
@@ -371,6 +372,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			}
 			break;
 		}
+		return false;
 	}
 
 	/**

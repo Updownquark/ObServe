@@ -54,73 +54,6 @@
 			The horizontal size of the widget may be specified with attributes.?>
 		<add-on name="west" inherits="border-layout-region,h-sizeable" />
 
-		<?DOC Typically a &lt;widget> whose horizontal position in its container can be controlled by attributes?>
-		<add-on name="h-positionable">
-			<?DOC The position for the left edge of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="left" type="expression" specify="optional" />
-			<?DOC The position for the horizontal center of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="h-center" type="expression" specify="optional" />
-			<?DOC The position for the right edge of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="right" type="expression" specify="optional" />
-		</add-on>
-		<?DOC Typically a &lt;widget> whose vertical position in its container can be controlled by attributes?>
-		<add-on name="v-positionable">
-			<?DOC The position for the top edge of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="top" type="expression" specify="optional" />
-			<?DOC The position for the vertical center of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="v-center" type="expression" specify="optional" />
-			<?DOC The position for the bottom edge of the widget.<br>
-				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
-				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
-			<attribute name="bottom" type="expression" specify="optional" />
-		</add-on>
-		<?DOC Typically a &lt;widget> whose horizontal size can be controlled by attributes?>
-		<add-on name="h-sizeable">
-			<?DOC The width for the widget.<br>
-				May be specified in pixels (e.g. `10px`) or percent (of the container width e.g. `50%`)?>
-			<attribute name="width" type="expression" specify="optional" />
-			<?DOC The minimum width for the widget in pixels?>
-			<attribute name="min-width" type="expression" specify="optional" />
-			<?DOC The preferred width for the widget in pixels?>
-			<attribute name="pref-width" type="expression" specify="optional" />
-			<?DOC The maximum width for the widget in pixels?>
-			<attribute name="max-width" type="expression" specify="optional" />
-		</add-on>
-		<?DOC Typically a &lt;widget> whose vertical size can be controlled by attributes?>
-		<add-on name="v-sizeable">
-			<?DOC The height for the widget.<br>
-				May be specified in pixels (e.g. `10px`) or percent (of the container height, e.g. `50%`)?>
-			<attribute name="height" type="expression" specify="optional" />
-			<?DOC The minimum height for the widget in pixels?>
-			<attribute name="min-height" type="expression" specify="optional" />
-			<?DOC The preferred height for the widget in pixels?>
-			<attribute name="pref-height" type="expression" specify="optional" />
-			<?DOC The maximum height for the widget in pixels?>
-			<attribute name="max-height" type="expression" specify="optional" />
-		</add-on>
-		<?DOC Typically a &lt;widget> whose size (in one unspecified dimension) can be controlled by attributes?>
-		<add-on name="generic-sizeable">
-			<?DOC The size for the widget.<br>
-				May be specified in pixels (e.g. `10px`) or percent (of the container size, e.g. `50%`)?>
-			<attribute name="size" type="expression" specify="optional" />
-			<?DOC The minimum size for the widget in pixels?>
-			<attribute name="min-size" type="expression" specify="optional" />
-			<?DOC The preferred size for the widget in pixels?>
-			<attribute name="pref-size" type="expression" specify="optional" />
-			<?DOC The maximum size for the widget in pixels?>
-			<attribute name="max-size" type="expression" specify="optional" />
-		</add-on>
-
 		<!-- Layouts -->
 		<?DOC A method of arranging the contents of a container?>
 		<add-on name="layout" />
@@ -567,7 +500,7 @@
 				<value name-attribute="column-edit-value-name" />
 			</element-model>
 			<?DOC The type of column editing to use to update the data set with column edit operations?>
-			<attribute name="type" type="column-edit-type" />
+			<attribute name="type" type="column-edit-type" default="modify-row-value" />
 			<?DOC The variable name of the column value being edited for expressions?>
 			<attribute name="column-edit-value-name" type="identifier" />
 			<?DOC A filter on the column value that determines whether the column is editable for a particular row?>
@@ -668,6 +601,10 @@
 			<attribute name="node-selection" type="expression" specify="optional" />
 			<?DOC The value of all actual nodes (not paths) currently selected?>
 			<attribute name="node-multi-selection" type="expression" specify="optional" />
+			<?DOC An event that causes the tree to expand all its nodes?>
+			<attribute name="expand-all" type="expression" specify="optional" />
+			<?DOC An event that causes the tree to collapse all its nodes?>
+			<attribute name="collapse-all" type="expression" specify="optional" />
 			<?DOC The column to render each value in the tree?>
 			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>

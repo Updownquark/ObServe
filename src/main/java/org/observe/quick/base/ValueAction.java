@@ -6,7 +6,6 @@ import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -178,10 +177,9 @@ public interface ValueAction<T> extends QuickStyledElement {
 		/**
 		 * Initializes or updates the action
 		 *
-		 * @param env The expresso environment to interpret expressions
 		 * @throws ExpressoInterpretationException If the action could not be interpreted
 		 */
-		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateAction() throws ExpressoInterpretationException;
 
 		/** @return The value action instance */
 		A create();
@@ -241,13 +239,13 @@ public interface ValueAction<T> extends QuickStyledElement {
 			}
 
 			@Override
-			public void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateAction() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
 				isEnabled = interpret(getDefinition().isEnabled(), ModelTypes.Value.STRING);
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
@@ -368,13 +366,14 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			theName.set(theNameInstantiator == null ? null : theNameInstantiator.get(myModels), null);
 			isEnabled.set(theEnabledInstantiator == null ? null : theEnabledInstantiator.get(myModels), null);
 			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
 			theAction = theActionInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -576,9 +575,10 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			ExFlexibleElementModelAddOn.satisfyElementValue(theValueVariable, myModels, SettableValue.flatten(theActionValue));
+			return myModels;
 		}
 
 		@Override
@@ -711,10 +711,11 @@ public interface ValueAction<T> extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			ExFlexibleElementModelAddOn.satisfyElementValue(theValuesVariable, myModels,
 				ObservableCollection.flattenValue(theActionValues));
+			return myModels;
 		}
 
 		@Override
@@ -735,10 +736,10 @@ public interface ValueAction<T> extends QuickStyledElement {
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 				throws ExpressoInterpretationException {
 				return new Interpreted(this, (ValueAction.Interpreted<?, ?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-					getWrapped().interpret(parentEl, parent, env));
+					getWrapped().interpret(parentEl, parent));
 			}
 		}
 

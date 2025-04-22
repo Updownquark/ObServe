@@ -55,6 +55,7 @@ import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.ExBiConsumer;
+import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExRunnable;
 import org.qommons.io.BetterFile;
 import org.qommons.io.ErrorReporting;
@@ -153,11 +154,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			int i = 0;
 			ObservableModelSet.Builder builder;
-			if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
-				builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
+			String doc = getDocument();
+			CompiledExpressoEnv env = getExpressoEnv(doc);
+			if (env.getModels() instanceof ObservableModelSet.Builder)
+				builder = (ObservableModelSet.Builder) env.getModels();
 			else {
-				builder = getExpressoEnv().getModels().wrap(name);
-				setExpressoEnv(getExpressoEnv().with(builder));
+				builder = env.getModels().wrap(name);
+				setExpressoEnv(doc, env.with(builder));
 			}
 			for (ModelValueElement.Def<?, ?> value : theValues) {
 				value.populate(builder, valueSessions.get(i));
@@ -215,18 +218,24 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		 * @param env The expresso environment to use to interpret expressions
 		 * @throws ExpressoInterpretationException If this model element could not be interpreted
 		 */
-		public void updateSubModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public void updateSubModel() throws ExpressoInterpretationException {
+			String doc = getDocument();
+			InterpretedExpressoEnv env = getExpressoEnv(doc);
 			InterpretedModelSet childModels;
 			try {
 				childModels = env.getModels().getSubModel(getDefinition().getName());
 			} catch (ModelException e) {
 				throw new IllegalStateException("Child model not added?", e);
 			}
-			update(env.with(childModels));
+			env = env.with(childModels);
+			setExpressoEnv(doc, env);
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
+			String doc = getDocument();
+			InterpretedExpressoEnv env = getExpressoEnv(doc);
 			// Find all the interpreted model values and initialize them with this as their parent before they are initialized properly
 			theValues.clear();
 			try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
@@ -239,7 +248,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(),
 					mv2.reporting().getPosition().getPosition()));
 
-				super.doUpdate(env);
+				setExpressoEnv(doc, env);
+				super.doUpdate();
 			}
 		}
 
@@ -302,13 +312,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		super.doUpdate(interpreted);
 
 		ObservableModelElement.Interpreted<?> myInterpreted = (ObservableModelElement.Interpreted<?>) interpreted;
+		String doc = myInterpreted.getDocument();
+		InterpretedExpressoEnv env = myInterpreted.getExpressoEnv(doc);
 
 		// Find all the model value instances and initialize them with this as their parent before they are initialized properly
 		theValues.clear();
 		for (ModelValueElement.Interpreted<?, ?, ?> mv : myInterpreted.getValues()) {
-			InterpretableModelComponentNode<?> modelV = myInterpreted.getModels().getComponentIfExists(mv.getDefinition().getModelPath());
+			InterpretableModelComponentNode<?> modelV = env.getModels().getComponentIfExists(mv.getDefinition().getModelPath());
 			if (modelV != null) {
-				ModelComponentInstantiator<?> component = getModels().getComponent(modelV.getIdentity());
+				ModelComponentInstantiator<?> component = getModels(doc).getComponent(modelV.getIdentity());
 				if (component.getBacking() instanceof ModelValueElement) {
 					ModelValueElement<?> mve = (ModelValueElement<?>) component.getBacking();
 					mve.update(mv, this);
@@ -367,18 +379,20 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				super.doUpdate(session);
 
 				session.put(ModelValueElement.PATH_KEY, session.getElement().getType().getName());
+				String doc = getDocument();
+				CompiledExpressoEnv env = getExpressoEnv(doc);
 				ObservableModelSet.Builder builder;
-				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
-					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
+				if (env.getModels() instanceof ObservableModelSet.Builder)
+					builder = (ObservableModelSet.Builder) env.getModels();
 				else {
 					builder = ObservableModelSet.build(getQonfigType().getName(), ObservableModelSet.JAVA_NAME_CHECKER);
-					if (nonTrivial(getExpressoEnv().getModels()))
-						builder.withAll(getExpressoEnv().getModels());
-					session.setExpressoEnv(session.getExpressoEnv().with(builder));
-					setExpressoEnv(session.getExpressoEnv());
+					if (nonTrivial(env.getModels()))
+						builder.withAll(env.getModels());
+					session.setExpressoEnv(doc, env.with(builder));
+					setExpressoEnv(doc, session.getExpressoEnv(doc));
 				}
 				BiConsumer<ObservableModelElement.Def<?, ?>, ExpressoQIS> sessionUpdater = (m, s) -> {
-					s.setExpressoEnv(s.getExpressoEnv().with(//
+					s.setExpressoEnv(doc, s.getExpressoEnv(doc).with(//
 						builder.createSubModel(s.attributes().get("named", "name").getText(), s.getElement().getPositionInFile())));
 				};
 				CollectionUtils
@@ -447,13 +461,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
 				// First create the models so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
-				});
-				super.doUpdate(env);
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), ExConsumer.doNothing());
+				super.doUpdate();
 				// Now call the update method
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), i -> i.updateSubModel());
 			}
 
 			/**
@@ -518,10 +531,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			for (ObservableModelElement subModel : theSubModels)
-				subModel.instantiate(myModels);
+				myModels = subModel.instantiate(myModels);
+			return myModels;
 		}
 	}
 
@@ -573,9 +587,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				syncChildren(DefaultModelElement.Def.class, theSubModels, session.forChildren("sub-model"), (sub, subS) -> {
 					String name = ((ExNamed.Def) sub.getAddOn(ExNamed.Def.class)).getName();
-					ObservableModelSet subModel = subS.getExpressoEnv().getModels().getSubModelIfExists(name);
+					String doc = subS.getInterpretingDocument();
+					CompiledExpressoEnv env = subS.getExpressoEnv(doc);
+					ObservableModelSet subModel = env.getModels().getSubModelIfExists(name);
 					if (subModel != null)
-						subS = subS.setExpressoEnv(subS.getExpressoEnv().with(subModel));
+						subS = subS.setExpressoEnv(doc, env.with(subModel));
 					sub.update(subS);
 				});
 			}
@@ -614,14 +630,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
 				// First, initialize the children so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
-				});
-				super.doUpdate(env);
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), ExConsumer.doNothing());
+				super.doUpdate();
 
 				// Now call the update methods
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), i -> i.updateSubModel());
 			}
 
 			@Override
@@ -679,10 +694,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			for (DefaultModelElement subModel : theSubModels)
-				subModel.instantiate(myModels);
+				myModels = subModel.instantiate(myModels);
+			return myModels;
 		}
 	}
 
@@ -781,14 +797,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
 				// First, initialize the children so all the linkages can happen
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> {
-				});
-				super.doUpdate(env);
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), ExConsumer.doNothing());
+				super.doUpdate();
 
 				// Now call the update methods
-				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), (i, mEnv) -> i.updateSubModel(mEnv));
+				syncChildren(getDefinition().getSubModels(), theSubModels, def -> def.interpret(this), i -> i.updateSubModel());
 			}
 
 			@Override
@@ -927,8 +942,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 				ConfigValueMaker configValueMaker = new ConfigValueMaker(this, theConfigDir, theConfigName, isBackup(), //
 					QommonsUtils.map(getOldConfigNames(), ocn -> ocn.getOldConfigName(), true), reporting());
-				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
-					configValueMaker, session.getElement().getPositionInFile());
+				CompiledExpressoEnv env = session.getExpressoEnv(getDocument());
+				((ObservableModelSet.Builder) env.getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME, configValueMaker,
+					session.getElement().getPositionInFile());
 
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
@@ -1343,10 +1359,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
+				String doc = getDocument();
+				InterpretedExpressoEnv env = getExpressoEnv(doc);
 				if (env.get(ConfigModelValue.FORMAT_SET_KEY, ObservableConfigFormatSet.class) == null)
 					env.put(ConfigModelValue.FORMAT_SET_KEY, new ObservableConfigFormatSet());
-				super.doUpdate(env);
+				setExpressoEnv(doc, env);
+				super.doUpdate();
 			}
 
 			@Override

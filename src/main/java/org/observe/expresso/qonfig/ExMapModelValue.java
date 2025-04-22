@@ -98,10 +98,11 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 			super.update(element);
 
-			if (getDefinition().getKeyType() == null)
+			VariableType keyType = getDefinition().getKeyType();
+			if (keyType == null)
 				theKeyType = null;
 			else
-				theKeyType = (TypeToken<K>) getDefinition().getKeyType().getType(getElement().getExpressoEnv());
+				theKeyType = (TypeToken<K>) getElement().interpretType(keyType);
 		}
 
 		@Override

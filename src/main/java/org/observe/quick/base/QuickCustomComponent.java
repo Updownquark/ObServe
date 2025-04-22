@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -80,9 +79,9 @@ public class QuickCustomComponent extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
-			theComponent = getDefinition().getComponent().interpret(ModelTypes.Value.any(), env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			theComponent = interpret(getDefinition().getComponent(), ModelTypes.Value.any());
 		}
 
 		@Override
@@ -113,8 +112,9 @@ public class QuickCustomComponent extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theComponent.set(theComponentInstantiator.get(myModels), null);
+		return myModels;
 	}
 }

@@ -7,7 +7,6 @@ import java.time.Instant;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -178,8 +177,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
 				theFormat = interpret(getDefinition().getFormat(), ModelTypes.Value.forType(formatType));
@@ -310,11 +309,12 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			theFormat.set(theFormatInstantiator == null ? null : theFormatInstantiator.get(myModels), null);
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
+			return myModels;
 		}
 
 		@Override

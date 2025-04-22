@@ -40,6 +40,7 @@ import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryClickAdapter;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.TableContentControl.FilteredValue;
@@ -85,12 +86,12 @@ implements TableBuilder<R, T, P> {
 	private boolean isRowsDraggable;
 	private Runnable thePostDrag;
 
-	SimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
-		this(rows, (T) new NoLayoutTable(), until);
+	SimpleTableBuilder(ComponentEditor<?, ?> parent, ObservableCollection<R> rows, Observable<?> until) {
+		this(parent, rows, (T) new NoLayoutTable(), until);
 	}
 
-	SimpleTableBuilder(ObservableCollection<R> rows, T table, Observable<?> until) {
-		super(null, table, until);
+	SimpleTableBuilder(ComponentEditor<?, ?> parent, ObservableCollection<R> rows, T table, Observable<?> until) {
+		super(parent, null, table, until);
 		theRows = rows;
 		theDynamicColumns = new ArrayList<>();
 	}

@@ -6,7 +6,6 @@ import java.util.Set;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -56,6 +55,12 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 
 			theStyleSheet = element.syncChild(QuickStyleSheet.class, theStyleSheet, session, "style-sheet");
 			session.put(QUICK_STYLE_SHEET, theStyleSheet);
+			if (theStyleSheet != null) {
+				for (String doc : theStyleSheet.getExpressoDocuments()) {
+					if (element.getExpressoEnv(doc) == null)
+						element.setExpressoEnv(doc, theStyleSheet.getExpressoEnv(doc));
+				}
+			}
 		}
 
 		@Override
@@ -98,8 +103,10 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 			}
 			if (theStyleSheet == null && getDefinition().getStyleSheet() != null)
 				theStyleSheet = getDefinition().getStyleSheet().interpret(getElement());
-			if (theStyleSheet != null)
-				theStyleSheet.updateStyleSheet(getElement().getExpressoEnv());
+			if (theStyleSheet != null) {
+				theStyleSheet.updateStyleSheet(element.getDefaultEnv());
+				element.addLogicalParent(theStyleSheet);
+			}
 		}
 
 		@Override
@@ -108,7 +115,8 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
-	private QuickStyleSheet.StyleSheetModels theStyleSheetModels;
+	private QuickStyleSheet.Instance theStyleSheet;
+	// private QuickStyleSheet.StyleSheetModels theStyleSheetModels;
 
 	ExWithStyleSheet(ExElement element) {
 		super(element);
@@ -124,21 +132,28 @@ public class ExWithStyleSheet extends ExAddOn.Abstract<ExElement> {
 		super.update(interpreted, element);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theStyleSheetModels = myInterpreted.getStyleSheet() == null ? null : myInterpreted.getStyleSheet().instantiateModels();
+		theStyleSheet = element.syncChild(myInterpreted.getStyleSheet(), theStyleSheet, ss -> ss.create(),
+			QuickStyleSheet.Instance::update);
+		if (theStyleSheet != null)
+			element.addLogicalParent(theStyleSheet);
+		// theStyleSheetModels = myInterpreted.getStyleSheet() == null ? null : myInterpreted.getStyleSheet().instantiateStyleSheetModels();
 	}
 
 	@Override
 	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 
-		if (theStyleSheetModels != null)
-			theStyleSheetModels.instantiate();
+		if (theStyleSheet != null)
+			theStyleSheet.instantiated();
+		// if (theStyleSheetModels != null)
+		// theStyleSheetModels.instantiate();
 	}
 
 	@Override
-	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		super.addRuntimeModels(builder, elementModels);
-		if (theStyleSheetModels != null)
-			theStyleSheetModels.populate(builder);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
+		if (theStyleSheet != null)
+			models = theStyleSheet.instantiate(models);
+		return models;
 	}
 }

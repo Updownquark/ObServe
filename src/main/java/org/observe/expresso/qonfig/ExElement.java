@@ -34,10 +34,12 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.BreakpointHere;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
@@ -45,6 +47,7 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MappedList;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.PartialQonfigElement;
 import org.qommons.config.QonfigAddOn;
@@ -71,6 +74,8 @@ import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
+
+import com.google.common.reflect.TypeToken;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
 public interface ExElement extends Identifiable {
@@ -117,11 +122,17 @@ public interface ExElement extends Identifiable {
 		 */
 		ErrorReporting reporting(String file);
 
-		/** @return The expresso environment for this element */
-		CompiledExpressoEnv getExpressoEnv();
+		String getDocument();
 
-		/** @param env The expresso environment for this element */
-		void setExpressoEnv(CompiledExpressoEnv env);
+		List<CompiledExpressoEnv> getExpressoEnvs();
+
+		Set<String> getExpressoDocuments();
+
+		/** @return The expresso environment for this element */
+		CompiledExpressoEnv getExpressoEnv(String document);
+
+		/** @param env An expresso environment for this element */
+		void setExpressoEnv(String document, CompiledExpressoEnv env);
 
 		/**
 		 * @param <D> The element definition type to cast this element to
@@ -328,7 +339,10 @@ public interface ExElement extends Identifiable {
 		 * @return The observable expression at the given attribute
 		 * @throws QonfigInterpretationException If the attribute expression could not be parsed
 		 */
-		CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session) throws QonfigInterpretationException;
+		default CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session) throws QonfigInterpretationException {
+			QonfigAttributeDef attr = session.attributes().get(attrName).getDefinition();
+			return getAttributeExpression(attr, session);
+		}
 
 		/**
 		 * @param attr The attribute to get
@@ -336,14 +350,54 @@ public interface ExElement extends Identifiable {
 		 * @return The observable expression at the given attribute
 		 * @throws QonfigInterpretationException If the attribute expression could not be parsed
 		 */
-		CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session) throws QonfigInterpretationException;
+		default CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session)
+			throws QonfigInterpretationException {
+			return getExpression(attr, session);
+		}
 
 		/**
 		 * @param session
 		 * @return The observable expression in this element's value
 		 * @throws QonfigInterpretationException If the value expression could not be parsed
 		 */
-		CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException;
+		default CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException {
+			return getExpression(session.getValue().getDefinition(), session);
+		}
+
+		default CompiledExpression getExpression(QonfigValueDef type, ExpressoQIS session) throws QonfigInterpretationException {
+			if (type == null)
+				reporting().error("This element has no value definition");
+			else if (!(type.getType() instanceof QonfigValueType.Custom)
+				|| !(((QonfigValueType.Custom) type.getType()).getCustomType() instanceof ExpressionValueType))
+				reporting().error("Attribute " + type + " is not an expression");
+
+			QonfigValue value;
+			if (type instanceof QonfigAttributeDef)
+				value = getElement().getAttributes().get(type.getDeclared());
+			else
+				value = getElement().getValue();
+			if (value == null || value.value == null)
+				return null;
+
+			Supplier<CompiledExpressoEnv> envSrc = LambdaUtils.cachingSupplier(() -> getExpressoEnv(value.fileLocation));
+
+			ObservableExpression expression;
+			try {
+				expression = session.getExpressoParser().parse(((QonfigExpression) value.value).text);
+			} catch (ExpressoParseException e) {
+				LocatedFilePosition position;
+				if (value.position instanceof LocatedPositionedContent)
+					position = ((LocatedPositionedContent) value.position).getPosition(e.getErrorOffset());
+				else
+					position = new LocatedFilePosition(getElement().getDocument().getLocation(),
+						value.position.getPosition(e.getErrorOffset()));
+				throw new QonfigInterpretationException("Could not parse attribute " + type + ": " + e.getMessage(), position,
+					e.getErrorLength(), e);
+			}
+
+			return new CompiledExpression(expression, getElement(), LocatedPositionedContent.of(value.fileLocation, value.position),
+				envSrc);
+		}
 
 		/**
 		 * @param <D> The type of the element definition
@@ -424,7 +478,8 @@ public interface ExElement extends Identifiable {
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
 			private final Set<ExAddOn.Def<? super E, ?>> theAddOnSequence;
 			private Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
-			private CompiledExpressoEnv theExpressoEnv;
+			private String theDocument;
+			private DocumentMap<CompiledExpressoEnv> theExpressoEnvs;
 			private ErrorReporting theReporting;
 
 			private QonfigPromise.Def<?> thePromise;
@@ -516,8 +571,30 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public CompiledExpressoEnv getExpressoEnv() {
-				return theExpressoEnv;
+			public String getDocument() {
+				return theDocument;
+			}
+
+			@Override
+			public Set<String> getExpressoDocuments() {
+				return theExpressoEnvs == null ? Collections.emptySet() : Collections.unmodifiableSet(theExpressoEnvs.keySet());
+			}
+
+			@Override
+			public List<CompiledExpressoEnv> getExpressoEnvs() {
+				return theExpressoEnvs == null ? Collections.emptyList() : theExpressoEnvs.values();
+			}
+
+			@Override
+			public CompiledExpressoEnv getExpressoEnv(String document) {
+				return theExpressoEnvs == null ? null : theExpressoEnvs.get(document);
+			}
+
+			@Override
+			public void setExpressoEnv(String document, CompiledExpressoEnv env) {
+				if (theExpressoEnvs == null)
+					throw new IllegalStateException("This element has not been updated yet");
+				theExpressoEnvs.put(document, env);
 			}
 
 			@Override
@@ -615,64 +692,6 @@ public interface ExElement extends Identifiable {
 				return traceability.getElementChildren(element, role);
 			}
 
-			@Override
-			public CompiledExpression getAttributeExpression(String attrName, ExpressoQIS session) throws QonfigInterpretationException {
-				QonfigAttributeDef attr = session.attributes().get(attrName).getDefinition();
-				return getExpression(attr, session);
-			}
-
-			CompiledExpression getExpression(QonfigValueDef type, ExpressoQIS session) throws QonfigInterpretationException {
-				if (type == null)
-					reporting().error("This element has no value definition");
-				else if (!(type.getType() instanceof QonfigValueType.Custom)
-					|| !(((QonfigValueType.Custom) type.getType()).getCustomType() instanceof ExpressionValueType))
-					reporting().error("Attribute " + type + " is not an expression");
-
-				QonfigValue value;
-				if (type instanceof QonfigAttributeDef)
-					value = getElement().getAttributes().get(type.getDeclared());
-				else
-					value = getElement().getValue();
-				if (value == null || value.value == null)
-					return null;
-
-				Supplier<CompiledExpressoEnv> envSrc;
-				if (thePromise == null)
-					envSrc = this::getExpressoEnv;
-				else if (documentsMatch(thePromise.getElement().getDocument().getLocation(), value.fileLocation))
-					envSrc = thePromise::getExternalExpressoEnv;
-				else
-					envSrc = this::getExpressoEnv;
-
-				ObservableExpression expression;
-				try {
-					expression = session.getExpressoParser().parse(((QonfigExpression) value.value).text);
-				} catch (ExpressoParseException e) {
-					LocatedFilePosition position;
-					if (value.position instanceof LocatedPositionedContent)
-						position = ((LocatedPositionedContent) value.position).getPosition(e.getErrorOffset());
-					else
-						position = new LocatedFilePosition(getElement().getDocument().getLocation(),
-							value.position.getPosition(e.getErrorOffset()));
-					throw new QonfigInterpretationException("Could not parse attribute " + type + ": " + e.getMessage(), position,
-						e.getErrorLength(), e);
-				}
-
-				return new CompiledExpression(expression, getElement(), LocatedPositionedContent.of(value.fileLocation, value.position),
-					envSrc);
-			}
-
-			@Override
-			public CompiledExpression getAttributeExpression(QonfigAttributeDef attr, ExpressoQIS session)
-				throws QonfigInterpretationException {
-				return getExpression(attr, session);
-			}
-
-			@Override
-			public CompiledExpression getValueExpression(ExpressoQIS session) throws QonfigInterpretationException {
-				return getExpression(session.getValue().getDefinition(), session);
-			}
-
 			/**
 			 * @param <D> The type of the element definition
 			 * @param type The type of the element definition
@@ -690,9 +709,6 @@ public interface ExElement extends Identifiable {
 				ExpressoQIS childSession = childName == null ? session : session.forChildren(childName).peekFirst();
 				if (childSession == null)
 					return null;
-				if (thePromise != null && !documentsMatch(childSession.getElement().getDocument().getLocation(),
-					thePromise.getElement().getDocument().getLocation()))
-					childSession.setExpressoEnv(thePromise.getExternalExpressoEnv());
 				if (def == null || !typesEqual(def.getElement(), childSession.getElement()))
 					def = childSession.interpret(type, update);
 				else
@@ -703,13 +719,6 @@ public interface ExElement extends Identifiable {
 			@Override
 			public <T extends ExElement.Def<?>> void syncChildren(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions,
 				ExBiConsumer<? super T, ExpressoQIS, QonfigInterpretationException> update) throws QonfigInterpretationException {
-				if (thePromise != null) {
-					for (ExpressoQIS childSession : sessions) {
-						if (!documentsMatch(childSession.getElement().getDocument().getLocation(),
-							thePromise.getElement().getDocument().getLocation()))
-							childSession.setExpressoEnv(thePromise.getExternalExpressoEnv());
-					}
-				}
 				CollectionUtils.SimpleAdjustment<T, ExpressoQIS, QonfigInterpretationException> adjustment = CollectionUtils
 					.synchronize((List<T>) defs, sessions, //
 						(widget, child) -> ExElement.typesEqual(widget.getElement(), child.getElement()))//
@@ -738,6 +747,8 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public final void update(ExpressoQIS session) throws QonfigInterpretationException {
+				theDocument = session.getInterpretingDocument();
+				theExpressoEnvs = session.getExpressoEnvs();
 				if (session.getFocusType() != theQonfigType)
 					session = session.asElement(theQonfigType);
 				theId.setStringRepresentation(theQonfigType.getName() + "@" + session.getElement().getPositionInFile().toShortString());
@@ -758,19 +769,19 @@ public interface ExElement extends Identifiable {
 						throw new IllegalArgumentException(theParent + " is not the parent of " + this);
 				}
 
-				setExpressoEnv(session.getExpressoEnv().at(theReporting.getFileLocation()));
-
 				if (theElement.getPromise() == null)
 					thePromise = null;
 				else {
 					ExpressoQIS promiseSession = session.interpretRoot(theElement.getPromise())//
-						.setExpressoEnv(theExpressoEnv);
+						.setExpressoEnvs(theExpressoEnvs);
 					if (thePromise == null || !typesEqual(thePromise.getElement(), theElement.getPromise())) {
 						thePromise = promiseSession.interpret(QonfigPromise.Def.class);
 					}
 					if (thePromise != null) {
 						thePromise.update(promiseSession, this);
-						session.setExpressoEnv(theExpressoEnv);
+						for (String doc : thePromise.getExpressoDocuments())
+							theExpressoEnvs.put(doc, thePromise.getExpressoEnv(doc));
+						session.setExpressoEnvs(theExpressoEnvs);
 					}
 				}
 
@@ -788,7 +799,7 @@ public interface ExElement extends Identifiable {
 				try {
 					forAddOns(session, (addOn, s) -> addOn.preUpdate(s, this));
 
-					doUpdate(session.setExpressoEnv(theExpressoEnv));
+					doUpdate(session.setExpressoEnvs(theExpressoEnvs));
 
 					forAddOns(session, (addOn, s) -> addOn.postUpdate(s, this));
 
@@ -817,12 +828,7 @@ public interface ExElement extends Identifiable {
 					session = session.asElement(addOn.getType());
 					action.accept(addOn, session);
 				}
-				session.setExpressoEnv(theExpressoEnv);
-			}
-
-			@Override
-			public void setExpressoEnv(CompiledExpressoEnv env) {
-				theExpressoEnv = env;
+				session.setExpressoEnvs(theExpressoEnvs);
 			}
 
 			/**
@@ -840,7 +846,8 @@ public interface ExElement extends Identifiable {
 			 *
 			 * @throws QonfigInterpretationException If any post-update work fails
 			 */
-			protected void postUpdate() throws QonfigInterpretationException {}
+			protected void postUpdate() throws QonfigInterpretationException {
+			}
 
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested,
 				ClassMap<ExAddOn.Def<? super E, ?>> addOns) throws QonfigInterpretationException {
@@ -952,8 +959,7 @@ public interface ExElement extends Identifiable {
 
 			private static <E extends ExElement> void addWithDependencies(ExAddOn.Def<? super E, ?> addOn,
 				Function<Class<? extends ExAddOn.Def<?, ?>>, Collection<? extends ExAddOn.Def<?, ?>>> getter,
-					BetterSet<ExAddOn.Def<? super E, ?>> dependencies,
-					Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
+					BetterSet<ExAddOn.Def<? super E, ?>> dependencies, Set<ExAddOn.Def<? super E, ?>> sequence, ErrorReporting reporting) {
 				dependencies.add(addOn);
 				for (Class<? extends ExAddOn.Def<?, ?>> depType : addOn.getDependencies()) {
 					for (ExAddOn.Def<?, ?> dep : getter.apply(depType)) {
@@ -989,6 +995,8 @@ public interface ExElement extends Identifiable {
 		/** @return The interpretation of the parent element */
 		Interpreted<?> getParentElement();
 
+		Interpreted<E> addLogicalParent(Interpreted<?> parent);
+
 		/** @return The promise that was specified to load this element's content */
 		QonfigPromise.Interpreted<?> getPromise();
 
@@ -1006,13 +1014,32 @@ public interface ExElement extends Identifiable {
 		}
 
 		/** @return This element's models */
-		InterpretedModelSet getModels();
+		default InterpretedModelSet getModels(String document) {
+			InterpretedExpressoEnv env = getExpressoEnv(document);
+			return env == null ? null : env.getModels();
+		}
+
+		default String getDocument() {
+			return getDefinition().getDocument();
+		}
+
+		default InterpretedExpressoEnv getDefaultEnv() {
+			return getExpressoEnv(getDocument());
+		}
 
 		/** @return The expresso environment for this element */
-		InterpretedExpressoEnv getExpressoEnv();
+		InterpretedExpressoEnv getExpressoEnv(String document);
 
 		/** @param env The expresso environment for this element */
-		void setExpressoEnv(InterpretedExpressoEnv env);
+		void setExpressoEnv(String document, InterpretedExpressoEnv env);
+
+		Set<String> getExpressoDocuments();
+
+		Set<String> getLocalModelDocuments();
+
+		List<InterpretedExpressoEnv> getExpressoEnvs();
+
+		DocumentMap<ModelInstantiator> instantiateLocalModels();
 
 		/**
 		 * @param <I> The element interpretation type to cast this element to
@@ -1098,28 +1125,25 @@ public interface ExElement extends Identifiable {
 		}
 
 		/**
-		 * @param env The expression to get the environment for
+		 * @param expression The expression to get the environment for
 		 * @return The expresso environment to use to interpret the expression
 		 */
-		InterpretedExpressoEnv getEnvironmentFor(LocatedExpression env);
+		default InterpretedExpressoEnv getEnvironmentFor(LocatedExpression expression) {
+			if (expression == null)
+				return null;
+			InterpretedExpressoEnv env = getExpressoEnv(expression.getFilePosition().getFileLocation());
+			if (env == null)
+				env = getDefaultEnv();
+			return env;
+		}
 
-		/**
-		 * Interprets or updates an interpreted child
-		 *
-		 * @param <D> The type of the definition of the child
-		 * @param <I> The type of the interpretation of the child
-		 * @param definition The child definition to interpret
-		 * @param existing The existing interpreted child
-		 * @param interpret The function to produce an interpretation for a child from a definition
-		 * @param update The function to update an interpreted child
-		 * @return The interpreted child
-		 * @throws ExpressoInterpretationException
-		 */
-		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
-			ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
-			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
-				throws ExpressoInterpretationException {
-			return syncChild(definition, existing, (d, env) -> interpret.apply(d), update);
+		default TypeToken<?> interpretType(VariableType type) throws ExpressoInterpretationException {
+			if (type == null)
+				return null;
+			else if (type.getContent() != null)
+				return type.getType(getExpressoEnv(type.getContent().getFileLocation()));
+			else
+				return type.getType(getDefaultEnv());
 		}
 
 		/**
@@ -1135,8 +1159,8 @@ public interface ExElement extends Identifiable {
 		 * @throws ExpressoInterpretationException
 		 */
 		<D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> I syncChild(D definition, I existing,
-			ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
+			ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
+			ExConsumer<? super I, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
 
 		/**
 		 * Synchronizes a list of child definitions and interpretations, ensuring each child in the definitions list has its interpretation
@@ -1150,28 +1174,9 @@ public interface ExElement extends Identifiable {
 		 * @param update The function to update an interpreted child
 		 * @throws ExpressoInterpretationException
 		 */
-		default <D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> void syncChildren(List<? extends D> definitions,
+		<D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> void syncChildren(List<? extends D> definitions,
 			List<I> existing, ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
-			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
-				throws ExpressoInterpretationException {
-			syncChildren(definitions, existing, (d, env) -> interpret.apply(d), update);
-		}
-
-		/**
-		 * Synchronizes a list of child definitions and interpretations, ensuring each child in the definitions list has its interpretation
-		 * in the interpreted list, and that any interpretations without a definition are removed and disposed.
-		 *
-		 * @param <D> The type of the definition of the children
-		 * @param <I> The type of the interpretation of the children
-		 * @param definitions The child definitions to interpret
-		 * @param existing The existing interpreted children
-		 * @param interpret The function to produce an interpretation for a child from a definition
-		 * @param update The function to update an interpreted child
-		 * @throws ExpressoInterpretationException
-		 */
-		<D extends ExElement.Def<?>, I extends ExElement.Interpreted<?>> void syncChildren(List<? extends D> definitions, List<I> existing,
-			ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-			ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
+			ExConsumer<? super I, ExpressoInterpretationException> update) throws ExpressoInterpretationException;
 
 		/**
 		 * Installs a callback that will be called when an element on this interpretation is instantiated
@@ -1205,7 +1210,7 @@ public interface ExElement extends Identifiable {
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final Set<ExAddOn.Interpreted<? super E, ?>> theAddOnSequence;
 			private final SettableValue<Boolean> isDestroyed;
-			private InterpretedExpressoEnv theExpressoEnv;
+			private DocumentMap<EnvInterpWithInh> theExpressoEnvs;
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
 			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
@@ -1221,7 +1226,6 @@ public interface ExElement extends Identifiable {
 				theAddOns = new ClassMap<>();
 				theAddOnSequence = new LinkedHashSet<>();
 				isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
-
 
 				for (ExAddOn.Def<? super E, ?> addOn : theDefinition.getAddOns()) {
 					ExAddOn.Interpreted<? super E, ?> interp;
@@ -1270,22 +1274,77 @@ public interface ExElement extends Identifiable {
 					throw new IllegalArgumentException(parent + " is not the parent of " + this);
 				}
 				theParent = (Interpreted.Abstract<?>) parent;
+				addLogicalParent(theParent);
 				return this;
 			}
 
 			@Override
-			public InterpretedModelSet getModels() {
-				return theExpressoEnv.getModels();
+			public Abstract<E> addLogicalParent(Interpreted<?> parent) {
+				if (!(parent instanceof Abstract))
+					return this;
+				if (((Abstract<?>) parent).theExpressoEnvs != null) {
+					if (theExpressoEnvs == null)
+						theExpressoEnvs = ((Abstract<?>) parent).theExpressoEnvs.extend();
+					else {
+						for (Map.Entry<String, EnvInterpWithInh> ee : ((Abstract<?>) parent).theExpressoEnvs.entrySet()) {
+							theExpressoEnvs.compute(ee.getKey(), (k, myEE) -> {
+								if (myEE != null && myEE.owner == this)
+									return myEE;
+								else
+									return ee.getValue();
+							});
+						}
+					}
+				}
+				return this;
 			}
 
 			@Override
-			public InterpretedExpressoEnv getExpressoEnv() {
-				return theExpressoEnv;
+			public InterpretedExpressoEnv getExpressoEnv(String document) {
+				EnvInterpWithInh ewi = theExpressoEnvs == null ? null : theExpressoEnvs.get(document);
+				return ewi == null ? null : ewi.env;
 			}
 
 			@Override
-			public void setExpressoEnv(InterpretedExpressoEnv env) {
-				theExpressoEnv = env;
+			public void setExpressoEnv(String document, InterpretedExpressoEnv env) {
+				if (theExpressoEnvs == null)
+					theExpressoEnvs = new DocumentMap<>(null);
+				EnvInterpWithInh current = theExpressoEnvs.get(document);
+				if (current != null && current.env == env)
+					return;
+				theExpressoEnvs.put(document, new EnvInterpWithInh(env, this));
+			}
+
+			@Override
+			public Set<String> getLocalModelDocuments() {
+				Set<String> docs = new LinkedHashSet<>();
+				for (Map.Entry<String, EnvInterpWithInh> env : theExpressoEnvs.entrySet()) {
+					if (env.getValue().owner == this)
+						docs.add(env.getKey());
+				}
+				return docs;
+			}
+
+			@Override
+			public Set<String> getExpressoDocuments() {
+				return theExpressoEnvs == null ? Collections.emptySet() : Collections.unmodifiableSet(theExpressoEnvs.keySet());
+			}
+
+			@Override
+			public List<InterpretedExpressoEnv> getExpressoEnvs() {
+				return theExpressoEnvs == null ? Collections.emptyList() : new MappedList<>(theExpressoEnvs.values(), ewi -> ewi.env);
+			}
+
+			@Override
+			public DocumentMap<ModelInstantiator> instantiateLocalModels() {
+				DocumentMap<ModelInstantiator> instantiated = new DocumentMap<>(null);
+				if (theExpressoEnvs != null) {
+					for (Map.Entry<String, EnvInterpWithInh> env : theExpressoEnvs.entrySet()) {
+						if (env.getValue().owner == this)
+							instantiated.put(env.getKey(), env.getValue().env.getModels().instantiate());
+					}
+				}
+				return instantiated;
 			}
 
 			@Override
@@ -1349,42 +1408,26 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public InterpretedExpressoEnv getEnvironmentFor(LocatedExpression expression) {
-				if (thePromise == null || documentsMatch(expression.getFilePosition().getFileLocation(),
-					theDefinition.getPromise().getElement().getDocument().getLocation()))
-					return theExpressoEnv;
-				else
-					return thePromise.getExternalExpressoEnv();
-			}
-
-			@Override
 			public <D extends Def<?>, I extends Interpreted<?>> I syncChild(D definition, I existing,
-				ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-				ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
-					throws ExpressoInterpretationException {
+				ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
+				ExConsumer<? super I, ExpressoInterpretationException> update) throws ExpressoInterpretationException {
 				if (existing != null && (definition == null || existing.getIdentity() != definition.getIdentity())) {
 					existing.destroy();
 					existing = null;
 				}
 				if (definition != null) {
-					InterpretedExpressoEnv env;
-					if (thePromise != null && !documentsMatch(definition.getElement().getDocument().getLocation(),
-						thePromise.getDefinition().getElement().getDocument().getLocation()))
-						env = thePromise.getExternalExpressoEnv();
-					else
-						env = theExpressoEnv;
 					if (existing == null)
-						existing = interpret.apply(definition, env);
+						existing = interpret.apply(definition);
 					if (existing != null)
-						update.accept(existing, env);
+						update.accept(existing);
 				}
 				return existing;
 			}
 
 			@Override
 			public <D extends Def<?>, I extends Interpreted<?>> void syncChildren(List<? extends D> definitions, List<I> existing,
-				ExBiFunction<? super D, InterpretedExpressoEnv, ? extends I, ExpressoInterpretationException> interpret,
-				ExBiConsumer<? super I, InterpretedExpressoEnv, ExpressoInterpretationException> update)
+				ExFunction<? super D, ? extends I, ExpressoInterpretationException> interpret,
+				ExConsumer<? super I, ExpressoInterpretationException> update)
 					throws ExpressoInterpretationException {
 				CollectionUtils.synchronize(existing, definitions, (interp, def) -> interp.getIdentity() == def.getIdentity())//
 				.adjust(new CollectionUtils.CollectionSynchronizerX<I, D, ExpressoInterpretationException>() {
@@ -1402,12 +1445,10 @@ public interface ExElement extends Identifiable {
 					@Override
 					public ElementSyncAction rightOnly(ElementSyncInput<I, D> element) throws ExpressoInterpretationException {
 						try {
-							InterpretedExpressoEnv env = getExpressoEnv(
-								element.getRightValue().getElement().getDocument().getLocation());
-							I interpreted = interpret.apply(element.getRightValue(), env);
+							I interpreted = interpret.apply(element.getRightValue());
 							if (interpreted != null) {
 								if (update != null)
-									update.accept(interpreted, env);
+									update.accept(interpreted);
 								return element.useValue(interpreted);
 							} else
 								return element.remove();
@@ -1420,22 +1461,12 @@ public interface ExElement extends Identifiable {
 					@Override
 					public ElementSyncAction common(ElementSyncInput<I, D> element) throws ExpressoInterpretationException {
 						try {
-							update.accept(element.getLeftValue(),
-								getExpressoEnv(element.getRightValue().getElement().getDocument().getLocation()));
+							if(update!=null)
+								update.accept(element.getLeftValue());
 						} catch (RuntimeException | Error e) {
 							element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 						}
 						return element.preserve();
-					}
-
-					private InterpretedExpressoEnv getExpressoEnv(String document) {
-						InterpretedExpressoEnv env;
-						if (thePromise != null
-							&& !documentsMatch(document, thePromise.getDefinition().getElement().getDocument().getLocation()))
-							env = thePromise.getExternalExpressoEnv();
-						else
-							env = theExpressoEnv;
-						return env;
 					}
 				}, CollectionUtils.AdjustmentOrder.RightOrder);
 			}
@@ -1463,10 +1494,9 @@ public interface ExElement extends Identifiable {
 			 * Updates this element interpretation. Must be called at least once after the {@link #getDefinition() definition} produces this
 			 * object.
 			 *
-			 * @param parentEnv The expresso environment of this element's parent
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
-			protected final void update(InterpretedExpressoEnv parentEnv) throws ExpressoInterpretationException {
+			protected final void update() throws ExpressoInterpretationException {
 				if (isInterpreting)
 					return;
 				isInterpreting = true;
@@ -1474,25 +1504,28 @@ public interface ExElement extends Identifiable {
 					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 						addOn.preUpdate(this);
 
+					if (theExpressoEnvs == null)
+						theExpressoEnvs = new DocumentMap<>(null);
+
 					if (thePromise != null && (getDefinition().getPromise() == null
 						|| thePromise.getIdentity() != getDefinition().getPromise().getIdentity())) {
 						thePromise.destroy();
 						thePromise = null;
 					}
-					if (thePromise == null && getDefinition().getPromise() != null)
+					if (thePromise == null && getDefinition().getPromise() != null) {
 						thePromise = getDefinition().getPromise().interpret();
-					if (thePromise != null)
-						thePromise.setParentEnv(parentEnv);
+					}
+					if (thePromise != null) {
+						thePromise.update(this);
+						addLogicalParent(thePromise);
+					}
 
-					setExpressoEnv(parentEnv.forChild(theDefinition.getExpressoEnv()));
-
-					doUpdate(theExpressoEnv);
-					// If our models are the same as the parent, then they're already interpreted or interpreting
-					// Can't always rely on having our parent correct, but we can tell from the definition
-					boolean hasUniqueModels = getDefinition().getParentElement() == null
-						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels();
-					if (hasUniqueModels)
-						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
+					doUpdate();
+					for (Map.Entry<String, EnvInterpWithInh> env : theExpressoEnvs.entrySet()) {
+						// If our models are the same as the parent, then they're already interpreted or interpreting
+						if (env.getValue().owner == this)
+							env.getValue().env.getModels().interpret(env.getValue().env); // Interpret any remaining values
+					}
 					for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 						addOn.postUpdate(this);
 					postUpdate();
@@ -1506,17 +1539,14 @@ public interface ExElement extends Identifiable {
 			/**
 			 * Performs implementation-specific initialization/update work on this element. Also updates add-ons and external content.
 			 *
-			 * @param expressoEnv The expresso environment to interpret expressions with
 			 * @throws ExpressoInterpretationException If this element cannot be interpreted
 			 */
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				setExpressoEnv(expressoEnv);
-				if (thePromise != null)
-					thePromise.update(expressoEnv, this);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				String doc = getDocument();
+				setExpressoEnv(doc, getExpressoEnv(doc).forChild(theDefinition.getExpressoEnv(doc)));
+
 				for (ExAddOn.Interpreted<? super E, ?> addOn : theAddOnSequence)
 					addOn.update(this);
-				if (thePromise != null)
-					thePromise.getExternalExpressoEnv().getModels().interpret(thePromise.getExternalExpressoEnv());
 			}
 
 			/**
@@ -1524,11 +1554,27 @@ public interface ExElement extends Identifiable {
 			 *
 			 * @throws ExpressoInterpretationException If an exception occurs performing post-update work on this element
 			 */
-			protected void postUpdate() throws ExpressoInterpretationException {}
+			protected void postUpdate() throws ExpressoInterpretationException {
+			}
 
 			@Override
 			public String toString() {
 				return getDefinition().toString();
+			}
+
+			static class EnvInterpWithInh {
+				final InterpretedExpressoEnv env;
+				final ExElement.Interpreted<?> owner;
+
+				EnvInterpWithInh(InterpretedExpressoEnv env, ExElement.Interpreted<?> owner) {
+					this.env = env;
+					this.owner = owner;
+				}
+
+				@Override
+				public String toString() {
+					return env.toString();
+				}
 			}
 		}
 	}
@@ -1538,6 +1584,8 @@ public interface ExElement extends Identifiable {
 
 	/** @return The parent element */
 	ExElement getParentElement();
+
+	String getDocument();
 
 	/**
 	 * @param <E> The element instance type to cast this element to
@@ -1571,7 +1619,9 @@ public interface ExElement extends Identifiable {
 	}
 
 	/** @return The instantiator for this element's models */
-	ModelInstantiator getModels();
+	ModelInstantiator getModels(String document);
+
+	void addLogicalParent(ExElement parent);
 
 	/**
 	 * <p>
@@ -1718,7 +1768,8 @@ public interface ExElement extends Identifiable {
 	 */
 	public abstract class Abstract extends AbstractIdentifiable implements ExElement, Cloneable {
 		private ExElement theParent;
-		private ModelInstantiator theLocalModel;
+		private String theDocument;
+		private DocumentMap<EnvInstWithInh> theLocalModels;
 		private boolean isModelPersistent;
 		private ClassMap<ExAddOn<?>> theAddOns;
 		private Set<ExAddOn<?>> theAddOnSequence;
@@ -1755,6 +1806,11 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
+		public String getDocument() {
+			return theDocument;
+		}
+
+		@Override
 		public <E extends ExElement> E as(Class<E> type, LocatedFilePosition errorPosition) throws ModelInstantiationException {
 			if (type.isInstance(this))
 				return (E) this;
@@ -1775,13 +1831,36 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public ModelInstantiator getModels() {
-			if (theLocalModel != null)
-				return theLocalModel;
-			else if (theParent != null)
-				return theParent.getModels();
+		public ModelInstantiator getModels(String document) {
+			if (theLocalModels != null) {
+				EnvInstWithInh models = theLocalModels.get(document);
+				if (models != null)
+					return models.models;
+			}
+			if (theParent != null)
+				return theParent.getModels(document);
 			else
 				return null;
+		}
+
+		@Override
+		public void addLogicalParent(ExElement parent) {
+			if (!(parent instanceof Abstract))
+				return;
+			if (((Abstract) parent).theLocalModels != null) {
+				if (theLocalModels == null)
+					theLocalModels = ((Abstract) parent).theLocalModels.extend();
+				else {
+					for (Map.Entry<String, EnvInstWithInh> ee : ((Abstract) parent).theLocalModels.entrySet()) {
+						theLocalModels.compute(ee.getKey(), (k, myEE) -> {
+							if (myEE != null && myEE.owner == this)
+								return myEE;
+							else
+								return ee.getValue();
+						});
+					}
+				}
+			}
 		}
 
 		@Override
@@ -1821,7 +1900,11 @@ public interface ExElement extends Identifiable {
 			if (parent == this)
 				throw new IllegalArgumentException("An element cannot be its own parent");
 			theParent = parent;
+			theDocument = interpreted.getDocument();
+			addLogicalParent(parent);
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
+			if (theLocalModels == null)
+				theLocalModels = new DocumentMap<>(null);
 
 			// Create add-ons
 			List<ExAddOn<?>> addOns = new ArrayList<>(theAddOnSequence);
@@ -1866,21 +1949,21 @@ public interface ExElement extends Identifiable {
 			if (thePromise == null && interpreted.getPromise() != null) {
 				thePromise = interpreted.getPromise().create(this);
 			}
-			if (thePromise != null)
-				thePromise.update(interpreted.getPromise(), null);
+			if (thePromise != null) {
+				thePromise.update(interpreted.getPromise());
+				addLogicalParent(thePromise);
+			}
 
-			if (interpreted.getParentElement() == null//
-				|| interpreted.getExpressoEnv().getModels().getIdentity() != interpreted.getParentElement().getExpressoEnv().getModels()
-				.getIdentity())
-				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
-			else
-				theLocalModel = null;
 			isModelPersistent = interpreted.isModelInstancePersistent();
 			try {
 				for (ExAddOn<?> addOn : theAddOnSequence)
 					((ExAddOn<ExElement>) addOn).preUpdate(
 						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 
+				for (Map.Entry<String, Interpreted.Abstract.EnvInterpWithInh> env : myInterpreted.theExpressoEnvs.entrySet()) {
+					if (env.getValue().owner == myInterpreted)
+						theLocalModels.put(env.getKey(), new EnvInstWithInh(env.getValue().env.getModels().instantiate(), this));
+				}
 				doUpdate(interpreted);
 
 				for (ExAddOn<?> addOn : theAddOnSequence)
@@ -1909,28 +1992,30 @@ public interface ExElement extends Identifiable {
 				addOn.preInstantiated();
 			if (thePromise != null)
 				thePromise.instantiated();
-			if (theLocalModel != null)
-				theLocalModel.instantiate();
+			if (theLocalModels != null) {
+				for (EnvInstWithInh model : theLocalModels.values()) {
+					if (model.owner == this)
+						model.models.instantiate();
+				}
+			}
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				addOn.instantiated();
 		}
 
 		@Override
 		public final ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
-			ModelSetInstance myModels = null;
 			try {
 				for (ExAddOn<?> addOn : theAddOnSequence)
 					addOn.preInstantiate();
 
-				myModels = createElementModel(models);
 				try {
 					if (thePromise != null)
-						thePromise.instantiate(models);
-					doInstantiate(myModels);
+						models = thePromise.instantiate(models);
+					theUpdatingModels = models = doInstantiate(models);
 
 					for (ExAddOn<?> addOn : theAddOnSequence)
-						addOn.postInstantiate(theUpdatingModels);
-					myModels = theUpdatingModels;
+						addOn.postInstantiate(models);
+					models = theUpdatingModels;
 				} finally {
 					if (!isModelPersistent)
 						theUpdatingModels = null;
@@ -1938,73 +2023,35 @@ public interface ExElement extends Identifiable {
 			} catch (RuntimeException | Error e) {
 				reporting().error(e.getMessage(), e);
 			}
-			return myModels;
-		}
-
-		/**
-		 * @param builder The model instance builder to install runtime models into. Runtime models are those that expressions on the
-		 *        element should not have access to, but may be needed for expressions that were interpreted in a different environment but
-		 *        need to be executed on this element (e.g. style sheets).
-		 *
-		 * @param elementModels The model instance for this element
-		 * @throws ModelInstantiationException If any runtime models could not be installed
-		 */
-		protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels)
-			throws ModelInstantiationException {
-			for (ExAddOn<?> addOn : theAddOnSequence)
-				addOn.addRuntimeModels(builder, elementModels);
-			if (thePromise != null)
-				((ExElement.Abstract) thePromise).addRuntimeModels(builder, elementModels);
-		}
-
-		/**
-		 * @param parentModels The parent models
-		 * @return The models for this element
-		 * @throws ModelInstantiationException If the element models could not be created
-		 */
-		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
-			// Construct a model instance containing the parent models, this element's local models,
-			// and any models required by the runtime environment
-			Observable<?> modelUntil = Observable.or(parentModels.getUntil(), onDestroy());
-			ModelSetInstanceBuilder runtimeModels = ObservableModelSet.createMultiModelInstanceBag(modelUntil)//
-				.withAll(parentModels);
-			ModelSetInstance promiseModels = thePromise == null ? null : thePromise.getModels().createInstance(parentModels.getUntil())//
-				.withAll(parentModels)//
-				.build();
-			if (promiseModels != null)
-				runtimeModels.withAll(promiseModels);
-			ModelSetInstance elementModels;
-			if (theLocalModel != null) {
-				ModelSetInstanceBuilder localBuilder = theLocalModel.createInstance(modelUntil)//
-					.withAll(parentModels);
-				if (thePromise != null)
-					localBuilder.withAll(thePromise.getModels().createInstance(modelUntil));
-				elementModels = localBuilder.build();
-				runtimeModels.withAll(elementModels);
-			} else if (thePromise != null) {
-				ModelSetInstanceBuilder localBuilder = thePromise.getModels().createInstance(modelUntil)//
-					.withAll(parentModels);
-				elementModels = localBuilder.build();
-				runtimeModels.withAll(elementModels);
-			} else
-				elementModels = parentModels;
-			addRuntimeModels(runtimeModels, elementModels);
-			if (runtimeModels.getTopLevelModels().size() == 1)
-				return runtimeModels.getInherited(runtimeModels.getTopLevelModels().iterator().next());
-			else
-				return runtimeModels.build();
+			return models;
 		}
 
 		/**
 		 * Performs implementation-specific instantiation for the element. Also instantiates add-ons and external content.
 		 *
 		 * @param myModels The model instance for this element to use for its values
+		 * @return The possibly augmented models
 		 * @throws ModelInstantiationException If this element could not be instantiated
 		 */
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			theUpdatingModels = myModels;
+			if (theLocalModels != null && !theLocalModels.isEmpty()) {
+				Observable<?> modelUntil = Observable.or(myModels.getUntil(), onDestroy());
+				ModelSetInstanceBuilder builder = ObservableModelSet.createMultiModelInstanceBag(modelUntil)//
+					.withAll(myModels);
+				for (EnvInstWithInh model : theLocalModels.values()) {
+					if (model.owner != this || builder.getTopLevelModels().contains(model.models.getIdentity()))
+						continue;
+					theUpdatingModels = myModels = model.models.createInstance(modelUntil)//
+						.withAll(myModels)//
+						.build();
+					builder.withAll(myModels);
+				}
+				theUpdatingModels = myModels = builder.build();
+			}
 			for (ExAddOn<?> addOn : theAddOnSequence)
-				addOn.instantiate(myModels);
+				theUpdatingModels = myModels = addOn.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -2014,6 +2061,12 @@ public interface ExElement extends Identifiable {
 			copy.theAddOns = new ClassMap<>();
 			copy.theAddOnSequence = new LinkedHashSet<>();
 			copy.isDestroyed = SettableValue.<Boolean> build().withValue(false).build();
+
+			copy.theLocalModels = parent == null ? new DocumentMap<>(null) : ((Abstract) parent).theLocalModels.extend();
+			for (Map.Entry<String, EnvInstWithInh> env : theLocalModels.entrySet()) {
+				if (env.getValue().owner == this)
+					copy.theLocalModels.put(env.getKey(), new EnvInstWithInh(env.getValue().models, copy));
+			}
 
 			Map<ExAddOn<?>, ExAddOn<?>> addOns = new HashMap<>();
 			for (ExAddOn<?> addOn : theAddOnSequence) {
@@ -2051,9 +2104,21 @@ public interface ExElement extends Identifiable {
 			if (!isDestroyed.get().booleanValue())
 				isDestroyed.set(true, null);
 		}
+
+		static class EnvInstWithInh {
+			final ModelInstantiator models;
+			final ExElement owner;
+
+			EnvInstWithInh(ModelInstantiator models, ExElement owner) {
+				this.models = models;
+				this.owner = owner;
+			}
+		}
 	}
 
 	/**
+	 * A simple boolean comparison method for 2 strings which takes several steps to optimize for frequent calls in this particular case
+	 *
 	 * @param location1 The location of document 1
 	 * @param location2 The location of document 2
 	 * @return Whether the 2 locations are for the same document
@@ -2064,9 +2129,14 @@ public interface ExElement extends Identifiable {
 			return location2 == null;
 		else if (location2 == null)
 			return false;
-		if (location1.hashCode() != location2.hashCode())
+		if (location1.hashCode() != location2.hashCode() || location1.length() != location2.length())
 			return false;
-		return location1.equals(location2);
+		// This function also checks equality from the end, which is more likely to differ sooner for documents
+		for (int i = location1.length() - 1; i >= 0; i--) {
+			if (location1.charAt(i) != location2.charAt(i))
+				return false;
+		}
+		return true;
 	}
 
 	/**

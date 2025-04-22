@@ -70,7 +70,7 @@ public interface QuickTextElement extends QuickStyledElement {
 			QuickStyleAttributeDef isSubScript();
 
 			@Override
-			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 				throws ExpressoInterpretationException;
 
 			/** Abstract {@link QuickTextStyle} definition implementation */
@@ -144,8 +144,8 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
+					throws ExpressoInterpretationException;
 			}
 		}
 
@@ -246,9 +246,10 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theFontColor = get(cache.getAttribute(getDefinition().getFontColor(), Color.class, env));
 					theFontSize = get(cache.getAttribute(getDefinition().getFontSize(), Double.class, env));

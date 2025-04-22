@@ -9,7 +9,6 @@ import java.util.stream.Stream;
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -18,6 +17,7 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.DocumentMap;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -246,8 +246,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theUnitWidth = interpret(getDefinition().getUnitWidth(), ModelTypes.Value.INT);
 				theUnitHeight = interpret(getDefinition().getUnitHeight(), ModelTypes.Value.INT);
@@ -265,7 +265,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		}
 
 		static abstract class Instantiator extends ModelValueElement.Abstract<SettableValue<QuickShading>> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitWidth;
 			private final ModelValueInstantiator<SettableValue<Integer>> theUnitHeight;
 			private final boolean isStretchX;
@@ -283,7 +283,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 			protected Instantiator(QuickAbstractCustomShadingElement.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModel = interpreted.getModels().instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 				theUnitWidth = interpreted.getUnitWidth() == null ? null : interpreted.getUnitWidth().instantiate();
 				theUnitHeight = interpreted.getUnitHeight() == null ? null : interpreted.getUnitHeight().instantiate();
 				isStretchX = interpreted.getDefinition().isStretchX();
@@ -301,7 +301,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				if (theUnitWidth != null)
 					theUnitWidth.instantiate();
 				if (theUnitHeight != null)
@@ -313,8 +313,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+			public SettableValue<QuickShading> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				String location = theLocation;
 				SettableValue<Integer> width = SettableValue.<Integer> build().withDescription("width").withValue(0).build();
@@ -407,8 +407,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theLit = interpret(getDefinition().getLit(), ModelTypes.Value.forType(float.class));
 			}
@@ -507,8 +507,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theColor = interpret(getDefinition().getColor(), ModelTypes.Value.forType(Color.class));
 			}
@@ -636,8 +636,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theOpacity = interpret(getDefinition().getOpacity(), ModelTypes.Value.DOUBLE);
 			}
 
@@ -667,7 +667,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<QuickShading> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public SettableValue<QuickShading> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				return SettableValue.of(
 					new QuickRaisedShading(isRound, isHorizontal, isVertical, theOpacity == null ? null : theOpacity.get(models)),

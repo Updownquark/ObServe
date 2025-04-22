@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick;
 
 import java.text.ParseException;
 import java.util.Objects;

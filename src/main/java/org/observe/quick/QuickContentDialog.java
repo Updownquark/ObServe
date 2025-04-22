@@ -1,7 +1,6 @@
 package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -70,7 +69,7 @@ public interface QuickContentDialog extends QuickDialog {
 		QuickWidget.Interpreted<?> getContent();
 
 		@Override
-		void updateDialog(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException;
+		void updateDialog() throws ExpressoInterpretationException;
 
 		@Override
 		D create();
@@ -103,16 +102,15 @@ public interface QuickContentDialog extends QuickDialog {
 			}
 
 			@Override
-			public void updateDialog(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				update(expressoEnv);
+			public void updateDialog() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
-				theContent = syncChild(getDefinition().getContent(), theContent, def -> def.interpret(this),
-					(c, cEnv) -> c.updateElement(cEnv));
+				theContent = syncChild(getDefinition().getContent(), theContent, def -> def.interpret(this), c -> c.updateElement());
 			}
 		}
 	}
@@ -159,10 +157,11 @@ public interface QuickContentDialog extends QuickDialog {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			theContent.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override

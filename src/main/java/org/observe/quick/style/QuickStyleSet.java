@@ -7,7 +7,6 @@ import java.util.List;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
@@ -21,8 +20,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** A style set containing styles that can be applied to an element by name */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
-	qonfigType = QuickStyleSet.STYLE_SET,
-	interpretation = QuickStyleSet.Interpreted.class)
+qonfigType = QuickStyleSet.STYLE_SET,
+interpretation = QuickStyleSet.Interpreted.class)
 public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implements Named {
 	/** The XML name of this type */
 	public static final String STYLE_SET = "style-set";
@@ -122,19 +121,17 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		/**
 		 * Initializes or updates this style set
 		 *
-		 * @param expressoEnv The expresso environment to interpret expressions with
 		 * @throws ExpressoInterpretationException If this style set could not be interpreted
 		 */
-		public void updateStyleSet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			update(expressoEnv);
+		public void updateStyleSet() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
-			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this),
-				(i, sEnv) -> i.updateStyle(sEnv));
+			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this), i -> i.updateStyle());
 		}
 	}
 }

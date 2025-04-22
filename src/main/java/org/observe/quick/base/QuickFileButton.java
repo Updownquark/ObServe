@@ -4,7 +4,6 @@ import java.io.File;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -110,8 +109,8 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theDefaultDir = interpret(getDefinition().getDefaultDir(), ModelTypes.Value.forType(File.class));
 			theFileDescrip = ExpressoTransformations.parseFilter(getDefinition().getFileDescrip(), this, true);
@@ -172,12 +171,13 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		// Populate with a value so the default directory is persistent for the session at least
 		theDefaultDir.set(theDefaultDirInstantiator == null ? SettableValue.create() : theDefaultDirInstantiator.get(myModels), null);
 		theFileDescrip.set(theFileDescripInstantiator == null ? null : theFileDescripInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

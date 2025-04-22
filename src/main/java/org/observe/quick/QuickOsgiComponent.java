@@ -54,6 +54,7 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 import org.qommons.io.BetterFile;
+import org.qommons.io.ErrorReporting;
 import org.qommons.io.FileUtils;
 import org.qommons.io.TextParseException;
 import org.qommons.threading.QommonsTimer;
@@ -183,7 +184,7 @@ public abstract class QuickOsgiComponent {
 			}
 
 			try {
-				theQuickApp = QuickApp.parseApp(theQuickAppFile, new URL[] { quickAppToolkitUrl }, Collections.emptyList());
+				theQuickApp = QuickApp.parseApp(theQuickAppFile, new URL[] { quickAppToolkitUrl }, Collections.emptyList(), null);
 			} catch (TextParseException | IllegalStateException | IOException | QonfigParseException e) {
 				if (e instanceof QonfigParseException && theRefreshFiles != null) {
 					try {
@@ -210,8 +211,10 @@ public abstract class QuickOsgiComponent {
 			} catch (IllegalArgumentException | TextParseException | IOException | QonfigParseException e) {
 				if (e instanceof QonfigParseException && theRefreshFiles != null) {
 					try {
-						addRefreshFile(
-							FileUtils.ofUrl(new URL(((QonfigParseException) e).getIssues().get(0).fileLocation.getFileLocation())));
+						for (ErrorReporting.Issue issue : ((QonfigParseException) e).getIssues()) {
+							if (issue.fileLocation != null)
+								addRefreshFile(FileUtils.ofUrl(new URL(issue.fileLocation.getFileLocation())));
+						}
 					} catch (MalformedURLException e2) {
 					}
 				}

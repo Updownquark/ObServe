@@ -5,7 +5,6 @@ import java.util.List;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -26,7 +25,6 @@ import org.observe.quick.QuickWidget;
 import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickComboBox;
 import org.observe.quick.base.QuickLayout;
-import org.observe.quick.base.TabularWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -163,7 +161,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		 */
 		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
 			if (theValues == null) {
-				theValues = getDefinition().getValues().interpret(ModelTypes.Collection.anyAsV(), getExpressoEnv());
+				theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.anyAsV());
 			}
 			return (TypeToken<T>) theValues.getType().getType(0);
 		}
@@ -184,11 +182,10 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			getValueType();
-			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+			theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this), r -> r.updateElement());
 		}
 
 		@Override
@@ -203,19 +200,19 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	private ModelValueInstantiator<ObservableCollection<T>> theValuesInstantiator;
 
 	private SettableValue<ObservableCollection<T>> theValues;
-	private SettableValue<SettableValue<T>> theActiveValue;
-	private SettableValue<SettableValue<Boolean>> isSelected;
-	private SettableValue<SettableValue<Integer>> theValueIndex;
+	private SettableValue<T> theActiveValue;
+	private SettableValue<Boolean> isSelected;
+	private SettableValue<Integer> theValueIndex;
 	private QuickWidget theRenderer;
 	private boolean isConstantSizing;
 
 	/** @param id The element ID for this widget */
 	protected QuickTiledPane(Object id) {
 		super(id);
-		theValues = SettableValue.<ObservableCollection<T>> build().build();
-		theActiveValue = SettableValue.<SettableValue<T>> build().build();
-		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
-		theValueIndex = SettableValue.<SettableValue<Integer>> build().build();
+		theValues = SettableValue.create();
+		theActiveValue = SettableValue.create();
+		isSelected = SettableValue.create(b -> b.withValue(false));
+		theValueIndex = SettableValue.create(b -> b.withValue(0));
 	}
 
 	@Override
@@ -228,29 +225,24 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		return theSelectedVariable;
 	}
 
-	/**
-	 * @param ctx The model context for this tiled pane
-	 * @throws ModelInstantiationException If the model context could not be installed
-	 */
-	public void setContext(TabularWidget.TabularContext<T> ctx) throws ModelInstantiationException {
-		setContext((MultiValueRenderContext<T>) ctx);
-		theValueIndex.set(ctx.getRowIndex(), null);
-	}
-
-	@Override
-	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException {
-		theActiveValue.set(ctx.getActiveValue(), null);
-		isSelected.set(ctx.isSelected(), null);
-	}
-
 	/** @return The values, each of which to represent as a separate content widget */
 	public ObservableCollection<T> getValues() {
 		return ObservableCollection.flattenValue(theValues);
 	}
 
 	/** @return The active value (e.g. the one being rendered or interacted with) */
+	@Override
 	public SettableValue<T> getActiveValue() {
-		return SettableValue.flatten(theActiveValue);
+		return theActiveValue;
+	}
+
+	@Override
+	public SettableValue<Boolean> isSelected() {
+		return isSelected;
+	}
+
+	public SettableValue<Integer> getValueIndex() {
+		return theValueIndex;
 	}
 
 	/** @return The layout for the content of this tiled pane */
@@ -300,27 +292,28 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theValues.set(theValuesInstantiator.get(myModels), null);
 
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theValueIndexVariable, myModels, SettableValue.flatten(theValueIndex));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActiveValue);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, isSelected);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theValueIndexVariable, myModels, theValueIndex);
 
 		if (theRenderer != null)
 			theRenderer.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override
 	public QuickTiledPane<T> copy(ExElement parent) {
 		QuickTiledPane<T> copy = (QuickTiledPane<T>) super.copy(parent);
 
-		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
-		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
-		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
-		copy.theValueIndex = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theValues = SettableValue.create();
+		copy.theActiveValue = SettableValue.create();
+		copy.isSelected = SettableValue.create(b -> b.withValue(false));
+		copy.theValueIndex = SettableValue.create(b -> b.withValue(0));
 		if (theRenderer != null)
 			copy.theRenderer = theRenderer.copy(copy);
 

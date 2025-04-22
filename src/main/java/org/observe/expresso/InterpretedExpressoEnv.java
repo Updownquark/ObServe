@@ -67,11 +67,11 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 * @return An interpreted environment that is an amalgamation of this environment and the child
 	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
-		InterpretedExpressoEnv env = at(child.reporting().getFileLocation());
+		InterpretedExpressoEnv env = this;
 		for (Map.Entry<String, ModelComponentId> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
-		if (!getUnaryOperators().equals(child.getUnaryOperators()) || !getBinaryOperators().equals(child.getBinaryOperators()))
+		if (!getUnaryOperators().containsAll(child.getUnaryOperators()) || !getBinaryOperators().containsAll(child.getBinaryOperators()))
 			env = env.withOperators(getUnaryOperators().copy()//
 				.withAll(child.getUnaryOperators())//
 				.build(),
@@ -92,6 +92,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 					env.put(key, child.get(key));
 			}
 		}
+		if (env != this)
+			env = env.at(child.reporting().getFileLocation());
 		return env;
 	}
 
@@ -212,6 +214,12 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	@Override
 	public <E> InterpretedExpressoEnv withSyntheticField(Class<E> entityType, String fieldName, Def<? super E, ?> field) {
 		super.withSyntheticField(entityType, fieldName, field);
+		return this;
+	}
+
+	@Override
+	public InterpretedExpressoEnv withAllSyntheticFields(CompiledExpressoEnv other) {
+		super.withAllSyntheticFields(other);
 		return this;
 	}
 

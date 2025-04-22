@@ -134,12 +134,12 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
@@ -165,7 +165,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				SettableValue<T> value = getElementValue().get(models);
 				SettableValue<T> copy = SettableValue.<T> build().withValue(value.get()).build();

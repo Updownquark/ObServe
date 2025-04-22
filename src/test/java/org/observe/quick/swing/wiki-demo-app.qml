@@ -6,7 +6,10 @@
 -->
 <quick-app xmlns:app="Quick-App v0.1" app-file="wiki-demo.qml">
   <!-- References Qonfig toolkits used by the application -->
-  <toolkit def="/org/qommons/config/qonfig-reference.qtd" />
+	<toolkit def="/org/qommons/config/qonfig-reference.qtd">
+		<promise-fulfillment fulfills="external-reference">org.qommons.config.QonfigExternalRefPromise</promise-fulfillment>
+		<promise-fulfillment fulfills="child-placeholder">org.qommons.config.QonfigChildPlaceholderPromise</promise-fulfillment>
+	</toolkit>
   <toolkit def="/org/observe/expresso/qonfig/expresso-core.qtd">
     <!--
       The Expresso-Core toolkit defines the "expression" external type,

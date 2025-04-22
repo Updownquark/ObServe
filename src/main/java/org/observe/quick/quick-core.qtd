@@ -96,6 +96,14 @@
 				<style-attribute name="sub-script" type="boolean" trickle-down="false" />
 			</styles>
 		</add-on>
+		<add-on name="with-border" inherits="styled" abstract="true">
+			<styles>
+				<?DOC The color of the border?>
+				<style-attribute name="border-color" type="java.awt.Color" />
+				<?DOC The thickness of the border in pixels?>
+				<style-attribute name="thickness" type="int" />
+			</styles>
+		</add-on>
 		<?DOC Anything that may display an icon.  The icon may be specified directly via an attribute, or may be determined using styles.?>
 		<add-on name="iconized" inherits="styled" abstract="true">
 			<styles>
@@ -104,6 +112,73 @@
 			</styles>
 			<?DOC The icon, to override the style, for ease of use?>
 			<attribute name="icon" type="expression" specify="optional" />
+		</add-on>
+
+		<?DOC Typically a &lt;widget> whose horizontal position in its container can be controlled by attributes?>
+		<add-on name="h-positionable">
+			<?DOC The position for the left edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="left" type="expression" specify="optional" />
+			<?DOC The position for the horizontal center of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="h-center" type="expression" specify="optional" />
+			<?DOC The position for the right edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="right" type="expression" specify="optional" />
+		</add-on>
+		<?DOC Typically a &lt;widget> whose vertical position in its container can be controlled by attributes?>
+		<add-on name="v-positionable">
+			<?DOC The position for the top edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="top" type="expression" specify="optional" />
+			<?DOC The position for the vertical center of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="v-center" type="expression" specify="optional" />
+			<?DOC The position for the bottom edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, e.g. `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
+			<attribute name="bottom" type="expression" specify="optional" />
+		</add-on>
+		<?DOC Typically a &lt;widget> whose horizontal size can be controlled by attributes?>
+		<add-on name="h-sizeable">
+			<?DOC The width for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container width e.g. `50%`)?>
+			<attribute name="width" type="expression" specify="optional" />
+			<?DOC The minimum width for the widget in pixels?>
+			<attribute name="min-width" type="expression" specify="optional" />
+			<?DOC The preferred width for the widget in pixels?>
+			<attribute name="pref-width" type="expression" specify="optional" />
+			<?DOC The maximum width for the widget in pixels?>
+			<attribute name="max-width" type="expression" specify="optional" />
+		</add-on>
+		<?DOC Typically a &lt;widget> whose vertical size can be controlled by attributes?>
+		<add-on name="v-sizeable">
+			<?DOC The height for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container height, e.g. `50%`)?>
+			<attribute name="height" type="expression" specify="optional" />
+			<?DOC The minimum height for the widget in pixels?>
+			<attribute name="min-height" type="expression" specify="optional" />
+			<?DOC The preferred height for the widget in pixels?>
+			<attribute name="pref-height" type="expression" specify="optional" />
+			<?DOC The maximum height for the widget in pixels?>
+			<attribute name="max-height" type="expression" specify="optional" />
+		</add-on>
+		<?DOC Typically a &lt;widget> whose size (in one unspecified dimension) can be controlled by attributes?>
+		<add-on name="generic-sizeable">
+			<?DOC The size for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container size, e.g. `50%`)?>
+			<attribute name="size" type="expression" specify="optional" />
+			<?DOC The minimum size for the widget in pixels?>
+			<attribute name="min-size" type="expression" specify="optional" />
+			<?DOC The preferred size for the widget in pixels?>
+			<attribute name="pref-size" type="expression" specify="optional" />
+			<?DOC The maximum size for the widget in pixels?>
+			<attribute name="max-size" type="expression" specify="optional" />
 		</add-on>
 
 		<?DOC A renderer for a widget.  This is itself a widget, but it is used differently.<br>
@@ -244,14 +319,7 @@
 		</element-def>
 
 		<?DOC A border to be drawn around the outside of a &lt;widget>?>
-		<element-def name="border" abstract="true" inherits="styled">
-			<styles>
-				<?DOC The color of the border?>
-				<style-attribute name="border-color" type="java.awt.Color" />
-				<?DOC The thickness of the border in pixels?>
-				<style-attribute name="thickness" type="int" />
-			</styles>
-		</element-def>
+		<element-def name="border" abstract="true" inherits="with-border" />
 		<?DOC A simple line border around a &lt;widget>?>
 		<element-def name="line-border" extends="border" />
 		<?DOC A line border with text in it around a &lt;widget>?>

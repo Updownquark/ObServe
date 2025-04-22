@@ -6,7 +6,6 @@ import java.util.List;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -87,16 +86,15 @@ public class QuickMenuBar extends ExElement.Abstract {
 		/**
 		 * Initializes or updates the menu bar
 		 *
-		 * @param env The expresso environment for interpreting expressions
 		 * @throws ExpressoInterpretationException If this menu bar could not be interpreted
 		 */
-		public void updateMenuBar(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateMenuBar() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			syncChildren(getDefinition().getMenus(), theMenus, def -> def.interpret(this), QuickMenu.Interpreted::updateElement);
 		}
@@ -143,11 +141,12 @@ public class QuickMenuBar extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		for (QuickMenu<?> menuItem : theMenus)
 			menuItem.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

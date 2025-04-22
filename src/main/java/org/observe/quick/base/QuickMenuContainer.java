@@ -94,7 +94,7 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 			super.postUpdate(element);
 
 			theMenuBar = getElement().syncChild(getDefinition().getMenuBar(), theMenuBar, def -> def.interpret(getElement()),
-				(b, bEnv) -> b.updateMenuBar(bEnv));
+				b -> b.updateMenuBar());
 		}
 
 		@Override
@@ -151,11 +151,12 @@ public class QuickMenuContainer extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 
 		if (theMenuBar != null)
 			theMenuBar.instantiate(models);
+		return models;
 	}
 
 	@Override

@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -14,6 +13,7 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
+import org.observe.quick.QuickSize;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -112,8 +112,8 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			theSplitPosition = interpret(getDefinition().getSplitPosition(), ModelTypes.Value.forType(QuickSize.class));
 		}
 
@@ -164,11 +164,12 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theSplitPosition.set(
 			theSplitPositionInstantiator == null ? SettableValue.<QuickSize> build().build() : theSplitPositionInstantiator.get(myModels),
 				null);
+		return myModels;
 	}
 
 	@Override

@@ -19,7 +19,7 @@ import javax.swing.JComponent;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.quick.base.QuickSize;
+import org.observe.quick.QuickSize;
 import org.observe.quick.ext.QuickBarChart;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -35,10 +35,8 @@ public class QuickSwingBarChart<T> extends JComponent {
 
 	public QuickSwingBarChart(QuickBarChart<T> chart) {
 		theChart = chart;
-		theCurrentBar = SettableValue.<T> build().onEdt().build();
-		theCurrentBarIndex = SettableValue.<Integer> build().onEdt().withValue(-1).build();
-		theChart.setContext(
-			new QuickBarChart.BarChartContext.Default<>(theCurrentBar, SettableValue.of(false, "Not Settable"), theCurrentBarIndex));
+		theCurrentBar = chart.getActiveValue();
+		theCurrentBarIndex = chart.getActiveIndex();
 		theBarBounds = new ArrayList<>();
 		addMouseMotionListener(new MouseAdapter() {
 			@Override

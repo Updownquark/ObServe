@@ -6,10 +6,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
@@ -23,7 +25,6 @@ import org.observe.collect.ObservableSortedCollectionImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -72,6 +73,7 @@ public class ObservableValueTransformations {
 		interpreter.createWith("disable", ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
 		interpreter.createWith(FilterAcceptValueTransform.FILTER_ACCEPT, ValueTransform.class,
 			ExElement.creator(FilterAcceptValueTransform::new));
+		interpreter.createWith(OnChangeTransform.ON_CHANGE, ValueTransform.class, ExElement.creator(OnChangeTransform::new));
 		interpreter.createWith("map-to", ValueTransform.class, ExElement.creator(MapValueTransform::new));
 		interpreter.createWith(If.IF, ValueTransform.class, ExElement.creator(IfValueTransform::new));
 		interpreter.createWith(Switch.SWITCH, ValueTransform.class, ExElement.creator(SwitchValueTransform::new));
@@ -119,9 +121,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				super.update(sourceType, env);
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType) throws ExpressoInterpretationException {
+				super.update(sourceType);
 				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), this, true);
 			}
 
@@ -266,10 +267,9 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType) throws ExpressoInterpretationException {
 				theSourceType = (TypeToken<T>) sourceType.getType(0);
-				super.update(sourceType, env);
+				super.update(sourceType);
 				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), this, true);
 			}
 
@@ -280,8 +280,7 @@ public class ObservableValueTransformations {
 
 			@Override
 			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(getDefinition().getSourceVariable(), theTest.instantiate(),
-					getExpressoEnv().getModels().instantiate());
+				return new Instantiator<>(getDefinition().getSourceVariable(), theTest.instantiate(), instantiateLocalModels());
 			}
 
 			@Override
@@ -293,10 +292,10 @@ public class ObservableValueTransformations {
 		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
 			private final ModelComponentId theSourceVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theTest;
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 
 			Instantiator(ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test,
-				ModelInstantiator localModel) {
+				DocumentMap<ModelInstantiator> localModel) {
 				theSourceVariable = sourceVariable;
 				theTest = test;
 				theLocalModel = localModel;
@@ -310,19 +309,19 @@ public class ObservableValueTransformations {
 			@Override
 			public void instantiate() throws ModelInstantiationException {
 				theTest.instantiate();
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 			}
 
 			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				models = theLocalModel.wrap(models);
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				SettableValue<T> sourceV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> test = theTest.get(models);
-				return new FilterEnabledValue<>(source.filterAccept(LambdaUtils.printableFn(v -> {
+				return new FilterEnabledValue<>(source, LambdaUtils.printableFn(v -> {
 					sourceV.set(v, null);
 					return test.get();
-				}, test::toString, null)), test);
+				}, test::toString, null), test);
 			}
 
 			@Override
@@ -339,8 +338,8 @@ public class ObservableValueTransformations {
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> prevValue, SettableValue<T> newSource, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
-				sourceModels = theLocalModel.wrap(sourceModels);
-				newModels = theLocalModel.wrap(newModels);
+				sourceModels = theLocalModel.operate(sourceModels, (m, mi) -> mi.wrap(m));
+				newModels = theLocalModel.operate(newModels, (m, mi) -> mi.wrap(m));
 				FilterEnabledValue<T> filtered = (FilterEnabledValue<T>) prevValue;
 				SettableValue<String> newTest = theTest.forModelCopy(filtered.getTest(), sourceModels, newModels);
 				if (newSource == filtered.getWrapped() && newTest == filtered.getTest())
@@ -348,19 +347,19 @@ public class ObservableValueTransformations {
 				else {
 					SettableValue<T> newSourceV = SettableValue.<T> build().build();
 					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
-					return new FilterEnabledValue<>(newSource.filterAccept(LambdaUtils.printableFn(v -> {
+					return new FilterEnabledValue<>(newSource, LambdaUtils.printableFn(v -> {
 						newSourceV.set(v, null);
 						return newTest.get();
-					}, newTest::toString, null)), newTest);
+					}, newTest::toString, null), newTest);
 				}
 			}
 		}
 
-		static class FilterEnabledValue<T> extends SettableValue.WrappingSettableValue<T> {
+		static class FilterEnabledValue<T> extends SettableValue.FilterAcceptValue<T> {
 			private final SettableValue<String> theTest;
 
-			FilterEnabledValue(SettableValue<T> wrapped, SettableValue<String> test) {
-				super(wrapped);
+			FilterEnabledValue(SettableValue<T> wrapped, Function<? super T, String> filter, SettableValue<String> test) {
+				super(wrapped, filter);
 				theTest = test;
 			}
 
@@ -371,6 +370,78 @@ public class ObservableValueTransformations {
 
 			SettableValue<String> getTest() {
 				return theTest;
+			}
+		}
+	}
+
+	static class OnChangeTransform extends ExElement.Def.Abstract<ExElement> implements ValueTransform<Observable<?>, ExElement> {
+		public static final String ON_CHANGE = "on-change";
+
+		public OnChangeTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public ModelType<? extends Observable<?>> getTargetModelType() {
+			return ModelTypes.Event;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
+			super.update(session);
+		}
+
+		@Override
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
+		}
+
+		static class Interpreted<T> extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<?>, Observable<?>, Observable<?>, ExElement> {
+			private TypeToken<T> theValueType;
+
+			Interpreted(OnChangeTransform definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType) throws ExpressoInterpretationException {
+				theValueType = (TypeToken<T>) sourceType.getType(0);
+				super.update();
+			}
+
+			@Override
+			public ModelInstanceType<? extends Observable<?>, ? extends Observable<?>> getTargetType() {
+				return ModelTypes.Event.forType(theValueType);
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<?>, Observable<?>> instantiate() throws ModelInstantiationException {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<T> implements Operation.Instantiator<SettableValue<?>, Observable<?>> {
+			Instantiator(Interpreted<T> interpreted) {
+			}
+
+			@Override
+			public Observable<?> transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
+				return source.noInitChanges().filter(evt -> !evt.isUpdate()).map(ObservableValueEvent::getNewValue);
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				return false;
 			}
 		}
 	}
@@ -412,7 +483,7 @@ public class ObservableValueTransformations {
 			@Override
 			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, SettableValue<S>, SettableValue<T>> instantiate()
 				throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMap().instantiate(), //
+				return new Instantiator<>(instantiateLocalModels(), getMap().instantiate(), //
 					TypeTokens.get().getDefaultValue(getSourceType()), //
 					QommonsUtils.filterMapE(getCombinedValues(), null, cv -> cv.instantiate()),
 					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(),
@@ -425,7 +496,7 @@ public class ObservableValueTransformations {
 		static class Instantiator<S, T>
 		extends AbstractCompiledTransformation.EfficientCopyingInstantiator<S, T, SettableValue<S>, SettableValue<T>> {
 
-			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
+			Instantiator(DocumentMap<ModelInstantiator> localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
 				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable,
 				ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate, boolean fireIfUnchanged,
@@ -559,9 +630,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				updateOp(env, (TypeToken<S>) sourceType.getType(0));
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType) throws ExpressoInterpretationException {
+				updateOp((TypeToken<S>) sourceType.getType(0));
 			}
 
 			@Override
@@ -613,9 +683,9 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType)
 				throws ExpressoInterpretationException {
-				updateOp(env, (TypeToken<S>) sourceType.getType(0));
+				updateOp((TypeToken<S>) sourceType.getType(0));
 			}
 
 			@Override
@@ -672,9 +742,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				updateOp(env, (TypeToken<S>) sourceType.getType(0));
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceType) throws ExpressoInterpretationException {
+				updateOp((TypeToken<S>) sourceType.getType(0));
 			}
 
 			@Override
@@ -743,9 +812,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				super.update(sourceType, env);
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType) throws ExpressoInterpretationException {
+				super.update(sourceType);
 				theRefresh = interpret(getDefinition().getRefresh(), ModelTypes.Event.any());
 			}
 
@@ -1173,9 +1241,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				super.update(env);
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType) throws ExpressoInterpretationException {
+				super.update();
 				TypeToken<?> valueType = sourceType.getType(0);
 				Class<?> rawType = TypeTokens.getRawType(valueType);
 				isSettable = SettableValue.class.isAssignableFrom(rawType);
@@ -1326,9 +1393,8 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
-				super.update(env);
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType) throws ExpressoInterpretationException {
+				super.update();
 				ModelType<C> modelType = (ModelType<C>) getDefinition().getTargetModelType();
 				TypeToken<?> valueType = sourceType.getType(0);
 				Class<?> rawType = TypeTokens.getRawType(valueType);
@@ -1360,7 +1426,7 @@ public class ObservableValueTransformations {
 					isSorted = true;
 					theEquivalence = null;
 					theSorting = syncChild(getDefinition().getSorting(), theSorting,
-						def -> (ExSort.ExRootSort.Interpreted<T>) def.interpret(this), (s, sEnv) -> s.update(theValueType, sEnv));
+						def -> (ExSort.ExRootSort.Interpreted<T>) def.interpret(this), s -> s.update(theValueType));
 					if (theSorting == null) {
 						theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(theValueType));
 						if (theDefaultSorting == null)

@@ -409,6 +409,14 @@ public class CompiledExpressoEnv implements SessionValues {
 		return null;
 	}
 
+	public CompiledExpressoEnv withAllSyntheticFields(CompiledExpressoEnv other) {
+		for (BiTuple<Class<?>, Map<String, SyntheticField.Def<?, ?>>> fieldOwner : other.theSyntheticFields.getAllEntries()) {
+			for (Map.Entry<String, SyntheticField.Def<?, ?>> field : fieldOwner.getValue2().entrySet())
+				withSyntheticField(fieldOwner.getValue1(), field.getKey(), (SyntheticField.Def<Object, ?>) field.getValue());
+		}
+		return this;
+	}
+
 	/**
 	 * @param position The position at which to report errors for the new expresso environment
 	 * @return The new environment

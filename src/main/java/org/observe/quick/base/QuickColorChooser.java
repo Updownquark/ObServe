@@ -4,7 +4,6 @@ import java.awt.Color;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -90,8 +89,8 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			isWithAlpha = interpret(getDefinition().isWithAlpha(), ModelTypes.Value.BOOLEAN);
 		}
@@ -131,10 +130,11 @@ public class QuickColorChooser extends QuickValueWidget.Abstract<Color> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		isWithAlpha.set(isWithAlphaInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

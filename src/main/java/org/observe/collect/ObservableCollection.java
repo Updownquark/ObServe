@@ -687,11 +687,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	}
 
 	/**
-	 * Turns a settable value containing a non-observable collection into the contents of the value
+	 * Turns a settable value containing a non-observable collection into the observable contents of the value
 	 *
 	 * @param <E> The type for the collection
 	 * @param collectionObservable The settable value
-	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 * @return An observable collection containing the contents of the collection in the value, or a zero-length collection when null
 	 */
 	static <E> ObservableCollection<E> flattenSimpleCollectionValue(SettableValue<? extends Collection<E>> collectionObservable) {
 		return new ObservableCollectionImpl.SimpleCollectionBackedObservable<>(ObservableCollection.<E> build().build(),

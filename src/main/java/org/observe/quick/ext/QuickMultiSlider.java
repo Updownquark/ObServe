@@ -146,16 +146,15 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			/**
 			 * Initializes or updates this renderer
 			 *
-			 * @param env The expresso environment for interpreting expressions
 			 * @throws ExpressoInterpretationException If the renderer could not be interpreted
 			 */
-			public void updateRenderer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateRenderer() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 			}
 
@@ -265,12 +264,13 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHandleValueVariable, myModels, SettableValue.flatten(theHandleValue));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHandleIndexVariable, myModels, SettableValue.flatten(theHandleIndex));
 			theTooltip = theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -309,10 +309,10 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (SliderHandleRenderer.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -348,9 +348,10 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theLineColor = get(cache.getAttribute(getDefinition().getLineColor(), Color.class, env));
 					theLineThickness = get(cache.getAttribute(getDefinition().getLineThickness(), Integer.class, env));
@@ -473,16 +474,15 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			/**
 			 * Initializes or updates this renderer
 			 *
-			 * @param env The expresso environment for interpreting expressions
 			 * @throws ExpressoInterpretationException If the renderer could not be interpreted
 			 */
-			public void updateRenderer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateRenderer() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theMaxValue = interpret(getDefinition().getMaxValue(), ModelTypes.Value.DOUBLE);
 			}
@@ -527,10 +527,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			theMaxValue = theMaxValueInstantiator == null ? null : theMaxValueInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -671,8 +672,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Number>> numberValues = interpret(
 				getDefinition().getValues(), ModelTypes.Collection.forType(Number.class));
@@ -724,7 +725,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			theMax = interpret(getDefinition().getMax(), ModelTypes.Value.DOUBLE);
 
 			theHandleRenderer = syncChild(getDefinition().getHandleRenderer(), theHandleRenderer, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+				r -> r.updateElement());
 
 			syncChildren(getDefinition().getBgRenderers(), theBgRenderers, def -> def.interpret(this),
 				SliderBgRenderer.Interpreted::updateRenderer);
@@ -837,8 +838,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theValues.set(theValuesInstantiator.get(myModels), null);
 		SettableValue<Double> min = theMinInstantiator.get(myModels);
@@ -855,6 +856,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			theHandleRenderer.instantiate(myModels);
 		for (SliderBgRenderer bgRenderer : theBgRenderers)
 			bgRenderer.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

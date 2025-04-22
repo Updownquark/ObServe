@@ -116,14 +116,15 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 			env = env.with(env.getClassView().copy()//
 				.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
 				.build());
-			update(env);
+			setExpressoEnv(getDocument(), env);
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
-			theBody = syncChild(getDefinition().getBody(), theBody, def -> def.interpret(this), (b, bEnv) -> b.updateElement(bEnv));
+			theBody = syncChild(getDefinition().getBody(), theBody, def -> def.interpret(this), b -> b.updateElement());
 		}
 
 		/** @return The new document */
@@ -183,10 +184,11 @@ public class QuickDocument extends ExElement.Abstract implements WithStyleSheet 
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theBody.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

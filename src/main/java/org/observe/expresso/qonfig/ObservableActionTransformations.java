@@ -4,7 +4,6 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -76,9 +75,9 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<ObservableAction, ObservableAction> sourceType, InterpretedExpressoEnv env)
+			public void update(ModelInstanceType<ObservableAction, ObservableAction> sourceType)
 				throws ExpressoInterpretationException {
-				super.update(sourceType, env);
+				super.update(sourceType);
 				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), this, true);
 			}
 

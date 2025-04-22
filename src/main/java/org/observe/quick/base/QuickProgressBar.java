@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -99,8 +98,8 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			theMaximum = interpret(getDefinition().getMaximum(), ModelTypes.Value.INT);
 			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
 		}
@@ -153,11 +152,12 @@ public class QuickProgressBar extends QuickValueWidget.Abstract<Integer> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theMaximum.set(theMaximumInstantiator.get(myModels), null);
 		theText.set(theTextInstantiator == null ? null : theTextInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

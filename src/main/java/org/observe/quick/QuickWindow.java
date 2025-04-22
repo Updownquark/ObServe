@@ -145,7 +145,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 			}
 			theConfigVariables.clear();
 			if (getElement() instanceof QuickDocument.Def) // Only set the environment if we're the root window
-				findConfigVariables(session.getExpressoEnv().getModels());
+				findConfigVariables(session.getExpressoEnv(getElement().getDocument()).getModels());
 		}
 
 		private void findConfigVariables(ObservableModelSet models) {
@@ -242,6 +242,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		}
 	}
 
+	private String theDocument;
 	private ModelValueInstantiator<SettableValue<Integer>> theXInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
@@ -329,6 +330,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
+		theDocument = myInterpreted.getElement().getDocument();
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();
 		theXInstantiator = myInterpreted.getX() == null ? null : myInterpreted.getX().instantiate();
 		theYInstantiator = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate();
@@ -361,15 +363,15 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		// Since the model instances are not available at this point (and won't be when the error is encountered),
 		// only literal values for title and icon are supported. If either is not a literal, a default will be used in its place.
 		for (ModelComponentId configV : theConfigVariables) {
-			ModelComponentInstantiator<?> configMV = getElement().getModels().getComponent(configV);
+			ModelComponentInstantiator<?> configMV = getElement().getModels(theDocument).getComponent(configV);
 			if (configMV.getBacking() instanceof AppEnvironment.EnvironmentConfigurable)
 				((AppEnvironment.EnvironmentConfigurable) configMV.getBacking()).setAppEnvironment(this);
 		}
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 
 		theX.set(theXInstantiator == null ? defaultIntV() : theXInstantiator.get(models));
 		theY.set(theYInstantiator == null ? defaultIntV() : theYInstantiator.get(models));
@@ -377,6 +379,7 @@ public class QuickWindow extends QuickAbstractWindow.Default implements AppEnvir
 		theHeight.set(theHeightInstantiator == null ? defaultIntV() : theHeightInstantiator.get(models));
 		theRePack.set(theRePackInstantiator == null ? null : theRePackInstantiator.get(models));
 		theWindowIcon.set(theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models));
+		return models;
 	}
 
 	private static SettableValue<Integer> defaultIntV() {

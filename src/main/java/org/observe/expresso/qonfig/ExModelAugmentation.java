@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
@@ -49,11 +50,13 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 		 * @param session The expresso interpretation session whose model to augment
 		 * @return A model builder to inject model values in to augment the tagged element's model view
 		 */
-		protected ObservableModelSet.Builder createBuilder(ExpressoQIS session) {
-			ObservableModelSet.Builder builder = augmentElementModel(getElement().getExpressoEnv().getModels(), getElement());
-			if (builder != getElement().getExpressoEnv().getModels()) {
-				getElement().setExpressoEnv(getElement().getExpressoEnv().with(builder));
-				session.setExpressoEnv(getElement().getExpressoEnv());
+		protected ObservableModelSet.Builder createBuilder(ExpressoQIS session, String document) {
+			CompiledExpressoEnv env = getElement().getExpressoEnv(document);
+			ObservableModelSet.Builder builder = augmentElementModel(env.getModels(), getElement());
+			if (builder != env.getModels()) {
+				env = env.with(builder);
+				getElement().setExpressoEnv(document, env);
+				session.setExpressoEnv(document, env);
 			}
 			return builder;
 		}

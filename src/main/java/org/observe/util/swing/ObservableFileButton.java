@@ -92,7 +92,7 @@ public class ObservableFileButton extends JButton {
 	 * @param until An observable that, when fired will release this button's resources
 	 */
 	public ObservableFileButton(SettableValue<File> value, boolean open, Observable<?> until) {
-		theValue = value.safe(ThreadConstraint.EDT, until);
+		theValue = value.safe(ThreadConstraint.EDT);
 		theUntil = until;
 		theFileWatchHandle = QommonsTimer.getCommonInstance().build(() -> {
 			File selected = theValue.get();

@@ -177,8 +177,8 @@ public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			syncChildren(getDefinition().getActionsAndOptions(), theActionsAndOptions, def -> {
 				if (def instanceof ValueAction.Def)
 					return (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<?>) def).interpret(this, getValueType());
@@ -186,11 +186,11 @@ public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 					return ((QuickWidget.Def<?>) def).interpret(this);
 				else
 					throw new IllegalStateException("Whats this? " + def.getClass().getName());
-			}, (interp, env2) -> {
+			}, interp -> {
 				if (interp instanceof ValueAction.Interpreted)
-					((ValueAction.Interpreted<R, ?>) interp).updateAction(env2);
+					((ValueAction.Interpreted<R, ?>) interp).updateAction();
 				else
-					((QuickWidget.Interpreted<?>) interp).updateElement(env2);
+					((QuickWidget.Interpreted<?>) interp).updateElement();
 			});
 		}
 
@@ -279,8 +279,8 @@ public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theRows.set(theRowsInstantiator.get(myModels), null);
 		if (theActions == null) {
@@ -296,6 +296,7 @@ public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 
 		for (ExElement aao : theActionsAndOptions)
 			aao.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

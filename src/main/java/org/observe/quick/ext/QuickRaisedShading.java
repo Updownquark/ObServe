@@ -13,7 +13,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.quick.base.QuickSize;
+import org.observe.quick.QuickSize;
 import org.observe.util.swing.Shading;
 
 /** A simple shader that makes a component look raised out of the screen above the level of the rest of the UI. E.g. like a button. */

@@ -404,8 +404,6 @@ public abstract class Invocation implements ObservableExpression {
 			if (methodName != null && !m.getName().equals(methodName))
 				continue;
 			boolean isStatic = impl.isStatic(m);
-			if (!isStatic && !arg0Context && contextType == null)
-				continue;
 			int specificity = -1;
 			TypeToken<?>[] paramTypes = null;
 			if (bestResult != null) {
@@ -481,7 +479,7 @@ public abstract class Invocation implements ObservableExpression {
 				boolean varArgs = false;
 				tva = TypeTokens.get().accumulate(impl.getMethodTypes(m), tvaResolver);
 				int parameters = option.size() - methodArgStart;
-				int varArgCount = 0;
+				int varArgCount = -1;
 				for (int a = 0; ok && a < parameters; a++) {
 					int ma = a - methodArgStart;
 					if (ma < 0)
@@ -492,7 +490,7 @@ public abstract class Invocation implements ObservableExpression {
 						// Test var-args invocation first
 						TypeToken<?> ptComp = paramType.getComponentType();
 						varArgs = option.matchesType(a, ptComp, ExceptionHandler.placeHolder());
-						if (varArgs && varArgCount == 0)
+						if (varArgs && varArgCount < 0)
 							varArgCount = parameters - ma;
 						if (varArgs && !tva.accumulate(ptComp, option.resolve(a, exHandler))) {
 							if (secondPass) {
@@ -599,8 +597,15 @@ public abstract class Invocation implements ObservableExpression {
 							// So bizarre, the methods call includes overridden methods, e.g. Comparable.compareTo() and String.compareTo()
 							specificity += TypeTokens.get().getTypeSpecificity(returnType.getType());
 						}
-						bestResult = new Invocation.MethodResult<>(m, o, false, varArgCount, specificity,
-							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
+						if (!isStatic && !arg0Context && contextType == null) {
+							methodErrors.put(m,
+								new ExpressoInterpretationException(
+									m.getDeclaringClass().getName() + "." + m.getName() + " cannot be accessed in a static way",
+									env.reporting().getPosition(), 0));
+						} else {
+							bestResult = new Invocation.MethodResult<>(m, o, false, varArgCount, specificity,
+								(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
+						}
 					}
 				}
 			}
@@ -807,13 +812,15 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 			SettableValue<?> sourceCtx = theContext == null ? null : theContext.get(sourceModels);
-			SettableValue<?> newCtx = theContext == null ? null : theContext.get(newModels);
+			SettableValue<?> newCtx = theContext == null ? null
+				: ((ModelValueInstantiator<SettableValue<?>>) theContext).forModelCopy(sourceCtx, sourceModels, newModels);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
 			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
 			boolean different = sourceCtx != newCtx;
 			for (int i = 0; i < argVs.length; i++) {
 				SettableValue<?> sourceArg = theArguments.get(i).get(sourceModels);
-				SettableValue<?> newArg = theArguments.get(i).get(newModels);
+				SettableValue<?> newArg = ((ModelValueInstantiator<SettableValue<?>>) theArguments.get(i)).forModelCopy(sourceArg,
+					sourceModels, newModels);
 				different |= sourceArg != newArg;
 				argVs[i] = newArg;
 				changeSources[i] = argVs[i].noInitChanges();
@@ -1015,43 +1022,28 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		public T get() {
-			long wrappedStamp = super.getStamp();
-			if (theCachedContainerStamp != -1 && wrappedStamp == theCachedContainerStamp)
-				return theCachedValue;
-			theCachedContainerStamp = wrappedStamp;
-			T value = super.get();
-			if (value == theCachedValue) {
-				long valueStamp = value == null ? 0 : value.getStamp();
-				if (theCachedValueStamp == -1 || valueStamp != theCachedValueStamp) {
-					theCachedValueStamp = valueStamp;
-					thePublishedStamp = wrappedStamp;
-				}
-			} else {
-				theCachedValue = value;
-				theCachedValueStamp = value == null ? 0 : value.getStamp();
-				thePublishedStamp = wrappedStamp;
-			}
+			syncCache();
 			return theCachedValue;
 		}
 
 		@Override
 		public long getStamp() {
+			syncCache();
+			return thePublishedStamp;
+		}
+
+		private void syncCache() {
 			long wrappedStamp = super.getStamp();
 			if (theCachedContainerStamp != -1 && wrappedStamp == theCachedContainerStamp)
-				return thePublishedStamp;
+				return;
+			theCachedContainerStamp = wrappedStamp;
 			T value = super.get();
-			if (theCachedValue == value) {
-				long valueStamp = value == null ? 0 : value.getStamp();
-				if (valueStamp == theCachedValueStamp)
-					return thePublishedStamp;
-				theCachedValueStamp = valueStamp;
-				theCachedContainerStamp = thePublishedStamp = wrappedStamp;
-			} else {
+			long valueStamp = value == null ? 0 : value.getStamp();
+			if (value != theCachedValue || theCachedValueStamp == -1 || theCachedValueStamp != valueStamp) {
 				theCachedValue = value;
-				theCachedValueStamp = value == null ? 0 : value.getStamp();
-				theCachedContainerStamp = thePublishedStamp = wrappedStamp;
+				theCachedValueStamp = valueStamp;
+				thePublishedStamp = wrappedStamp;
 			}
-			return wrappedStamp;
 		}
 
 		@Override
@@ -1309,6 +1301,10 @@ public abstract class Invocation implements ObservableExpression {
 		 */
 		public final int argListOption;
 		private final boolean isArg0Context;
+		/**
+		 * Negative if this is not a var-args invocation; otherwise the number of terminal arguments in this call that belong in the
+		 * variable argument
+		 */
 		public final int varArgs;
 		/** The {@link TypeTokens#getTypeSpecificity(Type) specificity} of the method's parameters */
 		public final int specificity;
@@ -1338,7 +1334,7 @@ public abstract class Invocation implements ObservableExpression {
 		public Object invoke(Object context, Object[] args, ExecutableImpl<M> impl)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			Object[] parameters;
-			if (isArg0Context || varArgs > 0) {
+			if (isArg0Context || varArgs >= 0) {
 				parameters = new Object[method.getParameterCount()];
 				if (isArg0Context) {
 					context = args[0];

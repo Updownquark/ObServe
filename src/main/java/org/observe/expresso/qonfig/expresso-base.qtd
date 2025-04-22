@@ -278,6 +278,9 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="test" type="expression" />
 		</element-def>
 
+		<?DOC Transforms a value to an event which will fire whenever the value <i>actually</i> changes, not for updates?>
+		<element-def name="on-change" inherits="operation" />
+
 		<?DOC A mapping operation, producing a value as the result of some function on each element of the source structure?>
 		<element-def name="map-to" inherits="abst-map-op, complex-operation, typed">
 			<element-model>

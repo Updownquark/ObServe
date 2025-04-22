@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -87,8 +86,8 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
 		}
 
@@ -127,9 +126,10 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theText.set(theTextInstantiator == null ? null : theTextInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

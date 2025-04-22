@@ -479,7 +479,7 @@ public class WindowPopulation {
 						}
 						if (evt.getNewValue() && theWindow.isVisible())
 							theWindow.requestFocus();
-						else
+						else if (evt.getNewValue() != theWindow.isVisible())
 							theWindow.setVisible(evt.getNewValue());
 					});
 				});
@@ -576,7 +576,8 @@ public class WindowPopulation {
 		@Override
 		default B withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
 			JMenuItem item = new JMenuItem(name);
-			ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false, getUntil());
+			ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(this, name, item, name, action, false,
+				getUntil());
 			if (ui != null) {
 				ui.accept(button);
 			}
@@ -588,7 +589,7 @@ public class WindowPopulation {
 		default B withCheckBoxMenuItem(String name, SettableValue<Boolean> value,
 			Consumer<ButtonEditor<JCheckBoxMenuItem, ?>> ui) {
 			JCheckBoxMenuItem item = new JCheckBoxMenuItem(name);
-			ButtonEditor<JCheckBoxMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name,
+			ButtonEditor<JCheckBoxMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(this, name, item, name,
 				ObservableAction.DO_NOTHING, false, getUntil());
 			if (ui != null) {
 				ui.accept(button);
@@ -608,7 +609,7 @@ public class WindowPopulation {
 		 * @param until The observable to stop all listening
 		 */
 		public JMenuBuilder(M menu, Observable<?> until) {
-			super((String) null, menu, menu.getText(), ObservableAction.nullAction(), false, until);
+			super(null, (String) null, menu, menu.getText(), ObservableAction.nullAction(), false, until);
 		}
 
 		@Override

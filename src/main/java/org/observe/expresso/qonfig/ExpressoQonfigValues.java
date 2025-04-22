@@ -50,6 +50,7 @@ import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.Collec
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -145,11 +146,6 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-			}
-
-			@Override
 			public ModelValueElement<SettableValue<T>> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
@@ -173,7 +169,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				SettableValue<T> initV = getElementValue().get(models);
 				try {
@@ -378,7 +374,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				if (getElementValue() != null)
 					return getElementValue().get(models)//
@@ -541,15 +537,18 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
+				InterpretedExpressoEnv env = getDefaultEnv();
 				theSource = getDefinition().getSource().interpret(ModelTypes.Value.anyAsV(), env);
 
-				super.doUpdate(env);
+				super.doUpdate();
 
+				env = getDefaultEnv();
 				getOrEvalSourceType(env);
 				theSave = getDefinition().getSave().interpret(ModelTypes.Action.instance(), env);
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
-					syncChildren(getDefinition().getPostActions(), thePostActions, (d, elEnv) -> (Action.Interpreted) d.interpret(elEnv),
+					syncChildren(getDefinition().getPostActions(), thePostActions, //
+						d -> (Action.Interpreted) d.interpret(getDefaultEnv()),
 						Action.Interpreted::update);
 				}
 			}
@@ -566,7 +565,7 @@ public class ExpressoQonfigValues {
 		 * @param <T> The type of the value
 		 */
 		public static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<T>> {
-			private final ModelInstantiator theLocalModels;
+			private final DocumentMap<ModelInstantiator> theLocalModels;
 			private final ModelValueInstantiator<SettableValue<T>> theSource;
 			private final ModelValueInstantiator<ObservableAction> theSave;
 			private final ModelComponentId theTargetAs;
@@ -576,7 +575,7 @@ public class ExpressoQonfigValues {
 			Instantiator(FieldValueDef.Interpreted<T> interpreted, List<Action.Instantiator> postActions)
 				throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModels = interpreted.instantiateLocalModels();
 				theSource = interpreted.getSource().instantiate();
 				theSave = interpreted.getSave().instantiate();
 				theTargetAs = interpreted.getDefinition().getTargetAs();
@@ -609,7 +608,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModels.instantiate();
+				theLocalModels.forEach(ModelInstantiator::instantiate);
 				theSource.instantiate();
 				theSave.instantiate();
 				for (Action.Instantiator postAction : thePostActions)
@@ -617,8 +616,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModels.wrap(models);
+			public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModels.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				SettableValue<T> source = theSource.get(models);
 				ObservableAction save = theSave.get(models);
@@ -632,8 +631,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				sourceModels = theLocalModels.wrap(sourceModels);
-				newModels = theLocalModels.wrap(newModels);
+				sourceModels = theLocalModels.operate(sourceModels, (m, mi) -> mi.wrap(m));
+				newModels = theLocalModels.operate(newModels, (m, mi) -> mi.wrap(m));
 				SettableValue<T> sourceSource = ((FieldValue<T>) value).getSource();
 				ObservableAction sourceSave = ((FieldValue<T>) value).getSave();
 				SettableValue<T> newSource = theSource.forModelCopy(sourceSource, sourceModels, newModels);
@@ -841,7 +840,7 @@ public class ExpressoQonfigValues {
 				}
 
 				@Override
-				public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 					instantiate(models);
 					return getElementValue().get(models);
 				}
@@ -975,11 +974,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			public void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getElements(), theElements,
-						(d, elEnv) -> (CollectionElement.Interpreted<T>) d.interpret(elEnv), CollectionElement.Interpreted::update);
+						d -> (CollectionElement.Interpreted<T>) d.interpret(getExpressoEnv(d.getDocument())),
+						CollectionElement.Interpreted::update);
 				}
 			}
 
@@ -1037,14 +1037,13 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public C evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				if (getElementValue() != null)
 					return (C) getElementValue().get(models)//
 						.alias(theAlias);
 				ObservableCollectionBuilder<T, ?> builder = create(models);
-				if (getModelPath() != null)
-					builder.withDescription(getModelPath());
+				builder.withDescription(theAlias);
 				C collection = (C) builder.build();
 				for (CollectionElement.CollectionPopulator<T> element : theElements)
 					element.populateCollection(collection, models);
@@ -1190,12 +1189,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			public void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				if (getElementValue() != null) { // No sorting needed
 				} else
 					theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<T>) def.interpret(this),
-						(s, sEnv) -> s.update((TypeToken<T>) getType().getType(0), sEnv));
+						s -> s.update((TypeToken<T>) getType().getType(0)));
 				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getValueType()));
 					if (theDefaultSorting == null)
@@ -1505,14 +1504,13 @@ public class ExpressoQonfigValues {
 			/**
 			 * Initializes or updates this entry
 			 *
-			 * @param env The expresso environment to use to interpret expressions
 			 * @param keyType The key type for the entry
 			 * @param valueType The value type for the entry
 			 * @throws ExpressoInterpretationException If this entry cannot be interpreted
 			 */
-			public void update(InterpretedExpressoEnv env, TypeToken<K> keyType, TypeToken<V> valueType)
+			public void update(TypeToken<K> keyType, TypeToken<V> valueType)
 				throws ExpressoInterpretationException {
-				super.update(env);
+				super.update();
 				theKey = interpret(getDefinition().getKey(), ModelTypes.Value.forType(keyType));
 				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.forType(valueType));
 			}
@@ -1585,7 +1583,7 @@ public class ExpressoQonfigValues {
 				}
 
 				@Override
-				public SettableValue<V> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				public SettableValue<V> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 					instantiate(models);
 					return getElementValue().get(models);
 				}
@@ -1739,14 +1737,14 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
-						(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
+						entry -> entry.update(keyType, valueType));
 				}
 			}
 
@@ -1796,7 +1794,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public M evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				ObservableMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
@@ -1940,10 +1938,10 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<K>) def.interpret(this),
-					(s, sEnv) -> s.update((TypeToken<K>) getType().getType(0), sEnv));
+					s -> s.update((TypeToken<K>) getType().getType(0)));
 				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
 					if (theDefaultSorting == null)
@@ -2092,13 +2090,13 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				ModelInstanceType<M, M> type = getType();
 				TypeToken<K> keyType = (TypeToken<K>) type.getType(0);
 				TypeToken<V> valueType = (TypeToken<V>) type.getType(1);
 				syncChildren(getDefinition().getEntries(), theEntries, d -> (MapEntry.Interpreted<K, V>) d.interpret(this),
-					(entry, eEnv) -> entry.update(eEnv, keyType, valueType));
+					entry -> entry.update(keyType, valueType));
 			}
 
 			/** @return The key type of the map */
@@ -2155,7 +2153,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public M evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				ObservableMultiMap.Builder<K, V, ?> builder = create(models);
 				if (getModelPath() != null)
@@ -2297,10 +2295,10 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theSort = syncChild(getDefinition().getSort(), theSort, def -> (ExSort.ExRootSort.Interpreted<K>) def.interpret(this),
-					(s, sEnv) -> s.update((TypeToken<K>) getType().getType(0), sEnv));
+					s -> s.update((TypeToken<K>) getType().getType(0)));
 				if (theSort == null) {
 					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
 					if (theDefaultSorting == null)
@@ -2426,7 +2424,7 @@ public class ExpressoQonfigValues {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theEventVariable = elModels.getElementValueModelId("event");
 			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theEventVariable, ModelTypes.Value, (interp, env) -> {
-				return ModelTypes.Value.forType(interp.getOrEvalEventType(env));
+				return ModelTypes.Value.forType(interp.getOrEvalEventType());
 			});
 		}
 
@@ -2469,11 +2467,11 @@ public class ExpressoQonfigValues {
 				return theEvent;
 			}
 
-			TypeToken<T> getOrEvalEventType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			TypeToken<T> getOrEvalEventType() throws ExpressoInterpretationException {
 				if (theEvent == null) {
 					VariableType defType = getDefinition().getEventType();
 					if (defType != null) {
-						theEventType = (TypeToken<T>) defType.getType(getExpressoEnv());
+						theEventType = (TypeToken<T>) interpretType(defType);
 						theEvent = interpret(getDefinition().getEvent(), ModelTypes.Event.forType(theEventType));
 					} else if (getDefinition().getEvent() != null) {
 						theEvent = interpret(getDefinition().getEvent(), ModelTypes.Event.<Observable<T>> anyAs());
@@ -2493,13 +2491,13 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				getOrEvalEventType(getExpressoEnv());
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
+				getOrEvalEventType();
 				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 			}
 
@@ -2530,7 +2528,7 @@ public class ExpressoQonfigValues {
 		 * @param <T> The type of the event
 		 */
 		public static class Instantiator<T> extends ModelValueElement.Abstract<Observable<T>> {
-			private final ModelInstantiator theLocalModels;
+			private final DocumentMap<ModelInstantiator> theLocalModels;
 			private final ModelValueInstantiator<Observable<T>> theEvent;
 			private final ModelValueInstantiator<ObservableAction> theAction;
 			private final T theDefaultEventValue;
@@ -2538,7 +2536,7 @@ public class ExpressoQonfigValues {
 
 			Instantiator(Hook.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModels = interpreted.instantiateLocalModels();
 				theEvent = interpreted.getEvent() == null ? null : interpreted.getEvent().instantiate();
 				theDefaultEventValue = TypeTokens.get().getDefaultValue(interpreted.getEventType());
 				theAction = interpreted.getAction().instantiate();
@@ -2557,15 +2555,15 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModels.instantiate();
+				theLocalModels.forEach(ModelInstantiator::instantiate);
 				if (theEvent != null)
 					theEvent.instantiate();
 				theAction.instantiate();
 			}
 
 			@Override
-			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModels.wrap(models);
+			public Observable<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModels.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				Observable<T> on = theEvent == null ? null : theEvent.get(models);
 				ObservableAction action = theAction.get(models);
@@ -2598,7 +2596,7 @@ public class ExpressoQonfigValues {
 				if (oldEvent == newEvent && oldAction == newAction)
 					return value;
 				else
-					return create(newEvent, newAction, theLocalModels.wrap(newModels));
+					return create(newEvent, newAction, theLocalModels.operate(newModels, (m, mi) -> mi.wrap(m)));
 			}
 		}
 	}
@@ -2691,10 +2689,9 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				onThread = getDefinition().getOnThread() == null ? null
-					: getDefinition().getOnThread().interpret(ModelTypes.Value.forType(ThreadConstraint.class), env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
+				onThread = interpret(getDefinition().getOnThread(), ModelTypes.Value.forType(ThreadConstraint.class));
 			}
 
 			@Override
@@ -2739,7 +2736,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public ObservableAction evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				ObservableAction action = getElementValue().get(models);
 				if (onThread != null || isAlwaysEnabled)
@@ -2938,11 +2935,11 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
-					syncChildren(getDefinition().getActions(), theActions, (d, aEnv) -> (Action.Interpreted) d.interpret(aEnv),
-						(i, aEnv) -> i.update(aEnv));
+					syncChildren(getDefinition().getActions(), theActions,
+						d -> (Action.Interpreted) d.interpret(getExpressoEnv(d.getDocument())), i -> i.update());
 				}
 			}
 
@@ -2989,7 +2986,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public ObservableAction evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				ObservableAction[] actions = new ObservableAction[theActions.size()];
 				for (int i = 0; i < actions.length; i++)
@@ -3026,7 +3023,7 @@ public class ExpressoQonfigValues {
 				ObservableValue<String>[] actionsEnabled = new ObservableValue[actions.length];
 				for (int i = 0; i < actions.length; i++)
 					actionsEnabled[i] = actions[i].isEnabled();
-				theEnabled = ObservableValue.firstValue(v -> v != null, null, actionsEnabled);
+				theEnabled = ObservableValue.firstValue(LambdaUtils.NON_NULL, null, actionsEnabled);
 				thePrint = print;
 			}
 
@@ -3196,8 +3193,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theInit = interpret(getDefinition().getInit(), ModelTypes.Action.instance());
 				theBefore = interpret(getDefinition().getBefore(), ModelTypes.Action.instance());
 				theWhile = interpret(getDefinition().getWhile(), ModelTypes.Value.forType(boolean.class));
@@ -3205,8 +3202,7 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					this.syncChildren(getDefinition().getBody(), theBody,
-						(def, bEnv) -> def.interpretValue(this),
-						(b, bEnv) -> b.updateValue(bEnv));
+						def -> def.interpretValue(this), b -> b.updateValue(getExpressoEnv(b.getDocument())));
 				}
 			}
 
@@ -3225,7 +3221,7 @@ public class ExpressoQonfigValues {
 
 		/** {@link Loop} instantiator */
 		public static class Instantiator extends ModelValueElement.Abstract<ObservableAction> {
-			private final ModelInstantiator theLocalModels;
+			private final DocumentMap<ModelInstantiator> theLocalModels;
 			private final ModelValueInstantiator<? extends ObservableAction> theInit;
 			private final ModelValueInstantiator<? extends ObservableAction> theBefore;
 			private final ModelValueInstantiator<SettableValue<Boolean>> theWhile;
@@ -3235,17 +3231,13 @@ public class ExpressoQonfigValues {
 
 			Instantiator(Loop.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModels = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModels = interpreted.instantiateLocalModels();
 				theInit = interpreted.getInit() == null ? null : interpreted.getInit().instantiate();
 				theBefore = interpreted.getBefore() == null ? null : interpreted.getBefore().instantiate();
 				theWhile = interpreted.getWhile().instantiate();
 				theBody = QommonsUtils.filterMapE(interpreted.getBody(), null, e -> e.create());
 				theFinally = interpreted.getFinally() == null ? null : interpreted.getFinally().instantiate();
 				theWhileReporting = interpreted.reporting().at(interpreted.getDefinition().getWhile().getFilePosition());
-			}
-
-			ModelInstantiator getLocalModels() {
-				return theLocalModels;
 			}
 
 			/** @return An action to perform as soon as this loop begins execution */
@@ -3275,8 +3267,7 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				if (theLocalModels != null)
-					theLocalModels.instantiate();
+				theLocalModels.forEach(ModelInstantiator::instantiate);
 				if (theInit != null)
 					theInit.instantiate();
 				if (theBefore != null)
@@ -3289,8 +3280,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModels.wrap(models);
+			public ObservableAction evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModels.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				ObservableAction init = theInit == null ? null : theInit.get(models);
 				ObservableAction before = theBefore == null ? null : theBefore.get(models);
@@ -3305,8 +3296,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				sourceModels = theLocalModels.wrap(sourceModels);
-				newModels = theLocalModels.wrap(newModels);
+				sourceModels = theLocalModels.operate(sourceModels, (m, mi) -> mi.wrap(m));
+				newModels = theLocalModels.operate(newModels, (m, mi) -> mi.wrap(m));
 				LoopAction loop = (LoopAction) value;
 				ObservableAction initS = loop.getInit();
 				ObservableAction initA = theInit == null ? null
@@ -3488,7 +3479,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public Observable<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				return getElementValue().get(models);
 			}
@@ -3568,7 +3559,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableValueSet<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public ObservableValueSet<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				// Although a purely in-memory value set would be more efficient, I have yet to implement one.
 				// Easiest path forward for this right now is to make an unpersisted ObservableConfig and use it to back the value set.
@@ -3776,8 +3767,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				isActive = interpret(getDefinition().isActive(), ModelTypes.Value.BOOLEAN);
 				theFrequency = interpret(getDefinition().getFrequency(), ModelTypes.Value.forType(Duration.class));
@@ -3911,7 +3902,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public SettableValue<Instant> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public SettableValue<Instant> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				instantiate(models);
 				SettableValue<Boolean> active = isActive.get(models);
 				SettableValue<Duration> frequency = theFrequency.get(models);

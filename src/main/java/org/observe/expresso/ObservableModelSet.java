@@ -3417,7 +3417,7 @@ public interface ObservableModelSet extends Identifiable {
 							throw new IllegalStateException(
 								"Inheritance " + rootModelId + "not satisfied: use ModelSetInstanceBuilder.withAll(ModelSetInstance)");
 						else
-							throw new IllegalArgumentException("This model component (" + component + ") is for an unrelated model this=("
+							throw new IllegalArgumentException("This model component (" + component + ") is for an unrelated model (this="
 								+ theModelInstantiator.getIdentity() + ")");
 					}
 				}
@@ -3608,6 +3608,8 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelSetInstance build() throws ModelInstantiationException {
 				isBuilt = true;
+				if (theTopLevelModels.size() == 1)
+					return theTopLevelModels.values().iterator().next();
 				return theMSI;
 			}
 

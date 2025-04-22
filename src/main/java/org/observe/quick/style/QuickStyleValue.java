@@ -10,6 +10,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.util.TypeTokens;
@@ -144,31 +145,25 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	 * @return The compiled style value
 	 * @throws ExpressoInterpretationException If the expressions could not be compiled
 	 */
-	public InterpretedStyleValue<?> interpret(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+	public InterpretedStyleValue<?> interpret(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet,
 		QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
 		if (theStyleSheet == null)
 			styleSheet = null;
 		else
 			styleSheet = styleSheet.findInterpretation(theStyleSheet);
 		QuickStyleSet.Interpreted styleSet = theStyleSet == null ? null : styleSheet.getStyleSets().get(theStyleSet.getName());
-		InterpretedExpressoEnv[] styleEnvs;
-		if (styleSet != null)
-			styleEnvs = new InterpretedExpressoEnv[] { styleSet.getExpressoEnv(), env };
-		else if (styleSheet != null)
-			styleEnvs = new InterpretedExpressoEnv[] { styleSheet.getExpressoEnv(), env };
-		else
-			styleEnvs = new InterpretedExpressoEnv[] { env };
-		InterpretedStyleApplication application = appCache.getApplication(theApplication, styleEnvs);
-		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(styleEnvs[0]);
-		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, styleEnvs[0]);
-		return _interpret(application, attribute, styleSheet, styleEnvs[0], env);
+		InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
+		InterpretedStyleApplication application = appCache.getApplication(theApplication, element);
+		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
+		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, defaultEnv);
+		return _interpret(application, attribute, styleSheet, element, defaultEnv);
 	}
 
 	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
-		QuickStyleSheet.Interpreted styleSheet, InterpretedExpressoEnv styleEnv, InterpretedExpressoEnv contextEnv)
+		QuickStyleSheet.Interpreted styleSheet, ExElement.Interpreted<?> element, InterpretedExpressoEnv contextEnv)
 			throws ExpressoInterpretationException {
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = interpretStyleValue(theValueExpression,
-			ModelTypes.Value.forType(attribute.getType()), styleEnv);
+			ModelTypes.Value.forType(attribute.getType()), element.getEnvironmentFor(theValueExpression));
 		ExWithRequiredModels.InterpretedRequiredModelContext modelContext = null;
 		if (theModelContext == null)
 			modelContext = null;

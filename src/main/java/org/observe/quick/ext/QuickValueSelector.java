@@ -3,7 +3,6 @@ package org.observe.quick.ext;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -161,14 +160,14 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 
 			if (theIncludeAllConfig != null && theIncludeAllConfig.getClass() != QuickButton.Def.class)
 				theIncludeAllConfig.reporting()
-					.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+				.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
 			if (theIncludeConfig != null && theIncludeConfig.getClass() != QuickButton.Def.class)
 				theIncludeConfig.reporting().warn("<button> sub-type is not respected here. This handle is only used for configuration.");
 			if (theExcludeConfig != null && theExcludeConfig.getClass() != QuickButton.Def.class)
 				theExcludeConfig.reporting().warn("<button> sub-type is not respected here. This handle is only used for configuration.");
 			if (theExcludeAllConfig != null && theExcludeAllConfig.getClass() != QuickButton.Def.class)
 				theExcludeAllConfig.reporting()
-					.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
+				.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
 
 			elModels.satisfyElementValueType(theAvailableValueName, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getAvailableValueType()));
@@ -262,18 +261,18 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
 			theAvailableValues = interpret(getDefinition().getAvailableValues(), ModelTypes.Collection.anyAsV());
 			theIncludedValues = interpret(getDefinition().getIncludedValues(), ModelTypes.Collection.anyAsV());
 
-			super.doUpdate(expressoEnv);
+			super.doUpdate();
 
 			theAvailable = syncChild(getDefinition().getAvailable(), theAvailable,
-				t -> (QuickSuperTable.Interpreted<A, ?, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
+				t -> (QuickSuperTable.Interpreted<A, ?, ?>) t.interpret(this), t -> t.updateElement());
 			theIncluded = syncChild(getDefinition().getIncluded(), theIncluded,
-				t -> (QuickTable.Interpreted<I, ?, ?>) t.interpret(this), (t, env) -> t.updateElement(env));
+				t -> (QuickTable.Interpreted<I, ?, ?>) t.interpret(this), t -> t.updateElement());
 
-			theInclude = getDefinition().getInclude().interpret(ModelTypes.Value.forType(theIncluded.getValueType()), expressoEnv);
+			theInclude = interpret(getDefinition().getInclude(), ModelTypes.Value.forType(theIncluded.getValueType()));
 
 			theIncludeAllConfig = syncChild(getDefinition().getIncludeAllConfig(), theIncludeAllConfig, t -> t.interpret(this),
 				QuickButton.Interpreted::updateElement);
@@ -447,14 +446,14 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
+
 		ExFlexibleElementModelAddOn.satisfyElementValue(theAvailableRowsName, myModels,
 			ObservableCollection.flattenValue(theAvailableValues));
 		ExFlexibleElementModelAddOn.satisfyElementValue(theIncludedRowsName, myModels,
 			ObservableCollection.flattenValue(theIncludedValues));
 		ExFlexibleElementModelAddOn.satisfyElementValue(theAvailableValueName, myModels, SettableValue.flatten(theAvailableValue));
-
-		super.doInstantiate(myModels);
 
 		theAvailableValues.set(theAvailableInstantiator.get(myModels), null);
 		theIncludedValues.set(theIncludedInstantiator.get(myModels), null);
@@ -470,6 +469,7 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 			theExcludeConfig.instantiate(myModels);
 		if (theExcludeAllConfig != null)
 			theExcludeAllConfig.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

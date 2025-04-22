@@ -16,7 +16,6 @@ import org.observe.Transformation;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -230,12 +229,13 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-			super.instantiate(models);
+		public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+			models = super.instantiate(models);
 
 			theTabName.set(theTabNameInstantiator == null ? null : theTabNameInstantiator.get(models), null);
 			theTabIcon.set(theTabIconInstantiator == null ? null : theTabIconInstantiator.get(models), null);
 			isTabAvailable.set(theAvailableInstantiator.get(models), null);
+			return models;
 		}
 
 		@Override
@@ -374,10 +374,11 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-			super.instantiate(models);
+		public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+			models = super.instantiate(models);
 
 			theTabId = theTabIdInstantiator.get(models);
+			return models;
 		}
 
 		@Override
@@ -489,19 +490,18 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			/**
 			 * Initializes or updates this tab set
 			 *
-			 * @param env The expresso environment to use to interpret expressions
 			 * @throws ExpressoInterpretationException If this tab set could not be interpreted
 			 */
-			public void updateTabSet(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateTabSet() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.<T> anyAsV());
 				theRenderer = syncChild(getDefinition().getRenderer(), theRenderer, def -> def.interpret(this),
-					(r, rEnv) -> r.updateElement(rEnv));
+					r -> r.updateElement());
 			}
 
 			/** @return The type of values in the collection */
@@ -603,9 +603,9 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			theInstantiatedModel++;
-			super.doInstantiate(myModels);
+			myModels = super.doInstantiate(myModels);
 
 			theValues.set(theValuesInstantiator.get(myModels), null);
 
@@ -614,6 +614,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				if (tab.theInstanceInstantiatedModel != theInstantiatedModel)
 					tab.instantiate(myModels);
 			}
+			return myModels;
 		}
 
 		@Override
@@ -796,8 +797,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			syncChildren(getDefinition().getTabSets(), theTabSets, def -> (TabSet.Interpreted<? extends T>) def.interpret(this),
 				TabSet.Interpreted::updateTabSet);
@@ -888,8 +889,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedTabVariable, myModels, theSelectedTab);
 		if (theSelectedTabInstantiator == null)
@@ -899,6 +900,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		for (TabSet<? extends T> tabSet : theTabSets)
 			tabSet.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

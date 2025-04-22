@@ -8,7 +8,6 @@ import java.util.Set;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -20,7 +19,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
 import org.observe.quick.base.QuickTree;
@@ -190,8 +188,8 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			if (theColumns == null)
 				theColumns = ObservableCollection.<QuickTableColumn.TableColumnSet.Interpreted<BetterList<N>, ?>> build()//
@@ -247,8 +245,8 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 
 	private SettableValue<SettableValue<C>> theColumnSelection;
 	private SettableValue<ObservableCollection<C>> theColumnMultiSelection;
-	private SettableValue<SettableValue<Integer>> theRowIndex;
-	private SettableValue<SettableValue<Integer>> theColumnIndex;
+	private SettableValue<Integer> theRowIndex;
+	private SettableValue<Integer> theColumnIndex;
 
 	/** @param id The element ID for this widget */
 	protected QuickTreeTable(Object id) {
@@ -258,8 +256,8 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 		theColumns = theColumnSets.flow()//
 			.<QuickTableColumn<BetterList<N>, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 			.collect();
-		theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
-		theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
+		theRowIndex = SettableValue.create(b -> b.withValue(0));
+		theColumnIndex = SettableValue.create(b -> b.withValue(0));
 
 		theColumnSelection = SettableValue.create();
 		theColumnMultiSelection = SettableValue.create();
@@ -311,10 +309,13 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 	}
 
 	@Override
-	public void setContext(TabularContext<BetterList<N>> ctx) throws ModelInstantiationException {
-		setContext((MultiValueRenderable.MultiValueRenderContext<BetterList<N>>) ctx);
-		theRowIndex.set(ctx.getRowIndex(), null);
-		theColumnIndex.set(ctx.getColumnIndex(), null);
+	public SettableValue<Integer> getRowIndex() {
+		return theRowIndex;
+	}
+
+	@Override
+	public SettableValue<Integer> getColumnIndex() {
+		return theColumnIndex;
 	}
 
 	@Override
@@ -403,16 +404,17 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
-		ExFlexibleElementModelAddOn.satisfyElementValue(theRowIndexVariable, myModels, SettableValue.flatten(theRowIndex));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theColumnIndexVariable, myModels, SettableValue.flatten(theColumnIndex));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theRowIndexVariable, myModels, theRowIndex);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theColumnIndexVariable, myModels, theColumnIndex);
 
 		theColumnSelection.set(theColumnSelectionInstantiator == null ? null : theColumnSelectionInstantiator.get(myModels));
 		theColumnMultiSelection.set(theColumnMultiSelectionInstantiator == null ? null : theColumnMultiSelectionInstantiator.get(myModels));
 		for (TableColumnSet<BetterList<N>> column : theColumnSets)
 			column.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override
@@ -425,8 +427,8 @@ public class QuickTreeTable<N, C> extends QuickTree<N> implements TabularWidget<
 		copy.theColumns = copy.theColumnSets.flow()//
 			.<QuickTableColumn<BetterList<N>, ?>> flatMap(columnSet -> columnSet.getColumns().flow())//
 			.collect();
-		copy.theRowIndex = SettableValue.<SettableValue<Integer>> build().build();
-		copy.theColumnIndex = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theRowIndex = SettableValue.create(b -> b.withValue(0));
+		copy.theColumnIndex = SettableValue.create(b -> b.withValue(0));
 
 		for (TableColumnSet<BetterList<N>> columnSet : theColumnSets)
 			copy.theColumnSets.add(columnSet.copy(this));

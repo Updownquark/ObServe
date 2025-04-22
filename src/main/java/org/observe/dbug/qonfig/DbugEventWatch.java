@@ -9,7 +9,6 @@ import org.observe.SettableValue;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugEvent;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -104,16 +103,16 @@ public class DbugEventWatch extends ExElement.Abstract {
 			return Collections.unmodifiableList(theActions);
 		}
 
-		public void updateWatch(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateWatch() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			// TODO Don't know how I'll implement access to the event fields yet
-			theIf = getDefinition().getIf() == null ? null : getDefinition().getIf().interpret(ModelTypes.Value.BOOLEAN, expressoEnv);
-			syncChildren(getDefinition().getActions(), theActions, a -> a.interpret(this), (a, env) -> a.updateAction(env));
+			theIf = interpret(getDefinition().getIf(), ModelTypes.Value.BOOLEAN);
+			syncChildren(getDefinition().getActions(), theActions, a -> a.interpret(this), a -> a.updateAction());
 		}
 
 		public DbugEventWatch create() {
@@ -170,13 +169,14 @@ public class DbugEventWatch extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		ExFlexibleElementModelAddOn.satisfyElementValue(theEventAs, myModels, theEvent);
 		theIf.set(theIfInstantiator == null ? null : theIfInstantiator.get(myModels), null);
 		for (DbugAction action : theActions)
 			action.instantiate(myModels);
+		return myModels;
 	}
 
 	public void watchEvent(DbugAnchor<?> anchor, Observable<?> until) {

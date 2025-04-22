@@ -90,68 +90,24 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
-	/** Context for a mouse listener */
-	public interface MouseListenerContext extends ListenerContext {
-		/** @return The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event */
-		SettableValue<Integer> getX();
-
-		/** @return The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event */
-		SettableValue<Integer> getY();
-
-		/** Default {@link MouseListenerContext} implementation */
-		public class Default extends ListenerContext.Default implements MouseListenerContext {
-			private final SettableValue<Integer> theX;
-			private final SettableValue<Integer> theY;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
-				SettableValue<Integer> x, SettableValue<Integer> y) {
-				super(altPressed, ctrlPressed, shiftPressed);
-				theX = x;
-				theY = y;
-			}
-
-			Default() {
-				theX = SettableValue.<Integer> build().withValue(0).build();
-				theY = SettableValue.<Integer> build().withValue(0).build();
-			}
-
-			@Override
-			public SettableValue<Integer> getX() {
-				return theX;
-			}
-
-			@Override
-			public SettableValue<Integer> getY() {
-				return theY;
-			}
-		}
-	}
-
 	private ModelComponentId theEventXValue;
 	private ModelComponentId theEventYValue;
-	private SettableValue<SettableValue<Integer>> theEventX;
-	private SettableValue<SettableValue<Integer>> theEventY;
+	private SettableValue<Integer> theEventX;
+	private SettableValue<Integer> theEventY;
 
 	/** @param id The element ID of this listener */
 	protected QuickMouseListener(Object id) {
 		super(id);
-		theEventX = SettableValue.<SettableValue<Integer>> build()
-			.build();
-		theEventY = SettableValue.<SettableValue<Integer>> build().build();
+		theEventX = SettableValue.create();
+		theEventY = SettableValue.create();
 	}
 
-	/** @param ctx The listener context from the Quick implementation */
-	public void setListenerContext(MouseListenerContext ctx) {
-		setListenerContext((ListenerContext) ctx);
-		theEventX.set(ctx.getX(), null);
-		theEventY.set(ctx.getY(), null);
+	public SettableValue<Integer> getEventX() {
+		return theEventX;
+	}
+
+	public SettableValue<Integer> getEventY() {
+		return theEventY;
 	}
 
 	@Override
@@ -163,18 +119,19 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theEventXValue, myModels, SettableValue.flatten(theEventX));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theEventYValue, myModels, SettableValue.flatten(theEventY));
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theEventXValue, myModels, theEventX);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theEventYValue, myModels, theEventY);
+		return myModels;
 	}
 
 	@Override
 	protected QuickMouseListener clone() {
 		QuickMouseListener copy = (QuickMouseListener) super.clone();
 
-		copy.theEventX = SettableValue.<SettableValue<Integer>> build().build();
-		copy.theEventY = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theEventX = SettableValue.create();
+		copy.theEventY = SettableValue.create();
 
 		return copy;
 	}
@@ -203,71 +160,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		private MouseMoveEventType(String elementName) {
 			this.elementName = elementName;
-		}
-	}
-
-	/** Context for a {@link QuickMouseButtonListener} */
-	public interface MouseButtonListenerContext extends MouseListenerContext {
-		/** @return The mouse button that was pressed for the current event */
-		SettableValue<MouseButton> getMouseButton();
-
-		/** Default {@link MouseButtonListenerContext} implementation */
-		public class Default extends MouseListenerContext.Default implements MouseButtonListenerContext {
-			private final SettableValue<MouseButton> theMouseButton;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 * @param mouseButton The mouse button that was pressed for the current event
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
-				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<MouseButton> mouseButton) {
-				super(altPressed, ctrlPressed, shiftPressed, x, y);
-				theMouseButton = mouseButton;
-			}
-
-			/** Creates context with default value containers */
-			public Default() {
-				theMouseButton = SettableValue.<MouseButton> build().build();
-			}
-
-			@Override
-			public SettableValue<MouseButton> getMouseButton() {
-				return theMouseButton;
-			}
-		}
-	}
-
-	/** Context for a {@link QuickScrollListener} */
-	public interface ScrollListenerContext extends MouseListenerContext {
-		/** @return The amount that the scroll event intends to be scrolled */
-		SettableValue<Integer> getScrollAmount();
-
-		/** Default {@link ScrollListenerContext} implementation */
-		public class Default extends MouseListenerContext.Default implements ScrollListenerContext {
-			private final SettableValue<Integer> theScrollAmount;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 * @param x The X-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 * @param y The Y-coordinate of the mouse's position relative to the upper-left corner of the widget for the current event
-			 * @param scrollAmount The amount that the scroll event intends to be scrolled
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
-				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<Integer> scrollAmount) {
-				super(altPressed, ctrlPressed, shiftPressed, x, y);
-				theScrollAmount = scrollAmount;
-			}
-
-			@Override
-			public SettableValue<Integer> getScrollAmount() {
-				return theScrollAmount;
-			}
 		}
 	}
 
@@ -442,13 +334,13 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		private ModelComponentId theEventButtonValue;
-		private SettableValue<SettableValue<MouseButton>> theEventButton;
+		private SettableValue<MouseButton> theEventButton;
 		private MouseButton theButton;
 
 		/** @param id The element ID for this listener */
 		protected QuickMouseButtonListener(Object id) {
 			super(id);
-			theEventButton = SettableValue.<SettableValue<MouseButton>> build().build();
+			theEventButton = SettableValue.create();
 		}
 
 		/**
@@ -459,10 +351,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			return theButton;
 		}
 
-		/** @param ctx The context for this listener from the Quick implementation */
-		public void setListenerContext(MouseButtonListenerContext ctx) {
-			setListenerContext((MouseListenerContext) ctx);
-			theEventButton.set(ctx.getMouseButton(), null);
+		public SettableValue<MouseButton> getEventButton() {
+			return theEventButton;
 		}
 
 		@Override
@@ -474,16 +364,17 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
-			ExFlexibleElementModelAddOn.satisfyElementValue(theEventButtonValue, myModels, SettableValue.flatten(theEventButton));
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theEventButtonValue, myModels, theEventButton);
+			return myModels;
 		}
 
 		@Override
 		public QuickMouseButtonListener copy(ExElement parent) {
 			QuickMouseButtonListener copy = (QuickMouseButtonListener) super.copy(parent);
 
-			copy.theEventButton = SettableValue.<SettableValue<MouseButton>> build().build();
+			copy.theEventButton = SettableValue.create();
 
 			return copy;
 		}
@@ -743,17 +634,15 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		private ModelComponentId theScrollAmountValue;
-		private SettableValue<SettableValue<Integer>> theScrollAmount;
+		private SettableValue<Integer> theScrollAmount;
 
 		QuickScrollListener(Object id) {
 			super(id);
-			theScrollAmount = SettableValue.<SettableValue<Integer>> build().build();
+			theScrollAmount = SettableValue.create();
 		}
 
-		/** @param ctx The listener context from the Quick implementation */
-		public void setListenerContext(ScrollListenerContext ctx) {
-			setListenerContext((MouseListenerContext) ctx);
-			theScrollAmount.set(ctx.getScrollAmount(), null);
+		public SettableValue<Integer> getScrollAmount() {
+			return theScrollAmount;
 		}
 
 		@Override
@@ -765,17 +654,18 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
-			ExFlexibleElementModelAddOn.satisfyElementValue(theScrollAmountValue, myModels, SettableValue.flatten(theScrollAmount));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theScrollAmountValue, myModels, theScrollAmount);
+			return myModels;
 		}
 
 		@Override
 		protected QuickScrollListener clone() {
 			QuickScrollListener copy = (QuickScrollListener) super.clone();
 
-			copy.theScrollAmount = SettableValue.<SettableValue<Integer>> build().build();
+			copy.theScrollAmount = SettableValue.create();
 
 			return copy;
 		}

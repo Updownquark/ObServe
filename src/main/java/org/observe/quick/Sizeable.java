@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick;
 
 import java.util.Collections;
 import java.util.Set;
@@ -129,7 +129,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		/** {@link Sizeable}.{@link Sizeable.Vertical} definition */
-		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = V_SIZEABLE,
 			interpretation = Interpreted.Vertical.class,
 			instance = Sizeable.Vertical.class)
@@ -178,7 +178,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		/** {@link Sizeable}.{@link Sizeable.Horizontal} definition */
-		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = H_SIZEABLE,
 			interpretation = Interpreted.Horizontal.class,
 			instance = Sizeable.Horizontal.class)
@@ -392,10 +392,10 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	/** @param element The element this sizeable is for */
 	protected Sizeable(ExElement element) {
 		super(element);
-		theSize = SettableValue.<SettableValue<QuickSize>> build().build();
-		theMinimum = SettableValue.<SettableValue<QuickSize>> build().build();
-		thePreferred = SettableValue.<SettableValue<QuickSize>> build().build();
-		theMaximum = SettableValue.<SettableValue<QuickSize>> build().build();
+		theSize = SettableValue.create();
+		theMinimum = SettableValue.create();
+		thePreferred = SettableValue.create();
+		theMaximum = SettableValue.create();
 	}
 
 	/**
@@ -432,22 +432,23 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theSize.set(theSizeInstantiator == null ? null : theSizeInstantiator.get(models), null);
 		theMinimum.set(theMinimumInstantiator == null ? null : theMinimumInstantiator.get(models), null);
 		thePreferred.set(thePreferredInstantiator == null ? null : thePreferredInstantiator.get(models), null);
 		theMaximum.set(theMaximumInstantiator == null ? null : theMaximumInstantiator.get(models), null);
+		return models;
 	}
 
 	@Override
 	protected Sizeable clone() {
 		Sizeable copy = (Sizeable) super.clone();
 
-		copy.theSize = SettableValue.<SettableValue<QuickSize>> build().build();
-		copy.theMinimum = SettableValue.<SettableValue<QuickSize>> build().build();
-		copy.thePreferred = SettableValue.<SettableValue<QuickSize>> build().build();
-		copy.theMaximum = SettableValue.<SettableValue<QuickSize>> build().build();
+		copy.theSize = SettableValue.create();
+		copy.theMinimum = SettableValue.create();
+		copy.thePreferred = SettableValue.create();
+		copy.theMaximum = SettableValue.create();
 
 		return copy;
 	}

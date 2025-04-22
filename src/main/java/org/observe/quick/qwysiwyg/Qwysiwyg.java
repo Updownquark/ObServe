@@ -50,6 +50,7 @@ import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressionValueType;
 import org.observe.expresso.qonfig.ExpressoDocument;
+import org.observe.expresso.qonfig.ExpressoHeadSection;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.quick.QuickApp;
@@ -151,7 +152,7 @@ public class Qwysiwyg {
 				try {
 					LocatedPositionedContent content = LocatedPositionedContent.of("QWYSIWYG Watch Expression",
 						new PositionedContent.Simple(FilePosition.START, expressionText));
-					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.forType(theType), interpretedContext.getExpressoEnv()//
+					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.forType(theType), interpretedContext.getDefaultEnv()//
 						.withErrorReporting(new ErrorReporting.Default(content)), 0, ExceptionHandler.thrower2());
 				} catch (ExpressoInterpretationException | TypeConversionException e) {
 					e.printStackTrace();
@@ -629,7 +630,7 @@ public class Qwysiwyg {
 			try {
 				styleDebugValues.add(new StyleDebugValue<>(interpretedValues.get(v).getValue1(),
 					interpretedValues.get(v).getValue2().getStyleValue(), attr.getAttribute(), values.get(v),
-					theStyledNode.interpreted.getExpressoEnv().withErrorReporting(new ErrorReporting.Default(null)),
+					theStyledNode.interpreted.getDefaultEnv().withErrorReporting(new ErrorReporting.Default(null)),
 					theStyledNode.element.getUpdatingModels()));
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -737,7 +738,7 @@ public class Qwysiwyg {
 				for (QonfigToolkit toolkit : quickApp.getToolkits())
 					theToolkits.put(toolkit, new StyledQonfigToolkit(toolkit));
 
-				theCompiledEnv = theDocumentDef.getExpressoEnv();
+				theCompiledEnv = theDocumentDef.getExpressoEnv(theDocumentDef.getDocument());
 			} catch (IOException | RuntimeException e) {
 				logToConsole(e, null);
 				clearDef();
@@ -757,8 +758,9 @@ public class Qwysiwyg {
 
 			renderDef(document.get().getRoot(), theDocumentDef, null);
 
+			ExpressoHeadSection.Def head = theDocumentDef.getAddOn(ExpressoDocument.Def.class).getHead();
 			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(
-				theDocumentDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(),
+				head.getExpressoEnv(head.getDocument()).getBuiltModels(),
 				quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER),
 				InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
 
@@ -1264,7 +1266,7 @@ public class Qwysiwyg {
 		if (interpreted.getParentElement() == null && theQwysiwygEdAddOn == null) {
 			theQwysiwygEdAddOn = findQwysiwygEdAddOn(interpreted.getDefinition().getElement().getDocument().getDocToolkit());
 		}
-		InterpretedExpressoEnv env = interpreted == null ? null : interpreted.getExpressoEnv();
+		InterpretedExpressoEnv env = interpreted == null ? null : interpreted.getDefaultEnv();
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = StyledQuickDocument.getSourceComponent(component,
 			def.getElement().getPositionInFile().getPosition()).parent;

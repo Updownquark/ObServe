@@ -248,17 +248,6 @@ public interface ExAddOn<E extends ExElement> {
 	}
 
 	/**
-	 * @param builder The model instance builder to install runtime models into. Runtime models are those that expressions on the element
-	 *        should not have access to, but may be needed for expressions that were interpreted in a different environment but need to be
-	 *        executed on this element (e.g. style sheets).
-	 *
-	 * @param elementModels The model instance for this element
-	 * @throws ModelInstantiationException If any runtime models could not be installed
-	 */
-	default void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-	}
-
-	/**
 	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiated() instantiated} before {@link #instantiated()} has been
 	 * called on any add-ons
 	 *
@@ -286,9 +275,10 @@ public interface ExAddOn<E extends ExElement> {
 	 *
 	 * @param interpreted The interpretation producing this add-on
 	 * @param models The models to support this add-on
+	 * @return The possible augmented models
 	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated
 	 */
-	void instantiate(ModelSetInstance models) throws ModelInstantiationException;
+	ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException;
 
 	/**
 	 * Called from the {@link #getElement() element}'s {@link ExElement#instantiate(ModelSetInstance) instantiate} after
@@ -337,7 +327,8 @@ public interface ExAddOn<E extends ExElement> {
 		}
 
 		@Override
-		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+			return models;
 		}
 
 		@Override
@@ -354,6 +345,11 @@ public interface ExAddOn<E extends ExElement> {
 			} catch (CloneNotSupportedException e) {
 				throw new IllegalStateException("Clone not supported?", e);
 			}
+		}
+
+		@Override
+		public String toString() {
+			return theElement + ":<" + getClass().getSimpleName() + ">";
 		}
 	}
 

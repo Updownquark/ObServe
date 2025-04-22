@@ -336,15 +336,15 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theName = interpret(getDefinition().getName(), ModelTypes.Value.STRING);
 				theTooltip = interpret(getDefinition().getTooltip(), ModelTypes.Value.STRING);
 				isVisible = interpret(getDefinition().isVisible(), ModelTypes.Value.BOOLEAN);
 				theRepaint = interpret(getDefinition().getRepaint(), ModelTypes.Event.any());
 
 				theBorder = syncChild(getDefinition().getBorder(), theBorder, def -> def.interpret(this),
-					(b, bEnv) -> b.updateBorder(bEnv));
+					b -> b.updateBorder());
 				syncChildren(getDefinition().getEventListeners(), theEventListeners, def -> def.interpret(this),
 					QuickEventListener.Interpreted::updateListener);
 				syncChildren(getDefinition().getDialogs(), theDialogs, def -> def.interpret(this), QuickDialog.Interpreted::updateDialog);
@@ -425,17 +425,17 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		/** @param id The element identifier for this widget */
 		protected Abstract(Object id) {
 			super(id);
-			theName = SettableValue.<SettableValue<String>> build().build();
-			theTooltip = SettableValue.<SettableValue<String>> build().build();
-			isVisible = SettableValue.<SettableValue<Boolean>> build().build();
-			theRepaint = SettableValue.<Observable<?>> build().build();
-			theEventListeners = ObservableCollection.<QuickEventListener> build().build();
-			theDialogs = ObservableCollection.<QuickDialog> build().build();
+			theName = SettableValue.create();
+			theTooltip = SettableValue.create();
+			isVisible = SettableValue.create();
+			theRepaint = SettableValue.create();
+			theEventListeners = ObservableCollection.create();
+			theDialogs = ObservableCollection.create();
 
-			isHovered = SettableValue.<SettableValue<Boolean>> build().build();
-			isFocused = SettableValue.<SettableValue<Boolean>> build().build();
-			isPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isHovered = SettableValue.create();
+			isFocused = SettableValue.create();
+			isPressed = SettableValue.create();
+			isRightPressed = SettableValue.create();
 		}
 
 		@Override
@@ -581,8 +581,8 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHoveredValue, myModels, SettableValue.flatten(isHovered));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theFocusedValue, myModels, SettableValue.flatten(isFocused));
@@ -602,22 +602,24 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 
 			for (QuickDialog dialog : theDialogs)
 				dialog.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override
 		public QuickWidget.Abstract copy(ExElement parent) {
 			QuickWidget.Abstract copy = (QuickWidget.Abstract) super.copy(parent);
 
-			copy.theName = SettableValue.<SettableValue<String>> build().build();
-			copy.theTooltip = SettableValue.<SettableValue<String>> build().build();
-			copy.isVisible = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.theRepaint = SettableValue.<Observable<?>> build().build();
-			copy.theEventListeners = ObservableCollection.<QuickEventListener> build().build();
+			copy.theName = SettableValue.create();
+			copy.theTooltip = SettableValue.create();
+			copy.isVisible = SettableValue.create();
+			copy.theRepaint = SettableValue.create();
+			copy.theEventListeners = ObservableCollection.create();
+			copy.theDialogs = ObservableCollection.create();
 
-			copy.isHovered = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.isFocused = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.isPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.isRightPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isHovered = SettableValue.create();
+			copy.isFocused = SettableValue.create();
+			copy.isPressed = SettableValue.create();
+			copy.isRightPressed = SettableValue.create();
 
 			if (theBorder != null)
 				copy.theBorder = theBorder.copy(copy);
@@ -663,10 +665,10 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				}
 
 				@Override
-				public QuickWidgetStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				public QuickWidgetStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
+					throws ExpressoInterpretationException {
 					return new Interpreted.Default(this, (QuickWidget.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 		}
@@ -708,9 +710,10 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theColor = get(cache.getAttribute(getDefinition().getColor(), Color.class, env));
 					theMouseCursor = get(cache.getAttribute(getDefinition().getMouseCursor(), MouseCursor.class, env));

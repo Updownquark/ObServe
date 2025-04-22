@@ -1,7 +1,6 @@
 package org.observe.dbug.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.qommons.BreakpointHere;
@@ -33,8 +32,8 @@ public class DbugBreak extends ExElement.Abstract implements DbugAction {
 		}
 
 		@Override
-		public void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateAction() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override

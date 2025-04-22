@@ -78,7 +78,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(),
 					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
-					this::getExpressoEnv);
+					null);
 			}
 		}
 

@@ -66,7 +66,7 @@ public abstract class ObservableStyledDocument<T> implements Highlighter {
 		theNodesByValue = new IdentityHashMap<>();
 
 		theRootStyle = new BgFontAdjuster(new SimpleAttributeSet());
-		theRoot = root.safe(theThreading, theUntil);
+		theRoot = root.safe(theThreading);
 		theRootNode = new DocumentNode(null, theRoot.get());
 		theListeners = ListenerList.build().build();
 

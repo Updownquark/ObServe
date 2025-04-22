@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import org.observe.expresso.CompiledExpressoEnv;
@@ -115,6 +116,11 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 
 		@Override
+		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+			return Collections.singleton((Class<ExAddOn.Def<?, ?>>) (Class<?>) ExpressoDocument.Def.class);
+		}
+
+		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends E> element) throws QonfigInterpretationException {
 			if (!theElementValues.isEmpty())
 				theElementValues.clear();
@@ -190,7 +196,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			ModelType<M> modelType,
 			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
 				throws QonfigInterpretationException {
-			ModelComponentNode<?> value = getElement().getExpressoEnv().getModels().getComponent(elementValueId);
+			ModelComponentNode<?> value = null;
+			for (CompiledExpressoEnv env : getElement().getExpressoEnvs()) {
+				if (env.getModels().getIdentity() == elementValueId.getOwnerId()) {
+					value = env.getModels().getComponent(elementValueId);
+					break;
+				}
+			}
 			if (!(value.getThing() instanceof PlaceholderModelValue))
 				throw new QonfigInterpretationException("Element value '" + elementValueId + "' is not dynamically-typed",
 					getElement().reporting().getPosition(), 0);
@@ -278,11 +290,19 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			for (Map.Entry<String, ? extends CompiledModelValue<?>> elementValue : getDefinition().getElementValues().entrySet()) {
 				if (theElementValues.containsKey(elementValue.getKey()))
 					continue;
-				InterpretableModelComponentNode<?> node = getElement().getExpressoEnv().getModels()
-					.getComponentIfExists(elementValue.getKey(), false);
-				theElementValues.put(elementValue.getKey(), node.interpreted());
+				theElementValues.put(elementValue.getKey(), getModelComponent(elementValue.getKey()).interpreted());
 			}
 			getDefinition().setCurrentInterpreting(null);
+		}
+
+		private InterpretableModelComponentNode<?> getModelComponent(String name) {
+			InterpretableModelComponentNode<?> node = null;
+			for (InterpretedExpressoEnv env : getElement().getExpressoEnvs()) {
+				node = env.getModels().getComponentIfExists(name, false);
+				if (node != null)
+					return node;
+			}
+			throw new IllegalStateException("No such model component: " + name);
 		}
 
 		/**
@@ -299,9 +319,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				if (defValue == null)
 					throw new ExpressoInterpretationException("No such element value '" + elementValueName + "'",
 						getElement().reporting().getPosition(), 0);
-				InterpretableModelComponentNode<?> node = getElement().getExpressoEnv().getModels().getComponentIfExists(elementValueName,
-					false);
-				value = node.interpreted();
+				value = getModelComponent(elementValueName).interpreted();
 				theElementValues.put(elementValueName, value);
 			}
 			return value;

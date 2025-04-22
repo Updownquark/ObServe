@@ -5,7 +5,6 @@ import java.awt.Image;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -112,8 +111,8 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theType = interpret(getDefinition().getType(), ModelTypes.Value.forType(String.class));
 			theOnClose = interpret(getDefinition().getOnClose(), ModelTypes.Action.instance());
@@ -179,12 +178,13 @@ public class QuickInfoDialog extends QuickContentDialog.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theType.set(theTypeInstantiator.get(myModels), null);
 		theOnClose.set(theOnCloseInstantiator == null ? ObservableAction.DO_NOTHING : theOnCloseInstantiator.get(myModels), null);
 		theIcon.set(theIconInstantiator == null ? null : theIconInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

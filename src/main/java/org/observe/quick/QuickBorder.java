@@ -62,10 +62,9 @@ public interface QuickBorder extends QuickStyledElement {
 		QuickBorderStyle.Interpreted getStyle();
 
 		/**
-		 * @param env The expresso environment to faciliate expression interpretation
 		 * @throws ExpressoInterpretationException If interpretation fails
 		 */
-		void updateBorder(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateBorder() throws ExpressoInterpretationException;
 
 		/** @return The border instance */
 		B create();
@@ -147,8 +146,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void updateBorder(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateBorder() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
@@ -259,8 +258,8 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theTitle = interpret(getDefinition().getTitle(), ModelTypes.Value.STRING);
 			}
 
@@ -281,7 +280,7 @@ public interface QuickBorder extends QuickStyledElement {
 		/** @param id The element identifier for this border */
 		public TitledBorder(Object id) {
 			super(id);
-			theTitle = SettableValue.<SettableValue<String>> build().build();
+			theTitle = SettableValue.create();
 		}
 
 		/** @return The title for the border */
@@ -297,15 +296,16 @@ public interface QuickBorder extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			theTitle.set(theTitleInstantiator.get(myModels), null);
+			return myModels;
 		}
 
 		@Override
 		protected TitledBorder clone() {
 			TitledBorder copy = (TitledBorder) super.clone();
-			copy.theTitle = SettableValue.<SettableValue<String>> build().build();
+			copy.theTitle = SettableValue.create();
 			return copy;
 		}
 
@@ -323,8 +323,8 @@ public interface QuickBorder extends QuickStyledElement {
 				 */
 				public Def(QuickInstanceStyle.Def parent, TitledBorder.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
-						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "titled-border");
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(), QuickCoreInterpretation.NAME,
+						QuickCoreInterpretation.VERSION, "titled-border");
 					theBorderColor = addApplicableAttribute(typeStyle.getAttribute("border-color"));
 					theBorderThickness = addApplicableAttribute(typeStyle.getAttribute("thickness"));
 				}
@@ -340,10 +340,10 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (TitledBorder.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -379,9 +379,10 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theBorderColor = get(cache.getAttribute(getDefinition().getBorderColor(), Color.class, env));
 					theBorderThickness = get(cache.getAttribute(getDefinition().getBorderThickness(), Integer.class, env));
@@ -409,8 +410,7 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
-				throws ModelInstantiationException {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled) throws ModelInstantiationException {
 				super.update(interpreted, styled);
 
 				Interpreted myInterpreted = (Interpreted) interpreted;
@@ -444,8 +444,7 @@ public interface QuickBorder extends QuickStyledElement {
 			QuickStyleAttributeDef getBorderThickness();
 
 			@Override
-			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent) throws ExpressoInterpretationException;
 
 			/** Default {@link QuickBorderStyle} definition implementation */
 			public class Default extends QuickInstanceStyle.Def.Abstract implements Def {
@@ -459,8 +458,8 @@ public interface QuickBorder extends QuickStyledElement {
 				 */
 				public Default(QuickInstanceStyle.Def parent, QuickBorder.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
-					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
-						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "border");
+					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(), QuickCoreInterpretation.NAME,
+						QuickCoreInterpretation.VERSION, "border");
 					theBorderColor = addApplicableAttribute(typeStyle.getAttribute("border-color"));
 					theBorderThickness = addApplicableAttribute(typeStyle.getAttribute("thickness"));
 				}
@@ -476,10 +475,10 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted.Default(this, (QuickBorder.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 		}
@@ -527,9 +526,10 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theBorderColor = get(cache.getAttribute(getDefinition().getBorderColor(), Color.class, env));
 					theBorderThickness = get(cache.getAttribute(getDefinition().getBorderThickness(), Integer.class, env));
@@ -566,8 +566,7 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled)
-				throws ModelInstantiationException {
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyled styled) throws ModelInstantiationException {
 				super.update(interpreted, styled);
 
 				QuickBorderStyle.Interpreted myInterpreted = (QuickBorderStyle.Interpreted) interpreted;

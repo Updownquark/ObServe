@@ -1,7 +1,6 @@
 package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 
@@ -33,10 +32,9 @@ public interface QuickDialog extends ExElement {
 		/**
 		 * Initializes or updates this dialog
 		 *
-		 * @param expressoEnv The expresso environment for evaluating expressions
 		 * @throws ExpressoInterpretationException If this dialog could not be interpreted
 		 */
-		void updateDialog(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException;
+		void updateDialog() throws ExpressoInterpretationException;
 
 		/** @return The instantiated dialog */
 		D create();

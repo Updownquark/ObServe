@@ -12,6 +12,7 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.DocumentMap;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
@@ -148,12 +149,12 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theDerivedState = interpret(getDefinition().getDerivedState(), ModelTypes.Value.INT);
 			}
 
@@ -169,27 +170,27 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		static class Instantiator extends ModelValueElement.Abstract<SettableValue<StatefulTestStructure>> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Integer>> theDerivedState;
 			private final ModelComponentId theInternalStateVariable;
 
 			Instantiator(StatefulStruct.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 				theDerivedState = interpreted.getDerivedState().instantiate();
 				theInternalStateVariable = interpreted.getDefinition().getInternalStateVariable();
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				theDerivedState.instantiate();
 			}
 
 			@Override
-			public SettableValue<StatefulTestStructure> get(ModelSetInstance models)
+			public SettableValue<StatefulTestStructure> evaluate(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				StatefulTestStructure structure = new StatefulTestStructure(theDerivedState.get(models));
 				ExFlexibleElementModelAddOn.satisfyElementValue(theInternalStateVariable, models, structure.getInternalState());
@@ -307,13 +308,13 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
 				theInternalState = null;
-				super.doUpdate(env);
+				super.doUpdate();
 				System.out.println("Interpret " + getDefinition().getModelPath());
 				// Satisfy the internalState value with the internalState container
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", getOrCreateInternalState());
@@ -332,28 +333,28 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<DynamicTypeStatefulTestStructure>> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
 			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
 
 			Instantiator(DynamicTypeStatefulStruct.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 				theInternalState = interpreted.getInternalState().instantiate();
 				theDerivedState = interpreted.getDerivedState().instantiate();
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				theInternalState.instantiate();
 				theDerivedState.instantiate();
 			}
 
 			@Override
-			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
+			public SettableValue<DynamicTypeStatefulTestStructure> evaluate(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
@@ -459,15 +460,15 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				try {
-					theInternalState = getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.<SettableValue<T>> anyAs(),
-						env);
+					InterpretedExpressoEnv env = getDefaultEnv();
+					theInternalState = env.getModels().getValue("internalState", ModelTypes.Value.<SettableValue<T>> anyAs(), env);
 				} catch (ModelException | TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation().getPosition(0), 0, e);
 				}
@@ -486,28 +487,28 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends ModelValueElement.Abstract<SettableValue<DynamicTypeStatefulTestStructure>> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
 			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
 
 			Instantiator(DynamicTypeStatefulStruct2.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 				theInternalState = interpreted.getInternalState().instantiate();
 				theDerivedState = interpreted.getDerivedState().instantiate();
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				theInternalState.instantiate();
 				theDerivedState.instantiate();
 			}
 
 			@Override
-			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
+			public SettableValue<DynamicTypeStatefulTestStructure> evaluate(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));

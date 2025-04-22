@@ -20,7 +20,6 @@ import javax.swing.plaf.basic.BasicSpinnerUI;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
 import org.qommons.Stamped;
@@ -436,16 +435,14 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 
 		private void startListening() {
 			// Combine with enabled so when enablement changes, the buttons become enabled/disabled
-			SimpleObservable<Void> until = new SimpleObservable<>();
-			Subscription valueSub = theValue.transform(tx -> tx//
+			theValueChangeSub = theValue.transform(tx -> tx//
 				.combineWith(theValue.isEnabled()).combine((v, e) -> v))//
-				.safe(ThreadConstraint.EDT, until)//
+				.safe(ThreadConstraint.EDT)//
 				.noInitChanges().act(evt -> {
 					ChangeEvent swingEvt = new ChangeEvent(this);
 					for (ChangeListener listener : theChangeListeners)
 						listener.stateChanged(swingEvt);
 				});
-			theValueChangeSub = Subscription.forAll(() -> until.onNext(null), valueSub);
 		}
 	}
 
@@ -467,7 +464,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 				JComponent jButton = (JComponent) button;
 				theModel.getObservableValue().transform(tx -> tx//
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
-				.safe(ThreadConstraint.EDT, theUntil)//
+					.safe(ThreadConstraint.EDT)//
 				.changes().takeUntil(theUntil).act(evt -> {
 					if (theModel.getPreviousValue() != null) {
 						jButton.setEnabled(true);
@@ -492,7 +489,7 @@ public class ObservableSpinner<T> extends JSpinner implements ObservableTextEdit
 				JComponent jButton = (JComponent) button;
 				theModel.getObservableValue().transform(tx -> tx//
 					.combineWith(theModel.getObservableValue().isEnabled()).combine((v, e) -> v))//
-				.safe(ThreadConstraint.EDT, theUntil)//
+					.safe(ThreadConstraint.EDT)//
 				.changes().takeUntil(theUntil).act(evt -> {
 					if (theModel.getNextValue() != null) {
 						jButton.setEnabled(true);

@@ -1,7 +1,6 @@
 package org.observe.quick.base;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -89,17 +88,16 @@ public class QuickPostField extends ExElement.Abstract {
 		/**
 		 * Updates this interpretation
 		 *
-		 * @param env The environment to interpret with
 		 * @throws ExpressoInterpretationException If an error occurs during interpretation
 		 */
-		public void updatePostField(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updatePostField() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
-			theContent = syncChild(getDefinition().getContent(), theContent, d -> d.interpret(this), (i, env2) -> i.updateElement(env2));
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			theContent = syncChild(getDefinition().getContent(), theContent, d -> d.interpret(this), i -> i.updateElement());
 		}
 
 		/** @return The post-field instance */
@@ -138,9 +136,10 @@ public class QuickPostField extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theContent.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

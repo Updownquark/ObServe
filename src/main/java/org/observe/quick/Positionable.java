@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick;
 
 import java.util.Collections;
 import java.util.Set;
@@ -94,7 +94,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		/** {@link Positionable}.{@link Positionable.Vertical} definition */
-		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = V_POSITIONABLE,
 			interpretation = Interpreted.Vertical.class,
 			instance = Positionable.Vertical.class)
@@ -132,7 +132,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		/** {@link Positionable}.{@link Positionable.Horizontal} definition */
-		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = H_POSITIONABLE,
 			interpretation = Interpreted.Horizontal.class,
 			instance = Positionable.Horizontal.class)
@@ -311,11 +311,12 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theLeading.set(theLeadingInstantiator == null ? null : theLeadingInstantiator.get(models), null);
 		theCenter.set(theCenterInstantiator == null ? null : theCenterInstantiator.get(models), null);
 		theTrailing.set(theTrailingInstantiator == null ? null : theTrailingInstantiator.get(models), null);
+		return models;
 	}
 
 	@Override

@@ -196,9 +196,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
 	public LocatedExpression findModelValues(LocatedExpression ex, Collection<ElementModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
+		ExElement.Def<?> element, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		ObservableExpression expression;
+		ObservableModelSet models = element.getExpressoEnv(ex.getFilePosition() == null ? null : ex.getFilePosition().getFileLocation())
+			.getModels();
 		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, reporting);
 		if (expression == ex.getExpression())
 			return ex;
@@ -716,23 +718,23 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link ElementModelValue
 	 *         model values} from a style-sheet
 	 */
-	public StyleApplicationDef forCondition(LocatedExpression condition, ObservableModelSet models,
+	public StyleApplicationDef forCondition(LocatedExpression condition, ExElement.Def<?> element,
 		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		List<LocatedExpression> newConditions = new ArrayList<>(theConditions.size() + 1);
 		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
 		newConditions.addAll(theConditions);
 		modelValues.putAll(theModelValues);
-		newConditions.add(getPrioritizedModelValues(condition, models, priorityAttr, styleSheet, dmvCache, modelValues, reporting));
+		newConditions.add(getPrioritizedModelValues(condition, element, priorityAttr, styleSheet, dmvCache, modelValues, reporting));
 		return new StyleApplicationDef(theParent, theRole, theTypes, Collections.unmodifiableList(newConditions), modelValues);
 	}
 
-	private LocatedExpression getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
+	private LocatedExpression getPrioritizedModelValues(LocatedExpression newCondition, ExElement.Def<?> element,
 		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache,
 		Map<ElementModelValue.Identity, Integer> modelValues, ErrorReporting reporting) throws QonfigInterpretationException {
 		Set<ElementModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		newCondition = findModelValues(newCondition, mvs, models, priorityAttr.getDeclarer(), styleSheet, dmvCache, reporting);
+		newCondition = findModelValues(newCondition, mvs, element, priorityAttr.getDeclarer(), styleSheet, dmvCache, reporting);
 		mvs.addAll(theModelValues.keySet());
 		prioritizeModelValues(mvs, theModelValues, priorityAttr, modelValues);
 		return newCondition;
@@ -829,40 +831,20 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *         evaluated}
 	 */
-	public InterpretedStyleApplication interpret(QuickInterpretedStyleCache.Applications appCache, InterpretedExpressoEnv... envs)
+	public InterpretedStyleApplication interpret(QuickInterpretedStyleCache.Applications appCache, ExElement.Interpreted<?> element)
 		throws ExpressoInterpretationException {
 		InterpretedStyleApplication parent;
 		if (theParent == null)
 			parent = null;
 		else
-			parent = appCache.getApplication(theParent, envs);
+			parent = appCache.getApplication(theParent, element);
 		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions;
 		if (theConditions.isEmpty())
 			conditions = Collections.emptyList();
 		else {
 			conditions = new ArrayList<>(theConditions.size());
-			for (LocatedExpression c : theConditions) {
-				boolean found = false;
-				ExpressoInterpretationException thrown = null;
-				for (InterpretedExpressoEnv env : envs) {
-					if (ExElement.documentsMatch(c.getFilePosition().getFileLocation(),
-						env.reporting().getFileLocation().getFileLocation())) {
-						try {
-							conditions.add(c.interpret(ModelTypes.Value.BOOLEAN, env));
-							found = true;
-							break;
-						} catch (ExpressoInterpretationException e) {
-							if (thrown == null)
-								thrown = e;
-						}
-					}
-				}
-				if (found) { // Well good then
-				} else if (thrown != null)
-					throw thrown;
-				else // Well, we'll try the first one then
-					conditions.add(c.interpret(ModelTypes.Value.BOOLEAN, envs[0]));
-			}
+			for (LocatedExpression c : theConditions)
+				conditions.add(element.interpret(c, ModelTypes.Value.BOOLEAN));
 			conditions = Collections.unmodifiableList(conditions);
 		}
 		return new InterpretedStyleApplication(parent, this, conditions);

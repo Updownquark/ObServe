@@ -374,17 +374,15 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickMouseButtonListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<QuickMouseListener.MouseButton> button = SettableValue.<QuickMouseListener.MouseButton> build().build();
-				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
-				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
-
 				QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
+				SettableValue<Boolean> altPressed = mbl.isAltPressed();
+				SettableValue<Boolean> ctrlPressed = mbl.isCtrlPressed();
+				SettableValue<Boolean> shiftPressed = mbl.isShiftPressed();
+				SettableValue<QuickMouseListener.MouseButton> button = mbl.getEventButton();
+				SettableValue<Integer> x = mbl.getEventX();
+				SettableValue<Integer> y = mbl.getEventY();
+
 				QuickMouseListener.MouseButton listenerButton = mbl.getButton();
-				mbl.setListenerContext(
-					new QuickMouseListener.MouseButtonListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, button));
 				if (mbl instanceof QuickMouseListener.QuickMouseClickListener) {
 					int clickCount = ((QuickMouseListener.QuickMouseClickListener) mbl).getClickCount();
 					component.addMouseListener(new MouseAdapter() {
@@ -401,9 +399,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 				} else if (mbl instanceof QuickMouseListener.QuickMousePressedListener) {
@@ -419,9 +416,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 				} else if (mbl instanceof QuickMouseListener.QuickMouseReleasedListener) {
@@ -437,9 +433,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 				} else
@@ -449,14 +444,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
-				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
-
 				QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
-				mml.setListenerContext(new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
+				SettableValue<Boolean> altPressed = mml.isAltPressed();
+				SettableValue<Boolean> ctrlPressed = mml.isCtrlPressed();
+				SettableValue<Boolean> shiftPressed = mml.isShiftPressed();
+				SettableValue<Integer> x = mml.getEventX();
+				SettableValue<Integer> y = mml.getEventY();
 				switch (mml.getEventType()) {
 				case Move:
 					component.addMouseMotionListener(new MouseAdapter() {
@@ -467,9 +460,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 					break;
@@ -482,9 +474,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 					break;
@@ -497,9 +488,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (!ql.testFilter())
-								return;
-							ql.getAction().act(evt);
+							if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(evt);
 						}
 					});
 					break;
@@ -511,16 +501,13 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickMouseListener.QuickScrollListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Integer> x = SettableValue.<Integer> build().withValue(0).build();
-				SettableValue<Integer> y = SettableValue.<Integer> build().withValue(0).build();
-				SettableValue<Integer> scrollAmount = SettableValue.<Integer> build().withValue(0).build();
-
 				QuickMouseListener.QuickScrollListener sl = (QuickMouseListener.QuickScrollListener) ql;
-				sl.setListenerContext(
-					new QuickMouseListener.ScrollListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, scrollAmount));
+				SettableValue<Boolean> altPressed = sl.isAltPressed();
+				SettableValue<Boolean> ctrlPressed = sl.isCtrlPressed();
+				SettableValue<Boolean> shiftPressed = sl.isShiftPressed();
+				SettableValue<Integer> x = sl.getEventX();
+				SettableValue<Integer> y = sl.getEventY();
+				SettableValue<Integer> scrollAmount = sl.getScrollAmount();
 				component.addMouseWheelListener(new MouseAdapter() {
 					@Override
 					public void mouseWheelMoved(MouseWheelEvent evt) {
@@ -530,21 +517,19 @@ public class QuickCoreSwing implements QuickInterpretation {
 						x.set(evt.getX(), evt);
 						y.set(evt.getY(), evt);
 						scrollAmount.set(evt.getUnitsToScroll(), evt);
-						if (!ql.testFilter())
-							return;
-						ql.getAction().act(evt);
+						if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+							ql.getAction().act(evt);
 					}
 				});
 			};
 		});
 		tx.with(QuickKeyListener.QuickKeyTypedListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Character> charTyped = SettableValue.<Character> build().withValue((char) 0).build();
 				QuickKeyListener.QuickKeyTypedListener tl = (QuickKeyListener.QuickKeyTypedListener) ql;
-				tl.setListenerContext(new QuickKeyListener.KeyTypedContext.Default(altPressed, ctrlPressed, shiftPressed, charTyped));
+				SettableValue<Boolean> altPressed = tl.isAltPressed();
+				SettableValue<Boolean> ctrlPressed = tl.isCtrlPressed();
+				SettableValue<Boolean> shiftPressed = tl.isShiftPressed();
+				SettableValue<Character> charTyped = tl.getTypedChar();
 				component.addKeyListener(new KeyAdapter() {
 					@Override
 					public void keyTyped(KeyEvent evt) {
@@ -554,21 +539,19 @@ public class QuickCoreSwing implements QuickInterpretation {
 						ctrlPressed.set(evt.isControlDown(), evt);
 						shiftPressed.set(evt.isShiftDown(), evt);
 						charTyped.set(evt.getKeyChar(), evt);
-						if (!ql.testFilter())
-							return;
-						ql.getAction().act(evt);
+						if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+							ql.getAction().act(evt);
 					}
 				});
 			};
 		});
 		tx.with(QuickKeyListener.QuickKeyCodeListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
 			return (component, ql) -> {
-				SettableValue<Boolean> altPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> ctrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<Boolean> shiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-				SettableValue<KeyCode> keyCode = SettableValue.<KeyCode> build().build();
 				QuickKeyListener.QuickKeyCodeListener kl = (QuickKeyListener.QuickKeyCodeListener) ql;
-				kl.setListenerContext(new QuickKeyListener.KeyCodeContext.Default(altPressed, ctrlPressed, shiftPressed, keyCode));
+				SettableValue<Boolean> altPressed = kl.isAltPressed();
+				SettableValue<Boolean> ctrlPressed = kl.isCtrlPressed();
+				SettableValue<Boolean> shiftPressed = kl.isShiftPressed();
+				SettableValue<KeyCode> keyCode = kl.getEventKeyCode();
 				component.addKeyListener(new KeyAdapter() {
 					@Override
 					public void keyPressed(KeyEvent e) {
@@ -592,9 +575,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 						ctrlPressed.set(evt.isControlDown(), evt);
 						shiftPressed.set(evt.isShiftDown(), evt);
 						keyCode.set(code, evt);
-						if (!ql.testFilter())
-							return;
-						ql.getAction().act(evt);
+						if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
+							ql.getAction().act(evt);
 					}
 				});
 			};

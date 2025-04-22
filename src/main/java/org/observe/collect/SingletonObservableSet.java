@@ -300,7 +300,7 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 
 	@Override
 	public SingletonObservableSet<T> safe(ThreadConstraint threading, Observable<?> until) {
-		return new SingletonObservableSet<>(theValue.safe(threading, until));
+		return new SingletonObservableSet<>(theValue.safe(threading));
 	}
 
 	class ValueElement implements CollectionElement<T> {

@@ -38,6 +38,7 @@ import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
@@ -58,20 +59,20 @@ import org.qommons.collect.ElementId;
  */
 class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends AbstractSimpleTableBuilder<BetterList<F>, JXTreeTable, P>
 implements TreeTableEditor<F, P> {
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ComponentEditor<?, ?> parent, ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeTableBuilder<>(root, children, null, null, until);
+		return new SimpleTreeTableBuilder<>(parent, root, children, null, null, until);
 	}
 
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ComponentEditor<?, ?> parent, ObservableValue<F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeTableBuilder<>(root, null, children, null, until);
+		return new SimpleTreeTableBuilder<>(parent, root, null, children, null, until);
 	}
 
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable3(ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable3(ComponentEditor<?, ?> parent, ObservableValue<F> root,
 		BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children,
 			Observable<?> until) {
-		return new SimpleTreeTableBuilder<>(root, null, null, children, until);
+		return new SimpleTreeTableBuilder<>(parent, root, null, null, children, until);
 	}
 
 	private final ObservableValue<F> theRoot;
@@ -85,15 +86,18 @@ implements TreeTableEditor<F, P> {
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
 	private boolean isRootVisible;
+	private Observable<?> theExpandAll;
+	private Observable<?> theCollapseAll;
 
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
 	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theDisplayedColumns;
 
-	private SimpleTreeTableBuilder(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children1,
-		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
-			BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children3,
-				Observable<?> until) {
-		super(null, new JXTreeTable(), until);
+	private SimpleTreeTableBuilder(ComponentEditor<?, ?> parent, ObservableValue<F> root,
+		Function<? super F, ? extends ObservableCollection<? extends F>> children1,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
+				BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children3,
+					Observable<?> until) {
+		super(parent, null, new JXTreeTable(), until);
 		theRoot = root;
 		theChildren1 = children1;
 		theChildren2 = children2;
@@ -183,6 +187,24 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public P withRootVisible(boolean rootVisible) {
 		isRootVisible = rootVisible;
+		return (P) this;
+	}
+
+	@Override
+	public P withExpandAll(Observable<?> expandAll) {
+		if (theExpandAll == null)
+			theExpandAll = expandAll;
+		else
+			theExpandAll = Observable.or(theExpandAll, expandAll);
+		return (P) this;
+	}
+
+	@Override
+	public P withCollapseAll(Observable<?> expandAll) {
+		if (theCollapseAll == null)
+			theCollapseAll = expandAll;
+		else
+			theCollapseAll = Observable.or(theCollapseAll, expandAll);
 		return (P) this;
 	}
 
@@ -451,6 +473,10 @@ implements TreeTableEditor<F, P> {
 			forEach.accept(row.nextRow(model.getRow(i, table)));
 	}
 
+	public static JTree getTree(JXTreeTable treeTable) {
+		return (JTree) treeTable.getCellRenderer(0, treeTable.getHierarchicalColumn());
+	}
+
 	@Override
 	protected Component createComponent() {
 		Component comp = super.createComponent();
@@ -461,6 +487,24 @@ implements TreeTableEditor<F, P> {
 		if (theTreeColumn != null && theTreeColumn.getRenderer() != null)
 			theTreeColumn.getRenderer().associate((Component) getEditor().getCellRenderer(0, 0)); // Hacky, but it works
 		getEditor().setRootVisible(isRootVisible);
+		JTree tree = getTree(getEditor());
+		if (theExpandAll != null) {
+			theExpandAll.takeUntil(getUntil()).act(__ -> {
+				for (int r = 0; r < tree.getRowCount(); r++)
+					tree.expandRow(r);
+			});
+		}
+		if (theCollapseAll != null) {
+			theCollapseAll.takeUntil(getUntil()).act(__ -> {
+				int rowCount = tree.getRowCount();
+				boolean collapsed = false;
+				do {
+					for (int r = rowCount - 1; r >= 0 && rowCount == tree.getRowCount(); r--)
+						tree.collapseRow(rowCount - 1);
+					collapsed = rowCount != tree.getRowCount();
+				} while (collapsed);
+			});
+		}
 		return comp;
 	}
 

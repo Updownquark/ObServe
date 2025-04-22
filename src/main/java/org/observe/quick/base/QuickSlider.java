@@ -4,7 +4,6 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -17,6 +16,7 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -140,12 +140,13 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			}
 			return numberValue.mapValue(ModelTypes.Value.DOUBLE, numberColl -> numberColl.transformReversible(tx -> tx//
 				.cache(false)//
-				.map(Number::doubleValue).replaceSource(reverse, rev -> rev.allowInexactReverse(inexact))));
+				.map(LambdaUtils.printableFn(v -> v == null ? 0 : v.doubleValue(), "double", null))
+				.replaceSource(reverse, rev -> rev.allowInexactReverse(inexact))));
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theMin = interpret(getDefinition().getMin(), ModelTypes.Value.DOUBLE);
 			theMax = interpret(getDefinition().getMax(), ModelTypes.Value.DOUBLE);
@@ -198,8 +199,8 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		SettableValue<Double> min = theMinInstantiator.get(myModels);
 		SettableValue<Double> max = theMaxInstantiator.get(myModels);
@@ -211,6 +212,7 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			theMin.set(min, null);
 			theMax.set(max, null);
 		}
+		return myModels;
 	}
 
 	@Override

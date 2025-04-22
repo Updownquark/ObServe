@@ -1,14 +1,17 @@
 package org.observe.quick.base;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
@@ -199,9 +202,9 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
 			theRoot = null;
-			super.doUpdate(env);
+			super.doUpdate();
 
 			getOrInitRoot(); // Initialize theRoot
 			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(getValueType()));
@@ -212,7 +215,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 				theFormat = QuickTextWidget.getDefaultFormat(getValueType(), false, reporting().getPosition());
 			thePostText = interpret(getDefinition().getPostText(), ModelTypes.Value.STRING);
 			theTextStyle = syncChild(getDefinition().getTextStyle(), theTextStyle, def -> def.interpret(this),
-				(s, sEnv) -> s.updateElement(sEnv));
+				s -> s.updateElement());
 		}
 
 		@Override
@@ -263,6 +266,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 	}
 
+	private final Set<String> theDocuments;
 	private ModelValueInstantiator<SettableValue<T>> theRootInstantiator;
 	private ModelValueInstantiator<SettableValue<Format<T>>> theFormatInstantiator;
 
@@ -278,8 +282,9 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	/** @param id The element identity of the widget */
 	protected DynamicStyledDocument(Object id) {
 		super(id);
-		theRoot = SettableValue.<SettableValue<T>> build().build();
-		theNodeValue = SettableValue.<T> build().build();
+		theDocuments = new LinkedHashSet<>();
+		theRoot = SettableValue.create();
+		theNodeValue = SettableValue.create();
 	}
 
 	/** @return The root of the document */
@@ -302,15 +307,24 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		return theNodeValue;
 	}
 
+	protected ModelSetInstance copyModels(SettableValue<T> node) throws ModelInstantiationException {
+		ModelSetInstance myModels = getUpdatingModels();
+		ModelSetInstanceBuilder builder = myModels.copy();
+		for (String doc : theDocuments) {
+			ModelSetInstance widgetModelCopy = getModels(doc).createCopy(myModels, myModels.getUntil()).build();
+			ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, widgetModelCopy, node);
+			builder.withAll(widgetModelCopy);
+		}
+		return builder.build();
+	}
+
 	/**
-	 * @param ctx The context to generate the children for
-	 * @return The child values for the node in the given context
+	 * @param node The node to generate the children for
+	 * @return The child values for the node
 	 * @throws ModelInstantiationException If the children could not be instantiated
 	 */
-	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
-			.build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
+	public ObservableCollection<? extends T> getChildren(SettableValue<T> node) throws ModelInstantiationException {
+		ModelSetInstance modelCopy = copyModels(node);
 		// After synthesizing and returning the children for the node, we can discard the model copy
 		return theChildrenSynth.get(modelCopy);
 	}
@@ -321,18 +335,15 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	/**
-	 * @param ctx The context to generate the style for
-	 * @return The text style for the node in the given context
+	 * @param node The node to generate the style for
+	 * @return The text style for the node
 	 * @throws ModelInstantiationException If the text style could not be instantiated
 	 */
-	public TextStyle getStyle(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
+	public TextStyle getStyle(SettableValue<T> node) throws ModelInstantiationException {
 		if (theTextStyle == null)
 			return null;
-		ModelSetInstance widgetModelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
-			.build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, widgetModelCopy, ctx.getNodeValue());
 		ModelSetInstance styleElementModelCopy = getTextStyle().getUpdatingModels().copy()//
-			.withAll(widgetModelCopy)//
+			.withAll(copyModels(node))//
 			.build();
 
 		TextStyle styleCopy = theTextStyle.getStyle().copy(theTextStyle.getAddOn(QuickStyled.class));
@@ -341,14 +352,12 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	/**
-	 * @param ctx The context to generate the post-text for
-	 * @return The post-text for the node in the given context
+	 * @param node The node to generate the post-text for
+	 * @return The post-text for the node
 	 * @throws ModelInstantiationException If the post-text could not be instantiated
 	 */
-	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getModels().createCopy(getUpdatingModels(), getUpdatingModels().getUntil())//
-			.build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue());
+	public SettableValue<String> getPostText(SettableValue<T> node) throws ModelInstantiationException {
+		ModelSetInstance modelCopy = copyModels(node);
 		// After synthesizing and returning the post text, we can discard the model copy
 		return thePostTextSynth.get(modelCopy);
 	}
@@ -357,6 +366,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
+		theDocuments.clear();
+		theDocuments.addAll(interpreted.getLocalModelDocuments());
 		theNodeValueId = myInterpreted.getDefinition().getNodeValue();
 
 		theRootInstantiator = myInterpreted.getRoot().instantiate();
@@ -387,21 +398,22 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, myModels, getNodeValue());
-		theRoot.set(theRootInstantiator.get(myModels), null);
+		theRoot.set(theRootInstantiator.get(myModels));
 		theFormat = theFormatInstantiator.get(myModels).get();
 
 		if (theTextStyle != null)
 			theTextStyle.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override
 	public DynamicStyledDocument<T> copy(ExElement parent) {
 		DynamicStyledDocument<T> copy = (DynamicStyledDocument<T>) super.copy(parent);
 
-		copy.theRoot = SettableValue.<SettableValue<T>> build().build();
+		copy.theRoot = SettableValue.create();
 		copy.theNodeValue = SettableValue.<T> build().build();
 
 		return copy;

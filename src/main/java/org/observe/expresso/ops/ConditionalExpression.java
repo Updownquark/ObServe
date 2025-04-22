@@ -363,9 +363,9 @@ public class ConditionalExpression implements ObservableExpression {
 					// It may be possible to set this value even when the active conditional value is disabled.
 					if (fd == null || cd == null)
 						return null;
-					// This one's hard. Which message to expose ?.
+					// This one's hard. Which message to expose?
 					// We'll defer to the conditional value. If they want a different message, they can use a transform <disable with="?">.
-					return fd;
+					return cd;
 				}));
 		}
 

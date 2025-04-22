@@ -1,10 +1,12 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ClassView;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -45,8 +47,10 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 			theClassView = syncChild(ClassViewElement.class, theClassView, session, "imports");
 			theModels = syncChild(ObservableModelElement.ModelSetElement.Def.class, theModels, session, "models");
 			if (theModels != null) {
-				setExpressoEnv(theModels.getExpressoEnv());
-				session.setExpressoEnv(getExpressoEnv());
+				String doc = getDocument();
+				CompiledExpressoEnv modelEnv = theModels.getExpressoEnv(doc);
+				setExpressoEnv(doc, modelEnv);
+				session.setExpressoEnv(doc, modelEnv);
 			}
 		}
 
@@ -83,24 +87,22 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 			return theModels;
 		}
 
-		/**
-		 * @param env The expresso environment to use to interpret expressions
-		 * @throws ExpressoInterpretationException If anything in the head section could not be interpreted
-		 */
-		public void updateHead(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			if (getDefinition().getClassViewElement() != null)
-				env = env.with(getDefinition().getClassViewElement().configureClassView(env.getClassView().copy()).build());
-			update(env);
-			getExpressoEnv().getModels().interpret(getExpressoEnv());
+		/** @throws ExpressoInterpretationException If anything in the head section could not be interpreted */
+		public void updateHead() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
+			String doc = getDocument();
+			InterpretedExpressoEnv env = getExpressoEnv(doc);
 			// Interpret the class view first, so the models (which are interpreted in the super call below) can use the imports
 			theClassView = getDefinition().getClassViewElement() == null ? null
 				: getDefinition().getClassViewElement().configureClassView(env.getClassView().copy()).build();
-			if (theClassView != null)
+			if (theClassView != null) {
 				env = env.with(theClassView);
+				setExpressoEnv(doc, env);
+			}
 
 			if (getDefinition().getModelElement() == null) {
 				if (theModels != null)
@@ -108,11 +110,13 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 				theModels = null;
 			} else {
 				theModels = syncChild(getDefinition().getModelElement(), theModels, def -> def.interpret(this),
-					(m, mEnv) -> m.update(mEnv));
-				env = getExpressoEnv().with(theModels.getModels());
+					m -> m.update());
+				env = env.with(theModels.getDefaultEnv().getModels());
 			}
+			env.getModels().interpret(env);
+			setExpressoEnv(doc, env);
 
-			super.doUpdate(env);
+			super.doUpdate();
 		}
 
 		/** @return The head section instance */
@@ -132,7 +136,7 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theModels = myInterpreted.getModels().instantiate();
+		theModels = myInterpreted.getDefaultEnv().getModels().instantiate();
 	}
 
 	@Override
@@ -140,5 +144,13 @@ public class ExpressoHeadSection extends ExElement.Abstract {
 		theModels.instantiate();
 
 		super.instantiated();
+	}
+
+	@Override
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		if (theModels != null)
+			myModels = theModels.wrap(myModels);
+		myModels = super.doInstantiate(myModels);
+		return myModels;
 	}
 }

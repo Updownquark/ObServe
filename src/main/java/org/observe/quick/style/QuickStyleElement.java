@@ -254,10 +254,9 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theCondition = getAttributeExpression("if", session);
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
-				theCondition = application.findModelValues(theCondition, new ArrayList<>(), getExpressoEnv().getModels(),
+				theCondition = application.findModelValues(theCondition, new ArrayList<>(), this,
 					priorityAttr.getDeclarer(), ancestorSS != null, emvCache, reporting());
-				application = application.forCondition(theCondition, getExpressoEnv().getModels(), priorityAttr, ancestorSS != null,
-					emvCache, reporting());
+				application = application.forCondition(theCondition, this, priorityAttr, ancestorSS != null, emvCache, reporting());
 			}
 			theApplication = application;
 
@@ -297,7 +296,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
 						theValue.getFilePosition().getPosition(0), theValue.length());
 				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
-				theValue = theApplication.findModelValues(theValue, new HashSet<>(), getExpressoEnv().getModels(),
+				theValue = theApplication.findModelValues(theValue, new HashSet<>(), this,
 					getQonfigType().getDeclarer(), ancestorSS != null, emvCache, reporting());
 				theStyleValues.add(new QuickStyleValue(ancestorSS, styleSet, theApplication, theEffectiveAttribute, theValue));
 			}
@@ -438,6 +437,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 							attrName.text.length());
 			} else {
 				for (QonfigElementOrAddOn type : types.values()) {
+					// if (type.getName().equals("help-icon"))
+					// BreakpointHere.breakpoint();
 					if (attrs.size() > 1)
 						break;
 					QuickTypeStyle styled = styleTypeSet.getOrCompile(type, reporting, styleTK);
@@ -602,17 +603,17 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		/**
 		 * Initializes or updates this style
 		 *
-		 * @param env The expresso environment for interpreting expressions
 		 * @throws ExpressoInterpretationException If this style could not be interpreted
 		 */
-		public void updateStyle(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateStyle() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
+			InterpretedExpressoEnv env = getDefaultEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			theDeclaredAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getDeclaredAttribute(), env);
 			theEffectiveAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getEffectiveAttribute(), env);
@@ -622,7 +623,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.forType(getEffectiveAttribute().getType()));
 			else
 				theValue = null;
-			syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), (i, sEnv) -> i.updateStyle(sEnv));
+			syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), i -> i.updateStyle());
 		}
 
 		/** @return The style element */
@@ -633,13 +634,13 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 
 	private ModelValueInstantiator<SettableValue<Boolean>> theConditionInstantiator;
 	private ModelValueInstantiator<SettableValue<T>> theValueInstantiator;
-	private final SettableValue<SettableValue<Boolean>> theCondition;
+	private SettableValue<SettableValue<Boolean>> theCondition;
 	private SettableValue<SettableValue<T>> theValue;
-	private final List<QuickStyleElement<?>> theChildren;
+	private List<QuickStyleElement<?>> theChildren;
 
 	QuickStyleElement(Object id) {
 		super(id);
-		theCondition = SettableValue.<SettableValue<Boolean>> build().build();
+		theCondition = SettableValue.create();
 		theChildren = new ArrayList<>();
 	}
 
@@ -693,12 +694,23 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theCondition.set(theConditionInstantiator == null ? null : theConditionInstantiator.get(myModels), null);
 		if (theValue != null)
 			theValue.set(theValueInstantiator.get(myModels), null);
 		for (QuickStyleElement<?> child : theChildren)
 			child.instantiate(myModels);
+		return myModels;
+	}
+
+	@Override
+	public QuickStyleElement<T> copy(ExElement parent) {
+		QuickStyleElement<T> copy = (QuickStyleElement<T>) super.copy(parent);
+		copy.theCondition = SettableValue.create();
+		copy.theChildren = new ArrayList<>();
+		for (QuickStyleElement<?> child : theChildren)
+			copy.theChildren.add(child.copy(this));
+		return copy;
 	}
 }

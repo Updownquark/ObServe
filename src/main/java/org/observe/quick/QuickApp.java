@@ -23,6 +23,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
@@ -34,6 +35,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
 import org.observe.expresso.qonfig.ExpressoDocument;
+import org.observe.expresso.qonfig.ExpressoHeadSection;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.ArgumentParsing;
@@ -47,10 +49,10 @@ import org.qommons.ValueHolder;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigApp;
 import org.qommons.config.QonfigDocument;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
-import org.qommons.config.QonfigPromiseFulfillment;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSessionImplementation;
 import org.qommons.io.BetterFile;
@@ -83,7 +85,7 @@ public class QuickApp extends QonfigApp {
 	 * @throws QonfigParseException If the application could not be parsed as Qonfig
 	 * @throws IllegalStateException If a references resource, like a toolkit, cannot be resolved
 	 */
-	public static QuickApp parseApp(URL appDefUrl, URL[] appToolkits, List<String> clArgs)
+	public static QuickApp parseApp(URL appDefUrl, URL[] appToolkits, List<String> clArgs, Appendable printDocument)
 		throws IOException, TextParseException, QonfigParseException, IllegalStateException {
 		QonfigApp qonfigApp = QonfigApp.parseApp(appDefUrl, appToolkits);
 		QonfigToolkit quickAppTk = findQuickAppTk(qonfigApp.getDocument().getDocToolkit());
@@ -92,29 +94,32 @@ public class QuickApp extends QonfigApp {
 		List<QuickInterpretation> quickInterpretation = QonfigApp.create(//
 			qonfigApp.getDocument().getRoot().getChildrenInRole(quickAppTk, "quick-app", "quick-interpretation"),
 			QuickInterpretation.class);
-		return new QuickApp(qonfigApp.getDocument(), qonfigApp.getAppFile(), qonfigApp.getToolkits(), qonfigApp.getPromiseFulfillment(),
-			qonfigApp.getSessionTypes(), qonfigApp.getInterpretations(), quickInterpretation, QommonsUtils.unmodifiableCopy(clArgs));
+		return new QuickApp(qonfigApp.getDocument(), qonfigApp.getAppFile(), qonfigApp.getToolkits(),
+			qonfigApp.getSessionTypes(), qonfigApp.getInterpretations(), quickInterpretation, QommonsUtils.unmodifiableCopy(clArgs),
+			printDocument);
 	}
 
 	private final List<QuickInterpretation> theQuickInterpretations;
 	private final List<String> theCommandLineArgs;
+	private final Appendable printDocument;
 
 	/**
 	 * @param document The Qonfig document that this instance was parsed from
 	 * @param appFile The path to the app file that was used to parse this instance
 	 * @param toolkits All Qonfig toolkits loaded for the application
-	 * @param promiseFulfillment Promise-fulfillment to support external content referenced from files in the application
 	 * @param sessionTypes Qonfig sesson implementations for parsing
 	 * @param interpretations Qonfig interpretations to transform Qonfig-parsed elements into usable structures
 	 * @param quickInterpretations Quick interpretations to transform Quick elements into application behaviors
 	 * @param commandLineArgs The command-line arguments to pass to the application as external model values
 	 */
 	protected QuickApp(QonfigDocument document, String appFile, Set<QonfigToolkit> toolkits,
-		List<QonfigPromiseFulfillment> promiseFulfillment, List<SpecialSessionImplementation<?>> sessionTypes,
-		List<QonfigInterpretation> interpretations, List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs) {
-		super(document, appFile, toolkits, promiseFulfillment, sessionTypes, interpretations);
+		List<SpecialSessionImplementation<?>> sessionTypes,
+		List<QonfigInterpretation> interpretations, List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs,
+		Appendable printDocument) {
+		super(document, appFile, toolkits, sessionTypes, interpretations);
 		theQuickInterpretations = quickInterpretations;
 		theCommandLineArgs = commandLineArgs;
+		this.printDocument = printDocument;
 	}
 
 	/** @return All classes configured for this application to interpret Quick types into application behaviors */
@@ -186,8 +191,9 @@ public class QuickApp extends QonfigApp {
 		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
 		if (quickDocDef.getHead().getClassViewElement() != null)
 			env = env.with(quickDocDef.getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
-			quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead().getExpressoEnv().getBuiltModels(), getCommandLineArgs(),
+		ExpressoHeadSection.Def head = quickDocDef.getAddOn(ExpressoDocument.Def.class).getHead();
+		CompiledExpressoEnv headEnv = head.getExpressoEnv(head.getDocument());
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(headEnv.getBuiltModels(), getCommandLineArgs(),
 			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
 
 		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
@@ -205,6 +211,46 @@ public class QuickApp extends QonfigApp {
 		interpretedDoc = null;
 
 		return new BiTuple<>(app, doc);
+	}
+
+	@Override
+	protected void appFileParsed(QonfigDocument doc) {
+		super.appFileParsed(doc);
+		if (printDocument != null) {
+			try {
+				printElement(doc.getRoot(), 0);
+			} catch (IOException e) {
+				System.err.println("Failed to print parsed Quick document");
+				e.printStackTrace();
+			}
+		}
+	}
+
+	private void printElement(QonfigElement element, int indent) throws IOException {
+		StringBuilder str = new StringBuilder();
+		StringUtils.indent(str, indent);
+		str.append('<').append(element.getType().getName());
+		if (element.getPromise() != null)
+			str.append(" promised-by=\"").append(element.getPromise().getType().getName()).append('"');
+		if (!element.getDeclaredRoles().isEmpty())
+			str.append(" role=\"").append(StringUtils.print(",", element.getDeclaredRoles(), r -> r.getName())).append('"');
+		if (!element.getAttributes().isEmpty()) {
+			for (QonfigElement.AttributeValue attr : element.getAttributes().values()) {
+				StringUtils.indent(str.append('\n'), indent + 1)//
+				.append(attr.getNamePosition()).append("=\"").append(attr.position).append('"');
+			}
+		}
+		str.append('>');
+		if (element.getValue() != null)
+			StringUtils.indent(str.append('\n'), indent + 1).append(element.getValue().position);
+		str.append('\n');
+		printDocument.append(str);
+		for (QonfigElement child : element.getChildren())
+			printElement(child, indent + 1);
+		str.setLength(0);
+		StringUtils.indent(str, indent);
+		str.append("</").append(element.getType().getName()).append(">\n");
+		printDocument.append(str);
 	}
 
 	/**
@@ -272,6 +318,7 @@ public class QuickApp extends QonfigApp {
 		ArgumentParsing.Arguments args = ArgumentParsing.build()//
 			.forValuePattern(p -> p//
 				.addStringArgument("quick-app", a -> a.optional())//
+				.addBooleanArgument("print-document", a -> a.defaultValue(false))//
 				)//
 			.acceptUnmatched(true)//
 			.build()//
@@ -313,7 +360,8 @@ public class QuickApp extends QonfigApp {
 		if (quickAppToolkitUrl == null)
 			throw new IllegalStateException("Could not locate Quick App toolkit definition 'quick-app.qtd'");
 
-		return QuickApp.parseApp(quickAppUrl, new URL[] { quickAppToolkitUrl }, args.getUnmatched());
+		Appendable printDocument = args.get("print-document", boolean.class) ? System.out : null;
+		return QuickApp.parseApp(quickAppUrl, new URL[] { quickAppToolkitUrl }, args.getUnmatched(), printDocument);
 	}
 
 	/**

@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -119,8 +118,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			isPassword = interpret(getDefinition().isPassword(), ModelTypes.Value.BOOLEAN);
 			theEmptyText = interpret(getDefinition().getEmptyText(), ModelTypes.Value.STRING);
 		}
@@ -177,10 +176,11 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		isPassword.set(thePasswordInstantiator.get(myModels), null);
 		theEmptyText.set(theEmptyTextInstantiator == null ? null : theEmptyTextInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override

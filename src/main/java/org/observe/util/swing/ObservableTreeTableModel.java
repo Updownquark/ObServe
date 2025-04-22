@@ -411,9 +411,10 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 									selectionModel.setSelectionPath(path);
 								else if (++tries < path.getPathCount() + 5) {
 									for (TreePath p = path.getParentPath(); p != null; p = p.getParentPath()) {
-										if (!treeTable.isExpanded(p))
+										if (!treeTable.isExpanded(p)) {
 											treeTable.expandPath(p);
-										break;
+											break;
+										}
 									}
 									EventQueue.invokeLater(this);
 								}
@@ -441,6 +442,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	 * @param <T> The type of nodes in the tree
 	 * @param treeTable The tree table to synchronize selection for
 	 * @param multiSelection The tree paths to synchronize the tree selection with
+	 * @param equivalence The equivalence for the tree values
 	 * @param until The observable to stop all listening
 	 */
 	public static <T> void syncSelection(JXTreeTable treeTable, ObservableCollection<BetterList<T>> multiSelection,
@@ -507,9 +509,12 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 					return;
 				callbackLock[0] = true;
 				try {
+					int idx = 0;
 					for (CollectionElement<BetterList<T>> selected : multiSelection.elements()) {
-						if (ObservableTreeModel.eventApplies(e, selected.get(), equivalence))
+						int fIdx = idx;
+						if (ObservableTreeModel.eventApplies(e, selected.get(), equivalence, () -> fIdx))
 							multiSelection.mutableElement(selected.getElementId()).set(selected.get());
+						idx++;
 					}
 				} finally {
 					t.close();

@@ -157,19 +157,17 @@ public interface TreeModel<N> extends ExElement {
 		Def<? super M> getDefinition();
 
 		/**
-		 * @param env The expresso environment to use to interpret expressions
 		 * @return The type of nodes in the tree
 		 * @throws ExpressoInterpretationException If the node type could not be interpreted
 		 */
-		TypeToken<? extends N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		TypeToken<? extends N> getNodeType() throws ExpressoInterpretationException;
 
 		/**
 		 * Initializes or updates this model
 		 *
-		 * @param env The expresso environment to use to interpret expressions
 		 * @throws ExpressoInterpretationException If this model could not be interpreted
 		 */
-		void updateModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateModel() throws ExpressoInterpretationException;
 
 		/** @return The tree model instance */
 		M create();
@@ -196,23 +194,22 @@ public interface TreeModel<N> extends ExElement {
 			}
 
 			@Override
-			public TypeToken<? extends N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public TypeToken<? extends N> getNodeType() throws ExpressoInterpretationException {
 				try (Transaction t = getDefinition().interpreting(this)) {
-					return doGetNodeType(env);
+					return doGetNodeType();
 				}
 			}
 
 			/**
-			 * @param env The expresso environment to use to interpret expressions
 			 * @return The type of nodes in the tree
 			 * @throws ExpressoInterpretationException If the node type could not be interpreted
 			 */
-			protected abstract TypeToken<? extends N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+			protected abstract TypeToken<? extends N> doGetNodeType() throws ExpressoInterpretationException;
 
 			@Override
-			public void updateModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateModel() throws ExpressoInterpretationException {
 				try (Transaction t = getDefinition().interpreting(this)) {
-					update(env);
+					update();
 				}
 			}
 		}

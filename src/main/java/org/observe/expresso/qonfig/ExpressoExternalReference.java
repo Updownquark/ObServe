@@ -6,13 +6,12 @@ import java.util.Map;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelInstantiator;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ElementTypeTraceability.QonfigElementKey;
 import org.observe.expresso.qonfig.ExpressoExternalDocument.AttributeValueSatisfier;
+import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterList;
@@ -28,6 +27,7 @@ import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigElementView;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigPromiseDef;
 import org.qommons.io.LocatedFilePosition;
 
 /** A reference to an external expresso document that will be loaded and injected into the source document as content */
@@ -48,7 +48,6 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		private ExElement.Def<?> theFulfilledContent;
 		private ExpressoExternalDocument.Def<?> theExternalContent;
 		private final BetterMultiMap<QonfigChildDef.Declared, ExpressoChildPlaceholder.Def<?>> theChildren;
-		private CompiledExpressoEnv theExtExpressoEnv;
 
 		/**
 		 * @param parent The parent element in the source document
@@ -63,6 +62,16 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		@QonfigAttributeGetter("ref")
 		public QonfigDocument getReference() {
 			return theExternalContent == null ? null : theExternalContent.getElement().getDocument();
+		}
+
+		@QonfigAttributeGetter("promised")
+		public QonfigElementDef getPromisedType() {
+			return ((QonfigPromiseDef) getQonfigType()).getPromisedType();
+		}
+
+		@QonfigAttributeGetter("promised-inheritance")
+		public MultiInheritanceSet<QonfigAddOn> getPromisedInheritance() {
+			return ((QonfigPromiseDef) getQonfigType()).getPromisedInheritance();
 		}
 
 		@Override
@@ -110,18 +119,17 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			buildExtContent(extContentBuilder, extContentDoc.getPartialRoot(),
 				session.getType(ExpressoSessionImplV0_1.CORE, ExpressoExternalDocument.EXPRESSO_EXTERNAL_DOCUMENT).getChild("fulfillment"));
 			QonfigElement extContentRoot = extContentBuilder.buildFull();
-			ExpressoQIS extContentSession = session.interpretRoot(extContentRoot).setExpressoEnv(CompiledExpressoEnv.STANDARD_JAVA);
+			ExpressoQIS extContentSession = session.interpretRoot(extContentRoot);
+			String doc = getDocument();
+			CompiledExpressoEnv parentEnv = session.getExpressoEnv(doc);
+			extContentSession.setExpressoEnv(doc, parentEnv
+				// Keep the non-structured parsers from the top level
+				.withAllNonStructuredParsers(parentEnv).withOperators(parentEnv.getUnaryOperators().copy()//
+					.build(), parentEnv.getBinaryOperators().copy().build()));
 			if (theExternalContent == null || !ExElement.typesEqual(theExternalContent.getElement(), extContentDoc.getPartialRoot()))
 				theExternalContent = extContentSession.interpret(ExpressoExternalDocument.Def.class);
-			theExternalContent.update(extContentSession, theFulfilledContent);
-			theExtExpressoEnv = theExternalContent.getExpressoEnv()//
-				.withAllNonStructuredParsers(session.getExpressoEnv()) // Keep the non-structured parsers from the top level
-				.withOperators(session.getExpressoEnv().getUnaryOperators().copy()//
-					.withAll(theExternalContent.getExpressoEnv().getUnaryOperators())//
-					.build(),
-					session.getExpressoEnv().getBinaryOperators().copy()//
-					.withAll(theExternalContent.getExpressoEnv().getBinaryOperators())//
-					.build());
+			theExternalContent.update(extContentSession, this);
+			setExpressoEnv(extContentDoc.getLocation(), theExternalContent.getExpressoEnv(extContentDoc.getLocation()));
 
 			super.doUpdate(session);
 		}
@@ -135,11 +143,11 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			// } else {
 			element.copyAttributes(builder);
 			for (PartialQonfigElement child : element.getChildren()) {
-				builder.withChild2(child.getParentRoles(), child.getType(), cb -> {
+				builder.withChild2(child.getParentRoles(), child.getType(), null, cb -> {
 					buildExtContent(cb, child, fulfillmentRole);
 				}, child.getFilePosition(), child.getDescription());
 			}
-				// }
+			// }
 		}
 
 		@Override
@@ -201,16 +209,6 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 
 		@Override
-		public CompiledExpressoEnv getExternalExpressoEnv() {
-			return theExtExpressoEnv;
-		}
-
-		@Override
-		public void setExternalExpressoEnv(CompiledExpressoEnv env) {
-			theExtExpressoEnv = env;
-		}
-
-		@Override
 		public Interpreted<? extends P> interpret() {
 			return new Interpreted<>(this, null);
 		}
@@ -225,8 +223,6 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 	implements QonfigPromise.Interpreted<P> {
 		private ExElement.Interpreted<?> theFulfilledContent;
 		private ExpressoExternalDocument.Interpreted<?> theExternalContent;
-		private InterpretedExpressoEnv theParentEnv;
-		private InterpretedExpressoEnv theExtExpressoEnv;
 
 		Interpreted(Def<? super P> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -254,28 +250,15 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 
 		@Override
-		public InterpretedExpressoEnv getExternalExpressoEnv() {
-			return theExtExpressoEnv;
-		}
-
-		@Override
-		public void setParentEnv(InterpretedExpressoEnv env) {
-			theParentEnv = env;
-		}
-
-		@Override
-		public void update(InterpretedExpressoEnv env, ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
+		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
 			theFulfilledContent = content;
+			addLogicalParent(theFulfilledContent);
 
-			if (theExternalContent == null || theExternalContent.getIdentity() != getDefinition().getExternalContent().getIdentity()) {
-				if (theExternalContent != null)
-					theExternalContent.destroy();
-				theExternalContent = getDefinition().getExternalContent().interpret();
-			}
-			theExternalContent.update(content, theParentEnv);
-			theExtExpressoEnv = theExternalContent.getExpressoEnv().forChild(getDefinition().getExternalExpressoEnv());
+			theExternalContent = syncChild(getDefinition().getExternalContent(), theExternalContent, ec -> ec.interpret(),
+				ec -> ec.update(this));
+			addLogicalParent(theExternalContent);
 
-			super.update(env);
+			super.update();
 		}
 
 		@Override
@@ -284,7 +267,6 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 		}
 	}
 
-	private ModelInstantiator theExtModels;
 	private ExElement theFulfilledContent;
 	private ExpressoExternalDocument theExternalContent;
 
@@ -305,39 +287,29 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
-		super.doUpdate(interpreted);
+		addLogicalParent(theFulfilledContent);
 
 		ExpressoExternalReference.Interpreted<?> myInterpreted = (ExpressoExternalReference.Interpreted<?>) interpreted;
-		if (theExternalContent != null && theExternalContent.getIdentity() != myInterpreted.getIdentity()) {
-			theExternalContent.destroy();
-			theExternalContent = null;
-		}
-		if (theExternalContent == null)
-			theExternalContent = myInterpreted.getExternalContent().create(theFulfilledContent);
-		theExternalContent.update(myInterpreted.getExternalContent(), null);
-		theExtModels = myInterpreted.getExternalExpressoEnv().getModels().instantiate();
+		theExternalContent = syncChild(myInterpreted.getExternalContent(), theExternalContent, ec -> ec.create(theFulfilledContent),
+			(ec, interp, parent) -> ec.update(interp, null));
+		addLogicalParent(theExternalContent);
+
+		super.doUpdate(interpreted);
 	}
 
 	@Override
 	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
 		theExternalContent.instantiated();
-		theExtModels.instantiate();
 	}
 
 	@Override
-	public ModelInstantiator getExtModels() {
-		return theExtModels;
-	}
-
-	@Override
-	protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		super.addRuntimeModels(builder, elementModels);
-		theExternalContent.addRuntimeModels(builder, elementModels);
-		ModelSetInstance extBuilder = theExtModels.createInstance(builder.getUntil())//
-			.withAll(builder)//
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
+		return ObservableModelSet.createMultiModelInstanceBag(myModels.getUntil())//
+			.withAll(myModels)//
+			.withAll(theExternalContent.instantiate(myModels))//
 			.build();
-		builder.withAll(extBuilder);
 	}
 
 	@Override

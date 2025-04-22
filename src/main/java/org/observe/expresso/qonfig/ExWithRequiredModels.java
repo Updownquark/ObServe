@@ -54,7 +54,8 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
-			if (session.children().get("required").get().isEmpty()) { // Don't create a required model if there's no reason to
+			ExpressoQIS requiredEl = session.children().get("required").get().peekFirst();
+			if (requiredEl == null) { // Don't create a required model if there's no reason to
 				theRequiredModelElement = null;
 				return;
 			}
@@ -67,13 +68,16 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 					placeholder.setModelId(addElementValue(name, placeholder, builder, value.getFilePosition()).getIdentity());
 				}
 			});
-			if (!session.children().get("required").get().isEmpty())
-				createBuilder(session);
+			String doc = requiredEl.getInterpretingDocument();
+			createBuilder(session, doc);
 			theRequiredModelElement = getElement().syncChild(ObservableModelElement.ExtModelElement.Def.class, theRequiredModelElement,
 				session, "required");
-			if (theRequiredModelElement != null)
-				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theRequiredModelElement.getExpressoEnv().getModels()));
-			session.setExpressoEnv(getElement().getExpressoEnv());
+			CompiledExpressoEnv env = getElement().getExpressoEnv(doc);
+			if (theRequiredModelElement != null) {
+				env = env.with(theRequiredModelElement.getExpressoEnv(doc).getModels());
+				getElement().setExpressoEnv(doc, env);
+			}
+			session.setExpressoEnv(doc, env);
 		}
 
 		/**
@@ -138,7 +142,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		public void update(ExElement.Interpreted<?> element) throws ExpressoInterpretationException {
 			super.update(element);
 			theRequiredModelElement = getElement().syncChild(getDefinition().getRequiredModelElement(), theRequiredModelElement,
-				def -> def.interpret(getElement()), (el, elEnv) -> el.update(elEnv));
+				def -> def.interpret(getElement()), el -> el.update());
 		}
 
 		@Override
@@ -221,10 +225,11 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
 		super.instantiate(models);
 		if (theExtModelElement != null)
-			theExtModelElement.instantiate(models);
+			models = theExtModelElement.instantiate(models);
+		return models;
 	}
 
 	static class PlaceholderExtValue<M> extends ExFlexibleElementModelAddOn.PlaceholderModelValue<M> {

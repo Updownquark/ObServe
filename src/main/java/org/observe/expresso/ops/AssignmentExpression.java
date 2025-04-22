@@ -23,6 +23,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
@@ -105,11 +106,20 @@ public class AssignmentExpression implements ObservableExpression {
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
-		if (type.getModelType() != ModelTypes.Action)
-			throw new ExpressoInterpretationException("Assignments cannot be used as " + type.getModelType() + "s",
-				env.reporting().getPosition(), getExpressionLength());
-		return (EvaluatedExpression<M, MV>) this
+		EvaluatedExpression<ObservableAction, ObservableAction> action = this
 			.<Object, Object, EX> _evaluate((ModelInstanceType<ObservableAction, ObservableAction>) type, env, expressionOffset, exHandler);
+		if (action == null)
+			return null;
+		if (action.getType().equals(type))
+			return (EvaluatedExpression<M, MV>) action;
+		ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder(true);
+		InterpretedValueSynth<M, MV> converted = action.as(type, env, tce);
+		if (converted != null)
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), converted, null, action);
+		else
+			throw new ExpressoInterpretationException(
+				"Assignments can only be actions and cannot be converted to " + StringUtils.getIndefiniteArticle(type.toString()) + type,
+				env.reporting().getPosition(), getExpressionLength(), tce.get1());
 	}
 
 	private <S, T extends S, EX extends Throwable> EvaluatedExpression<ObservableAction, ObservableAction> _evaluate(

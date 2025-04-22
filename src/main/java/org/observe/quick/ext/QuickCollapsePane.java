@@ -2,7 +2,6 @@ package org.observe.quick.ext;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -119,11 +118,11 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			isCollapsed = interpret(getDefinition().isCollapsed(), ModelTypes.Value.BOOLEAN);
-			theHeader = syncChild(getDefinition().getHeader(), theHeader, def -> def.interpret(this), (h, hEnv) -> h.updateElement(hEnv));
+			theHeader = syncChild(getDefinition().getHeader(), theHeader, def -> def.interpret(this), h -> h.updateElement());
 		}
 
 		@Override
@@ -191,8 +190,8 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		isCollapsed.set(isCollapsedInstantiator == null ? SettableValue.<Boolean> build().withValue(true).build()
 			: isCollapsedInstantiator.get(myModels), null);
@@ -200,6 +199,7 @@ public class QuickCollapsePane extends QuickContainer.Abstract<QuickWidget> {
 
 		if (theHeader != null)
 			theHeader.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

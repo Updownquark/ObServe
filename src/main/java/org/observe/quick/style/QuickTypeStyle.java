@@ -53,8 +53,8 @@ public class QuickTypeStyle {
 
 		/**
 		 * @param element The element type to get the style type of
-		 * @param reporting The error reporting to use for errors to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from
-		 *        and for {@link ErrorReporting#error(String) error reporting}
+		 * @param reporting The error reporting to use for errors to get the {@link ExpressoQIS#getExpressoEnv(String) expresso environment}
+		 *        from and for {@link ErrorReporting#error(String) error reporting}
 		 * @param style The toolkit inheriting Quick-Style
 		 * @return The style type for the given element type
 		 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
@@ -65,10 +65,17 @@ public class QuickTypeStyle {
 			if (styled != null)
 				return styled;
 			QonfigAddOn styledAddOn = style.getAddOn(STYLED);
-			if (!styledAddOn.isAssignableFrom(element))
+			boolean isStyled = styledAddOn.isAssignableFrom(element);
+			if (!isStyled && element instanceof QonfigPromiseDef) {
+				QonfigPromiseDef promise = (QonfigPromiseDef) element;
+				isStyled = promise.getPromisedType() != null && styledAddOn.isAssignableFrom(promise.getPromisedType());
+				if (!isStyled)
+					isStyled = promise.getPromisedInheritance().contains(styledAddOn);
+			}
+			if (!isStyled)
 				return null;
 			List<QuickTypeStyle> parents = new ArrayList<>();
-			QonfigElementOrAddOn superEl = element.getSuperElement();
+			QonfigElementDef superEl = element.getSuperElement();
 			if (superEl != null) {
 				QuickTypeStyle parent = getOrCompile(superEl, reporting, style);
 				if (parent != null)

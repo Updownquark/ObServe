@@ -7,13 +7,13 @@ import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn;
-import org.observe.quick.base.TabularWidget;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.PanelPopulation;
@@ -30,6 +30,21 @@ import org.qommons.ex.CheckedExceptionWrapper;
  * @param <R2> The type of the row collection in the PanelPopulation widget
  */
 public class QuickSwingColumnSet<R, R2> {
+	static class TabularContext<R> {
+		final SettableValue<R> activeValue;
+		final SettableValue<Integer> rowIndex;
+		final SettableValue<Integer> columnIndex;
+		final SettableValue<Boolean> selected;
+
+		public TabularContext(SettableValue<R> activeValue, SettableValue<Integer> rowIndex, SettableValue<Integer> columnIndex,
+			SettableValue<Boolean> selected) {
+			this.activeValue = activeValue;
+			this.rowIndex = rowIndex != null ? rowIndex : SettableValue.create(b -> b.withValue(0));
+			this.columnIndex = columnIndex != null ? columnIndex : SettableValue.create(b -> b.withValue(0));
+			this.selected = selected != null ? selected : SettableValue.create(b -> b.withValue(false));
+		}
+	}
+
 	private final TriConsumer<R2, R, QuickWidget> theUpdate;
 	private final Function<R2, R> theReverse;
 	private final Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
@@ -134,7 +149,7 @@ public class QuickSwingColumnSet<R, R2> {
 	 * @throws ModelInstantiationException If the columns could not be prepared for population
 	 */
 	public Populator createPopulator(QuickWidget widget, ObservableCollection<QuickTableColumn<R, ?>> columns,
-		TabularWidget.TabularContext<R> ctx, Observable<?> until) throws ModelInstantiationException {
+		TabularContext<R> ctx, Observable<?> until) throws ModelInstantiationException {
 		return new Populator(widget, columns, ctx, until);
 	}
 
@@ -148,12 +163,12 @@ public class QuickSwingColumnSet<R, R2> {
 		private ComponentEditor<?, ?> theParentComponent;
 		private boolean tableInitialized;
 
-		Populator(QuickWidget parent, ObservableCollection<QuickTableColumn<R, ?>> columns, TabularWidget.TabularContext<R> ctx,
+		Populator(QuickWidget parent, ObservableCollection<QuickTableColumn<R, ?>> columns, TabularContext<R> ctx,
 			Observable<?> until) {
 			theSwingTableColumns = columns.flow()//
 				.<InterpretedSwingTableColumn<R, R2, ?>> map(column -> {
 					try {
-						return new InterpretedSwingTableColumn<>(parent, column, theUpdate, theReverse, ctx, until,
+						return new InterpretedSwingTableColumn<>(parent, column, true, theUpdate, theReverse, ctx, until,
 							() -> theParentComponent, renderers, editors, theDragging);
 					} catch (ModelInstantiationException e) {
 						if (tableInitialized) {

@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -102,8 +101,8 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			theText = interpret(getDefinition().getText(), ModelTypes.Value.STRING);
 			theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 		}
@@ -153,10 +152,11 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theText = theTextInstantiator == null ? null : theTextInstantiator.get(myModels);
 		theAction = theActionInstantiator.get(myModels);
+		return myModels;
 	}
 
 	@Override

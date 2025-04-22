@@ -2,7 +2,6 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -186,9 +185,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
 				theValue = null;
-				super.doUpdate(env);
+				super.doUpdate();
 				theValue = getOrInitValue(); // Initialize theValue
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueVariable().getName(), theValue);
 				theDisabled = interpret(getDefinition().getDisabled(), ModelTypes.Value.STRING);
@@ -266,10 +265,11 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			theValue.set(theValueInstantiator.get(myModels), null);
 			theDisabled.set(theDisabledInstantiator == null ? null : theDisabledInstantiator.get(myModels), null);
+			return myModels;
 		}
 
 		@Override

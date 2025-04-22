@@ -302,8 +302,8 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theDefault = interpret(getDefinition().getDefault(), getType());
 		}
@@ -318,8 +318,7 @@ public class ExtModelValueElement<MV> extends ModelValueElement.Abstract<MV> {
 	}
 
 	@Override
-	public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-		instantiate(models);
+	public MV evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 		return null;
 	}
 

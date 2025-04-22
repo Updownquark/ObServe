@@ -1,7 +1,6 @@
 package org.observe.dbug.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -52,8 +51,8 @@ public class DbugTag extends ExElement.Abstract {
 			return (Def) super.getDefinition();
 		}
 
-		public void updateTag(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateTag() throws ExpressoInterpretationException {
+			update();
 		}
 
 		public DbugTag create() {

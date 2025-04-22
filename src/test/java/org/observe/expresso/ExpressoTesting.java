@@ -105,17 +105,17 @@ public class ExpressoTesting extends ExElement.Abstract {
 			/**
 			 * Initializes or updates this test
 			 *
-			 * @param env The expresso environment for interpreting expressions
 			 * @throws ExpressoInterpretationException If this test could not be interpreted
 			 */
-			public void updateTest(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateTest() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this), TestAction.Interpreted::updateValue);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
+				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this),
+					a -> a.updateValue(getExpressoEnv(a.getDocument())));
 			}
 
 			/** @return The test instance */
@@ -185,10 +185,11 @@ public class ExpressoTesting extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			for (TestAction.TestActionElement action : theActions)
 				action.instantiate(myModels);
+			return myModels;
 		}
 	}
 
@@ -258,11 +259,11 @@ public class ExpressoTesting extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				if (getDefinition().getExpectedException() != null) {
 					Class<?> exType;
-					exType = getExpressoEnv().getClassView().getType(getDefinition().getExpectedException());
+					exType = getDefaultEnv().getClassView().getType(getDefinition().getExpectedException());
 					if (exType == null)
 						throw new ExpressoInterpretationException("No such exception type found: '" + theExpectedException + "'",
 							getPosition(), 0);
@@ -330,9 +331,10 @@ public class ExpressoTesting extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-				super.doInstantiate(myModels);
+			protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+				myModels = super.doInstantiate(myModels);
 				theAction = theActionInstantiator.get(myModels);
+				return myModels;
 			}
 		}
 	}
@@ -409,19 +411,22 @@ public class ExpressoTesting extends ExElement.Abstract {
 		 * @throws ExpressoInterpretationException If this test set could not be interpreted
 		 */
 		public void updateTest() throws ExpressoInterpretationException {
-			update(getDefinition().getExpressoEnv().interpret(null, InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getClassView()));
+			String doc = getDocument();
+			setExpressoEnv(doc,
+				getDefinition().getExpressoEnv(doc).interpret(null, InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getClassView()));
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
 			System.out.print("Interpreting global models...");
 			System.out.flush();
-			super.doUpdate(expressoEnv);
+			super.doUpdate();
 			System.out.println("complete");
 
 			System.out.print("Interpreting test " + theTargetTestDef.getName() + "...");
 			System.out.flush();
-			theTargetTest = syncChild(theTargetTestDef, theTargetTest, def -> def.interpret(this), (i, iEnv) -> i.updateTest(iEnv));
+			theTargetTest = syncChild(theTargetTestDef, theTargetTest, def -> def.interpret(this), i -> i.updateTest());
 			System.out.println("complete");
 		}
 
@@ -454,13 +459,14 @@ public class ExpressoTesting extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		System.out.print("Instantiating test " + theTargetTest.getName() + "...");
 		System.out.flush();
 		theTargetTest.instantiate(myModels);
 		System.out.println("complete");
+		return myModels;
 	}
 
 	/** Executes the target test in this test set */

@@ -9,10 +9,28 @@ import org.qommons.config.SpecialSession;
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	/** The session key for storing the dynamic value cache */
 	public static final String DYNAMIC_VALUE_CACHE = "DYNAMIC_VALUE_CACHE";
+	private static final String EXPRESSO_ENVS = "EXPRESSO_ENVS";
 	private final CoreSession theWrapped;
+	private DocumentMap<CompiledExpressoEnv> theExpressoEnvs;
 
 	ExpressoQIS(CoreSession session) {
 		theWrapped = session;
+		DocumentMap<CompiledExpressoEnv> envs = session.get(EXPRESSO_ENVS, DocumentMap.class);
+		ValueSource source = session.getSource(EXPRESSO_ENVS);
+		if (source == null) {
+			theExpressoEnvs = new DocumentMap<>(null);
+			session.put(EXPRESSO_ENVS, theExpressoEnvs);
+		} else {
+			switch (source) {
+			case Inherited:
+				theExpressoEnvs = envs.extend();
+				session.put(EXPRESSO_ENVS, theExpressoEnvs);
+				break;
+			default:
+				theExpressoEnvs = envs;
+				break;
+			}
+		}
 	}
 
 	@Override
@@ -34,17 +52,27 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return this;
 	}
 
+	public DocumentMap<CompiledExpressoEnv> getExpressoEnvs() {
+		return theExpressoEnvs;
+	}
+
+	public ExpressoQIS setExpressoEnvs(DocumentMap<CompiledExpressoEnv> expressoEnvs) {
+		theExpressoEnvs = expressoEnvs;
+		theWrapped.put(EXPRESSO_ENVS, expressoEnvs);
+		return this;
+	}
+
 	/** @return The expresso environment to use to evaluate expressions under this session */
-	public CompiledExpressoEnv getExpressoEnv() {
-		return theWrapped.get("EXPRESSO_ENV", CompiledExpressoEnv.class);
+	public CompiledExpressoEnv getExpressoEnv(String document) {
+		return theExpressoEnvs.get(document);
 	}
 
 	/**
 	 * @param env The expresso environment to use to evaluate expressions under this session
 	 * @return This session
 	 */
-	public ExpressoQIS setExpressoEnv(CompiledExpressoEnv env) {
-		theWrapped.put("EXPRESSO_ENV", env);
+	public ExpressoQIS setExpressoEnv(String document, CompiledExpressoEnv env) {
+		theExpressoEnvs.put(document, env);
 		return this;
 	}
 

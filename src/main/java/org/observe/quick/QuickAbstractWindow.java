@@ -220,11 +220,12 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 		}
 
 		@Override
-		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-			super.instantiate(models);
+		public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+			models = super.instantiate(models);
 
 			theTitle.set(theTitleInstantiator == null ? null : theTitleInstantiator.get(models), null);
 			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models), null);
+			return models;
 		}
 
 		@Override

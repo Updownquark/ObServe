@@ -57,8 +57,8 @@
 			</box>
 			<toggle-button field-label="`Toggle Button`" value="boolValue">`A toggle button`
 				<style attr="icon">
-					<style if="boolValue">`/icons/greenDot.png`</style>
-					<style>`/icons/redDot.png`</style>
+					<style if="boolValue">`/icons/greenDot.png$16x16`</style>
+					<style>`/icons/redDot.png$16x16`</style>
 				</style>
 			</toggle-button>
 			<toggle-buttons field-label="`Toggle Buttons`" value="strValue" values="strValues" />
@@ -70,10 +70,10 @@
 					</column-edit>
 				</column>
 				<column name="`Icon`" value="row.getBoolean()" column-value-name="b">
-					<label icon="`/icons/`+(b ? &quot;green&quot; : &quot;red&quot;)+`Dot.png`" />
+					<label icon="`/icons/`+(b ? `green` : `red`)+`Dot.png$16x16`" />
 				</column>
 				<column name="`Button`" value="row.getBoolean()" column-value-name="b">
-					<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">
+					<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png$16x16`">
 						`Set`
 						<style attr="mouse-cursor">
 							<style if="b">HAND</style>
@@ -81,7 +81,7 @@
 						</style>
 					</button>
 					<column-edit type="modify-row-value" column-edit-value-name="__" commit="row.setBoolean(true)" editable-if="!b">
-						<button action="row.setBoolean(true)" icon="`/icons/`+(b ? &quot;red&quot; : &quot;green&quot;)+`Dot.png`">`Set`</button>
+						<button action="row.setBoolean(true)" icon="`/icons/`+(b ? `red` : `green`)+`Dot.png$16x16`">`Set`</button>
 					</column-edit>
 				</column>
 			</table>

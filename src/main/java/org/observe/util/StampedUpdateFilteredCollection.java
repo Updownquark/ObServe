@@ -30,10 +30,11 @@ public class StampedUpdateFilteredCollection<E extends Stamped> extends Observab
 	@Override
 	public long getStamp() {
 		long wrapperStamp = super.getStamp();
-		if (theCachedContainerStamp != -1 && theCachedContainerStamp != wrapperStamp)
+		if (theCachedContainerStamp != -1 && theCachedContainerStamp == wrapperStamp)
 			return thePublishedStamp;
 		theCachedContainerStamp = wrapperStamp;
-		long valueStamp = Stamped.compositeStamp(getWrapped());
+		// We need show up as changed when any values have been swapped for others that may have the same stamp
+		long valueStamp = Stamped.compositeStamp(getWrapped(), v -> (v == null ? 0 : (System.identityHashCode(v) ^ v.getStamp())));
 		if (theValueStamp != -1 && theValueStamp == valueStamp)
 			return thePublishedStamp;
 		theValueStamp = valueStamp;

@@ -11,7 +11,7 @@ import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExModelAugmentation;
-import org.observe.quick.base.QuickSize;
+import org.observe.quick.QuickSize;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickStyleAttribute;
@@ -166,7 +166,7 @@ public class QuickShaded extends ExAddOn.Abstract<QuickStyledElement> {
 			super.postUpdate(element);
 
 			QuickInstanceStyle.Interpreted styled = element.getAddOnValue(QuickStyled.Interpreted.class, QuickStyled.Interpreted::getStyle);
-			InterpretedExpressoEnv env = element.getExpressoEnv();
+			InterpretedExpressoEnv env = element.getDefaultEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			theLightSource = styled.get(cache.getAttribute(getDefinition().getLightSource(), Float.class, env));
 			theLightColor = styled.get(cache.getAttribute(getDefinition().getLightColor(), Color.class, env));

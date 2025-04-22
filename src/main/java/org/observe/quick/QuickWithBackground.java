@@ -315,13 +315,14 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHoveredValue, myModels, SettableValue.flatten(isHovered));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theFocusedValue, myModels, SettableValue.flatten(isFocused));
 			ExFlexibleElementModelAddOn.satisfyElementValue(thePressedValue, myModels, SettableValue.flatten(isPressed));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theRightPressedValue, myModels, SettableValue.flatten(isRightPressed));
+			return myModels;
 		}
 
 		@Override
@@ -376,10 +377,10 @@ public interface QuickWithBackground extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickBackgroundStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				public QuickBackgroundStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
+					throws ExpressoInterpretationException {
 					return new Interpreted.Default(this, (QuickWithBackground.Interpreted<?>) parentEl,
-						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent, env));
+						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent));
 				}
 			}
 		}
@@ -427,9 +428,10 @@ public interface QuickWithBackground extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theColor = get(cache.getAttribute(getDefinition().getColor(), Color.class, env));
 					theMouseCursor = get(cache.getAttribute(getDefinition().getMouseCursor(), MouseCursor.class, env));

@@ -306,6 +306,36 @@ public class UnaryOperatorSet {
 		return ops == null ? null : (UnaryOp<T, ?>) ops.get(type, TypeMatch.SUPER_TYPE);
 	}
 
+	/**
+	 * @param other The other unary operator set to compare to
+	 * @return True if this operator set contains all operators in the other set, with or without extras
+	 */
+	public boolean containsAll(UnaryOperatorSet other) {
+		if (this == other)
+			return true;
+		int missing = theOperators.size() - other.theOperators.size();
+		if (missing < 0)
+			return false;
+		for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : theOperators.entrySet()) {
+			ClassMap<UnaryOp<?, ?>> otherOp = other.theOperators.get(op.getKey());
+			if (otherOp == null) {
+				missing--;
+				if (missing < 0)
+					return false; // other has something we don't
+				else
+					continue;
+			}
+			if (otherOp.size() > op.getValue().size())
+				return false;
+			for (BiTuple<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().getAllEntries()) {
+				UnaryOp<?, ?> otherOp2 = otherOp.get(op2.getValue1(), TypeMatch.EXACT);
+				if (otherOp2 != null && !otherOp2.equals(op2.getValue2()))
+					return false;
+			}
+		}
+		return true;
+	}
+
 	@Override
 	public boolean equals(Object o) {
 		if (this == o)
@@ -458,4 +488,5 @@ public class UnaryOperatorSet {
 			return new UnaryOperatorSet(operators);
 		}
 	}
+
 }

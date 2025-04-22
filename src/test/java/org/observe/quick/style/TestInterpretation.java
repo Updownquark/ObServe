@@ -16,16 +16,17 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.DocumentMap;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.quick.style.QuickInterpretedStyle.QuickStyleAttributeInstantiator;
+import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -131,7 +132,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 			}
 
 			@Override
@@ -232,8 +233,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				a = interpret(getDefinition().getA(), ModelTypes.Value.BOOLEAN);
 				b = interpret(getDefinition().getB(), ModelTypes.Value.BOOLEAN);
@@ -253,7 +254,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		static class Instantiator extends StyledTestElement<A> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelValueInstantiator<SettableValue<Boolean>> a;
 			private final ModelValueInstantiator<SettableValue<Boolean>> b;
 			private final ModelValueInstantiator<SettableValue<Integer>> c;
@@ -265,8 +266,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			Instantiator(A.Interpreted interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				InterpretedModelSet models = interpreted.getExpressoEnv().getModels();
-				theLocalModel = models.instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 
 				a = interpreted.a.instantiate();
 				b = interpreted.b.instantiate();
@@ -280,7 +280,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				a.instantiate();
 				b.instantiate();
 				c.instantiate();
@@ -288,8 +288,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<A> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+			public SettableValue<A> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				SettableValue<Boolean> aInst = a.get(models);
 				SettableValue<Boolean> bInst = b.get(models);
@@ -350,10 +350,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (A.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -385,9 +385,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
-					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s0 = get(cache.getAttribute(getDefinition().getS0(), boolean.class, env));
 					s1 = get(cache.getAttribute(getDefinition().getS1(), int.class, env));
@@ -561,17 +562,15 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				e = interpret(getDefinition().getE(), ModelTypes.Value.BOOLEAN);
 				f = interpret(getDefinition().getF(), ModelTypes.Value.INT);
 
 				syncChildren(getDefinition().getChildren(), theChildren,
 					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) def.interpretValue(this),
-					(v, vEnv) -> {
-						v.updateValue(vEnv);
-					});
+					v -> v.updateValue(getExpressoEnv(v.getDocument())));
 			}
 
 			@Override
@@ -586,7 +585,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T extends B> extends StyledTestElement<T> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 
 			private final ModelValueInstantiator<SettableValue<Boolean>> e;
 			private final ModelValueInstantiator<SettableValue<Integer>> f;
@@ -598,8 +597,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			Instantiator(B.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted);
-				InterpretedModelSet model = interpreted.getExpressoEnv().getModels();
-				theLocalModel = model.instantiate();
+				theLocalModel = interpreted.instantiateLocalModels();
 
 				e = interpreted.e.instantiate();
 				f = interpreted.f.instantiate();
@@ -612,7 +610,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				e.instantiate();
 				f.instantiate();
 
@@ -621,8 +619,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = theLocalModel.wrap(models);
+			public SettableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				instantiate(models);
 				SettableValue<Boolean> eInst = e.get(models);
 				SettableValue<Integer> fInst = f.get(models);
@@ -671,10 +669,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (B.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -701,9 +699,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
-					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s3 = get(cache.getAttribute(getDefinition().getS3(), int.class, env));
 					s4 = get(cache.getAttribute(getDefinition().getS4(), int.class, env));
@@ -828,8 +827,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				g = interpret(getDefinition().getG(), ModelTypes.Value.BOOLEAN);
 			}
@@ -884,10 +883,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (C.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -909,9 +908,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
-					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s5 = get(cache.getAttribute(getDefinition().getS5(), boolean.class, env));
 				}
@@ -1012,8 +1012,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				h = interpret(getDefinition().getH(), ModelTypes.Value.INT);
 			}
@@ -1069,10 +1069,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, (D.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
-						getWrapped().interpret(parentEl, parent, env));
+						getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -1094,9 +1094,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
-					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(element, styleSheet, appCache);
+					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s6 = get(cache.getAttribute(getDefinition().getS6(), int.class, env));
 				}

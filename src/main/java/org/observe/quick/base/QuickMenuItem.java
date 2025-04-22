@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -20,7 +19,7 @@ import org.qommons.config.QonfigInterpretationException;
 /**
  * A simple menu item in a menu that performs an action
  *
- * @param <T> The type of alue to represent
+ * @param <T> The type of value to represent
  */
 public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	/** The XML name of this element */
@@ -93,8 +92,8 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 		}
@@ -111,7 +110,7 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	/** @param id The element ID for this menu item */
 	protected QuickMenuItem(Object id) {
 		super(id);
-		theAction = SettableValue.<ObservableAction> build().build();
+		theAction = SettableValue.create();
 	}
 
 	/** @return The action to perform when the menu item is selected */
@@ -135,17 +134,18 @@ public class QuickMenuItem<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theAction.set(theActionInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override
 	public QuickMenuItem<T> copy(ExElement parent) {
 		QuickMenuItem<T> copy = (QuickMenuItem<T>) super.copy(parent);
 
-		copy.theAction = SettableValue.<ObservableAction> build().build();
+		copy.theAction = SettableValue.create();
 
 		return copy;
 	}

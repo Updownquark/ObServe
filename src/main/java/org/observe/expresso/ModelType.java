@@ -334,7 +334,7 @@ public abstract class ModelType<M> implements Named {
 		 */
 		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target, InterpretedExpressoEnv env) {
 			if (target == null) {
-				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
+				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) getModelType().selfConversionTargets;
 				ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target, env);
 				if (selfInstConverter == null)
 					return (ModelInstanceConverter<M, M2>) nullConverter(this);
@@ -346,7 +346,7 @@ public abstract class ModelType<M> implements Named {
 				for (int i = 0; goodType && i < getModelType().getTypeCount(); i++)
 					goodType = target.getType(i).equals(getType(i));
 				if (goodType) {
-					ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
+					ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) getModelType().selfConversionTargets;
 					ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null
 						: selfConverter.convert(this, target, env);
 					if (selfInstConverter == null)
@@ -393,7 +393,7 @@ public abstract class ModelType<M> implements Named {
 						return null;
 					ModelInstanceType<M2, ?> newType = target.getModelType().forTypes(params);
 					ModelInstanceConverter<M, M2> firstConverter = converter(converter, newType);
-					ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) SELF_CONVERSION_TARGETS.get(target.getModelType());
+					ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) target.getModelType().selfConversionTargets;
 					ModelInstanceConverter<M2, M2> selfInstConverter = selfConverter == null ? null
 						: selfConverter.convert(newType, target, env);
 					if (selfInstConverter != null)
@@ -402,16 +402,14 @@ public abstract class ModelType<M> implements Named {
 						return firstConverter;
 				}
 			}
-			ModelConverter<M, M2> modelConverter = (ModelConverter<M, M2>) CONVERSION_TARGETS
-				.getOrDefault(getModelType(), Collections.emptyMap())//
-				.get(target.getModelType());
+			ModelConverter<M, M2> modelConverter = (ModelConverter<M, M2>) getModelType().conversionTargets.get(target.getModelType());
 			ModelInstanceConverter<M, M2> firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			if (firstConverter == null) {
-				modelConverter = (ModelConverter<M, M2>) FLEX_CONVERSION_FROM_TARGETS.get(target.getModelType());
+				modelConverter = (ModelConverter<M, M2>) target.getModelType().flexConversionFromTargets;
 				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			}
 			if (firstConverter == null) {
-				modelConverter = (ModelConverter<M, M2>) FLEX_CONVERSION_TO_TARGETS.get(getModelType());
+				modelConverter = (ModelConverter<M, M2>) getModelType().flexConversionToTargets;
 				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			}
 			if (firstConverter == null)
@@ -609,15 +607,16 @@ public abstract class ModelType<M> implements Named {
 	private static final Map<String, ModelType<?>> MODEL_TYPES_BY_NAME = Collections.synchronizedMap(new LinkedHashMap<>());
 	private static final Map<Class<?>, ModelType<?>> MODEL_TYPES_BY_TYPE = Collections.synchronizedMap(new LinkedHashMap<>());
 	private static final List<ModelType<?>> ALL_MODEL_TYPES = Collections.synchronizedList(new ArrayList<>());
-	private static final Map<ModelType<?>, Map<ModelType<?>, ModelConverter<?, ?>>> CONVERSION_TARGETS = new HashMap<>();
-	private static final Map<ModelType<?>, ModelConverter<?, Object>> FLEX_CONVERSION_TO_TARGETS = new HashMap<>();
-	private static final Map<ModelType<?>, ModelConverter<Object, ?>> FLEX_CONVERSION_FROM_TARGETS = new HashMap<>();
-	private static final Map<ModelType<?>, ModelConverter<?, ?>> SELF_CONVERSION_TARGETS = new HashMap<>();
 
 	private final String theName;
 	/** The type of model this represents */
 	public final Class<M> modelType;
 	private final int theTypeCount;
+
+	private final Map<ModelType<?>, ModelConverter<?, ?>> conversionTargets;
+	private ModelConverter<?, Object> flexConversionToTargets;
+	private ModelConverter<Object, ?> flexConversionFromTargets;
+	private ModelConverter<?, ?> selfConversionTargets;
 
 	/**
 	 * @param name The name of the model type
@@ -638,34 +637,35 @@ public abstract class ModelType<M> implements Named {
 			MODEL_TYPES_BY_TYPE.put(type, this);
 			ALL_MODEL_TYPES.add(this);
 		}
+		conversionTargets = new HashMap<>();
 		setupConversions(new ConversionBuilder<M>() {
 			@Override
 			public <M2> ConversionBuilder<M> convertibleTo(ModelType<M2> targetModelType, ModelConverter<M, M2> converter) {
-				CONVERSION_TARGETS.computeIfAbsent(ModelType.this, __ -> new HashMap<>()).put(targetModelType, converter);
+				conversionTargets.put(targetModelType, converter);
 				return this;
 			}
 
 			@Override
 			public <M2> ConversionBuilder<M> convertibleFrom(ModelType<M2> sourceModelType, ModelConverter<M2, M> converter) {
-				CONVERSION_TARGETS.computeIfAbsent(sourceModelType, __ -> new HashMap<>()).put(ModelType.this, converter);
+				sourceModelType.conversionTargets.put(ModelType.this, converter);
 				return this;
 			}
 
 			@Override
 			public ConversionBuilder<M> convertibleToAny(ModelConverter<M, Object> converter) {
-				FLEX_CONVERSION_TO_TARGETS.put(ModelType.this, converter);
+				flexConversionToTargets = converter;
 				return this;
 			}
 
 			@Override
 			public ConversionBuilder<M> convertibleFromAny(ModelConverter<Object, M> converter) {
-				FLEX_CONVERSION_FROM_TARGETS.put(ModelType.this, converter);
+				flexConversionFromTargets = converter;
 				return this;
 			}
 
 			@Override
 			public ConversionBuilder<M> convertSelf(ModelConverter<M, M> converter) {
-				SELF_CONVERSION_TARGETS.put(ModelType.this, converter);
+				selfConversionTargets = converter;
 				return this;
 			}
 		});

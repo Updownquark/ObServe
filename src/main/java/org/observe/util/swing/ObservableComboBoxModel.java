@@ -12,8 +12,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntConsumer;
+import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
@@ -142,8 +143,8 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		List<Subscription> subs = new LinkedList<>();
 		subs.add(() -> safeUntil.onNext(null));
 		ObservableCollection<? extends T> safeValues = availableValues.safe(ThreadConstraint.EDT, safeUntil);
-		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
-		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, safeUntil);
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT);
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT);
 		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(safeValues);
 		comboBox.setModel((ComboBoxModel<T>) comboModel);
 		boolean[] callbackLock = new boolean[1];
@@ -151,25 +152,42 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			comboBox.setEnabled(enabled == null);
 			comboBox.setToolTipText(enabled == null ? safeDescrip.get() : enabled);
 		};
-		subs.add(safeDescrip.safe(ThreadConstraint.EDT, safeUntil).changes().act(evt -> {
+		subs.add(safeDescrip.changes().act(evt -> {
 			if (safeSelected.isEnabled().get() == null)
 				comboBox.setToolTipText(evt.getNewValue());
 		}));
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
 		ComboPopup popup = getComboPopup(comboBox);
+		boolean[] isDebug = new boolean[1];
 		subs.add(ObservableComboBoxModel.<T> hookUpComboData(safeValues, safeSelected, index -> {
+			if (!isDebug[0])
+				isDebug[0] = PanelPopulation.isDebugging(comboBox.getName(), "combo");
 			if (index < 0)
 				comboBox.setSelectedIndex(-1);
-			else if (index >= comboBox.getItemCount())
-				return;
-			else if (index == comboBox.getSelectedIndex())
-				return;
-			else if (comboBox.getSelectedItem() == safeValues.get(index))
-				return;
+			else if (index >= comboBox.getItemCount()) {
+				if (isDebug[0])
+					System.out
+					.println("Target index (" + index + ") is too large (" + comboBox.getItemCount() + "/" + safeValues.size() + ")");
+				return false;
+			} else if (index == comboBox.getSelectedIndex()) {
+				if (isDebug[0])
+					System.out.println("Target index (" + index + ") is not changed");
+				return false;
+			} else if (comboBox.getSelectedItem() == safeValues.get(index)) {
+				if (isDebug[0])
+					System.out.println("Target item (" + safeValues.get(index) + "@" + index + ") is not changed");
+				return false;
+			}
 			// Ignore update events when the popup is expanded
-			else if (popup != null && popup.isVisible())
-				return;
+			else if (popup != null && popup.isVisible()) {
+				if (isDebug[0])
+					System.out.println("Popup is expanded");
+				return false;
+			}
+			if (isDebug[0])
+				System.out.println("Setting target index " + index);
 			comboBox.setSelectedIndex(index);
+			return true;
 		}, listener -> {
 			ItemListener itemListener = evt -> {
 				if (evt.getStateChange() != ItemEvent.SELECTED)
@@ -188,7 +206,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			};
 			comboBox.addItemListener(itemListener);
 			return () -> comboBox.removeItemListener(itemListener);
-		}, checkEnabled));
+		}, checkEnabled, comboBox::getName));
 		subs.add(safeSelected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
 
 		ListCellRenderer<? super T> oldRenderer = comboBox.getRenderer();
@@ -311,23 +329,38 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @return A subscription to stop all listening
 	 */
 	static <T> Subscription hookUpComboData(ObservableCollection<? extends T> availableValues, SettableValue<T> selected,
-		IntConsumer setSelected, Function<TriFunction<T, Integer, Object, Boolean>, Subscription> acceptSelected,
-		Consumer<String> checkEnabled) {
+		IntPredicate setSelected, Function<TriFunction<T, Integer, Object, Boolean>, Subscription> acceptSelected,
+		Consumer<String> checkEnabled, Supplier<String> debug) {
 		List<Subscription> subs = new LinkedList<>();
 		boolean[] callbackLock = new boolean[1];
 		ElementId[] currentSelectedElement = new ElementId[1];
 		Object[] currentSelected = new Object[1];
+		boolean[] isDebug = new boolean[1];
 		subs.add(acceptSelected.apply((item, idx, cause) -> {
 			if (!callbackLock[0]) {
+				if (!isDebug[0])
+					isDebug[0] = PanelPopulation.isDebugging(debug.get(), "combo");
 				callbackLock[0] = true;
 				try {
 					if (selected.isAcceptable(item) != null) {
+						if (isDebug[0])
+							System.out.println("User-selected item " + item + " is unacceptable: " + selected.isAcceptable(item));
 						if (currentSelectedElement[0] == null)
-							EventQueue.invokeLater(() -> setSelected.accept(-1));
+							// The item the user has clicked cannot be selected.
+							EventQueue.invokeLater(() -> {
+								callbackLock[0] = true;
+								try {
+									setSelected.test(availableValues.indexOf(selected.get()));
+								} finally {
+									callbackLock[0] = false;
+								}
+							});
 						else if (currentSelectedElement[0].isPresent())
-							EventQueue.invokeLater(() -> setSelected.accept(availableValues.getElementsBefore(currentSelectedElement[0])));
+							EventQueue.invokeLater(() -> setSelected.test(availableValues.getElementsBefore(currentSelectedElement[0])));
 						return false;
 					}
+					if (isDebug[0])
+						System.out.println("User-selected item " + item);
 					currentSelectedElement[0] = availableValues.getElement(idx).getElementId();
 					currentSelected[0] = item;
 					selected.set(item, cause);
@@ -343,10 +376,14 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(selected.changes().act(evt -> {
 			if (callbackLock[0])
 				return;
+			if (!isDebug[0])
+				isDebug[0] = PanelPopulation.isDebugging(debug.get(), "combo");
 			if (evt.getNewValue() == null) {
+				if (isDebug[0])
+					System.out.println("Null combo value");
 				currentSelectedElement[0] = null;
 				currentSelected[0] = null;
-				setSelected.accept(-1);
+				setSelected.test(-1);
 				return;
 			}
 			String enabled = selected.isEnabled().get();
@@ -356,11 +393,17 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				if (found != null) {
 					currentSelectedElement[0] = found.getElementId();
 					currentSelected[0] = found.get();
-					setSelected.accept(availableValues.getElementsBefore(found.getElementId()));
+					int index = availableValues.getElementsBefore(currentSelectedElement[0]);
+					if (isDebug[0])
+						System.out.println("Combo value " + evt.getNewValue() + " found at " + index);
+					if (!setSelected.test(index))
+						currentSelected[0] = null;
 				} else {
 					currentSelectedElement[0] = null;
 					currentSelected[0] = null;
-					setSelected.accept(-1);
+					if (isDebug[0])
+						System.out.println("Combo value " + evt.getNewValue() + " not found");
+					setSelected.test(-1);
 				}
 			} finally {
 				callbackLock[0] = false;
@@ -379,21 +422,27 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(availableValues.changes().act(evt -> {
 			if (evt.type == CollectionChangeType.remove)
 				return;
+			if (!isDebug[0])
+				isDebug[0] = PanelPopulation.isDebugging(debug.get(), "combo");
 			Object selectedV = selected.get();
 			if (selectedV != null && currentSelected[0] != selectedV) {
 				for (CollectionChangeEvent.ElementChange<? extends T> change : evt.getElements()) {
 					if (((Equivalence<T>) availableValues.equivalence()).elementEquals(change.newValue, selectedV)) {
 						callbackLock[0] = true;
 						try {
-							setSelected.accept(change.index);
-							if (selected.isAcceptable(change.newValue) == null) {
+							setSelected.test(change.index);
+							if (selected.isAcceptable(change.newValue) == null && !selected.isEventing()) {
+								if (isDebug[0])
+									System.out.println("Combo value " + selectedV + " updated at " + change.index + " (" + evt.type + ")");
 								currentSelected[0] = change.newValue;
 								try {
 									selected.set(change.newValue, evt);
 								} catch (ReentrantNotificationException e) {
 									// Have issues where the architecture doesn't have the capability to detect this reentrant situation
 								}
-							}
+							} else if (isDebug[0])
+								System.out.println("Combo value " + selectedV + " updated at " + change.index + " (" + evt.type
+									+ ") but value can't be updated: " + selected.isAcceptable(change.newValue));
 						} finally {
 							callbackLock[0] = false;
 						}

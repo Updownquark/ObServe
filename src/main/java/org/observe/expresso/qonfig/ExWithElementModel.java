@@ -98,11 +98,12 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 					"Multiple conflicting element values named '" + name + "' declared by " + prev.getIdentity() + " and " + dv,
 					session.getElement().getPositionInFile(), 0);
 			}
+			String doc = session.getInterpretingDocument();
 			CompiledExpression sourceAttrX;
 			try {
 				if(dv.getValue()!=null)
 					sourceAttrX = new CompiledExpression(dv.getValue().getExpression(), dv.getValue().getElement(),
-						dv.getValue().getFilePosition(), getElement()::getExpressoEnv);
+						dv.getValue().getFilePosition(), () -> getElement().getExpressoEnv(doc));
 				else if (dv.isSourceValue())
 					sourceAttrX = getElement().getValueExpression(session);
 				else if (dv.getSourceAttribute() != null)
@@ -123,14 +124,14 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			else
 				value = new PlaceholderElementValue<>(dv, name, spec);
 			if (builder == null)
-				builder = createBuilder(session);
+				builder = createBuilder(session, doc);
 			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, spec.getElement().getPositionInFile());
 			value.setModelId(modelNode.getIdentity());
 			if (dv.getNameAttribute() != null) {
-				CompiledExpressoEnv env = getElement().getExpressoEnv();
+				CompiledExpressoEnv env = getElement().getExpressoEnv(doc);
 				env = env.withAttribute(dv.getNameAttribute().getName(), modelNode.getIdentity());
-				session.setExpressoEnv(env);
-				getElement().setExpressoEnv(env);
+				session.setExpressoEnv(doc, env);
+				getElement().setExpressoEnv(doc, env);
 			}
 			return builder;
 		}
@@ -224,9 +225,11 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 	@Override
 	public void update(ExAddOn.Interpreted<? super ExElement, ?> interpreted, ExElement element) throws ModelInstantiationException {
 		super.update(interpreted, element);
-		ModelInstantiator models = element.getModels();
+		ModelInstantiator models = element.getModels(interpreted.getElement().getDocument());
 		ExWithElementModel.Interpreted myInterpreted = (ExWithElementModel.Interpreted) interpreted;
 		for (Map.Entry<String, InterpretedModelComponentNode<?, ?>> value : myInterpreted.getElementValues().entrySet()) {
+			if (value.getValue().getIdentity().getRootId() != models.getIdentity())
+				continue;
 			ModelValueInstantiator<?> mv = models.getComponent(value.getValue().getIdentity());
 			if (mv instanceof ModelValueElement)
 				((ModelValueElement<?>) mv).update((ExElement.Interpreted<?>) value.getValue(), element);

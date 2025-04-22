@@ -26,16 +26,18 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
+import org.observe.expresso.qonfig.DocumentMap;
 import org.observe.quick.Iconized;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
-import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickTable;
-import org.observe.quick.base.TabularWidget;
 import org.observe.quick.ext.QuickBarChart;
 import org.observe.quick.ext.QuickCollapsePane;
 import org.observe.quick.ext.QuickComboButton;
@@ -49,6 +51,7 @@ import org.observe.quick.ext.QuickSuperTable;
 import org.observe.quick.ext.QuickTiledPane;
 import org.observe.quick.ext.QuickTreeTable;
 import org.observe.quick.ext.QuickValueSelector;
+import org.observe.quick.swing.QuickSwingColumnSet.TabularContext;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.ObservableCollectionSynchronization;
@@ -76,6 +79,7 @@ import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.ex.CheckedExceptionWrapper;
 
 /** Swing implementation for the Quick-X toolkit */
@@ -257,45 +261,20 @@ public class QuickXSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickComboButton<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
-			MultiValueRenderable.MultiValueRenderContext<T> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>();
-			quick.setContext(ctx);
-			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext<T>() {
-				private final SettableValue<Integer> theRowIndex = SettableValue.<Integer> build().withValue(0).build();
-				private final SettableValue<Integer> theColumnIndex = SettableValue.<Integer> build().withValue(0).build();
-
-				@Override
-				public SettableValue<T> getActiveValue() {
-					return ctx.getActiveValue();
-				}
-
-				@Override
-				public SettableValue<Boolean> isSelected() {
-					return ctx.isSelected();
-				}
-
-				@Override
-				public SettableValue<Integer> getRowIndex() {
-					return theRowIndex;
-				}
-
-				@Override
-				public SettableValue<Integer> getColumnIndex() {
-					return theColumnIndex;
-				}
-			};
-			quick.setContext(tableCtx);
+			TabularContext<T> tableCtx = new TabularContext<>(quick.getActiveValue(), null, null, quick.isSelected());
 			SettableValue<T> selectedValue = SettableValue.<T> build().build();
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> renderer;
 			renderer = new QuickSwingTablePopulation.QuickSwingRenderer<>(null, LambdaUtils.identity(), quick, selectedValue,
-				quick.getRenderers(), tableCtx, () -> combo[0], theRenderers);
+				quick.getRenderers(), tableCtx, () -> combo[0], theRenderers, true);
 			panel.addComboButton(null, quick.getValues(), (value, cause) -> {
-				ctx.getActiveValue().set(value, cause);
+				quick.getActiveValue().set(value, cause);
 				quick.getAction().act(cause);
 			}, cb -> {
 				combo[0] = cb;
 				component.accept(cb);
 				cb.withText(quick.getText());
 				cb.withIcon(quick.getAddOn(Iconized.class).getIcon().map(img -> img == null ? null : new ImageIcon(img)));
+				cb.disableWith(quick.getAction().isEnabled());
 				cb.renderWith(renderer);
 				cb.withValueTooltip(v -> {
 					ModelCell<T, T> cell = new ModelCell.Default<>(() -> v, v, 0, 0, false, false, false, false, false, true);
@@ -317,9 +296,8 @@ public class QuickXSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTreeTable<N, C> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			TabularWidget.TabularContext<BetterList<N>> ctx = new TabularWidget.TabularContext.Default<>(
-				quick.reporting().getPosition().toShortString());
-			quick.setContext(ctx);
+			TabularContext<BetterList<N>> ctx = new TabularContext<>(quick.getActiveValue(), quick.getRowIndex(), quick.getColumnIndex(),
+				quick.isSelected());
 			ValueHolder<PanelPopulation.TreeTableEditor<N, ?>> treeHolder = new ValueHolder<>();
 			InterpretedSwingTableColumn<BetterList<N>, BetterList<N>, N> treeColumn = getTreeColumn(quick, treeHolder, ctx,
 				panel.getUntil());
@@ -512,12 +490,21 @@ public class QuickXSwing implements QuickInterpretation {
 	static class SwingTiledPane<T> extends QuickSwingPopulator.Abstract<QuickTiledPane<T>> {
 		private final QuickSwingLayout<QuickLayout> theLayout;
 		private final QuickSwingPopulator<QuickWidget> theRenderer;
+		private final DocumentMap<ModelInstantiator> theModels;
 
 		SwingTiledPane(QuickTiledPane.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			interpreted.persistModelInstances(true);
 			theLayout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
 			theRenderer = interpreted.getRenderer() == null ? null : tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+			theModels = interpreted.instantiateLocalModels();
+		}
+
+		private ModelSetInstance copyModels(QuickTiledPane<T> quick) throws ModelInstantiationException {
+			ModelSetInstanceBuilder builder = ObservableModelSet.createMultiModelInstanceBag(quick.getUpdatingModels().getUntil());
+			for (ModelInstantiator model : theModels.values())
+				builder.withAll(model.createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil()).build());
+			return builder.build();
 		}
 
 		@Override
@@ -535,12 +522,12 @@ public class QuickXSwing implements QuickInterpretation {
 			PanelPopulation.ComponentEditor<?, ?>[] populator = new PanelPopulation.ComponentEditor[1];
 
 			// Let the Quick widget proper do the rendering
-			TabularWidget.TabularContext<T> renderCtx = new TabularWidget.TabularContext.Default<>(quick.toString());
-			quick.setContext(renderCtx);
+			TabularContext<T> renderCtx = new TabularContext<>(quick.getActiveValue(), quick.getValueIndex(), null, quick.isSelected());
 			QuickWidget renderer = quick.getRenderer();
 			Map<Object, QuickSwingPopulator<QuickWidget>> rendererMap = Collections.singletonMap(renderer.getIdentity(), theRenderer);
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingRenderer = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
-				LambdaUtils.identity(), quick, quick.getActiveValue(), Arrays.asList(renderer), renderCtx, () -> populator[0], rendererMap);
+				LambdaUtils.identity(), quick, quick.getActiveValue(), Arrays.asList(renderer), renderCtx, () -> populator[0], rendererMap,
+				false);
 
 			// Now we need to make copies of the Quick tiled pane so the other 2 renderers (one for hover, one for focus) are independent
 			// of each other and the renderer
@@ -567,65 +554,61 @@ public class QuickXSwing implements QuickInterpretation {
 			};
 
 			QuickTiledPane<T> hoverCopy = quick.copy(quick.getParentElement());
-			ModelSetInstance hoverModels = quick.getModels().createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil())
-				.build();
+			ModelSetInstance hoverModels = copyModels(quick);
 			hoverCopy.instantiate(hoverModels);
 			hoverCopy.setContext(bgCtx);
-			TabularWidget.TabularContext<T> hoverCtx = new TabularWidget.TabularContext.Default<>(quick.toString() + "(hover)");
-			hoverCopy.setContext(hoverCtx);
+			TabularContext<T> hoverCtx = new TabularContext<>(hoverCopy.getActiveValue(), hoverCopy.getValueIndex(), null,
+				hoverCopy.isSelected());
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingHover = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
 				LambdaUtils.identity(), hoverCopy, hoverCopy.getActiveValue(), Arrays.asList(hoverCopy.getRenderer()), hoverCtx,
-				() -> populator[0], rendererMap);
+				() -> populator[0], rendererMap, false);
 
 			QuickTiledPane<T> focusCopy = quick.copy(quick.getParentElement());
-			ModelSetInstance focusModels = quick.getModels().createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil())
-				.build();
+			ModelSetInstance focusModels = copyModels(quick);
 			focusCopy.instantiate(focusModels);
 			focusCopy.setContext(bgCtx);
-			TabularWidget.TabularContext<T> focusCtx = new TabularWidget.TabularContext.Default<>(quick.toString() + "(focus)");
-			focusCopy.setContext(focusCtx);
+			TabularContext<T> focusCtx = new TabularContext<>(focusCopy.getActiveValue(), focusCopy.getValueIndex(), null,
+				focusCopy.isSelected());
 			QuickSwingTablePopulation.QuickSwingRenderer<T, T, T> swingFocus = new QuickSwingTablePopulation.QuickSwingRenderer<>(null,
 				LambdaUtils.identity(), focusCopy, focusCopy.getActiveValue(), Arrays.asList(focusCopy.getRenderer()), focusCtx,
-				() -> populator[0], rendererMap);
+				() -> populator[0], rendererMap, false);
 
 			// Support modifying values in the collection
 
 			long[] hoverFocusKnownValuesStamp = new long[2];
 			hoverFocusKnownValuesStamp[0] = tiledPane.getValues().getStamp();
 			hoverFocusKnownValuesStamp[1] = hoverFocusKnownValuesStamp[0];
-			hoverCtx.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
+			hoverCopy.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
 				if (swingHover.isUpdating())
 					return;
 				long newValuesStamp = tiledPane.getValues().getStamp();
 				// If the collection hasn't changed but the value has, the input is from the UI and we should update the collection element
 				if (newValuesStamp == hoverFocusKnownValuesStamp[0]) {
-					if (evt.getNewValue() != tiledPane.getValues().get(hoverCtx.getRowIndex().get()))
-						System.out.println("Changing hover [" + hoverCtx.getRowIndex().get() + "] from "
-							+ tiledPane.getValues().get(hoverCtx.getRowIndex().get()) + " to " + evt.getNewValue());
 					try {
-						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(hoverCtx.getRowIndex().get()).getElementId())//
-						.set(evt.getNewValue());
+						MutableCollectionElement<T> element = tiledPane.getValues()
+							.mutableElement(tiledPane.getValues().getElement(hoverCopy.getValueIndex().get()).getElementId());
+						if (element.isAcceptable(evt.getNewValue()) == null)
+							element.set(evt.getNewValue());
 					} catch (RuntimeException e) {
-						quick.reporting().error("Unable to modify value[" + hoverCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
+						quick.reporting().error("Unable to modify value[" + hoverCopy.getValueIndex().get() + "]=" + evt.getNewValue(), e);
 					}
 					hoverFocusKnownValuesStamp[0] = tiledPane.getValues().getStamp();
 				} else
 					hoverFocusKnownValuesStamp[0] = newValuesStamp;
 			});
-			focusCtx.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
+			focusCopy.getActiveValue().noInitChanges().takeUntil(until).act(evt -> {
 				if (swingFocus.isUpdating())
 					return;
 				long newValuesStamp = tiledPane.getValues().getStamp();
 				// If the collection hasn't changed but the value has, the input is from the UI and we should update the collection element
 				if (newValuesStamp == hoverFocusKnownValuesStamp[1]) {
-					if (evt.getNewValue() != tiledPane.getValues().get(focusCtx.getRowIndex().get()))
-						System.out.println("Changing focus [" + focusCtx.getRowIndex().get() + "] from "
-							+ tiledPane.getValues().get(focusCtx.getRowIndex().get()) + " to " + evt.getNewValue());
 					try {
-						tiledPane.getValues().mutableElement(tiledPane.getValues().getElement(focusCtx.getRowIndex().get()).getElementId())//
-						.set(evt.getNewValue());
+						MutableCollectionElement<T> element = tiledPane.getValues()
+							.mutableElement(tiledPane.getValues().getElement(focusCopy.getValueIndex().get()).getElementId());
+						if (element.isAcceptable(evt.getNewValue()) == null)
+							element.set(evt.getNewValue());
 					} catch (RuntimeException e) {
-						quick.reporting().error("Unable to modify value[" + focusCtx.getRowIndex().get() + "]=" + evt.getNewValue(), e);
+						quick.reporting().error("Unable to modify value[" + focusCopy.getValueIndex().get() + "]=" + evt.getNewValue(), e);
 					}
 					hoverFocusKnownValuesStamp[1] = tiledPane.getValues().getStamp();
 				} else
@@ -747,15 +730,13 @@ public class QuickXSwing implements QuickInterpretation {
 			Observable<?> until = Observable.or(panel.getUntil(), quick.onDestroy());
 			ObservableValueSelector<A, I>[] selector = new ObservableValueSelector[1];
 
-			TabularWidget.TabularContext<A> availableCtx = new TabularWidget.TabularContext.Default<>(
-				quick.getAvailable().reporting().getPosition().toShortString());
-			quick.getAvailable().setContext(availableCtx);
+			TabularContext<A> availableCtx = new TabularContext<>(quick.getAvailable().getActiveValue(), quick.getAvailable().getRowIndex(),
+				quick.getAvailable().getColumnIndex(), quick.getAvailable().isSelected());
 			QuickSwingColumnSet<A, ObservableValueSelector.SelectableValue<A, I>>.Populator availableColumnsPopulator = theAvailableColumns
 				.createPopulator(quick.getAvailable(), quick.getAvailable().getAllColumns(), availableCtx, until);
 
-			TabularWidget.TabularContext<I> includedCtx = new TabularWidget.TabularContext.Default<>(
-				quick.getIncluded().reporting().getPosition().toShortString());
-			quick.getIncluded().setContext(includedCtx);
+			TabularContext<I> includedCtx = new TabularContext<>(quick.getIncluded().getActiveValue(), quick.getIncluded().getRowIndex(),
+				quick.getIncluded().getColumnIndex(), quick.getIncluded().isSelected());
 			QuickSwingColumnSet<I, ObservableValueSelector.SelectableValue<A, I>>.Populator includedColumnsPopulator = theIncludedColumns
 				.createPopulator(quick.getIncluded(), quick.getIncluded().getAllColumns(), includedCtx, until);
 

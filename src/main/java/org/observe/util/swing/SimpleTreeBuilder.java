@@ -41,6 +41,7 @@ import org.observe.util.swing.Dragging.SimpleTransferAccepter;
 import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.Dragging.TransferAccepter;
 import org.observe.util.swing.Dragging.TransferSource;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
@@ -67,9 +68,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
 	 * @return The tree builder to configure
 	 */
-	public static <F> SimpleTreeBuilder<F, ?> createTree(ObservableValue<? extends F> root,
+	public static <F> SimpleTreeBuilder<F, ?> createTree(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeBuilder<>(root, new PPTreeModel1<>(root, children), until);
+		return new SimpleTreeBuilder<>(parent, root, new PPTreeModel1<>(root, children), until);
 	}
 
 	/**
@@ -81,9 +82,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
 	 * @return The tree builder to configure
 	 */
-	public static <F> SimpleTreeBuilder<F, ?> createTree2(ObservableValue<? extends F> root,
+	public static <F> SimpleTreeBuilder<F, ?> createTree2(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return createTree3(root, (path, nodeUntil) -> children.apply(path), until);
+		return createTree3(parent, root, (path, nodeUntil) -> children.apply(path), until);
 	}
 
 	/**
@@ -95,9 +96,9 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
 	 * @return The tree builder to configure
 	 */
-	public static <F> SimpleTreeBuilder<F, ?> createTree3(ObservableValue<? extends F> root,
+	public static <F> SimpleTreeBuilder<F, ?> createTree3(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeBuilder<>(root, new PPTreeModel3<>(root, children), until);
+		return new SimpleTreeBuilder<>(parent, root, new PPTreeModel3<>(root, children), until);
 	}
 
 	private final ObservableValue<? extends F> theRoot;
@@ -110,14 +111,17 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
+	private Observable<?> theExpandAll;
+	private Observable<?> theCollapseAll;
 	private boolean isRootVisible;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
 	private Dragging.SimpleTransferSource<BetterList<F>, F> theDragSource;
 	private Dragging.SimpleTransferAccepter<BetterList<F>, F> theDragAccepter;
 
-	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
-		super(null, new MyTree<>(model), until);
+	private SimpleTreeBuilder(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root, ObservableTreeModel<F> model,
+		Observable<?> until) {
+		super(parent, null, new MyTree<>(model), until);
 		theRenderer = new CategoryRenderStrategy<>("Tree", (Class<F>) Object.class,
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
@@ -343,6 +347,24 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 	}
 
 	@Override
+	public P withExpandAll(Observable<?> expandAll) {
+		if (theExpandAll == null)
+			theExpandAll = expandAll;
+		else
+			theExpandAll = Observable.or(theExpandAll, expandAll);
+		return (P) this;
+	}
+
+	@Override
+	public P withCollapseAll(Observable<?> expandAll) {
+		if (theCollapseAll == null)
+			theCollapseAll = expandAll;
+		else
+			theCollapseAll = Observable.or(theCollapseAll, expandAll);
+		return (P) this;
+	}
+
+	@Override
 	public boolean isVisible(List<? extends F> path) {
 		return getEditor().isVisible(new TreePath(path.toArray()));
 	}
@@ -476,6 +498,8 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 		ObservableCollection<BetterList<F>> multiSelection = ObservableCollection.<BetterList<F>> build().build().safe(ThreadConstraint.EDT,
 			getUntil());
 		ObservableTreeModel.syncSelection(getEditor(), multiSelection, Equivalence.DEFAULT, getUntil());
+		if (PanelPopulation.isDebugging(getEditor().getName(), "multiSelect"))
+			multiSelection.simpleChanges().takeUntil(getUntil()).act(__ -> System.out.println("Selection=" + multiSelection));
 		if (theValueMultiSelection != null) {
 			ObservableCollection<F> modelValueSel = multiSelection.flow()//
 				.<F> transform(tx -> tx//
@@ -496,13 +520,30 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 			ObservableTreeModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null)
 			ObservableTreeModel.syncSelection(getEditor(), theValueSingleSelection//
-				.safe(ThreadConstraint.EDT, getUntil()).//
+				.safe(ThreadConstraint.EDT).//
 				<BetterList<F>> transformReversible(tx -> tx//
 					.map(v -> model.getValuePath(v, true))//
 					.withReverse(path -> path == null ? null : path.getLast())),
 				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+		if (theExpandAll != null) {
+			theExpandAll.takeUntil(getUntil()).act(__ -> {
+				for (int r = 0; r < tree.getRowCount(); r++)
+					tree.expandRow(r);
+			});
+		}
+		if (theCollapseAll != null) {
+			theCollapseAll.takeUntil(getUntil()).act(__ -> {
+				int rowCount = tree.getRowCount();
+				boolean collapsed = false;
+				do {
+					for (int r = rowCount - 1; r >= 0 && rowCount == tree.getRowCount(); r--)
+						tree.collapseRow(r);
+					collapsed = rowCount != tree.getRowCount();
+				} while (collapsed);
+			});
+		}
 
 		// Tooltip control could mess up cell tooltips and stuff
 		withTooltipControl(false);
@@ -539,7 +580,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 				});
 			}
 			if (hasButtons) {
-				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(this, null,
 					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
 				for (Object action : theActions) {
 					if (action instanceof SimpleDataAction) {

@@ -15,7 +15,6 @@ import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.dbug.DbugFieldType;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -125,7 +124,7 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theAs = elModels.getElementValueModelId(session.getAttributeText("as"));
 			elModels.satisfyElementValueType(theAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getAnchorType(env)));
+				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getAnchorType()));
 
 			syncChildren(DbugAction.Def.class, theActions, session.forChildren("action"));
 			syncChildren(DbugEventWatch.Def.class, theEvents, session.forChildren("event"));
@@ -157,13 +156,13 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 			return (Def) super.getDefinition();
 		}
 
-		public TypeToken<A> getAnchorType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public TypeToken<A> getAnchorType() throws ExpressoInterpretationException {
 			if (theAnchorType == null) {
 				SubAnchorWatch.Interpreted<A> saw = getAddOn(SubAnchorWatch.Interpreted.class);
 				if (saw != null)
-					theAnchorType = saw.getAnchorType(env);
+					theAnchorType = saw.getAnchorType();
 				else if (getDefinition().getAnchorType() != null)
-					theAnchorType = (TypeToken<A>) getDefinition().getAnchorType().getType(env);
+					theAnchorType = (TypeToken<A>) interpretType(getDefinition().getAnchorType());
 				else {
 					reporting().error("type missing");
 					theAnchorType = (TypeToken<A>) TypeTokens.get().OBJECT;
@@ -192,30 +191,30 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 			return Collections.unmodifiableList(theSubWatches);
 		}
 
-		public void updateWatch(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateWatch() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
-			TypeToken<A> type = getAnchorType(expressoEnv);
+			TypeToken<A> type = getAnchorType();
 			theDbugAnchorType = Dbug.common().getAnchor(TypeTokens.getRawType(type), false);
 			if (theDbugAnchorType != null) {
 				for (DbugFieldType<? super A, ?> field : theDbugAnchorType.getFields().values()) {
-					addSyntheticField(expressoEnv, field);
+					addSyntheticField(field);
 				}
 			} else if (getAddOn(SubAnchorWatch.Interpreted.class) == null)
 				reporting().warn("No Dbug anchor type found for " + type + ". This element is useless.");
-			theIf = getDefinition().getIf() == null ? null : getDefinition().getIf().interpret(ModelTypes.Value.BOOLEAN, expressoEnv);
-			syncChildren(getDefinition().getActions(), theActions, a -> a.interpret(this), (a, env) -> a.updateAction(env));
-			syncChildren(getDefinition().getEvents(), theEvents, a -> a.interpret(this), (a, env) -> a.updateWatch(env));
-			syncChildren(getDefinition().getSubWatches(), theSubWatches, a -> a.interpret(this), (a, env) -> a.updateWatch(env));
+			theIf = interpret(getDefinition().getIf(), ModelTypes.Value.BOOLEAN);
+			syncChildren(getDefinition().getActions(), theActions, a -> a.interpret(this), a -> a.updateAction());
+			syncChildren(getDefinition().getEvents(), theEvents, a -> a.interpret(this), a -> a.updateWatch());
+			syncChildren(getDefinition().getSubWatches(), theSubWatches, a -> a.interpret(this), a -> a.updateWatch());
 		}
 
-		private <A2, F> void addSyntheticField(InterpretedExpressoEnv expressoEnv, DbugFieldType<A2, F> field) {
-			expressoEnv.withSyntheticField(field.getAnchor().getType(), field.getName(), new SyntheticField.Def<A2, F>() {
+		private <A2, F> void addSyntheticField(DbugFieldType<A2, F> field) {
+			getDefaultEnv().withSyntheticField(field.getAnchor().getType(), field.getName(), new SyntheticField.Def<A2, F>() {
 				@Override
 				public <E2 extends A2> SyntheticField<E2, ? extends F> get(TypeToken<E2> entityType) {
 					return new SyntheticField<E2, F>() {
@@ -301,7 +300,7 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 		super.doUpdate(interpreted);
 		Interpreted<A> myInterpreted = (Interpreted<A>) interpreted;
 		try {
-			theAnchorType = TypeTokens.getRawType(myInterpreted.getAnchorType(null));
+			theAnchorType = TypeTokens.getRawType(myInterpreted.getAnchorType());
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("What?", e);
 		}
@@ -352,12 +351,13 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theAs, myModels, theAsValue);
 		theIf.set(theIfInstantiator == null ? null : theIfInstantiator.get(myModels), null);
 		for (DbugAction action : theActions)
 			action.instantiate(myModels);
+		return myModels;
 	}
 
 	public void watch(DbugAnchor<? super A> anchor, Observable<?> until) {

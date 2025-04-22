@@ -145,7 +145,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			@Override
 			public void update(ExElement.Interpreted<? extends ExElement> element) throws ExpressoInterpretationException {
 				super.update(element);
-				element.syncChildren(getDefinition().getTags(), theTags, def -> def.interpret(element), (def, env) -> def.update(env));
+				element.syncChildren(getDefinition().getTags(), theTags, def -> def.interpret(element), def -> def.update());
 			}
 
 			@Override

@@ -21,10 +21,10 @@ import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickSize;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.MultiValueRenderable;
 import org.observe.quick.base.QuickBaseInterpretation;
-import org.observe.quick.base.QuickSize;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
@@ -233,8 +233,8 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			getType();
 
@@ -282,10 +282,10 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 			}
 
 			@Override
-			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 				throws ExpressoInterpretationException {
 				return new Interpreted(this, (QuickBarChart.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
-					getWrapped().interpret(parentEl, parent, env));
+					getWrapped().interpret(parentEl, parent));
 			}
 		}
 
@@ -327,9 +327,10 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+			public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 				throws ExpressoInterpretationException {
-				super.update(env, styleSheet, appCache);
+				super.update(element, styleSheet, appCache);
+				InterpretedExpressoEnv env = element.getDefaultEnv();
 				QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 				theBarColor = get(cache.getAttribute(getDefinition().getBarColor(), Color.class, env));
 				theOutlineColor = get(cache.getAttribute(getDefinition().getOutlineColor(), Color.class, env));
@@ -392,47 +393,6 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 		}
 	}
 
-	/**
-	 * Model context for a {@link QuickBarChart}
-	 *
-	 * @param <T> The type of values in the chart
-	 */
-	public interface BarChartContext<T> extends MultiValueRenderContext<T> {
-		/** @return The index of the active value for the chart */
-		SettableValue<Integer> getActiveIndex();
-
-		/**
-		 * Default {@link BarChartContext} implementation
-		 *
-		 * @param <T> The type of values in the chart
-		 */
-		public class Default<T> extends MultiValueRenderContext.Default<T> implements BarChartContext<T> {
-			private final SettableValue<Integer> theActiveIndex;
-
-			/**
-			 * @param activeValue The active value for the chart
-			 * @param selected Whether the active value is selected
-			 * @param index The index of the active value for the chart
-			 */
-			public Default(SettableValue<T> activeValue, SettableValue<Boolean> selected, SettableValue<Integer> index) {
-				super(activeValue, selected);
-				theActiveIndex = index;
-			}
-
-			/** Creates the context */
-			public Default() {
-				this(SettableValue.<T> build().withDescription("activeValue").build(), //
-					SettableValue.<Boolean> build().withDescription("selected").withValue(false).build(), //
-					SettableValue.<Integer> build().withDescription("valueIndex").withValue(0).build());
-			}
-
-			@Override
-			public SettableValue<Integer> getActiveIndex() {
-				return theActiveIndex;
-			}
-		}
-	}
-
 	private ModelComponentId theActiveValueVariable;
 	private ModelComponentId theActiveIndexVariable;
 	private ModelComponentId theSelectedVariable;
@@ -444,26 +404,26 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 	private ModelValueInstantiator<SettableValue<QuickSize>> thePaddingInstantiator;
 
 	private boolean isVertical;
-	private SettableValue<SettableValue<T>> theActiveBar;
-	private SettableValue<SettableValue<Integer>> theActiveIndex;
+	private SettableValue<T> theActiveBar;
+	private SettableValue<Integer> theActiveIndex;
 	private SettableValue<ObservableCollection<T>> theValues;
 	private SettableValue<SettableValue<Double>> theMax;
 	private SettableValue<SettableValue<Double>> theBarLength;
 	private SettableValue<SettableValue<String>> theBarTitle;
 	private SettableValue<SettableValue<QuickSize>> thePadding;
-	private SettableValue<SettableValue<Boolean>> isSelected;
+	private SettableValue<Boolean> isSelected;
 
 	/** @param id The element ID for this widget */
 	protected QuickBarChart(Object id) {
 		super(id);
-		theActiveBar = SettableValue.<SettableValue<T>> build().build();
-		theActiveIndex = SettableValue.<SettableValue<Integer>> build().build();
-		isSelected = SettableValue.<SettableValue<Boolean>> build().build();
-		theValues = SettableValue.<ObservableCollection<T>> build().build();
-		theMax = SettableValue.<SettableValue<Double>> build().build();
-		theBarLength = SettableValue.<SettableValue<Double>> build().build();
-		theBarTitle = SettableValue.<SettableValue<String>> build().build();
-		thePadding = SettableValue.<SettableValue<QuickSize>> build().build();
+		theActiveBar = SettableValue.create();
+		theActiveIndex = SettableValue.create(b -> b.withValue(0));
+		isSelected = SettableValue.create(b -> b.withValue(false));
+		theValues = SettableValue.create();
+		theMax = SettableValue.create();
+		theBarLength = SettableValue.create();
+		theBarTitle = SettableValue.create();
+		thePadding = SettableValue.create();
 	}
 
 	/** @return The values for the chart's bars */
@@ -522,14 +482,17 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 	}
 
 	@Override
-	public void setContext(MultiValueRenderContext<T> ctx) {
-		theActiveBar.set(ctx.getActiveValue(), null);
+	public SettableValue<T> getActiveValue() {
+		return theActiveBar;
 	}
 
-	/** @param ctx The bar chart context for the environment */
-	public void setContext(BarChartContext<T> ctx) {
-		setContext((MultiValueRenderContext<T>) ctx);
-		theActiveIndex.set(ctx.getActiveIndex(), null);
+	public SettableValue<Integer> getActiveIndex() {
+		return theActiveIndex;
+	}
+
+	@Override
+	public SettableValue<Boolean> isSelected() {
+		return isSelected;
 	}
 
 	@Override
@@ -564,27 +527,28 @@ public class QuickBarChart<T> extends QuickWidget.Abstract implements MultiValue
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveBar));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveIndexVariable, myModels, SettableValue.flatten(theActiveIndex));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected, () -> false));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActiveBar);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveIndexVariable, myModels, theActiveIndex);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, isSelected);
 
 		theValues.set(theValuesInstantiator.get(myModels), null);
 		theMax.set(theMaxInstantiator.get(myModels), null);
 		theBarLength.set(theBarLengthInstantiator.get(myModels), null);
 		theBarTitle.set(theBarTitleInstantiator == null ? null : theBarTitleInstantiator.get(myModels), null);
 		thePadding.set(thePaddingInstantiator == null ? null : thePaddingInstantiator.get(myModels), null);
+		return myModels;
 	}
 
 	@Override
 	public QuickBarChart<T> copy(ExElement parent) {
 		QuickBarChart<T> copy = (QuickBarChart<T>) super.copy(parent);
 
-		copy.theActiveBar = SettableValue.<SettableValue<T>> build().build();
-		copy.theActiveIndex = SettableValue.<SettableValue<Integer>> build().build();
-		copy.isSelected = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theActiveBar = SettableValue.create();
+		copy.theActiveIndex = SettableValue.create(b -> b.withValue(0));
+		copy.isSelected = SettableValue.create(b -> b.withValue(false));
 		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
 		copy.theMax = SettableValue.<SettableValue<Double>> build().build();
 		copy.theBarLength = SettableValue.<SettableValue<Double>> build().build();

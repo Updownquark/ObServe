@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -100,10 +99,9 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
-			syncChildren(getDefinition().getRenderers(), theRenderers, def -> def.interpret(this),
-				(r, rEnv) -> r.updateElement(rEnv));
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			syncChildren(getDefinition().getRenderers(), theRenderers, def -> def.interpret(this), r -> r.updateElement());
 		}
 
 		@Override
@@ -141,11 +139,12 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		for (QuickWidget renderer : theRenderers)
 			renderer.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

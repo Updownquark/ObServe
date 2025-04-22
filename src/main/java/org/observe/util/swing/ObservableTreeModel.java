@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
@@ -830,7 +831,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				else if (singularOnly && selModel.getSelectionCount() > 1)
 					return;
 				TreePath selPath = selModel.getSelectionPath();
-				if (!e.getTreePath().isDescendant(selPath) || selPath.getPathCount() == e.getTreePath().getPathCount())
+				int selectionDepth = selPath.getPathCount();
+				if (!e.getTreePath().isDescendant(selPath) || selectionDepth == e.getTreePath().getPathCount())
 					return;
 				ObservableTreeModel<T>.TreeNode selNode = (ObservableTreeModel<T>.TreeNode) selPath
 					.getPathComponent(e.getTreePath().getPathCount());
@@ -841,17 +843,20 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 						break;
 					}
 				}
-				if (found < 0)
+				if (found < 0) {// Changed path is not relevant to the selection
 					return;
+				} // else Selected path has been affected. Fire an update with fresh values.
 				callbackLock[0] = true;
 				try {
-					List<T> list = new ArrayList<>(e.getPath().length + 1);
+					List<T> list = new ArrayList<>(selectionDepth);
 					for (Object node : e.getPath())
 						list.add(((ObservableTreeModel<T>.TreeNode) node).get());
 					list.add(((ObservableTreeModel<T>.TreeNode) e.getChildren()[found]).get());
-					BetterList<T> betterList = BetterList.of(list);
-					if (selection.isAcceptable(betterList) == null)
-						selection.set(betterList, e);
+					while (list.size() < selectionDepth)
+						list.add(((ObservableTreeModel<T>.TreeNode) selPath.getPathComponent(list.size())).get());
+					BetterList<T> newSelection = BetterList.of(list);
+					if (selection.isAcceptable(newSelection) == null)
+						selection.set(newSelection, e);
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -1038,7 +1043,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				callbackLock[0] = true;
 				try {
 					for (CollectionElement<BetterList<T>> selected : multiSelection.elements()) {
-						if (eventApplies(e, selected.get(), equivalence))
+						if (eventApplies(e, selected.get(), equivalence, () -> multiSelection.getElementsBefore(selected.getElementId())))
 							multiSelection.mutableElement(selected.getElementId()).set(selected.get());
 					}
 				} finally {
@@ -1099,9 +1104,9 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		return treePath == null;
 	}
 
-	public static <T> boolean eventApplies(TreeModelEvent e, BetterList<T> path, Equivalence<? super T> equivalence) {
+	public static <T> boolean eventApplies(TreeModelEvent e, BetterList<T> path, Equivalence<? super T> equivalence, IntSupplier index) {
 		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath(), equivalence))
 			return false;
-		return ArrayUtils.contains(e.getChildren(), path.get(e.getTreePath().getPathCount() - 1));
+		return Arrays.binarySearch(e.getChildIndices(), index.getAsInt()) >= 0;
 	}
 }

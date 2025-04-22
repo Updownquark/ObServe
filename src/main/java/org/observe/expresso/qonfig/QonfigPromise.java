@@ -1,10 +1,7 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -28,12 +25,6 @@ public interface QonfigPromise extends ExElement {
 		 */
 		void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException;
 
-		/** @return The expresso environment of the fulfilled content */
-		CompiledExpressoEnv getExternalExpressoEnv();
-
-		/** @param env The expresso environment of the fulfilled content */
-		void setExternalExpressoEnv(CompiledExpressoEnv env);
-
 		/** @return The interpreted promise */
 		Interpreted<? extends P> interpret();
 	}
@@ -47,12 +38,6 @@ public interface QonfigPromise extends ExElement {
 		/** @return The content fulfilled by this promise */
 		ExElement.Interpreted<?> getFulfilledContent();
 
-		/** @return The expresso environment of the fulfilled content */
-		InterpretedExpressoEnv getExternalExpressoEnv();
-
-		/** @param env The expresso environment of the fulfilled content */
-		void setParentEnv(InterpretedExpressoEnv env);
-
 		/**
 		 * Initializes or updates this promise
 		 *
@@ -60,7 +45,7 @@ public interface QonfigPromise extends ExElement {
 		 * @param content The fulfilled content for the promise
 		 * @throws ExpressoInterpretationException If the promise could not be updated
 		 */
-		void update(InterpretedExpressoEnv env, ExElement.Interpreted<?> content) throws ExpressoInterpretationException;
+		void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException;
 
 		/**
 		 * @param content The fulfilled content for the promise
@@ -76,9 +61,6 @@ public interface QonfigPromise extends ExElement {
 	 * @throws ModelInstantiationException If the promise could not be instantiated
 	 */
 	void update(Interpreted<?> interpreted) throws ModelInstantiationException;
-
-	/** @return The expresso models of the fulfilled content */
-	ModelInstantiator getExtModels();
 
 	@Override
 	QonfigPromise copy(ExElement parent);

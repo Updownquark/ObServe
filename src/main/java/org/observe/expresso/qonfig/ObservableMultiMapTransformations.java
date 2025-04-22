@@ -444,10 +444,10 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void update(ModelInstanceType<M1, MV1> sourceType) throws ExpressoInterpretationException {
 				theTargetType = (ModelInstanceType<M2, MV2>) getDefinition().getTargetModelType().forTypes(sourceType.getType(0),
 					sourceType.getType(1));
-				super.update(env);
+				super.update();
 			}
 
 			@Override
@@ -649,11 +649,11 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.update(env);
+			public void update(ModelInstanceType<M1, MV1> sourceType) throws ExpressoInterpretationException {
+				super.update();
 				ModelInstanceType<C1, CV1> collectionSourceType = (ModelInstanceType<C1, CV1>) ModelTypes.Collection
 					.forType(sourceType.getType(getDefinition().isKey() ? 0 : 1));
-				doUpdateValue(collectionSourceType, env);
+				doUpdateValue(collectionSourceType);
 				if (getDefinition().isKey()) {
 					theTargetType = (ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<KT, VT>>) getDefinition()
 						.getTargetModelType().forTypes(getInternalType().getType(0), sourceType.getType(1));
@@ -695,7 +695,7 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public MV2 evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				throw new ModelInstantiationException(MAP_TRANSFORM + " cannot be used as a model value", reporting().getPosition(), 0);
 			}
 
@@ -945,8 +945,9 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<M1, M2> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void update(ModelInstanceType<M1, M2> sourceType) throws ExpressoInterpretationException {
 				theSourceType = sourceType;
+				super.update();
 				theTransform = interpret(getDefinition().getTransform(), ModelTypes.Value.anyAs());
 			}
 

@@ -3,7 +3,6 @@ package org.observe.quick.base;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -121,8 +120,8 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 			theValues = interpret(getDefinition().getValues(), ModelTypes.Collection.forType(getValueType()));
 		}
 	}
@@ -131,15 +130,15 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	private SettableValue<ObservableCollection<T>> theValues;
 	private ModelComponentId theActiveValueVariable;
 	private ModelComponentId theSelectedVariable;
-	private SettableValue<SettableValue<T>> theActiveValue;
-	private SettableValue<SettableValue<Boolean>> theSelectedValue;
+	private SettableValue<T> theActiveValue;
+	private SettableValue<Boolean> theSelectedValue;
 
 	/** @param id The element identity of the widget */
 	protected CollectionSelectorWidget(Object id) {
 		super(id);
 		theValues = SettableValue.<ObservableCollection<T>> build().build();
-		theActiveValue = SettableValue.<SettableValue<T>> build().build();
-		theSelectedValue = SettableValue.<SettableValue<Boolean>> build().build();
+		theActiveValue = SettableValue.create();
+		theSelectedValue = SettableValue.create(b -> b.withValue(false));
 	}
 
 	/** @return The elements the user may select from */
@@ -158,9 +157,13 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	}
 
 	@Override
-	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException {
-		theActiveValue.set(ctx.getActiveValue(), null);
-		theSelectedValue.set(ctx.isSelected(), null);
+	public SettableValue<T> getActiveValue() {
+		return theActiveValue;
+	}
+
+	@Override
+	public SettableValue<Boolean> isSelected() {
+		return theSelectedValue;
 	}
 
 	@Override
@@ -180,11 +183,12 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theValues.set(theValuesInstantiator == null ? null : theValuesInstantiator.get(myModels), null);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(theSelectedValue));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, theActiveValue);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, theSelectedValue);
+		return myModels;
 	}
 
 	@Override
@@ -192,8 +196,8 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 		CollectionSelectorWidget<T> copy = (CollectionSelectorWidget<T>) super.clone();
 
 		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
-		copy.theActiveValue = SettableValue.<SettableValue<T>> build().build();
-		copy.theSelectedValue = SettableValue.<SettableValue<Boolean>> build().build();
+		copy.theActiveValue = SettableValue.create();
+		copy.theSelectedValue = SettableValue.create(b -> b.withValue(false));
 
 		return copy;
 	}

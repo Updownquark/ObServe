@@ -6,9 +6,7 @@ import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-/**
- * The root of an external document loaded by a {@link QonfigPromise} to be injected into a source document
- */
+/** The root of an external document loaded by a {@link QonfigPromise} to be injected into a source document */
 public abstract class QonfigExternalDocument extends ExElement.Abstract {
 	/** The name of the toolkit defining this element */
 	public static final String QONFIG_REFERENCE_TK = "Qonfig-Reference v0.1";
@@ -26,7 +24,7 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 		instance = ExpressoExternalDocument.class)
 	public static abstract class Def<C extends QonfigExternalDocument> extends ExElement.Def.Abstract<C> {
 		private QonfigElementDef theFulfills;
-		private ExElement.Def<?> theContent;
+		private QonfigPromise.Def<?> theFulfilledPromise;
 
 		/**
 		 * @param parent The parent element of this document, typically null
@@ -42,21 +40,25 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 			return theFulfills;
 		}
 
+		public QonfigPromise.Def<?> getFulfilledPromise() {
+			return theFulfilledPromise;
+		}
+
 		/** @return The fulfilled content of the document to be injected into the source document */
 		@QonfigChildGetter("fulfillment")
 		public ExElement.Def<?> getContent() {
-			return theContent;
+			return theFulfilledPromise.getFulfilledContent();
 		}
 
 		/**
 		 * Initializes or updates this external document
 		 *
 		 * @param session The expresso session to use to update this document
-		 * @param content The fulfilled content of the document to be injected into the source document
+		 * @param promise The promise loading this external content
 		 * @throws QonfigInterpretationException If this document could not be interpreted
 		 */
-		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
-			theContent = content;
+		public void update(ExpressoQIS session, QonfigPromise.Def<?> promise) throws QonfigInterpretationException {
+			theFulfilledPromise = promise;
 			update(session);
 		}
 
@@ -96,8 +98,7 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 	 * @param <C> The type of content to create
 	 */
 	public static abstract class Interpreted<C extends QonfigExternalDocument> extends ExElement.Interpreted.Abstract<C> {
-		private ExElement.Interpreted<?> theContent;
-		private InterpretedExpressoEnv theReferenceEnv;
+		private QonfigPromise.Interpreted<?> theFulfilledPromise;
 
 		/**
 		 * @param definition The definition to interpret
@@ -112,27 +113,31 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 			return (Def<? super C>) super.getDefinition();
 		}
 
-		/** @return The fulfilled content of the document to be injected into the source document */
-		public ExElement.Interpreted<?> getContent() {
-			return theContent;
+		public QonfigPromise.Interpreted<?> getFulfilledPromise() {
+			return theFulfilledPromise;
 		}
 
-		/** @return The interpreted environment from the reference (where the promise was specified) */
-		public InterpretedExpressoEnv getReferenceEnv() {
-			return theReferenceEnv;
+		/** @return The fulfilled content of the document to be injected into the source document */
+		public ExElement.Interpreted<?> getContent() {
+			return theFulfilledPromise.getFulfilledContent();
 		}
 
 		/**
 		 * Initializes or updates this external document
 		 *
-		 * @param content The fulfilled content of the document to be injected into the source document
-		 * @param referenceEnv The interpreted environment from the reference (where the promise was specified)
+		 * @param promise The promise referencing this external document
 		 * @throws ExpressoInterpretationException If this document could not be interpreted
 		 */
-		public void update(ExElement.Interpreted<?> content, InterpretedExpressoEnv referenceEnv) throws ExpressoInterpretationException {
-			theContent = content;
-			theReferenceEnv = referenceEnv;
-			super.update(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
+		public void update(QonfigPromise.Interpreted<?> promise) throws ExpressoInterpretationException {
+			theFulfilledPromise = promise;
+			addLogicalParent(theFulfilledPromise);
+			InterpretedExpressoEnv parentEnv = theFulfilledPromise.getDefaultEnv();
+			setExpressoEnv(getDocument(), InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
+				.withAllNonStructuredParsers(parentEnv)//
+				.withErrorReporting(reporting())//
+				.withOperators(parentEnv.getUnaryOperators(), parentEnv.getBinaryOperators())//
+				.withAllSyntheticFields(parentEnv));
+			super.update();
 		}
 	}
 

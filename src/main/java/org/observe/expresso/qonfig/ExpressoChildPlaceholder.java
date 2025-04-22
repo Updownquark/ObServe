@@ -1,16 +1,11 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelInstantiator;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.LocatedFilePosition;
 
 /**
  * <p>
@@ -37,7 +32,6 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 	public static class Def<P extends ExpressoChildPlaceholder> extends ExElement.Def.Abstract<P> implements QonfigPromise.Def<P> {
 		private ExElement.Def<?> theDocumentParent;
 		private ExElement.Def<?> theFulfilledContent;
-		private CompiledExpressoEnv theExtExpressoEnv;
 		private String theRefRoleName;
 		private QonfigChildDef theRefRole;
 
@@ -76,34 +70,29 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		}
 
 		@Override
+		public <D extends ExElement.Def<?>> D as(Class<D> type, LocatedFilePosition errorPosition) throws QonfigInterpretationException {
+			if (type.isInstance(theFulfilledContent))
+				return (D) theFulfilledContent;
+			return super.as(type, errorPosition);
+		}
+
+		@Override
 		public void update(ExpressoQIS session, ExElement.Def<?> content) throws QonfigInterpretationException {
 			theFulfilledContent = content;
 
 			theRefRoleName = session.getAttributeText("ref-role");
 
-			String targetDoc = content.getElement().getDocument().getLocation();
+			String targetDoc = content.getDocument();
 			content = content.getParentElement();
 			while (content != null
-				&& (content.getPromise() == null
-				|| !ExElement.documentsMatch(content.getPromise().getElement().getDocument().getLocation(), targetDoc)))
+				&& (content.getPromise() == null || !ExElement.documentsMatch(content.getPromise().getDocument(), targetDoc)))
 				content = content.getParentElement();
 			if (content != null) {
 				theDocumentParent = content;
-				theExtExpressoEnv = theDocumentParent.getExpressoEnv();
 			} else
 				reporting().error("Could not locate ancestor in hierarchy with document " + getElement().getDocument().getLocation());
 
 			update(session);
-		}
-
-		@Override
-		public CompiledExpressoEnv getExternalExpressoEnv() {
-			return theExtExpressoEnv;
-		}
-
-		@Override
-		public void setExternalExpressoEnv(CompiledExpressoEnv env) {
-			theExtExpressoEnv = env;
 		}
 
 		@Override
@@ -121,7 +110,6 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 	implements QonfigPromise.Interpreted<P> {
 		private ExElement.Interpreted<?> theFulfilledContent;
 		private ExElement.Interpreted<?> theDocumentParent;
-		private InterpretedExpressoEnv theExtExpressoEnv;
 
 		Interpreted(Def<? super P> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -132,33 +120,36 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 			return (Def<? super P>) super.getDefinition();
 		}
 
+		/** @return The element in the document that loaded the external content */
+		public ExElement.Interpreted<?> getDocumentParent() {
+			return theDocumentParent;
+		}
+
 		@Override
 		public ExElement.Interpreted<?> getFulfilledContent() {
 			return theFulfilledContent;
 		}
 
 		@Override
-		public InterpretedExpressoEnv getExternalExpressoEnv() {
-			return theExtExpressoEnv;
+		public <I extends ExElement.Interpreted<?>> I as(Class<I> type, LocatedFilePosition errorPosition)
+			throws ExpressoInterpretationException {
+			if (type.isInstance(theFulfilledContent))
+				return (I) theFulfilledContent;
+			return super.as(type, errorPosition);
 		}
 
 		@Override
-		public void setParentEnv(InterpretedExpressoEnv env) {
-			// Don't need it?
-		}
-
-		@Override
-		public void update(InterpretedExpressoEnv env, ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
+		public void update(ExElement.Interpreted<?> content) throws ExpressoInterpretationException {
 			theFulfilledContent = content;
-			super.update(env);
+			addLogicalParent(content.getParentElement());
+			super.update();
+			content.addLogicalParent(this);
 
 			Object dpi = getDefinition().getDocumentParent().getIdentity();
 			while (content != null && content.getIdentity() != dpi)
 				content = content.getParentElement();
 			if (content != null) {
 				theDocumentParent = content;
-				theExtExpressoEnv = theDocumentParent.getExpressoEnv()//
-					.forChild(getDefinition().getExternalExpressoEnv());
 			} else {
 				reporting().error("Could not locate ancestor in hierarchy with ID " + dpi);
 			}
@@ -170,67 +161,30 @@ public class ExpressoChildPlaceholder extends ExElement.Abstract implements Qonf
 		}
 	}
 
-	private ExElement theDocumentParent;
-	private ExElement theContent;
-	private ObservableModelSet.ModelInstantiator theExtLocalModels;
+	private ExElement theFulfilledContent;
 
 	ExpressoChildPlaceholder(Object id, ExElement content) {
 		super(id);
-		theContent = content;
+		theFulfilledContent = content;
+	}
+
+	@Override
+	public <E extends ExElement> E as(Class<E> type, LocatedFilePosition errorPosition) throws ModelInstantiationException {
+		if (type.isInstance(theFulfilledContent))
+			return (E) theFulfilledContent;
+		return super.as(type, errorPosition);
 	}
 
 	@Override
 	public void update(QonfigPromise.Interpreted<?> interpreted) throws ModelInstantiationException {
+		addLogicalParent(theFulfilledContent);
 		super.update(interpreted, null);
-		ExpressoChildPlaceholder.Interpreted<?> myInterpreted = (ExpressoChildPlaceholder.Interpreted<?>) interpreted;
-		Object dpi = myInterpreted.getDefinition().getDocumentParent().getIdentity();
-		ExElement content = theContent;
-		while (content != null && content.getIdentity() != dpi)
-			content = content.getParentElement();
-		if (content != null) {
-			theDocumentParent = content;
-			if (interpreted.getExternalExpressoEnv().getModels().getIdentity() != theDocumentParent.getParentElement().getModels()
-				.getIdentity())
-				theExtLocalModels = interpreted.getExternalExpressoEnv().getModels().instantiate();
-			else
-				theExtLocalModels = null;
-		} else {
-			reporting().error("Could not locate ancestor in hierarchy with ID " + dpi);
-			theDocumentParent = null;
-			theExtLocalModels = null;
-		}
-	}
-
-	@Override
-	public ModelInstantiator getExtModels() {
-		if (theExtLocalModels != null)
-			return theExtLocalModels;
-		else
-			return theDocumentParent.getModels();
-	}
-
-	@Override
-	public void instantiated() throws ModelInstantiationException {
-		super.instantiated();
-		if (theExtLocalModels != null)
-			theExtLocalModels.instantiate();
-	}
-
-	@Override
-	protected void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		// Should still be updating as the content is one of its descendants
-		ModelSetInstance parentModels = theDocumentParent.getUpdatingModels();
-		if (theExtLocalModels == null)
-			builder.withAll(parentModels);
-		else
-			builder.withAll(theExtLocalModels.wrap(parentModels));
-		super.addRuntimeModels(builder, elementModels);
 	}
 
 	@Override
 	public ExpressoChildPlaceholder copy(ExElement content) {
 		ExpressoChildPlaceholder copy = (ExpressoChildPlaceholder) super.copy(null);
-		copy.theContent = content;
+		copy.theFulfilledContent = content;
 		return copy;
 	}
 }

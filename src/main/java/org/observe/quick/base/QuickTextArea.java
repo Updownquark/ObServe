@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -70,7 +69,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		/** @return The styled document for the text area */
 		@QonfigChildGetter("document")
-		public StyledDocument.Def<?> getDocument() {
+		public StyledDocument.Def<?> getTextDocument() {
 			return theDocument;
 		}
 
@@ -135,7 +134,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		/** @return The styled document for the text area */
-		public StyledDocument.Interpreted<T, ?> getDocument() {
+		public StyledDocument.Interpreted<T, ?> getTextDocument() {
 			return theDocument;
 		}
 
@@ -144,16 +143,16 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.getOrInitValue();
 			if (isDocumentStale) {
 				isDocumentStale = false;
-				theDocument = syncChild(getDefinition().getDocument(), theDocument,
-					def -> (StyledDocument.Interpreted<T, ?>) def.interpret(this), (d, dEnv) -> d.updateDocument(dEnv));
+				theDocument = syncChild(getDefinition().getTextDocument(), theDocument,
+					def -> (StyledDocument.Interpreted<T, ?>) def.interpret(this), d -> d.updateDocument());
 			}
 			return getValue();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void doUpdate() throws ExpressoInterpretationException {
 			isDocumentStale = true;
-			super.doUpdate(env);
+			super.doUpdate();
 			theRows = interpret(getDefinition().getRows(), ModelTypes.Value.forType(Integer.class));
 		}
 
@@ -217,7 +216,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	/** @return The styled document for the text area */
-	public StyledDocument<T> getDocument() {
+	public StyledDocument<T> getTextDocument() {
 		return theDocument;
 	}
 
@@ -248,9 +247,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		theMousePositionVariable = myInterpreted.getDefinition().getMousePositionVariable();
 		theRowsInstantiator = myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate();
 		isHtml = myInterpreted.getDefinition().isHtml();
-		theDocument = myInterpreted.getDocument() == null ? null : myInterpreted.getDocument().create();
+		theDocument = myInterpreted.getTextDocument() == null ? null : myInterpreted.getTextDocument().create();
 		if (theDocument != null)
-			theDocument.update(myInterpreted.getDocument(), this);
+			theDocument.update(myInterpreted.getTextDocument(), this);
 	}
 
 	@Override
@@ -265,12 +264,13 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theRows.set(theRowsInstantiator == null ? null : theRowsInstantiator.get(myModels), null);
 		if (theDocument != null)
 			theDocument.instantiate(myModels);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theMousePositionVariable, myModels, getMousePosition());
+		return myModels;
 	}
 
 	@Override

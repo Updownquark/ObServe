@@ -214,13 +214,16 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		ObservableComboBoxModel.comboFor(combo, tooltip, v -> {
 			return valueToolTip[0] == null ? null : valueToolTip[0].apply(v);
 		}, ObservableCollection.flattenValue(availableValues), value);
+		boolean[] installing = new boolean[1];
 		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, cell, f, tt, vtt) -> {
+			installing[0] = true;
 			modelValue[0] = cell.getModelValue();
 			filter[0] = f;
 			tooltip.set(tt, null);
 			valueToolTip[0] = vtt;
 			ObservableCollection<? extends C> newValues = options.apply(editor[0].getEditingCell(), until);
 			availableValues.set(newValues, null);
+			installing[0] = false;
 			return commit -> {
 				filter[0] = null;
 				if (combo.isEditable()) // Just copying from DefaultCellEditor, not currently editable here, so just for posterity
@@ -231,7 +234,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			};
 		}, editWithClicks(2));
 		value.noInitChanges().act(evt -> {
-			if (availableValues.get() != null)
+			if (!installing[0] && availableValues.get() != null)
 				editor[0].stopCellEditing();
 		});
 		return editor[0];

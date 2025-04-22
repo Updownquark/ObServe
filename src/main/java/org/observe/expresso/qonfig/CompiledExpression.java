@@ -62,7 +62,7 @@ public class CompiledExpression implements LocatedExpression {
 	 * @throws ExpressoCompilationException If the model type could not be evaluated
 	 */
 	public ModelType<?> getModelType() throws ExpressoCompilationException {
-		if (theEnv == null) {
+		if (theEnv == null && theEnvSupplier != null) {
 			theEnv = theEnvSupplier.get();
 			theEnvSupplier = null; // Don't need it anymore--release it
 		}

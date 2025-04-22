@@ -72,6 +72,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.swing.ObservableSpinner.ObservableSpinnerModel;
 import org.qommons.Causable;
+import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
@@ -124,9 +125,8 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription checkFor(JToggleButton checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
-		SimpleObservable<Void> until = SimpleObservable.build().build();
-		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
-		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT);
+		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT);
 
 		String[] enDesc = new String[2];
 		Runnable checkEnabled = () -> {
@@ -170,7 +170,6 @@ public class ObservableSwingUtils {
 			descripSub.unsubscribe();
 			enabledSub.unsubscribe();
 			checkBox.removeActionListener(action);
-			until.onNext(null);
 		};
 	}
 
@@ -184,9 +183,8 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription checkFor(JCheckBoxMenuItem checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
-		SimpleObservable<Void> until = SimpleObservable.build().build();
-		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
-		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT);
+		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT);
 
 		String[] enDesc = new String[2];
 		Runnable checkEnabled = () -> {
@@ -229,7 +227,6 @@ public class ObservableSwingUtils {
 			descripSub.unsubscribe();
 			enabledSub.unsubscribe();
 			checkBox.removeActionListener(action);
-			until.onNext(null);
 		};
 	}
 
@@ -246,8 +243,7 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static <T> Subscription togglesFor(JToggleButton[] buttons, T[] options, String[] descrips, SettableValue<T> selected) {
-		SimpleObservable<Void> until = SimpleObservable.build().build();
-		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT);
 		ActionListener[] actions = new ActionListener[buttons.length];
 		for (int i = 0; i < buttons.length; i++) {
 			int index = i;
@@ -286,7 +282,6 @@ public class ObservableSwingUtils {
 			enabledSub.unsubscribe();
 			for (int i = 0; i < buttons.length; i++)
 				buttons[i].removeActionListener(actions[i]);
-			until.onNext(null);
 		};
 	}
 
@@ -307,7 +302,7 @@ public class ObservableSwingUtils {
 		ObservableCollection<? extends T> safeValues;
 		SimpleObservable<Void> safeUntil = SimpleObservable.build().build();
 		subs.add(() -> safeUntil.onNext(null));
-		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT, safeUntil);
+		SettableValue<T> safeSelected = selected.safe(ThreadConstraint.EDT);
 		safeValues = availableValues.safe(ThreadConstraint.EDT, safeUntil);
 		ObservableCollection<TB> buttons = safeValues.flow().<TB> transform(tx -> tx.map((value, button) -> {
 			if (button == null)
@@ -349,10 +344,11 @@ public class ObservableSwingUtils {
 			else if (currentSelection[0] >= 0)
 				buttons.get(currentSelection[0]).setSelected(false);
 			currentSelection[0] = index;
+			return true;
 		}, lstnr -> {
 			listener[0] = lstnr;
 			return () -> listener[0] = null;
-		}, checkEnabled));
+		}, checkEnabled, LambdaUtils.constantSupplier(null)));
 		ButtonGroup group = new ButtonGroup();
 		ActionListener selectListener = evt -> {
 			Object button = evt.getSource();
@@ -437,8 +433,7 @@ public class ObservableSwingUtils {
 	 */
 	public static <T> Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<T> value,
 		Function<? super T, ? extends T> purify) {
-		SimpleObservable<Void> until = SimpleObservable.build().build();
-		SettableValue<T> safeValue = value.safe(ThreadConstraint.EDT, until);
+		SettableValue<T> safeValue = value.safe(ThreadConstraint.EDT);
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
 			if (!callbackLock[0]) {
@@ -485,7 +480,6 @@ public class ObservableSwingUtils {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
 			spinner.removeChangeListener(changeListener);
-			until.onNext(null);
 		};
 	}
 
@@ -499,8 +493,7 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription sliderFor(JSlider slider, String descrip, SettableValue<Integer> value) {
-		SimpleObservable<Void> until = SimpleObservable.build().build();
-		SettableValue<Integer> safeValue = value.safe(ThreadConstraint.EDT, until);
+		SettableValue<Integer> safeValue = value.safe(ThreadConstraint.EDT);
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
 			if (!callbackLock[0] && !slider.getValueIsAdjusting()) {
@@ -539,7 +532,6 @@ public class ObservableSwingUtils {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
 			slider.removeChangeListener(changeListener);
-			until.onNext(null);
 		};
 	}
 
@@ -586,7 +578,7 @@ public class ObservableSwingUtils {
 	 */
 	public static <E> SettableValue<E> syncSelection(Component component, ListModel<E> model, Supplier<ListSelectionModel> selectionModel,
 		Equivalence<? super E> equivalence, SettableValue<E> selection, Observable<?> until, ModelUpdater update) {
-		SettableValue<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
+		SettableValue<E> safeSelection = selection.safe(ThreadConstraint.EDT);
 		boolean[] callbackLock = new boolean[1];
 		ListSelectionListener selListener = e -> {
 			ListSelectionModel selModel = selectionModel.get();

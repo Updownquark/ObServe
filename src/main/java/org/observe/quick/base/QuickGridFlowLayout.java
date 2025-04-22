@@ -259,9 +259,10 @@ public class QuickGridFlowLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theMaxRowCount.set(theMaxRowCountInstantiator.get(models), null);
+		return models;
 	}
 
 	@Override

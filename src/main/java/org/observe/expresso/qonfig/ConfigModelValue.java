@@ -205,9 +205,10 @@ public abstract class ConfigModelValue<T, MV> extends ModelValueElement.Abstract
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theValueType = getAddOn(ExTyped.Interpreted.class).getValueType();
+				InterpretedExpressoEnv env = getDefaultEnv();
 				try {
 					theConfigValue = env.getModels().getValue(ExpressoConfigV0_1.CONFIG_NAME,
 						ModelTypes.Value.forType(ObservableConfig.class), env);
@@ -258,7 +259,7 @@ public abstract class ConfigModelValue<T, MV> extends ModelValueElement.Abstract
 	}
 
 	@Override
-	public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+	public MV evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 		ObservableConfig config = theConfigValue.get(models).get();
 		ObservableConfig.ObservableConfigValueBuilder<T> builder = config.asValue(theValueType);
 		builder = builder.at(theConfigPath);

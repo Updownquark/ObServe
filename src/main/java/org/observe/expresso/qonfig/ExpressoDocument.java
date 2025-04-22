@@ -1,14 +1,11 @@
 package org.observe.expresso.qonfig;
 
-import java.util.Collections;
-import java.util.Set;
-
 import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -57,10 +54,10 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 			return theHead;
 		}
 
-		@Override
-		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
-			return Collections.singleton(ExWithElementModel.Def.class);
-		}
+		// @Override
+		// public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
+		// return Collections.singleton(ExWithElementModel.Def.class);
+		// }
 
 		/** @return The model value ID of the onModelLoad action */
 		public ModelComponentId getModelLoadValue() {
@@ -76,8 +73,17 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
 
-			createBuilder(session);
+			createBuilder(session, element.getDocument());
 			theHead = getElement().syncChild(ExpressoHeadSection.Def.class, theHead, session, "head");
+			if (theHead != null) {
+				for (String doc : theHead.getExpressoDocuments())
+					element.setExpressoEnv(doc, theHead.getExpressoEnv(doc));
+			}
+		}
+
+		@Override
+		public void postUpdate(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+			super.postUpdate(session, element);
 
 			ExWithElementModel.Def elModels = getElement().getAddOn(ExWithElementModel.Def.class);
 			if (elModels != null) {
@@ -126,9 +132,12 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 			super.update(element);
 
 			theHead = getElement().syncChild(getDefinition().getHead(), theHead, def -> def.interpret(element),
-				(i, iEnv) -> i.updateHead(iEnv));
-			if (theHead != null && theHead.getClassView() != null)
-				getElement().setExpressoEnv(getElement().getExpressoEnv().with(theHead.getClassView()));
+				ExpressoHeadSection.Interpreted::updateHead);
+			if (theHead != null) {
+				element.addLogicalParent(theHead);
+				String headDoc = theHead.getDocument();
+				element.setExpressoEnv(headDoc, theHead.getExpressoEnv(headDoc)); // Need to force this environment
+			}
 		}
 
 		@Override
@@ -179,20 +188,37 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 			theHead = null;
 		} else if (theHead == null)
 			theHead = myInterpreted.getHead().create();
-		if (theHead != null)
+		if (theHead != null) {
 			theHead.update(myInterpreted.getHead(), element);
+			element.addLogicalParent(theHead);
+		}
 	}
 
 	@Override
 	public void preInstantiated() throws ModelInstantiationException {
 		super.preInstantiated();
 
-		theHead.instantiated();
+		if (theHead != null)
+			theHead.instantiated();
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
+
+		if (theHead != null) {
+			ObservableModelSet.ModelSetInstanceBuilder builder = ObservableModelSet.createMultiModelInstanceBag(models.getUntil());
+			builder.withAll(models);
+			builder.withAll(theHead.instantiate(models));
+			models = builder.build();
+		}
+
+		return models;
+	}
+
+	@Override
+	public void postInstantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.postInstantiate(models);
 
 		if (theModelLoadValue != null) {
 			ExFlexibleElementModelAddOn.satisfyElementValue(theModelLoadValue, models, theModelLoad.readOnly());
@@ -200,19 +226,6 @@ public class ExpressoDocument<B> extends ExModelAugmentation<ExElement> {
 		}
 
 		theModelLoad.onNext(null);
-	}
-
-	@Override
-	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		super.addRuntimeModels(builder, elementModels);
-
-		theHead.addRuntimeModels(builder, elementModels);
-	}
-
-	@Override
-	public void postInstantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.postInstantiate(models);
-
 		theBodyLoad.onNext(null);
 	}
 

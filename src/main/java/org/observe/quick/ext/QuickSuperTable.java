@@ -5,7 +5,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -155,10 +154,9 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
-			theDisplayed = getDefinition().getDisplayed() == null ? null
-				: getDefinition().getDisplayed().interpret(ModelTypes.Collection.forType(getValueType()), env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			theDisplayed = interpret(getDefinition().getDisplayed(), ModelTypes.Collection.forType(getValueType()));
 			theRowDragging = syncChild(getDefinition().getRowDragging(), theRowDragging, def -> def.interpret(this),
 				WithRowDragging.Interpreted::updateRowDragging);
 			theAdaptiveHeight = syncChild(getDefinition().getAdaptiveHeight(), theAdaptiveHeight, def -> def.interpret(this),
@@ -230,16 +228,15 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 			/**
 			 * Updates this element
 			 *
-			 * @param env The interpreted environment to use for evaluating expressions
 			 * @throws ExpressoInterpretationException If an error occurs interpreting this element
 			 */
-			public void updateRowDragging(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateRowDragging() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				thePostDrag = interpret(getDefinition().getPostDrag(), ModelTypes.Action.instance());
 			}
 
@@ -277,10 +274,11 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			thePostDrag = thePostDragInstantiator == null ? null : thePostDragInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -361,16 +359,15 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 			/**
 			 * Updates this element
 			 *
-			 * @param env The interpreted environment to use for evaluating expressions
 			 * @throws ExpressoInterpretationException If an error occurs interpreting this element
 			 */
-			public void updateAdaptiveHeight(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateAdaptiveHeight() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 			}
 
 			/** @return The adaptive height instance */
@@ -527,12 +524,13 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theDisplayed.set(theDisplayedInstantiator == null ? null : theDisplayedInstantiator.get(myModels), null);
 		if (theAdaptiveHeight != null)
 			theAdaptiveHeight.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

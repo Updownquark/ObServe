@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
@@ -112,7 +113,7 @@ public class QuickInterpretedStyleCache {
 		 * @return The interpreted style application for the definition environment
 		 * @throws ExpressoInterpretationException If the style application could not be interpreted
 		 */
-		public InterpretedStyleApplication getApplication(StyleApplicationDef definition, InterpretedExpressoEnv... envs)
+		public InterpretedStyleApplication getApplication(StyleApplicationDef definition, ExElement.Interpreted<?> element)
 			throws ExpressoInterpretationException {
 			if (definition == null)
 				return null;
@@ -121,7 +122,7 @@ public class QuickInterpretedStyleCache {
 				synchronized (theApplications) {
 					app = theApplications.get(definition);
 					if (app == null) {
-						app = definition.interpret(this, envs);
+						app = definition.interpret(this, element);
 						theApplications.put(definition, app);
 					}
 				}

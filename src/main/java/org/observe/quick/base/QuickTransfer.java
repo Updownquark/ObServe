@@ -9,7 +9,6 @@ import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -185,21 +184,22 @@ public class QuickTransfer {
 			}
 
 			/**
-			 * @param env The environment to use to interpret expressions
 			 * @param suggestedDataType The data type that this transfer source's parent thinks is most likely for the transfer data type
 			 * @throws ExpressoInterpretationException If an error occurs interpreting this transfer source
 			 */
-			public void updateTransferSource(InterpretedExpressoEnv env, TypeToken<?> suggestedDataType)
+			public void updateTransferSource(TypeToken<?> suggestedDataType)
 				throws ExpressoInterpretationException {
 				theSuggestedDataType = suggestedDataType;
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				// This type doesn't publish any values typed by the flavors like transfer-accept,
+				// so we don't have to be as careful and can do things the standard way
+				super.doUpdate();
 				syncChildren(getDefinition().getFlavors(), theFlavors, f -> (QuickDataFlavor.Interpreted<? extends T, ?>) f.interpret(this),
-					(f, env) -> f.updateDataFlavor(env, theSuggestedDataType));
+					f -> f.updateDataFlavor(theSuggestedDataType));
 				theValueType = TypeTokens.get().getCommonType(theFlavors.stream().map(f -> f.getDataType()).collect(Collectors.toList()));
 
 				canTransform = interpret(getDefinition().canTransform(), ModelTypes.Value.BOOLEAN);
@@ -284,13 +284,14 @@ public class QuickTransfer {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			canTransform = canTransformInstantiator.get(myModels);
 			theTransform = theTransformInstantiator == null ? null : theTransformInstantiator.get(myModels);
 			for (QuickDataFlavor<? extends T> flavor : theFlavors)
 				flavor.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -527,32 +528,49 @@ public class QuickTransfer {
 				return theIconOffsetY;
 			}
 
-			/** @return The type of transformed values acceptable to this target from another widget (or the same widget) */
-			public TypeToken<S> getDataType() {
+			/**
+			 * @return The type of transformed values acceptable to this target from another widget (or the same widget)
+			 * @throws ExpressoInterpretationException If the data type could not be interpreted
+			 */
+			public TypeToken<S> getDataType() throws ExpressoInterpretationException {
+				if (theDataType == null) { // Not evaluated yet--interpretation is happening
+					List<TypeToken<? extends S>> flavorTypes = new ArrayList<>(theFlavors.size());
+					for (QuickDataFlavor.Interpreted<? extends S, ?> flavor : theFlavors) {
+						TypeToken<? extends S> flavorType = flavor.getDataType();
+						if (flavorType != null)
+							flavorTypes.add(flavorType);
+					}
+					if (flavorTypes.isEmpty())
+						theDataType = (TypeToken<S>) TypeTokens.get().OBJECT;
+					else
+						theDataType = TypeTokens.get().getCommonType(flavorTypes);
+				}
 				return theDataType;
 			}
 
 			/**
-			 * @param env The environment to use to interpret expressions
 			 * @param suggestedDataType The data type that this transfer accepter's parent thinks is most likely for the transfer data type
 			 * @throws ExpressoInterpretationException If an error occurs interpreting this transfer accepter
 			 */
-			public void updateTransferAccepter(InterpretedExpressoEnv env, TypeToken<?> suggestedDataType)
+			public void updateTransferAccepter(TypeToken<?> suggestedDataType)
 				throws ExpressoInterpretationException {
 				theSuggestedDataType = suggestedDataType;
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+			protected void doUpdate() throws ExpressoInterpretationException {
+				// Create the flavor children first so we can determine the data type
 				syncChildren(getDefinition().getFlavors(), theFlavors, f -> (QuickDataFlavor.Interpreted<? extends S, ?>) f.interpret(this),
-					(f, env2) -> f.updateDataFlavor(env2, theSuggestedDataType));
-				theDataType = TypeTokens.get().getCommonType(theFlavors.stream().map(f -> f.getDataType()).collect(Collectors.toList()));
-				super.doUpdate(expressoEnv);
-				canAccept = getDefinition().canAccept().interpret(ModelTypes.Value.BOOLEAN, expressoEnv);
-				theAccept = getDefinition().getAccept().interpret(ModelTypes.Action.instance(), expressoEnv);
-				theIconOffsetX = getDefinition().getIconOffsetX().interpret(ModelTypes.Value.INT, expressoEnv);
-				theIconOffsetY = getDefinition().getIconOffsetY().interpret(ModelTypes.Value.INT, expressoEnv);
+					null);
+				super.doUpdate();
+				for (QuickDataFlavor.Interpreted<? extends S, ?> flavor : theFlavors)
+					flavor.updateDataFlavor(theSuggestedDataType);
+				getDataType();
+				canAccept = interpret(getDefinition().canAccept(), ModelTypes.Value.BOOLEAN);
+				theAccept = interpret(getDefinition().getAccept(), ModelTypes.Action.instance());
+				theIconOffsetX = interpret(getDefinition().getIconOffsetX(), ModelTypes.Value.INT);
+				theIconOffsetY = interpret(getDefinition().getIconOffsetY(), ModelTypes.Value.INT);
 			}
 
 			/** @return The instantiated transfer accepter */
@@ -568,10 +586,10 @@ public class QuickTransfer {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted(this, parentEl.getAddOn(QuickStyled.Interpreted.class),
-						(QuickStyled.QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent, env));
+						(QuickStyled.QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent));
 				}
 			}
 
@@ -694,8 +712,8 @@ public class QuickTransfer {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			if (theTransferValueAs != null)
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTransferValueAs, myModels, theTransferValue);
@@ -708,6 +726,7 @@ public class QuickTransfer {
 
 			for (QuickDataFlavor<? extends S> flavor : theFlavors)
 				flavor.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -758,7 +777,7 @@ public class QuickTransfer {
 			 * @param suggestedType The data type that this data flavor's parent thinks is most likely for the transfer data type
 			 * @throws ExpressoInterpretationException If an error occurs interpreting this data flavor
 			 */
-			void updateDataFlavor(InterpretedExpressoEnv env, TypeToken<?> suggestedType) throws ExpressoInterpretationException;
+			void updateDataFlavor(TypeToken<?> suggestedType) throws ExpressoInterpretationException;
 
 			/** @return The instantiated data flavor */
 			F create();
@@ -818,14 +837,14 @@ public class QuickTransfer {
 			}
 
 			@Override
-			public void updateDataFlavor(InterpretedExpressoEnv env, TypeToken<?> suggestedType) throws ExpressoInterpretationException {
+			public void updateDataFlavor(TypeToken<?> suggestedType) throws ExpressoInterpretationException {
 				theDataType = (TypeToken<T>) suggestedType;
-				update(env);
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				TypeToken<T> configuredType = getAddOn(ExTyped.Interpreted.class).getValueType();
 				if (configuredType != null)
 					theDataType = configuredType;
@@ -902,8 +921,8 @@ public class QuickTransfer {
 			}
 
 			@Override
-			public void updateDataFlavor(InterpretedExpressoEnv env, TypeToken<?> suggestedType) throws ExpressoInterpretationException {
-				update(env);
+			public void updateDataFlavor(TypeToken<?> suggestedDataFlavor) throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override

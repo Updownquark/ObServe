@@ -1,8 +1,10 @@
 package org.observe.expresso;
 
+import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -30,17 +32,17 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.StampedUpdateFilteredCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
-import org.qommons.BiTuple;
 import org.qommons.Causable;
-import org.qommons.ClassMap;
-import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.MultiInheritanceView;
+import org.qommons.MultiInheritanceView.TypeMatch;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
@@ -61,7 +63,28 @@ public class ModelTypes {
 	public static final Function<Object, String> NOT_REVERSIBLE = LambdaUtils.constantFn("Not reversible", "Not reversible",
 		"Not reversible");
 
-	private static final ClassMap<ModelType<?>> ALL_TYPES = new ClassMap<>();
+	static class ModelTypeData<M> {
+		final ModelType<M> modelType;
+		final Type[] paramTypes;
+		private final Map<TypeToken<?>, ModelInstanceType<M, ?>> convertedTypes;
+
+		ModelTypeData(Class<? super M> baseType, ModelType<M> modelType) {
+			this.modelType = modelType;
+			paramTypes = baseType.getTypeParameters();
+			convertedTypes = new HashMap<>();
+		}
+
+		ModelInstanceType<M, ?> getConvertedType(TypeToken<?> type) {
+			return convertedTypes.computeIfAbsent(type, __ -> {
+				TypeToken<?>[] convertedParamTypes = new TypeToken[paramTypes.length];
+				for (int i = 0; i < convertedParamTypes.length; i++)
+					convertedParamTypes[i] = type.resolveType(paramTypes[i]);
+				return modelType.forTypes(convertedParamTypes);
+			});
+		}
+	}
+
+	private static final MultiInheritanceView<Class<?>, ModelTypeData<?>> ALL_TYPES;
 
 	/** A nested model in a model */
 	public static final ModelType.UnTyped<ObservableModelSet> Model = new ModelType.UnTyped<ObservableModelSet>("Model",
@@ -145,18 +168,20 @@ public class ModelTypes {
 		.getUnmodifiable();
 
 	static {
-		ALL_TYPES.with(Observable.class, Event);
-		ALL_TYPES.with(ObservableAction.class, Action);
-		ALL_TYPES.with(ObservableValue.class, Value);
-		ALL_TYPES.with(Collection.class, Collection);
-		ALL_TYPES.with(BetterSortedList.class, SortedCollection);
-		ALL_TYPES.with(Set.class, Set);
-		ALL_TYPES.with(SortedSet.class, SortedSet);
-		ALL_TYPES.with(ObservableValueSet.class, ValueSet);
-		ALL_TYPES.with(Map.class, Map);
-		ALL_TYPES.with(SortedMap.class, SortedMap);
-		ALL_TYPES.with(MultiMap.class, MultiMap);
-		ALL_TYPES.with(SortedMultiMap.class, SortedMultiMap);
+		MultiInheritanceView.MultiInheritanceMap2<Class<?>, ModelTypeData<?>> allTypes = MultiInheritanceView.createClassMap();
+		allTypes.with(Observable.class, new ModelTypeData<>(Observable.class, Event));
+		allTypes.with(ObservableAction.class, new ModelTypeData<>(ObservableAction.class, Action));
+		allTypes.with(ObservableValue.class, new ModelTypeData<>(ObservableValue.class, Value));
+		allTypes.with(Collection.class, new ModelTypeData<>(Collection.class, Collection));
+		allTypes.with(BetterSortedList.class, new ModelTypeData<>(BetterSortedList.class, SortedCollection));
+		allTypes.with(Set.class, new ModelTypeData<>(Set.class, Set));
+		allTypes.with(SortedSet.class, new ModelTypeData<>(SortedSet.class, SortedSet));
+		allTypes.with(ObservableValueSet.class, new ModelTypeData<>(ObservableValueSet.class, ValueSet));
+		allTypes.with(Map.class, new ModelTypeData<>(Map.class, Map));
+		allTypes.with(SortedMap.class, new ModelTypeData<>(SortedMap.class, SortedMap));
+		allTypes.with(MultiMap.class, new ModelTypeData<>(MultiMap.class, MultiMap));
+		allTypes.with(SortedMultiMap.class, new ModelTypeData<>(SortedMultiMap.class, SortedMultiMap));
+		ALL_TYPES = allTypes.unmodifiable();
 	}
 
 	static boolean anyNonTrivial(TypeConverter<?, ?, ?, ?>[] casts) {
@@ -492,13 +517,10 @@ public class ModelTypes {
 							.converter(LambdaUtils.printableFn(src -> src.noInitChanges().map(__ -> null), "valueChanges", null), dest);
 					} else {
 						Class<?> rawSourceType = TypeTokens.getRawType(source.getType(0));
-						ModelType<?> holderType = ALL_TYPES.get(rawSourceType, TypeMatch.SUPER_TYPE);
+						ModelTypeData<?> holderType = ALL_TYPES.get(rawSourceType, TypeMatch.SUPER_TYPE);
 						if (holderType != null) {
-							TypeToken<?>[] holderParamTypes = new TypeToken[holderType.getTypeCount()];
-							for (int t = 0; t < holderParamTypes.length; t++)
-								holderParamTypes[t] = source.getType(0).resolveType(holderType.modelType.getTypeParameters()[t]);
-							ModelInstanceType<?, ?> holderInstanceType = holderType.forTypes(holderParamTypes);
-							if (!holderType.modelType.isAssignableFrom(rawSourceType)) {
+							ModelInstanceType<?, ?> holderInstanceType = holderType.getConvertedType(source.getType(0));
+							if (!holderType.modelType.modelType.isAssignableFrom(rawSourceType)) {
 								return source.convert((ModelInstanceType<Object, Object>) holderInstanceType, env)//
 									.and(((ModelInstanceType<Object, Object>) holderInstanceType).convert(dest, env));
 							}
@@ -550,22 +572,22 @@ public class ModelTypes {
 					/* This converter enables the passing of actual model value holders into java code.
 					 * E.g. a method which accepts a SettableValue<Double> instead of just a double
 					 * so it can observe changes in the model value instead of just the current value. */
-					BiTuple<Class<?>, ModelType<?>> convertModel = ALL_TYPES.getEntry(TypeTokens.getRawType(dest.getType(0)),
-						TypeMatch.SUPER_TYPE);
+					ModelTypeData<?> convertModel = ALL_TYPES.get(TypeTokens.getRawType(dest.getType(0)), TypeMatch.SUPER_TYPE);
 					String location = env.reporting().getFileLocation() == null ? ""
 						: (env.reporting().getPosition().toShortString() + ": ");
 					String uModMsg = location + source + "->" + dest + " wrapping is not reversible";
 					if (convertModel != null) {
-						TypeToken<?>[] destParamTypes = new TypeToken[convertModel.getValue2().getTypeCount()];
-						for (int i = 0; i < destParamTypes.length; i++)
-							destParamTypes[i] = dest.getType(0).resolveType(convertModel.getValue1().getTypeParameters()[i]);
-						ModelInstanceType<?, ?> destModelType = convertModel.getValue2().forTypes(destParamTypes);
+						ModelInstanceType<?, ?> destModelType = convertModel.getConvertedType(dest.getType(0));
 						ModelInstanceConverter<?, ?> valueConverter = source.convert(destModelType, env);
 						if (valueConverter == null)
 							return null;
-						ModelInstanceType<SettableValue<?>, ?> type = Value.forType(//
-							TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType)
-							.parameterized(valueConverter.getType().getTypeList()));
+						TypeToken<?> parameterizeModelType;
+						if (valueConverter.getType().getTypeList().length == 0)
+							parameterizeModelType = TypeTokens.get().of(valueConverter.getType().getModelType().modelType);
+						else
+							parameterizeModelType = TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType)
+							.parameterized(valueConverter.getType().getTypeList());
+						ModelInstanceType<SettableValue<?>, ?> type = Value.forType(parameterizeModelType);
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
@@ -643,12 +665,9 @@ public class ModelTypes {
 							.get(dest.getModelType());
 						if (flattener == null)
 							return null;
-						TypeToken<?>[] sourceParamTypes = new TypeToken[dest.getModelType().getTypeCount()];
-						BiTuple<Class<?>, ModelType<?>> convertModel = ALL_TYPES.getEntry(dest.getModelType().modelType,
-							TypeMatch.SUPER_TYPE);
-						for (int i = 0; i < sourceParamTypes.length; i++)
-							sourceParamTypes[i] = source.getType(0).resolveType(convertModel.getValue1().getTypeParameters()[i]);
-						ModelInstanceType<Object, ?> sourceModelType = dest.getModelType().forTypes(sourceParamTypes);
+						ModelTypeData<?> convertModel = ALL_TYPES.get(dest.getModelType().modelType, TypeMatch.SUPER_TYPE);
+						ModelInstanceType<Object, ?> sourceModelType = (ModelInstanceType<Object, ?>) convertModel
+							.getConvertedType(source.getType(0));
 						ModelInstanceConverter<Object, ?> valueConverter = sourceModelType.convert(dest, env);
 						if (valueConverter == null)
 							return null;

@@ -108,11 +108,6 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 			return (Def) super.getDefinition();
 		}
 
-		@Override
-		public QuickWidget.Interpreted<?> getElement() {
-			return (QuickWidget.Interpreted<?>) super.getElement();
-		}
-
 		/** @return The text label for the field widget */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFieldLabel() {
 			return theName;
@@ -191,11 +186,12 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theFieldLabel = theFieldLabelInstantiator == null ? null : theFieldLabelInstantiator.get(models);
 		if (thePost != null)
 			thePost.instantiate(models);
+		return models;
 	}
 
 	@Override

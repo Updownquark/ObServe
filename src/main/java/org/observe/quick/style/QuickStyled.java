@@ -2,7 +2,6 @@ package org.observe.quick.style;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -13,13 +12,12 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
@@ -79,17 +77,20 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			super.update(session, element);
 
+			String doc = element.getDocument();
+			CompiledExpressoEnv defaultEnv = element.getExpressoEnv(doc);
 			ObservableModelSet.Builder builder;
-			if (element.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
-				builder = (ObservableModelSet.Builder) element.getExpressoEnv().getModels();
+			if (defaultEnv.getModels() instanceof ObservableModelSet.Builder)
+				builder = (ObservableModelSet.Builder) defaultEnv.getModels();
 			else
 				builder = ObservableModelSet
 				.build(element.getElement().getType().getName() + ".local", ObservableModelSet.JAVA_NAME_CHECKER)
-				.withAll(element.getExpressoEnv().getModels());
+				.withAll(defaultEnv.getModels());
 			builder.withTagValue(StyleApplicationDef.STYLED_ELEMENT_TAG, element.getElement());
-			if (builder != element.getExpressoEnv().getModels()) {
-				element.setExpressoEnv(element.getExpressoEnv().with(builder.build()));
-				session.setExpressoEnv(element.getExpressoEnv());
+			if (builder != defaultEnv.getModels()) {
+				defaultEnv = defaultEnv.with(builder.build());
+				element.setExpressoEnv(doc, defaultEnv);
+				session.setExpressoEnv(doc, defaultEnv);
 			}
 
 			element.syncChildren(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
@@ -100,13 +101,13 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 			else {
 				declaredValues = new ArrayList<>();
 				for (QuickStyleElement.Def styleEl : theStyleElements)
-					styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, element.getElement(), element.getExpressoEnv(), null);
+					styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, element.getElement(), defaultEnv, null);
 			}
 
 			QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
 			if (styleSheet != null) {
 				styleSheetValues = new ArrayList<>();
-				styleSheet.getStyleValues(styleSheetValues, element.getElement(), element.getExpressoEnv());
+				styleSheet.getStyleValues(styleSheetValues, element.getElement(), defaultEnv);
 			} else
 				styleSheetValues = Collections.emptyList();
 
@@ -117,9 +118,10 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 					session.putGlobal(QuickStyleElement.STYLE_TYPE_SET, styleTypes);
 				}
 				// Initialize all of this element's types for style
-				styleTypes.getOrCompile(element.getElement().getType(), session.reporting(), element.getQonfigType().getDeclarer());
+				QonfigToolkit styleTK = getType().getDeclarer();
+				styleTypes.getOrCompile(element.getElement().getType(), session.reporting(), styleTK);
 				for (QonfigAddOn inh : element.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance))
-					styleTypes.getOrCompile(inh, session.reporting(), element.getQonfigType().getDeclarer());
+					styleTypes.getOrCompile(inh, session.reporting(), styleTK);
 
 				// Find the nearest styled ancestor to inherit styles from
 				ExElement.Def<?> parent = element.getParentElement();
@@ -134,14 +136,14 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 				QuickInstanceStyle.Def parentStyle = parent == null ? null
 					: parent.getAddOnValue(QuickStyled.Def.class, QuickStyled.Def::getStyle);
 				QuickCompiledStyle rootStyle = new QuickCompiledStyle.Default(styleTypes, element.getElement(), parentStyle,
-					element.reporting(), session.getFocusType().getDeclarer());
+					element.reporting(), styleTK);
 
 				if (element instanceof QuickStyledElement.Def)
 					theStyle = ((QuickStyledElement.Def<?>) element).wrap(parentStyle, rootStyle);
 				else
 					theStyle = new QuickInstanceStyle.Def.Base(parentStyle, this, rootStyle);
 			}
-			theStyle.update(declaredValues, styleSheetValues, element.getExpressoEnv());
+			theStyle.update(declaredValues, styleSheetValues, defaultEnv);
 		}
 
 		@Override
@@ -190,8 +192,7 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 				while (parent != null && parent.getAddOn(QuickStyled.Interpreted.class) != null)
 					parent = parent.getParentElement();
 				theStyle = getDefinition().getStyle().interpret(element,
-					parent == null ? null : parent.getAddOnValue(QuickStyled.Interpreted.class, QuickStyled.Interpreted::getStyle),
-						element.getExpressoEnv());
+					parent == null ? null : parent.getAddOnValue(QuickStyled.Interpreted.class, QuickStyled.Interpreted::getStyle));
 			}
 			theStyleSheet = null;
 			ExElement.Interpreted<?> parent = element.getParentElement();
@@ -202,7 +203,7 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 					theStyleSheet = parent.getAddOnValue(ExWithStyleSheet.Interpreted.class, ss -> ss.getStyleSheet());
 				parent = parent.getParentElement();
 			}
-			theStyle.update(element.getExpressoEnv(), theStyleSheet, new QuickInterpretedStyleCache.Applications());
+			theStyle.update(element, theStyleSheet, new QuickInterpretedStyleCache.Applications());
 
 			element.syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(element),
 				QuickStyleElement.Interpreted::updateStyle);
@@ -216,12 +217,10 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 
 	private QuickInstanceStyle theStyle;
 	private final List<QuickStyleElement<?>> theStyleElements;
-	private final Set<ModelComponentId> theStyleSheetModels;
 
 	QuickStyled(ExElement element) {
 		super(element);
 		theStyleElements = new ArrayList<>();
-		theStyleSheetModels = new HashSet<>();
 	}
 
 	@Override
@@ -251,13 +250,6 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 		if (theStyle == null)
 			theStyle = myInterpreted.getStyle().create(this);
 		theStyle.update(myInterpreted.getStyle(), parent == null ? null : parent.getAddOn(QuickStyled.class));
-		theStyleSheetModels.clear();
-		for (QuickStyleAttribute<?> attr : myInterpreted.getStyle().getAttributes()) {
-			for (InterpretedStyleValue<?> value : myInterpreted.getStyle().get(attr).getValues()) {
-				if (value.getModelContext() != null)
-					theStyleSheetModels.add(value.getModelContext().getModel());
-			}
-		}
 
 		CollectionUtils
 		.synchronize(theStyleElements, myInterpreted.getStyleElements(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
@@ -278,21 +270,14 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void addRuntimeModels(ModelSetInstanceBuilder builder, ModelSetInstance elementModels) throws ModelInstantiationException {
-		super.addRuntimeModels(builder, elementModels);
-		for (ModelComponentId styleSheetModel : theStyleSheetModels)
-			builder.withAll(//
-				builder.getInherited(styleSheetModel).copy(builder.getUntil()).build());
-	}
-
-	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 
 		theStyle.instantiate(models);
 
 		for (QuickStyleElement<?> styleEl : theStyleElements)
 			styleEl.instantiate(models);
+		return models;
 	}
 
 	@Override
@@ -312,8 +297,7 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 			QuickStyled.Def getStyled();
 
 			@Override
-			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent) throws ExpressoInterpretationException;
 
 			/** @return All style attributes that apply to this style's element */
 			Set<QuickStyleAttributeDef> getApplicableAttributes();
@@ -366,8 +350,8 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 				}
 
 				@Override
-				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
+					throws ExpressoInterpretationException;
 			}
 
 			/** Basic Quick style definition for when the element is not a {@link QuickStyledElement} instance */
@@ -382,10 +366,10 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
 					return new Interpreted.Base(this, parentEl.getAddOn(QuickStyled.Interpreted.class),
-						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent, env));
+						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent));
 				}
 			}
 		}
@@ -448,13 +432,14 @@ public class QuickStyled extends ExAddOn.Abstract<ExElement> {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
 					throws ExpressoInterpretationException {
-					super.update(env, styleSheet, appCache);
+					super.update(element, styleSheet, appCache);
 					theApplicableAttributes.clear();
-					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+					InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
+					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
 					for (QuickStyleAttributeDef attr : getDefinition().getApplicableAttributes())
-						theApplicableAttributes.put(attr, cache.getAttribute(attr, env));
+						theApplicableAttributes.put(attr, cache.getAttribute(attr, defaultEnv));
 				}
 			}
 

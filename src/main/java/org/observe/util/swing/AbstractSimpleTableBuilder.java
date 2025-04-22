@@ -58,6 +58,7 @@ import org.observe.util.swing.Dragging.TransferWrapper;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.observe.util.swing.PanelPopulation.AbstractTableBuilder;
 import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SimpleComponentEditor;
@@ -112,12 +113,12 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 	private boolean withColumnHeader;
 	private boolean isScrollable;
 
-	protected AbstractSimpleTableBuilder(ObservableCollection<R> rows, Observable<?> until) {
-		this(rows, (T) new NoLayoutTable(), until);
+	protected AbstractSimpleTableBuilder(ComponentEditor<?, ?> parent, ObservableCollection<R> rows, Observable<?> until) {
+		this(parent, rows, (T) new NoLayoutTable(), until);
 	}
 
-	protected AbstractSimpleTableBuilder(ObservableCollection<R> rows, T table, Observable<?> until) {
-		super(null, table, until);
+	protected AbstractSimpleTableBuilder(ComponentEditor<?, ?> parent, ObservableCollection<R> rows, T table, Observable<?> until) {
+		super(parent, null, table, until);
 		getEditor().setFillsViewportHeight(true);
 		theActions = new LinkedList<>();
 		theActionsOnTop = true;
@@ -443,6 +444,8 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 		// Sync multi-selection so we can control the actions if nothing else
 		ObservableCollection<R> multiSelection = ObservableCollection.create(b -> b.onEdt());
 		syncMultiSelection(table, model, multiSelection);
+		if (PanelPopulation.isDebugging(getEditor().getName(), "multiSelect"))
+			multiSelection.simpleChanges().takeUntil(getUntil()).act(__ -> System.out.println("Selection=" + multiSelection));
 		if (theSelectionValues != null) {
 			// ObservableUtils.link(multiSelection, theSelectionValues);
 			Subscription selSyncSub = ObservableCollectionSynchronization.synchronize(multiSelection, theSelectionValues)//
@@ -515,7 +518,7 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 				});
 			}
 			if (hasButtons) {
-				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(this, null,
 					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
 				for (Object action : theActions) {
 					if (action instanceof SimpleDataAction) {

@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -101,8 +100,8 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			thePrevious = interpret(getDefinition().getPrevious(), ModelTypes.Value.forType(getValueType()));
 			theNext = interpret(getDefinition().getNext(), ModelTypes.Value.forType(getValueType()));
@@ -155,11 +154,12 @@ public class QuickSpinner<T> extends QuickTextField<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		thePrevious = thePreviousInstantiator == null ? null : thePreviousInstantiator.get(myModels);
 		theNext = theNextInstantiator == null ? null : theNextInstantiator.get(myModels);
+		return myModels;
 	}
 
 	@Override

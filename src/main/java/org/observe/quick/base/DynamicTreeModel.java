@@ -5,7 +5,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -131,31 +130,27 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 		}
 
 		@Override
-		public TypeToken<N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public TypeToken<N> doGetNodeType() throws ExpressoInterpretationException {
 			if (theNodeType == null) {
-				if (getExpressoEnv() != null)
-					theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
-				else
-					theRoot = getDefinition().getRoot().interpret(ModelTypes.Value.anyAsV(), env);
+				theRoot = interpret(getDefinition().getRoot(), ModelTypes.Value.anyAs());
 				theNodeType = (TypeToken<N>) theRoot.getType().getType(0);
 			}
 			return theNodeType;
 		}
 
 		/**
-		 * @param env The expresso environment to use to interpret expressions
 		 * @return The type of tree paths for the tree
 		 * @throws ExpressoInterpretationException If the path type could not be interpreted
 		 */
-		public TypeToken<BetterList<N>> getPathType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType(env));
+		public TypeToken<BetterList<N>> getPathType() throws ExpressoInterpretationException {
+			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
-			getNodeType(getExpressoEnv()); // Initialize root
+			getNodeType(); // Initialize root
 			theChildren = interpret(getDefinition().getChildren(), ModelTypes.Collection.forType(theNodeType));
 			TypeToken<?> childType = theChildren.getType().getType(0);
 			if (!TypeTokens.get().isAssignable(theNodeType, childType)) {
@@ -185,7 +180,7 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 
 	DynamicTreeModel(Object id) {
 		super(id);
-		theRoot = SettableValue.<SettableValue<N>> build().build();
+		theRoot = SettableValue.create();
 	}
 
 	@Override
@@ -241,19 +236,20 @@ public class DynamicTreeModel<N> extends ExElement.Abstract implements TreeModel
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theActivePathValue = (SettableValue<BetterList<N>>) myModels.get(theActivePathVariable);
 
 		theRoot.set(theRootInstantiator.get(myModels), null);
 		isLeaf = theLeafInstantiator == null ? null : theLeafInstantiator.get(myModels);
+		return myModels;
 	}
 
 	@Override
 	public DynamicTreeModel<N> copy(ExElement parent) {
 		DynamicTreeModel<N> copy = (DynamicTreeModel<N>) super.copy(parent);
-		copy.theRoot = SettableValue.<SettableValue<N>> build().build();
+		copy.theRoot = SettableValue.create();
 		return copy;
 	}
 }

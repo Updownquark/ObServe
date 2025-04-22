@@ -11,7 +11,6 @@ import java.util.stream.Stream;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -198,22 +197,20 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		 * Instantiates or updates this sorting
 		 *
 		 * @param type The type to sort
-		 * @param env The expresso environment to use to interpret expression
 		 * @throws ExpressoInterpretationException If anything in this sort could not be interpreted
 		 */
-		public abstract void update(TypeToken<OT> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		public abstract void update(TypeToken<OT> type) throws ExpressoInterpretationException;
 
 		/**
 		 * @param internalType The internal type, the type of values that this sort's expressions use
-		 * @param env The expresso environment to use to interpret expression
 		 * @throws ExpressoInterpretationException If anything in this sort could not be interpreted
 		 */
-		protected void updateInternal(TypeToken<IT> internalType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected void updateInternal(TypeToken<IT> internalType) throws ExpressoInterpretationException {
 			theSortType = internalType;
-			super.update(env);
+			super.update();
 			theSortWith = interpret(getDefinition().getSortWith(), ModelTypes.Value.INT);
 			syncChildren(getDefinition().getSortBy(), theSortBy, def -> (ExSortBy.Interpreted<IT, ?>) def.interpret(this),
-				(i, sEnv) -> i.update(internalType, sEnv));
+				i -> i.update(internalType));
 			if (theSortWith == null && theSortBy.isEmpty()) {
 				Class<IT> raw = TypeTokens.getRawType(internalType);
 				theDefaultSorting = ExSort.getDefaultSorting(raw);
@@ -480,8 +477,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
-			public void update(TypeToken<T> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				updateInternal(type, env);
+			public void update(TypeToken<T> type) throws ExpressoInterpretationException {
+				updateInternal(type);
 			}
 
 			@Override
@@ -500,29 +497,29 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			protected SortInstantiator<T, T> doInstantiateSort() throws ModelInstantiationException {
 				return new RootSortInstantiator<>(getDefinition().getSortValue(), getDefinition().getSortCompareValue(), //
 					getSortWith() == null ? null : getSortWith().instantiate(), //
-						instantiateSortBy(), getDefaultSorting(), getDefinition().isAscending(), getExpressoEnv().getModels().instantiate());
+						instantiateSortBy(), getDefaultSorting(), getDefinition().isAscending(), instantiateLocalModels());
 			}
 		}
 
 		static class RootSortInstantiator<T> extends SortInstantiator<T, T> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 
 			RootSortInstantiator(ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<T, ?>> sortBy,
-				Comparator<? super T> defaultSorting, boolean ascending, ModelInstantiator localModel) {
+				Comparator<? super T> defaultSorting, boolean ascending, DocumentMap<ModelInstantiator> localModel) {
 				super(sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
 				theLocalModel = localModel;
 			}
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 			}
 
 			@Override
 			protected Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<T> left, SettableValue<T> right)
 				throws ModelInstantiationException {
-				parentModels = theLocalModel.wrap(parentModels);
+				parentModels = theLocalModel.operate(parentModels, (m, mi) -> mi.wrap(m));
 				return getInternalSorting(parentModels, left, right);
 			}
 		}
@@ -605,13 +602,9 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
-			public void update(TypeToken<OT> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				env = env.with(getParentElement().getModels());
-				if (getExpressoEnv() != null)
-					theAttribute = interpret(getDefinition().getAttribute(), ModelTypes.Value.anyAsV());
-				else
-					theAttribute = getDefinition().getAttribute().interpret(ModelTypes.Value.anyAsV(), env);
-				updateInternal((TypeToken<IT>) theAttribute.getType().getType(0), env);
+			public void update(TypeToken<OT> type) throws ExpressoInterpretationException {
+				theAttribute = getParentElement().interpret(getDefinition().getAttribute(), ModelTypes.Value.anyAsV());
+				updateInternal((TypeToken<IT>) theAttribute.getType().getType(0));
 			}
 
 			@Override
@@ -623,19 +616,20 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			protected SortInstantiator<OT, IT> doInstantiateSort() throws ModelInstantiationException {
 				return new SortByInstantiator<>(getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
 					getSortWith() == null ? null : getSortWith().instantiate(), instantiateSortBy(), getDefaultSorting(),
-						getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
+					getDefinition().isAscending(), instantiateLocalModels(),
 						theSort.getDefinition().getSortValue(), theAttribute.instantiate());
 			}
 		}
 
 		static class SortByInstantiator<OT, IT> extends SortInstantiator<OT, IT> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelComponentId theParentSortValue;
 			private final ModelValueInstantiator<SettableValue<IT>> theAttribute;
 
 			SortByInstantiator(ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
-				Comparator<? super IT> defaultSorting, boolean ascending, ModelInstantiator localModel, ModelComponentId parentSortValue,
+				Comparator<? super IT> defaultSorting, boolean ascending, DocumentMap<ModelInstantiator> localModel,
+				ModelComponentId parentSortValue,
 				ModelValueInstantiator<SettableValue<IT>> attribute) {
 				super(sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
 				theLocalModel = localModel;
@@ -645,14 +639,14 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				theAttribute.instantiate();
 			}
 
 			@Override
 			protected Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<OT> left, SettableValue<OT> right)
 				throws ModelInstantiationException {
-				ModelSetInstance models = theLocalModel.wrap(parentModels);
+				ModelSetInstance models = theLocalModel.operate(parentModels, (m, mi) -> mi.wrap(m));
 				ModelSetInstance leftCopy = models.copy().build();
 				ModelSetInstance rightCopy = models.copy().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, leftCopy, left);

@@ -10,7 +10,6 @@ import org.observe.SettableValue;
 import org.observe.assoc.ObservableMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -130,30 +129,27 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 
 		@Override
-		protected TypeToken<N> doGetNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		protected TypeToken<N> doGetNodeType() throws ExpressoInterpretationException {
 			if (theNodeType == null) {
 				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
 				syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), null);
 				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
-				if (getExpressoEnv() != null)
-					theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
-				else
-					theValue = getDefinition().getValue().interpret(ModelTypes.Value.anyAsV(), env);
+				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.anyAs());
 				types.add((TypeToken<? extends N>) theValue.getType().getType(0));
 				for (TreeModel.Interpreted<? extends N, ?> child : theChildren)
-					types.add(child.getNodeType(env));
+					types.add(child.getNodeType());
 				theNodeType = TypeTokens.get().getCommonType(types);
 			}
 			return theNodeType;
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
-			getNodeType(expressoEnv); // Init value
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			getNodeType(); // Init value
 			// We didn't actually update the children, just interpreted them to get the node type
 			for (TreeModel.Interpreted<?, ?> child : theChildren)
-				child.updateModel(getExpressoEnv());
+				child.updateModel();
 		}
 
 		@Override
@@ -251,13 +247,14 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		theValue.set((SettableValue<N>) theValueInstantiator.get(myModels), null);
 
 		for (TreeModel<? extends N> child : theInitializedChildren)
 			child.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

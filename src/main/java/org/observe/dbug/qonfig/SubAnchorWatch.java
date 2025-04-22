@@ -2,7 +2,6 @@ package org.observe.dbug.qonfig;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -73,17 +72,17 @@ public class SubAnchorWatch<A> extends ExAddOn.Abstract<DbugAnchorWatch<A>> {
 			return (Class<SubAnchorWatch<A>>) (Class<?>) SubAnchorWatch.class;
 		}
 
-		public TypeToken<A> getAnchorType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		public TypeToken<A> getAnchorType() throws ExpressoInterpretationException {
 			if (theAnchorType == null) {
-				theWatch = getDefinition().getWatch() == null ? null : getDefinition().getWatch().interpret(ModelTypes.Value.anyAs(), env);
+				theWatch = getElement().interpret(getDefinition().getWatch(), ModelTypes.Value.anyAs());
 				ExElement.Interpreted<?> parent = getElement().as(ExElement.Interpreted.class, null).getParentElement();
 				if (theWatch != null)
 					theAnchorType = (TypeToken<A>) theWatch.getType().getType(0);
 				else if (theWatch == null && parent.getAddOn(DbugModelValue.Interpreted.class) != null) {
-					theWatch = parent.getAddOn(DbugModelValue.Interpreted.class).getValue(env);
+					theWatch = parent.getAddOn(DbugModelValue.Interpreted.class).getValue();
 					theAnchorType = (TypeToken<A>) theWatch.getType().getType(0);
 				} else if (parent instanceof DbugAnchorWatch.Interpreted)
-					theAnchorType = ((DbugAnchorWatch.Interpreted<A>) parent).getAnchorType(env);
+					theAnchorType = ((DbugAnchorWatch.Interpreted<A>) parent).getAnchorType();
 				else {
 					getElement().reporting().error("Unable to determine type of anchor");
 					theAnchorType = (TypeToken<A>) TypeTokens.get().OBJECT;
@@ -95,7 +94,7 @@ public class SubAnchorWatch<A> extends ExAddOn.Abstract<DbugAnchorWatch<A>> {
 		@Override
 		public void update(ExElement.Interpreted<? extends DbugAnchorWatch<A>> element) throws ExpressoInterpretationException {
 			super.update(element);
-			getAnchorType(element.getExpressoEnv());
+			getAnchorType();
 		}
 
 		@Override
@@ -137,8 +136,9 @@ public class SubAnchorWatch<A> extends ExAddOn.Abstract<DbugAnchorWatch<A>> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 		theWatch = theWatchInstantiator == null ? null : theWatchInstantiator.get(models);
+		return models;
 	}
 }

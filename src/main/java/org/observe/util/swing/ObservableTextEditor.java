@@ -246,7 +246,7 @@ public class ObservableTextEditor<E> {
 		theComponent = component;
 		theEnabledSetter = enabled;
 		theTooltipSetter = tooltip;
-		theValue = value.safe(ThreadConstraint.EDT, until);
+		theValue = value.safe(ThreadConstraint.EDT);
 		theFormat = format;
 		if (until == null)
 			until = Observable.empty();
@@ -724,24 +724,28 @@ public class ObservableTextEditor<E> {
 		boolean prevError = theError != null;
 		theError = error;
 		theWarningMsg = warningMsg;
+		if (theStatusChange != null)
+			theStatusChange.onNext(null);
 		// The logic here is that if the text widget is not editable, there's no sense graying it out or showing the disabled message
 		// because they couldn't edit it anyway
 		String disabled = isEditable ? theValue.isEnabled().get() : null;
-		if (theError != null) {
-			if (disabled != null)
-				theComponent.setBackground(error_disabled_bg);
-			else
-				theComponent.setBackground(error_bg);
-		} else if (warningMsg != null) {
-			if (disabled != null)
-				theComponent.setBackground(warning_disabled_bg);
-			else
-				theComponent.setBackground(warning_bg);
-		} else {
-			if (disabled != null)
-				theComponent.setBackground(disabled_bg);
-			else
-				theComponent.setBackground(normal_bg);
+		if (!ComponentPropertyManager.isManaged(theComponent, "background")) {
+			if (theError != null) {
+				if (disabled != null)
+					theComponent.setBackground(error_disabled_bg);
+				else
+					theComponent.setBackground(error_bg);
+			} else if (warningMsg != null) {
+				if (disabled != null)
+					theComponent.setBackground(warning_disabled_bg);
+				else
+					theComponent.setBackground(warning_bg);
+			} else {
+				if (disabled != null)
+					theComponent.setBackground(disabled_bg);
+				else
+					theComponent.setBackground(normal_bg);
+			}
 		}
 
 		if (theError != null)
@@ -756,8 +760,6 @@ public class ObservableTextEditor<E> {
 			else
 				theTooltipSetter.accept(theToolTip);
 		}
-		if (theStatusChange != null)
-			theStatusChange.onNext(null);
 	}
 
 	/**

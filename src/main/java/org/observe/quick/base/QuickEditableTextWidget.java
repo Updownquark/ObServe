@@ -223,10 +223,11 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			ExFlexibleElementModelAddOn.satisfyElementValue(theErrorVariable, myModels, SettableValue.flatten(theErrorStatus));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theWarningVariable, myModels, SettableValue.flatten(theWarningStatus));
+			return myModels;
 		}
 
 		@Override

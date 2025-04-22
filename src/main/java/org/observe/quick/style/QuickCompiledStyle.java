@@ -96,8 +96,7 @@ public interface QuickCompiledStyle {
 	 * @return The interpreted style for this style's element
 	 * @throws ExpressoInterpretationException If this structure's expressions could not be evaluated
 	 */
-	QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
-		throws ExpressoInterpretationException;
+	QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent) throws ExpressoInterpretationException;
 
 	/** Default {@link QuickCompiledStyle} implementation */
 	public class Default implements QuickCompiledStyle {
@@ -128,7 +127,9 @@ public interface QuickCompiledStyle {
 
 			BetterMultiMap<String, QuickStyleAttributeDef> attrsByName = BetterHashMultiMap.<String, QuickStyleAttributeDef> buildHashed()//
 				.withDistinctValues().buildMultiMap();
-			attrsByName.putAll(styleTypes.getOrCompile(element.getType(), reporting, style).getAttributes());
+			QuickTypeStyle typeStyle = styleTypes.getOrCompile(element.getType(), reporting, style);
+			if (typeStyle != null)
+				attrsByName.putAll(typeStyle.getAttributes());
 			for (QonfigElementOrAddOn inh : element.getInheritance().values()) {
 				QuickTypeStyle inhStyle = styleTypes.getOrCompile(inh, reporting, style);
 				if (inhStyle != null)
@@ -241,7 +242,7 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 			throws ExpressoInterpretationException {
 			return new QuickInterpretedStyle.Default(this, parent);
 		}
@@ -322,9 +323,9 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 			throws ExpressoInterpretationException {
-			return theWrapped.interpret(parentEl, parent, env);
+			return theWrapped.interpret(parentEl, parent);
 		}
 
 		@Override
@@ -373,14 +374,15 @@ public interface QuickCompiledStyle {
 		 * @return The interpreted value for this style attribute on the element
 		 * @throws ExpressoInterpretationException If the condition or the value could not be interpreted
 		 */
-		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, InterpretedExpressoEnv env,
+		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, ExElement.Interpreted<?> element,
 			QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
 				throws ExpressoInterpretationException {
-			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, env);
+			InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
+			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
+			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, defaultEnv);
 			List<InterpretedStyleValue<T>> values = new ArrayList<>(theValues.size());
 			for (QuickStyleValue v : theValues)
-				values.add((InterpretedStyleValue<T>) v.interpret(env, styleSheet, appCache));
+				values.add((InterpretedStyleValue<T>) v.interpret(element, styleSheet, appCache));
 			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values));
 		}
 

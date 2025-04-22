@@ -7,7 +7,6 @@ import java.util.List;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -144,10 +143,9 @@ public interface QuickEventListener extends ExElement {
 		/**
 		 * Initializes or updates this listener
 		 *
-		 * @param env The expresso environment to interpret expressions
 		 * @throws ExpressoInterpretationException If this listener could not be interpreted
 		 */
-		void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateListener() throws ExpressoInterpretationException;
 
 		/** @return The listener instance */
 		L create();
@@ -186,77 +184,24 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateListener() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				syncChildren(getDefinition().getFilters(), theFilters, def -> def.interpret(this), EventFilter.Interpreted::updateFilter);
 				theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 			}
 		}
 	}
 
-	/** Context for an event listener */
-	public interface ListenerContext {
-		/** @return Whether the user is currently pressing the ALT key */
-		SettableValue<Boolean> isAltPressed();
+	SettableValue<Boolean> isAltPressed();
 
-		/** @return Whether the user is currently pressing the CTRL key */
-		SettableValue<Boolean> isCtrlPressed();
+	SettableValue<Boolean> isCtrlPressed();
 
-		/** @return Whether the user is currently pressing the SHIFT key */
-		SettableValue<Boolean> isShiftPressed();
-
-		/** Default {@link ListenerContext} implementation */
-		public class Default implements ListenerContext {
-			private final SettableValue<Boolean> isAltPressed;
-			private final SettableValue<Boolean> isCtrlPressed;
-			private final SettableValue<Boolean> isShiftPressed;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed) {
-				isAltPressed = altPressed;
-				isCtrlPressed = ctrlPressed;
-				isShiftPressed = shiftPressed;
-			}
-
-			/** Creates context with default value containers */
-			public Default() {
-				isAltPressed = SettableValue.<Boolean> build().withValue(false).build();
-				isCtrlPressed = SettableValue.<Boolean> build().withValue(false).build();
-				isShiftPressed = SettableValue.<Boolean> build().withValue(false).build();
-			}
-
-			@Override
-			public SettableValue<Boolean> isAltPressed() {
-				return isAltPressed;
-			}
-
-			@Override
-			public SettableValue<Boolean> isCtrlPressed() {
-				return isCtrlPressed;
-			}
-
-			@Override
-			public SettableValue<Boolean> isShiftPressed() {
-				return isShiftPressed;
-			}
-		}
-	}
-
-	/**
-	 * Sets the event listener context to populate this listener's models with context-specific values
-	 *
-	 * @param ctx The listener context from the Quick implementation
-	 */
-	void setListenerContext(ListenerContext ctx);
+	SettableValue<Boolean> isShiftPressed();
 
 	/** @return The list of filters that must be passed by an event if this listener's action is to be performed on it */
 	List<EventFilter> getFilters();
@@ -286,26 +231,32 @@ public interface QuickEventListener extends ExElement {
 		private ModelComponentId theCtrlPressedValue;
 		private ModelComponentId theShiftPressedValue;
 
-		private SettableValue<SettableValue<Boolean>> isAltPressed;
-		private SettableValue<SettableValue<Boolean>> isCtrlPressed;
-		private SettableValue<SettableValue<Boolean>> isShiftPressed;
+		private SettableValue<Boolean> isAltPressed;
+		private SettableValue<Boolean> isCtrlPressed;
+		private SettableValue<Boolean> isShiftPressed;
 
 		/** @param id The element identifier for this listener */
 		protected Abstract(Object id) {
 			super(id);
 			theFilters = new ArrayList<>();
-			isAltPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			isCtrlPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			isShiftPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			isAltPressed = SettableValue.create();
+			isCtrlPressed = SettableValue.create();
+			isShiftPressed = SettableValue.create();
 		}
 
 		@Override
-		public void setListenerContext(ListenerContext ctx) {
-			if (ctx == null)
-				return;
-			isAltPressed.set(ctx.isAltPressed(), null);
-			isCtrlPressed.set(ctx.isCtrlPressed(), null);
-			isShiftPressed.set(ctx.isShiftPressed(), null);
+		public SettableValue<Boolean> isAltPressed() {
+			return isAltPressed;
+		}
+
+		@Override
+		public SettableValue<Boolean> isCtrlPressed() {
+			return isCtrlPressed;
+		}
+
+		@Override
+		public SettableValue<Boolean> isShiftPressed() {
+			return isShiftPressed;
 		}
 
 		@Override
@@ -355,17 +306,18 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
-			ExFlexibleElementModelAddOn.satisfyElementValue(theAltPressedValue, myModels, SettableValue.flatten(isAltPressed));
-			ExFlexibleElementModelAddOn.satisfyElementValue(theCtrlPressedValue, myModels, SettableValue.flatten(isCtrlPressed));
-			ExFlexibleElementModelAddOn.satisfyElementValue(theShiftPressedValue, myModels, SettableValue.flatten(isShiftPressed));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theAltPressedValue, myModels, isAltPressed);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theCtrlPressedValue, myModels, isCtrlPressed);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theShiftPressedValue, myModels, isShiftPressed);
 
 			for (EventFilter filter : theFilters)
 				filter.instantiate(myModels);
 
 			theAction = theActionInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override
@@ -375,9 +327,9 @@ public interface QuickEventListener extends ExElement {
 			copy.theFilters = new ArrayList<>();
 			for (EventFilter filter : theFilters)
 				copy.theFilters.add(filter.copy(copy));
-			copy.isAltPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.isCtrlPressed = SettableValue.<SettableValue<Boolean>> build().build();
-			copy.isShiftPressed = SettableValue.<SettableValue<Boolean>> build().build();
+			copy.isAltPressed = SettableValue.create();
+			copy.isCtrlPressed = SettableValue.create();
+			copy.isShiftPressed = SettableValue.create();
 
 			return copy;
 		}
@@ -450,16 +402,15 @@ public interface QuickEventListener extends ExElement {
 			/**
 			 * Initializes or updates this filter
 			 *
-			 * @param env The expresso environment to interpret expressions
 			 * @throws ExpressoInterpretationException If this filter could not be interpreted
 			 */
-			public void updateFilter(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateFilter() throws ExpressoInterpretationException {
+				update();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theCondition = interpret(getDefinition().getCondition(), ModelTypes.Value.BOOLEAN);
 			}
 
@@ -504,9 +455,10 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 			theCondition = theConditionInstantiator.get(myModels);
+			return myModels;
 		}
 
 		@Override

@@ -2,7 +2,6 @@ package org.observe.dbug.qonfig;
 
 import org.observe.ObservableAction;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -61,14 +60,14 @@ public class DbugDo extends ExElement.Abstract implements DbugAction {
 		}
 
 		@Override
-		public void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			update(env);
+		public void updateAction() throws ExpressoInterpretationException {
+			update();
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-			super.doUpdate(expressoEnv);
-			theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), expressoEnv);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
+			theAction = interpret(getDefinition().getAction(), ModelTypes.Action.instance());
 		}
 
 		@Override
@@ -105,9 +104,10 @@ public class DbugDo extends ExElement.Abstract implements DbugAction {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 		theAction = theActionInstantiator.get(myModels);
+		return myModels;
 	}
 
 	@Override

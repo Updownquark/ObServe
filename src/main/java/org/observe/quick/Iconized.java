@@ -120,7 +120,7 @@ public class Iconized extends ExAddOn.Abstract<ExElement> {
 		public void postUpdate(ExElement.Interpreted<? extends ExElement> element) throws ExpressoInterpretationException {
 			super.postUpdate(element);
 			QuickInstanceStyle.Interpreted style = element.getAddOn(QuickStyled.Interpreted.class).getStyle();
-			InterpretedExpressoEnv env = element.getExpressoEnv();
+			InterpretedExpressoEnv env = element.getDefaultEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			theIconAttr = style.get(cache.getAttribute(getDefinition().getIconAttr(), Image.class, env));
 			theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(),
@@ -182,10 +182,11 @@ public class Iconized extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 
 		theIconValue.set(theIconInstantiator != null ? theIconInstantiator.get(models) : theIconStyle, null);
+		return models;
 	}
 
 	@Override

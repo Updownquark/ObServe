@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -3809,22 +3810,22 @@ public final class ObservableCollectionImpl {
 				void sync(ObservableCollection<? extends E> collection, Object causeForInitialEvents) {
 					CollectionUtils.synchronize(theElements, collection.elements(), //
 						(flatEl, collEl) -> flatEl.id.theSourceEl.equals(collEl.getElementId()))//
-						.simple(el -> new ContainedElement<>(new FlattenedElementId(collection, el.getElementId()), el.get()))//
-						.commonUses(true, false)//
-						.onLeft(el -> {
+					.simple(el -> new ContainedElement<>(new FlattenedElementId(collection, el.getElementId()), el.get()))//
+					.commonUses(true, false)//
+					.onLeft(el -> {
+						fire(ObservableCollectionEvent.createCollectionEvent(el.getLeftValue().id, el.getTargetIndex(),
+							CollectionChangeType.remove, el.getLeftValue().value, el.getLeftValue().value, causeForInitialEvents));
+					}).onRight(el -> {
+						if (causeForInitialEvents != null)
 							fire(ObservableCollectionEvent.createCollectionEvent(el.getLeftValue().id, el.getTargetIndex(),
-								CollectionChangeType.remove, el.getLeftValue().value, el.getLeftValue().value, causeForInitialEvents));
-						}).onRight(el -> {
-							if (causeForInitialEvents != null)
-								fire(ObservableCollectionEvent.createCollectionEvent(el.getLeftValue().id, el.getTargetIndex(),
-									CollectionChangeType.add, null, el.getLeftValue().value, causeForInitialEvents));
-						}).onCommon(el -> {
-							E newValue = el.getRightValue().get();
-							if (el.getLeftValue().value != newValue)
-								fire(ObservableCollectionEvent.createCollectionEvent(el.getLeftValue().id, el.getTargetIndex(),
-									CollectionChangeType.set, el.getLeftValue().value, newValue, causeForInitialEvents));
-						})//
-						.adjust();
+								CollectionChangeType.add, null, el.getLeftValue().value, causeForInitialEvents));
+					}).onCommon(el -> {
+						E newValue = el.getRightValue().get();
+						if (el.getLeftValue().value != newValue)
+							fire(ObservableCollectionEvent.createCollectionEvent(el.getLeftValue().id, el.getTargetIndex(),
+								CollectionChangeType.set, el.getLeftValue().value, newValue, causeForInitialEvents));
+					})//
+					.adjust();
 					theCollection = collection;
 				}
 
@@ -3900,8 +3901,10 @@ public final class ObservableCollectionImpl {
 
 					if (clearAndAdd && collection != null) {
 						collectionObserver.isActive = false;
-						collectionSub.unsubscribe();
-						collectionSub = null;
+						if (collectionSub != null) {
+							collectionSub.unsubscribe();
+							collectionSub = null;
+						}
 						collectionObserver.remove(collEvt);
 						collectionObserver = null;
 						collection = null;
@@ -3976,9 +3979,11 @@ public final class ObservableCollectionImpl {
 				return true;
 			else if (c1 == null || c2 == null)
 				return false;
-			else if (c1.size() != c2.size())
-				return false;
+			// The size() call is cheaper, but we need to not call any value methods on the outgoing collection,
+			// in case it's no longer valid (e.g. "v==null ? {} : v.getValues()")
 			else if (!c1.getIdentity().equals(c2.getIdentity()))
+				return false;
+			else if (c1.size() != c2.size())
 				return false;
 			else if (c1.isEmpty())
 				return true;
@@ -4224,7 +4229,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
-			update();
+			update(null);
 			return theCollection.getElement(index);
 		}
 
@@ -4235,13 +4240,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int getElementsBefore(ElementId id) {
-			update();
+			update(null);
 			return theCollection.getElementsBefore(id);
 		}
 
 		@Override
 		public int getElementsAfter(ElementId id) {
-			update();
+			update(null);
 			return theCollection.getElementsAfter(id);
 		}
 
@@ -4253,7 +4258,7 @@ public final class ObservableCollectionImpl {
 			Transaction isLockedT;
 			if (!isLocked) {
 				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
-				update();
+				update(Optional.ofNullable(cv));
 				isLocked = true;
 			} else
 				isLockedT = Transaction.NONE;
@@ -4275,7 +4280,7 @@ public final class ObservableCollectionImpl {
 			Transaction isLockedT;
 			if (!isLocked) {
 				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
-				update();
+				update(Optional.ofNullable(cv));
 				isLocked = true;
 			} else
 				isLockedT = Transaction.NONE;
@@ -4305,7 +4310,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int size() {
-			update();
+			update(null);
 			return theCollection.size();
 		}
 
@@ -4327,7 +4332,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isEmpty() {
-			update();
+			update(null);
 			return theCollection.isEmpty();
 		}
 
@@ -4338,31 +4343,31 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			update();
+			update(null);
 			return theCollection.getElement(value, first);
 		}
 
 		@Override
 		public CollectionElement<T> getElement(ElementId id) {
-			update();
+			update(null);
 			return theCollection.getElement(id);
 		}
 
 		@Override
 		public CollectionElement<T> getTerminalElement(boolean first) {
-			update();
+			update(null);
 			return theCollection.getTerminalElement(first);
 		}
 
 		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			update();
+			update(null);
 			return theCollection.getAdjacentElement(elementId, next);
 		}
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			update();
+			update(null);
 			return new MutableElement(theCollection.mutableElement(id));
 		}
 
@@ -4386,7 +4391,7 @@ public final class ObservableCollectionImpl {
 			if (sourceCollection == this)
 				return BetterList.of(localElement);
 			Collection<T> c = theCollectionValue.get();
-			if (c instanceof BetterList && !theCollection.isContentControlled()) {
+			if (c instanceof BetterCollection && !theCollection.isContentControlled()) {
 				try (Transaction t = lock(false, null)) {
 					BetterCollection<T> list = (BetterCollection<T>) c;
 					return BetterList.of2(list.getSourceElements(localElement, sourceCollection).stream(), el -> getFrontedElement(el));
@@ -4540,7 +4545,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			return getBackingStamp() + theStampMod;
+			return getBackingStamp(theCollectionValue.get()) + theStampMod;
 		}
 
 		@Override
@@ -4598,7 +4603,7 @@ public final class ObservableCollectionImpl {
 						theCollection.setValue(elements, value);
 					} finally {
 						if (!success)
-							update();
+							update(Optional.of(coll));
 					}
 					isModifying = true;
 					try {
@@ -4635,6 +4640,7 @@ public final class ObservableCollectionImpl {
 		private CollectionElement<T> addBackingElement(CollectionElement<T> backingElement) {
 			int index = Collections.binarySearch(theBackingElements, backingElement.getElementId());
 			index = -index - 1;
+			theBackingElements.add(index, backingElement.getElementId());
 			return theCollection.addElement(index, backingElement.get());
 		}
 
@@ -4643,30 +4649,42 @@ public final class ObservableCollectionImpl {
 			theBackingElements.remove(index);
 		}
 
-		/** If the observable value has changed, synchronizes its contents with this collection */
-		protected void update() {
+		/**
+		 * If the observable value has changed, synchronizes its contents with this collection
+		 *
+		 * @param content An optional containing the known current value of the collection, or null if this is not known
+		 */
+		protected void update(Optional<Collection<T>> content) {
 			if (isLocked)
 				return;
-			long stamp = getBackingStamp();
-			if (stamp != theStampCopy) {
-				theStampCopy = stamp;
-				if (!isModifying)
-					sync(null);
+			try (Transaction t = theCollectionValue.lock(false, null)) {
+				Collection<T> cv;
+				if (content != null)
+					cv = content.orElse(null);
+				else
+					cv = theCollectionValue.get();
+				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+					long stamp = getBackingStamp(cv);
+					if (stamp != theStampCopy) {
+						theStampCopy = stamp;
+						if (!isModifying)
+							sync(cv, null);
+					}
+				}
 			}
 		}
 
-		private long getBackingStamp() {
+		private long getBackingStamp(Collection<T> content) {
 			long stamp = theCollectionValue.getStamp();
-			Collection<T> coll = theCollectionValue.get();
-			if (coll instanceof Stamped)
-				return Stamped.compositeOf2Stamps(stamp, ((Stamped) coll).getStamp());
+			if (content instanceof Stamped)
+				return Stamped.compositeOf2Stamps(stamp, ((Stamped) content).getStamp());
 			else
 				return stamp;
 		}
 
-		private void sync(Object cause) {
+		private void sync(Collection<T> content, Object cause) {
 			boolean updateAll;
-			BiPredicate<T, T> equal;
+			BiPredicate<Object, Object> equal;
 			if (cause != null) { // Change is coming from the value
 				// If the call is from the value, we need to update all unless we're already in a cycle
 				updateAll = !theCollection.isEventing();
@@ -4676,12 +4694,32 @@ public final class ObservableCollectionImpl {
 				updateAll = false;// If this is spontaneous, fix the content but don't fire any updates
 				equal = (o1, o2) -> o1 == o2;
 			}
-			try (Transaction t = theCollectionValue.lock(); //
-				Causable.CausableInUse syncCause = Causable.cause(cause)) {
-				Collection<T> cv = theCollectionValue.get();
-				try (Transaction t2 = theCollection.lock(true, syncCause); //
-					Transaction t3 = Transactable.lock(cv, false, syncCause)) {
-					List<T> list = cv instanceof List ? (List<T>) cv : QommonsUtils.unmodifiableCopy(cv);
+			try (Causable.CausableInUse syncCause = Causable.cause(cause); //
+				Transaction t2 = theCollection.lock(true, syncCause)) {
+				if (content instanceof BetterCollection && theBackingElements.size() == theCollection.size()) {
+					List<CollectionElement<T>> elements = QommonsUtils.unmodifiableCopy(((BetterCollection<T>) content).elements());
+					CollectionUtils.SimpleAdjustment<T, CollectionElement<T>, RuntimeException> syncAction = CollectionUtils
+						.synchronize(theCollection, elements, (v, el) -> equal.test(v, el.get()))//
+						.simple(el -> el.get())//
+						.commonUses(true, updateAll)//
+						.onLeft(el -> theBackingElements.remove(el.getTargetIndex()));
+					if (theCollection.isContentControlled()) {
+						syncAction.addLast();
+						syncAction.onRight(el -> {
+							if (el.getTargetIndex() >= 0)
+								theBackingElements.add(el.getTargetIndex(), el.getRightValue().getElementId());
+							else
+								addBackingElementWhereItGoes(el.getRightValue().getElementId());
+						});
+					} else {
+						syncAction.rightOrder();
+						syncAction.onRight(el -> theBackingElements.add(el.getTargetIndex(), el.getRightValue().getElementId()));
+					}
+					syncAction.onCommon(el -> theBackingElements.set(el.getTargetIndex(), el.getRightValue().getElementId()));
+					syncAction.adjust();
+				} else {
+					theBackingElements.clear();
+					List<T> list = content instanceof List ? (List<T>) content : QommonsUtils.unmodifiableCopy(content);
 					CollectionUtils.SimpleAdjustment<T, T, RuntimeException> syncAction = CollectionUtils
 						.synchronize(theCollection, list, equal)//
 						.simple(LambdaUtils.identity())//
@@ -4691,8 +4729,17 @@ public final class ObservableCollectionImpl {
 					else
 						syncAction.rightOrder();
 					syncAction.adjust();
+					if (content instanceof BetterCollection) {
+						for (CollectionElement<T> el : ((BetterCollection<T>) content).elements())
+							theBackingElements.add(el.getElementId());
+					}
 				}
 			}
+		}
+
+		private void addBackingElementWhereItGoes(ElementId backingElement) {
+			int index = Collections.binarySearch(theBackingElements, backingElement);
+			theBackingElements.add(-index - 1, backingElement);
 		}
 
 		@Override
@@ -4701,8 +4748,8 @@ public final class ObservableCollectionImpl {
 				theValueSubscription = theCollectionValue.noInitChanges().act(evt -> {
 					if (!isModifying) {
 						isModifying = true;
-						try {
-							sync(evt);
+						try (Transaction t = Transactable.lock(evt.getNewValue(), false, null)) {
+							sync(evt.getNewValue(), evt);
 						} finally {
 							isModifying = false;
 						}

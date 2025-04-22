@@ -67,13 +67,13 @@
 				</check-box>
 			</column>
 			<column name="`Factorization`" value="Primes.formatFactorization(app.primes.factorize(activeValue, 100_000))"
-				header-tooltip="&quot;The prime factors of each of the &quot;+app.valueSize+&quot; values&quot;">
+				header-tooltip="`The prime factors of each of the `+app.valueSize+` values`">
 				<label value="columnValue">
 					<style attr="color" if="hovered">`aqua`</style>
 					<style attr="font-weight" if="rightPressed">`bold`</style>
 				</label>
 			</column>
-			<multi-value-action icon="&quot;/icons/remove.png&quot;" as-popup="true" tooltip="`Remove selected rows`">
+			<multi-value-action icon="`/icons/remove.png$16x16`" as-popup="true" tooltip="`Remove selected rows`">
 				app.values.removeAll(actionValues)
 			</multi-value-action>
 		</table>

@@ -285,11 +285,9 @@ public class ExpressoTransformations {
 			 * Updates this transformation
 			 *
 			 * @param sourceType The internal source instance type
-			 * @param env The interpreted environment for interpreting expressions
 			 * @throws ExpressoInterpretationException If this transformation cannot be interpreted
 			 */
-			protected void doUpdateValue(ModelInstanceType<IM1, IMV1> sourceType, InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
+			protected void doUpdateValue(ModelInstanceType<IM1, IMV1> sourceType) throws ExpressoInterpretationException {
 				ModelInstanceType<?, ?> type = sourceType;
 				int i = 0;
 				for (Operation<?, ?, ?> op : getDefinition().getOperations()) {
@@ -307,8 +305,7 @@ public class ExpressoTransformations {
 						interpOp = op.interpret(this);
 						theOperations.add(interpOp);
 					}
-					((Operation.Interpreted<Object, Object, ?, ?, ?>) interpOp).update((ModelInstanceType<Object, Object>) type,
-						getExpressoEnv());
+					((Operation.Interpreted<Object, Object, ?, ?, ?>) interpOp).update((ModelInstanceType<Object, Object>) type);
 					type = interpOp.getTargetType();
 					i++;
 				}
@@ -477,14 +474,14 @@ public class ExpressoTransformations {
 
 			@Override
 			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+				update();
 				try {
 					theSource = interpret(getDefinition().getSource(),
 						((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs());
 				} catch (ExpressoCompilationException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 				}
-				doUpdateValue(theSource.getType(), env);
+				doUpdateValue(theSource.getType());
 			}
 
 			@Override
@@ -514,8 +511,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				instantiate(models);
+			protected MV2 evaluate(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				MV1 sourceValue = theSource.get(models);
 				return transformInternal(sourceValue, models);
 			}
@@ -609,7 +605,7 @@ public class ExpressoTransformations {
 			 * @param env The expresso environment to interpret expressions with
 			 * @throws ExpressoInterpretationException If the transformer could not be interpreted
 			 */
-			void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+			void update(ModelInstanceType<M1, MV1> sourceType) throws ExpressoInterpretationException;
 
 			/** @return The type of the transformed observable */
 			ModelInstanceType<? extends M2, ? extends MV2> getTargetType();
@@ -905,9 +901,9 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<M, MV> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void update(ModelInstanceType<M, MV> sourceType) throws ExpressoInterpretationException {
 				theType = sourceType;
-				super.update(env);
+				super.update();
 			}
 
 			@Override
@@ -1064,11 +1060,10 @@ public class ExpressoTransformations {
 			 * @param sourceName The source model value
 			 * @param sourceType The source type of the transformation
 			 * @param targetType The target type of the transformation
-			 * @param env The expresso environment to use to interpret expressions
 			 * @param combinedTypes The names and types of all combined values incorporated into the transform
 			 * @throws ExpressoInterpretationException If the reverse transformation could not be produced
 			 */
-			void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
+			void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType)
 				throws ExpressoInterpretationException;
 
 			/** @return Any component model values that are used by this reverse */
@@ -1342,14 +1337,13 @@ public class ExpressoTransformations {
 
 			TypeToken<T> getOrEvalTargetType() throws ExpressoInterpretationException {
 				if (theMap == null) {
-					TypeToken<T> evaluatedTT = getDefinition().getType() == null ? null
-						: (TypeToken<T>) getDefinition().getType().getType(getExpressoEnv());
+					TypeToken<T> evaluatedTT = (TypeToken<T>) interpretType(getDefinition().getType());
 					if (evaluatedTT != null)
 						return evaluatedTT;
 					// ??? We need to do the combined values first, because the map-with may (and most likely does) use the combined value
 					// variables
 					syncChildren(getDefinition().getCombinedValues(), theCombinedValues, def -> def.interpret(this),
-						(i, vEnv) -> i.update(vEnv));
+						i -> i.update());
 					try (Transaction t = Invocation.asAction()) {
 						theMap = interpret(getDefinition().getMap(), ModelTypes.Value.<SettableValue<T>> anyAs());
 					}
@@ -1369,11 +1363,11 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<M1, MV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void update(ModelInstanceType<M1, MV1> sourceType) throws ExpressoInterpretationException {
 				theMap = null;
 				theSourceType = (TypeToken<S>) sourceType.getType(0);
-				isTesting = env.isTesting();
-				super.update(env);
+				isTesting = getDefaultEnv().isTesting();
+				super.update();
 				TypeToken<T> targetType = getOrEvalTargetType();
 				if (theMap == null)
 					theMap = interpret(getDefinition().getMap(), ModelTypes.Value.forType(targetType));
@@ -1385,7 +1379,7 @@ public class ExpressoTransformations {
 							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(targetType))));
 				}
 				theReverse = syncChild(getDefinition().getReverse(), theReverse, def -> def.interpret(this),
-					(r, rEnv) -> r.update(getDefinition().getSourceName(), theSourceType, targetType, rEnv));
+					r -> r.update(getDefinition().getSourceName(), theSourceType, targetType));
 			}
 
 			@Override
@@ -1414,7 +1408,7 @@ public class ExpressoTransformations {
 		 * @param <MV2> The instance type of the transformed value
 		 */
 		public static abstract class Instantiator<S, T, MV1, MV2> implements CompiledTransformation.Instantiator<S, T, MV1, MV2> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final List<CombineWith.Instantiator<?>> theCombinedValues;
 			private final ModelValueInstantiator<SettableValue<T>> theMap;
 			private final S theDefaultSource;
@@ -1446,7 +1440,7 @@ public class ExpressoTransformations {
 			 * @param oneToMany See {@link XformDef#isOneToMany()}
 			 * @param equivalence The equivalence for the transformed model value
 			 */
-			protected Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
+			protected Instantiator(DocumentMap<ModelInstantiator> localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
 				ModelComponentId sourceVariable, ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate,
 				boolean fireIfUnchanged, boolean nullToNull,
@@ -1471,7 +1465,7 @@ public class ExpressoTransformations {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				theMap.instantiate();
 				for (CombineWith.Instantiator<?> combinedValue : theCombinedValues)
 					combinedValue.instantiate();
@@ -1484,7 +1478,7 @@ public class ExpressoTransformations {
 			@Override
 			public Transformation<S, T> transform(Transformation.ReversibleTransformationPrecursor<S, T, ?> precursor,
 				ModelSetInstance models) throws ModelInstantiationException {
-				models = theLocalModel.wrap(models);
+				models = theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 				SettableValue<S> sourceV = SettableValue.<S> build()//
 					.withValue(theDefaultSource)//
 					.build();
@@ -1526,8 +1520,8 @@ public class ExpressoTransformations {
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				if (theLocalModel != null) {
-					sourceModels = theLocalModel.wrap(sourceModels);
-					newModels = theLocalModel.wrap(newModels);
+					sourceModels = theLocalModel.operate(sourceModels, (m, mi) -> mi.wrap(m));
+					newModels = theLocalModel.operate(newModels, (m, mi) -> mi.wrap(m));
 				}
 				SettableValue<T> map = theMap.get(sourceModels);
 				if (map != theMap.forModelCopy(map, sourceModels, newModels))
@@ -1669,7 +1663,7 @@ public class ExpressoTransformations {
 			 * @param oneToMany See {@link XformDef#isOneToMany()}
 			 * @param equivalence The equivalence for the transformed model value
 			 */
-			protected EfficientCopyingInstantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> map,
+			protected EfficientCopyingInstantiator(DocumentMap<ModelInstantiator> localModel, ModelValueInstantiator<SettableValue<T>> map,
 				S defaultSource, List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
 				ModelComponentId sourceVariable, ModelComponentId previousResultVariable, boolean cached, boolean reEvalOnUpdate,
 				boolean fireIfUnchanged, boolean nullToNull,
@@ -1765,7 +1759,7 @@ public class ExpressoTransformations {
 				return (CombineWith<? super E>) super.getDefinition();
 			}
 
-			void getValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			void getValue() throws ExpressoInterpretationException {
 				theValue = interpret(getDefinition().getElementValue(), ModelTypes.Value.<SettableValue<T>> anyAs());
 			}
 
@@ -1780,9 +1774,9 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				getValue(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
+				getValue();
 			}
 
 			/**
@@ -2072,11 +2066,11 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
+			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType)
 				throws ExpressoInterpretationException {
 				theSourceType = sourceType;
 				theTargetType = targetType;
-				super.update(env);
+				super.update();
 				ModelInstanceType<SettableValue<?>, SettableValue<S>> sourceModelType = ModelTypes.Value.forType(sourceType);
 				theEnabled = interpret(getDefinition().getEnabled(), ModelTypes.Value.STRING);
 				theAccept = interpret(getDefinition().getAccept(), ModelTypes.Value.STRING);
@@ -2097,7 +2091,7 @@ public class ExpressoTransformations {
 		 * @param <T> The transformed value type
 		 */
 		public static abstract class Instantiator<S, T> implements CompiledMapReverse.Instantiator<S, T> {
-			private final ModelInstantiator theLocalModel;
+			private final DocumentMap<ModelInstantiator> theLocalModel;
 			private final ModelComponentId theTargetVariable;
 			private final ModelValueInstantiator<SettableValue<String>> theEnabled;
 			private final ModelValueInstantiator<SettableValue<String>> theAccept;
@@ -2116,7 +2110,7 @@ public class ExpressoTransformations {
 			 * @param stateful Whether this reverse operation depends on the current source value
 			 * @param reverse The expression to do the work of the reverse operation
 			 */
-			protected Instantiator(ModelInstantiator localModel, ModelComponentId targetVariable,
+			protected Instantiator(DocumentMap<ModelInstantiator> localModel, ModelComponentId targetVariable,
 				ModelValueInstantiator<SettableValue<String>> enabled, ModelValueInstantiator<SettableValue<String>> accept,
 				ModelValueInstantiator<SettableValue<S>> add, ModelValueInstantiator<SettableValue<String>> addAccept, boolean stateful,
 				ModelValueInstantiator<?> reverse) {
@@ -2131,7 +2125,7 @@ public class ExpressoTransformations {
 			}
 
 			/** @return The local model for the reverse element */
-			public ModelInstantiator getLocalModel() {
+			public DocumentMap<ModelInstantiator> getLocalModel() {
 				return theLocalModel;
 			}
 
@@ -2172,7 +2166,7 @@ public class ExpressoTransformations {
 
 			@Override
 			public void instantiate() throws ModelInstantiationException {
-				theLocalModel.instantiate();
+				theLocalModel.forEach(ModelInstantiator::instantiate);
 				if (theEnabled != null)
 					theEnabled.instantiate();
 				if (theAccept != null)
@@ -2184,11 +2178,15 @@ public class ExpressoTransformations {
 				theReverse.instantiate();
 			}
 
+			protected ModelSetInstance wrapModels(ModelSetInstance models) throws ModelInstantiationException {
+				return theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
+			}
+
 			@Override
 			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, SettableValue<T> previousResultV,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException {
-				models = theLocalModel.wrap(models);
+				models = wrapModels(models);
 
 				SettableValue<T> targetV = SettableValue.<T> build().build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTargetVariable, models, targetV);
@@ -2419,15 +2417,15 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
+			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType)
 				throws ExpressoInterpretationException {
-				super.update(sourceName, sourceType, targetType, env);
+				super.update(sourceName, sourceType, targetType);
 				theReverse = interpret(getDefinition().getReverse(), ModelTypes.Value.forType(sourceType));
 			}
 
 			@Override
 			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getDefinition().getTargetVariable(), //
+				return new Instantiator<>(instantiateLocalModels(), getDefinition().getTargetVariable(), //
 					getEnabled() == null ? null : getEnabled().instantiate(), getAccept() == null ? null : getAccept().instantiate(), //
 						getAdd() == null ? null : getAdd().instantiate(), getAddAccept() == null ? null : getAddAccept().instantiate(),
 							getDefinition().isStateful(), getReverse().instantiate(), getDefinition().isInexact());
@@ -2443,7 +2441,7 @@ public class ExpressoTransformations {
 		public static class Instantiator<S, T> extends AbstractMapReverse.Instantiator<S, T> {
 			private final boolean isInexact;
 
-			Instantiator(ModelInstantiator localModel, ModelComponentId targetVariable,
+			Instantiator(DocumentMap<ModelInstantiator> localModel, ModelComponentId targetVariable,
 				ModelValueInstantiator<SettableValue<String>> enabled, ModelValueInstantiator<SettableValue<String>> accept,
 				ModelValueInstantiator<SettableValue<S>> add, ModelValueInstantiator<SettableValue<String>> addAccept, boolean stateful,
 				ModelValueInstantiator<SettableValue<S>> reverse, boolean inexact) {
@@ -2459,7 +2457,7 @@ public class ExpressoTransformations {
 			@Override
 			protected TransformReverse<S, T> createReverse(ReverseParameters<S, T> parameters, ModelSetInstance models)
 				throws ModelInstantiationException {
-				models = getLocalModel().wrap(models);
+				models = wrapModels(models);
 				SettableValue<S> sourceV = parameters.sourceValue;
 				SettableValue<T> previousResultV = parameters.previousResultValue;
 				SettableValue<T> targetV = parameters.targetValue;
@@ -2525,15 +2523,15 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
+			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType)
 				throws ExpressoInterpretationException {
-				super.update(sourceName, sourceType, targetType, env);
+				super.update(sourceName, sourceType, targetType);
 				theReverse = interpret(getDefinition().getReverse(), ModelTypes.Action.instance());
 			}
 
 			@Override
 			public Instantiator<S, T> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getDefinition().getTargetVariable(), //
+				return new Instantiator<>(instantiateLocalModels(), getDefinition().getTargetVariable(), //
 					getEnabled() == null ? null : getEnabled().instantiate(), getAccept() == null ? null : getAccept().instantiate(), //
 						getAdd() == null ? null : getAdd().instantiate(), getAddAccept() == null ? null : getAddAccept().instantiate(),
 							getDefinition().isStateful(), getReverse().instantiate());
@@ -2547,7 +2545,7 @@ public class ExpressoTransformations {
 		 * @param <T> The target type of the transformation
 		 */
 		public static class Instantiator<S, T> extends AbstractMapReverse.Instantiator<S, T> {
-			Instantiator(ModelInstantiator localModel, ModelComponentId targetVariable,
+			Instantiator(DocumentMap<ModelInstantiator> localModel, ModelComponentId targetVariable,
 				ModelValueInstantiator<SettableValue<String>> enabled, ModelValueInstantiator<SettableValue<String>> accept,
 				ModelValueInstantiator<SettableValue<S>> add, ModelValueInstantiator<SettableValue<String>> addAccept, boolean stateful,
 				ModelValueInstantiator<ObservableAction> reverse) {
@@ -2562,7 +2560,7 @@ public class ExpressoTransformations {
 			@Override
 			protected TransformReverse<S, T> createReverse(ReverseParameters<S, T> parameters, ModelSetInstance models)
 				throws ModelInstantiationException {
-				models = getLocalModel().wrap(models);
+				models = wrapModels(models);
 				SettableValue<S> sourceV = parameters.sourceValue;
 				SettableValue<T> previousResultV = parameters.previousResultValue;
 				SettableValue<T> targetV = parameters.targetValue;
@@ -2664,26 +2662,25 @@ public class ExpressoTransformations {
 			/**
 			 * Initializes or updates this operation
 			 *
-			 * @param env The expresso environment to use to interpret expressions
 			 * @param sourceType The source type of the operation
 			 * @throws ExpressoInterpretationException If this operation could not be interpreted
 			 */
-			protected void updateOp(InterpretedExpressoEnv env, TypeToken<S> sourceType) throws ExpressoInterpretationException {
+			protected void updateOp(TypeToken<S> sourceType) throws ExpressoInterpretationException {
 				theSourceValueType = sourceType;
-				update(env);
+				update();
 				if (theTargetValueType == null)
 					theTargetValueType = evaluateTargetType();
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				theTargetValueType = null;
 				ExTyped.Interpreted<?> typed = getAddOn(ExTyped.Interpreted.class);
 				if (typed != null)
 					theTargetValueType = (TypeToken<T>) typed.getValueType();
 				else
-					theTargetValueType = expressoEnv.get(ExTyped.VALUE_TYPE_KEY, TypeToken.class);
+					theTargetValueType = getDefaultEnv().get(ExTyped.VALUE_TYPE_KEY, TypeToken.class);
 			}
 
 			/** @return The target type of the operation */
@@ -2706,18 +2703,13 @@ public class ExpressoTransformations {
 		 * @param <T> The target type of the operation
 		 */
 		public static abstract class Instantiator<S, T> {
-			private final ModelInstantiator theLocalModels;
+			private final DocumentMap<ModelInstantiator> theLocalModels;
 			private final ModelComponentId theSourceAsVariable;
 
 			/** @param interpreted The interpretation to instantiate */
 			protected Instantiator(ScalarOp.Interpreted<S, T> interpreted) {
-				if (interpreted.getModels() != interpreted.getParentElement().getModels()) {
-					theLocalModels = interpreted.getModels().instantiate();
-					theSourceAsVariable = interpreted.getDefinition().getSourceAs();
-				} else {
-					theLocalModels = null;
-					theSourceAsVariable = null;
-				}
+				theLocalModels = interpreted.instantiateLocalModels();
+				theSourceAsVariable = interpreted.getDefinition().getSourceAs();
 			}
 
 			/**
@@ -2726,8 +2718,7 @@ public class ExpressoTransformations {
 			 * @throws ModelInstantiationException If any model values fail to initialize
 			 */
 			public void instantiate() throws ModelInstantiationException {
-				if (theLocalModels != null)
-					theLocalModels.instantiate();
+				theLocalModels.forEach(ModelInstantiator::instantiate);
 			}
 
 			/**
@@ -2738,7 +2729,7 @@ public class ExpressoTransformations {
 			 */
 			public SettableValue<T> get(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				if (theLocalModels != null) {
-					models = theLocalModels.wrap(models);
+					models = theLocalModels.operate(models, (m, mi) -> mi.wrap(m));
 					if (theSourceAsVariable != null)
 						ExFlexibleElementModelAddOn.satisfyElementValue(theSourceAsVariable, models, source);
 				}
@@ -2753,8 +2744,8 @@ public class ExpressoTransformations {
 			 */
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				if (theLocalModels != null) {
-					sourceModels = theLocalModels.wrap(sourceModels);
-					newModels = theLocalModels.wrap(newModels);
+					sourceModels = theLocalModels.operate(sourceModels, (m, mi) -> mi.wrap(m));
+					newModels = theLocalModels.operate(newModels, (m, mi) -> mi.wrap(m));
 				}
 				return checkIsDifferent(sourceModels, newModels);
 			}
@@ -2851,8 +2842,8 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theValue = interpret(getDefinition().getValue(),
 					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
@@ -2860,11 +2851,11 @@ public class ExpressoTransformations {
 				Transaction typeConfig = Transaction.NONE;
 				if (typed != null && typed.getDefinition().getValueType() != null) {
 					// If the type is specified, tell all the children to evaluate with that type
-					typeConfig = expressoEnv.putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
+					typeConfig = getDefaultEnv().putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
 				}
 				try {
 					syncChildren(getDefinition().getIfs(), theIfs, iff -> (ScalarOp.Interpreted<S, T>) iff.interpret(this),
-						(iff, env) -> iff.updateOp(env, getSourceValueType()));
+						iff -> iff.updateOp(getSourceValueType()));
 				} finally {
 					typeConfig.close();
 				}
@@ -3130,8 +3121,8 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theDefault = interpret(getDefinition().getDefault(), //
 					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));
@@ -3139,11 +3130,11 @@ public class ExpressoTransformations {
 				Transaction typeConfig = Transaction.NONE;
 				if (typed != null && typed.getDefinition().getValueType() != null) {
 					// If the type is specified, tell all the children to evaluate with that type
-					typeConfig = expressoEnv.putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
+					typeConfig = getDefaultEnv().putTemp(ExTyped.VALUE_TYPE_KEY, typed.getValueType());
 				}
 				try {
 					syncChildren(getDefinition().getCases(), theCases, def -> (ScalarOp.Interpreted<S, T>) def.interpret(this),
-						(interp, env) -> interp.updateOp(env, getSourceValueType()));
+						interp -> interp.updateOp(getSourceValueType()));
 				} finally {
 					typeConfig.close();
 				}
@@ -3386,8 +3377,8 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-				super.doUpdate(expressoEnv);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 
 				theValue = interpret(getDefinition().getValue(),
 					getTargetValueType() == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(getTargetValueType()));

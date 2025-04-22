@@ -1,9 +1,7 @@
 package org.observe.util;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,6 +35,7 @@ import org.qommons.io.Format;
 import org.qommons.io.RandomAccessFileInputStream;
 import org.qommons.io.RandomAccessFileOutputStream;
 import org.qommons.io.RewritableTextFile;
+import org.qommons.io.TabularFileParser;
 import org.qommons.io.TextParseException;
 
 import com.google.common.reflect.TypeToken;
@@ -537,8 +536,7 @@ public class CsvEntitySet implements AutoCloseable {
 					continue;
 				File[] entityFiles = getEntityFiles(entityDir);
 				if (entityFiles.length > 0) {
-					try (Reader reader = new BufferedReader(new FileReader(entityFiles[0]))) {
-						CsvParser parser = new CsvParser(reader, ',');
+					try (TabularFileParser parser = TabularFileParser.parse(entityFiles[0])) {
 						try {
 							String[] header = parser.parseNextLine();
 							EntityFormat format = parseHeader(entityDir.getName(), header, parser);
@@ -547,6 +545,9 @@ public class CsvEntitySet implements AutoCloseable {
 							System.err.println("Bad header for " + entityDir.getName() + "/" + entityFiles[0].getName());
 							e.printStackTrace();
 						}
+					} catch (TextParseException e) {
+						System.err.println("Could not parse " + entityDir.getName() + "/" + entityFiles[0].getName());
+						e.printStackTrace();
 					}
 				}
 			}
@@ -1172,7 +1173,7 @@ public class CsvEntitySet implements AutoCloseable {
 	 * @return The entity format parsed from the header
 	 * @throws TextParseException If the header could not be parsed
 	 */
-	protected EntityFormat parseHeader(String typeName, String[] header, CsvParser parser) throws TextParseException {
+	protected EntityFormat parseHeader(String typeName, String[] header, TabularFileParser parser) throws TextParseException {
 		Map<String, TypeToken<?>> fields = new LinkedHashMap<>();
 		List<String> ids = new ArrayList<>(header.length);
 		for (int f = 0; f < header.length; f++) {
@@ -1200,7 +1201,7 @@ public class CsvEntitySet implements AutoCloseable {
 		return new EntityFormat(typeName, fields, ids);
 	}
 
-	void checkHeader(EntityFormat entity, String[] line, String file, CsvParser fileParser) throws TextParseException {
+	void checkHeader(EntityFormat entity, String[] line, String file, TabularFileParser fileParser) throws TextParseException {
 		for (int f = 0; f < line.length; f++) {
 			if (!line[f].replaceAll(" ", "").equalsIgnoreCase(entity.getHeader()[f].replaceAll(" ", ""))) {
 				fileParser.throwParseException(f, 0, "Bad " + entity.getName() + " file " + file + " header");
@@ -2235,7 +2236,7 @@ public class CsvEntitySet implements AutoCloseable {
 				try {
 					theFileData = new RewritableTextFile(theFiles[theFileIndex - 1], UTF8, -1);
 					theFileReader = theFileData.getIn();
-					theFileParser = new CsvParser(theFileReader, ',');
+					theFileParser = new CsvParser(theFileReader, ',', theFileData.size());
 					theLastLine = theFileParser.parseNextLine();
 					if (theLastLine == null) {
 						if (ignoreParseExceptions) {

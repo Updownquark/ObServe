@@ -2,27 +2,18 @@ package org.observe.quick.base;
 
 import java.util.Set;
 
-import org.observe.expresso.BinaryOperatorSet;
-import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.UnaryOperatorSet;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWidget;
-import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretation;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.Builder;
-import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
-
-import com.google.common.reflect.TypeToken;
 
 /** {@link QonfigInterpretation} for the Quick-Base toolkit */
 public class QuickBaseInterpretation implements QonfigInterpretation {
@@ -34,30 +25,6 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	/** {@link #NAME} and {@link #VERSION} combined */
 	public static final String BASE = "Quick-Base v0.1";
-
-	static {
-		TypeTokens.get().addSupplementaryCast(Integer.class, QuickSize.class, new TypeTokens.SupplementaryCast<Integer, QuickSize>() {
-			@Override
-			public TypeToken<? extends QuickSize> getCastType(TypeToken<? extends Integer> sourceType) {
-				return TypeTokens.get().of(QuickSize.class);
-			}
-
-			@Override
-			public QuickSize cast(Integer source) {
-				return source == null ? null : QuickSize.ofPixels(source.intValue());
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public String canCast(Integer source) {
-				return null;
-			}
-		});
-	}
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -79,27 +46,6 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
-		// General setup
-		interpreter.modifyWith(QuickDocument.QUICK, QuickDocument.Def.class,
-			new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
-			@Override
-			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
-				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				CompiledExpressoEnv env = exS.getExpressoEnv();
-				env = env//
-					.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
-					.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()));
-				exS.setExpressoEnv(env);
-				return null;
-			}
-
-			@Override
-			public QuickDocument.Def modifyValue(QuickDocument.Def value, CoreSession session, Object prepared)
-				throws QonfigInterpretationException {
-				return value;
-			}
-		});
-
 		// Simple widgets
 		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class, ExElement.creator(QuickLabel.Def::new));
 		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, ExElement.creator(QuickTextField.Def::new));
@@ -149,12 +95,6 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExAddOn.creator(QuickWidget.Def.class, QuickGridFlowLayout.Def::new));
 		interpreter.createWith(QuickLayerLayout.LAYER_LAYOUT, QuickLayerLayout.Def.class,
 			ExAddOn.creator(QuickWidget.Def.class, QuickLayerLayout.Def::new));
-		interpreter.createWith(Positionable.H_POSITIONABLE, Positionable.Def.Horizontal.class,
-			ExAddOn.creator(Positionable.Def.Horizontal::new));
-		interpreter.createWith(Positionable.V_POSITIONABLE, Positionable.Def.Vertical.class,
-			ExAddOn.creator(Positionable.Def.Vertical::new));
-		interpreter.createWith(Sizeable.H_SIZEABLE, Sizeable.Def.Horizontal.class, ExAddOn.creator(Sizeable.Def.Horizontal::new));
-		interpreter.createWith(Sizeable.V_SIZEABLE, Sizeable.Def.Vertical.class, ExAddOn.creator(Sizeable.Def.Vertical::new));
 
 		// Table
 		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, ExElement.creator(QuickTable.Def::new));
@@ -218,38 +158,5 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickTransfer.AsObject.Def::new));
 		interpreter.createWith(QuickTransfer.AS_TEXT, QuickTransfer.AsText.Def.class, ExElement.creator(QuickTransfer.AsText.Def::new));
 		return interpreter;
-	}
-
-	private static UnaryOperatorSet unaryOps(UnaryOperatorSet unaryOps) {
-		return unaryOps.copy()//
-			.with("-", QuickSize.class, s -> new QuickSize(-s.percent, s.pixels), s -> new QuickSize(-s.percent, s.pixels),
-				"Size negation operator")//
-			.build();
-	}
-
-	private static BinaryOperatorSet binaryOps(BinaryOperatorSet binaryOps) {
-		return binaryOps.copy()//
-			.with("+", QuickSize.class, Double.class, (s, d) -> new QuickSize(s.percent, s.pixels + (int) Math.round(d)),
-				(s, d, o) -> new QuickSize(s.percent, s.pixels - (int) Math.round(d)), null, "Size addition operator")//
-			.with("-", QuickSize.class, Double.class, (p, d) -> new QuickSize(p.percent, p.pixels - (int) Math.round(d)),
-				(s1, s2, o) -> new QuickSize(s1.percent, s1.pixels + (int) Math.round(s2)), null, "Size subtraction operator")//
-			.with("+", QuickSize.class, QuickSize.class, QuickSize::plus,
-				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels), null, "Size addition operator")//
-			.with("-", QuickSize.class, QuickSize.class, QuickSize::minus,
-				(s1, s2, o) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels), null, "Size subtraction operator")//
-			.with("*", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)),
-				(s, d, o) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)), null, "Size multiplication operator")//
-			.with2("*", Double.class, QuickSize.class, QuickSize.class,
-				(d, s) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), (d, s, o) -> {
-					if (s == null)
-						return Double.NaN;
-					if (s.percent != 0.0f)
-						return o.percent * 1.0 / s.percent;
-					else
-						return o.pixels * 1.0 / s.pixels;
-				}, null, "Size multiplication operator")//
-			.with("/", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)),
-				(s, d, o) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), null, "Size division operator")//
-			.build();
 	}
 }

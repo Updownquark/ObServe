@@ -6,7 +6,6 @@ import java.util.List;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -95,8 +94,8 @@ public class QuickMenu<T> extends QuickAbstractMenuItem<T> {
 		}
 
 		@Override
-		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			super.doUpdate(env);
+		protected void doUpdate() throws ExpressoInterpretationException {
+			super.doUpdate();
 
 			syncChildren(getDefinition().getMenuItems(), theMenuItems, def -> def.interpret(this),
 				QuickAbstractMenuItem.Interpreted::updateElement);
@@ -145,11 +144,12 @@ public class QuickMenu<T> extends QuickAbstractMenuItem<T> {
 	}
 
 	@Override
-	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-		super.doInstantiate(myModels);
+	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		myModels = super.doInstantiate(myModels);
 
 		for (QuickAbstractMenuItem<?> menuItem : theMenuItems)
 			menuItem.instantiate(myModels);
+		return myModels;
 	}
 
 	@Override

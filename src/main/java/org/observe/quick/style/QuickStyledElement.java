@@ -1,7 +1,6 @@
 package org.observe.quick.style;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickStyled.QuickInstanceStyle;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -61,11 +60,10 @@ public interface QuickStyledElement extends ExElement {
 		/**
 		 * Populates and updates this interpretation. Must be called once after being produced by the {@link #getDefinition() definition}.
 		 *
-		 * @param env The expresso environment to use to interpret style information
 		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
 		 *         content
 		 */
-		void updateElement(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateElement() throws ExpressoInterpretationException;
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -87,8 +85,8 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
-			public void updateElement(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				update(env);
+			public void updateElement() throws ExpressoInterpretationException {
+				update();
 			}
 		}
 	}

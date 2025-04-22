@@ -33,72 +33,6 @@ public interface QuickKeyListener extends QuickEventListener {
 		Def<? super L> getDefinition();
 	}
 
-	/** Context for a {@link QuickKeyTypedListener} */
-	public interface KeyTypedContext extends ListenerContext {
-		/** @return The character that was typed */
-		SettableValue<Character> getTypedChar();
-
-		/** Default {@link KeyTypedContext} implementation */
-		public class Default extends ListenerContext.Default implements KeyTypedContext {
-			private final SettableValue<Character> theTypedChar;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 * @param typedChar The character that was typed
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
-				SettableValue<Character> typedChar) {
-				super(altPressed, ctrlPressed, shiftPressed);
-				theTypedChar = typedChar;
-			}
-
-			/** Creates a context with default value containers */
-			public Default() {
-				theTypedChar = SettableValue.<Character> build().withValue((char) 0).build();
-			}
-
-			@Override
-			public SettableValue<Character> getTypedChar() {
-				return theTypedChar;
-			}
-		}
-	}
-
-	/** Context for a {@link QuickKeyCodeListener} */
-	public interface KeyCodeContext extends ListenerContext {
-		/** @return The key code of the key that was pressed or released */
-		SettableValue<KeyCode> getKeyCode();
-
-		/** Default {@link KeyCodeContext} implementation */
-		public class Default extends ListenerContext.Default implements KeyCodeContext {
-			private final SettableValue<KeyCode> theKeyCode;
-
-			/**
-			 * @param altPressed Whether the user is currently pressing the ALT key
-			 * @param ctrlPressed Whether the user is currently pressing the CTRL key
-			 * @param shiftPressed Whether the user is currently pressing the SHIFT key
-			 * @param keyCode The key code of the key that was pressed or released
-			 */
-			public Default(SettableValue<Boolean> altPressed, SettableValue<Boolean> ctrlPressed, SettableValue<Boolean> shiftPressed,
-				SettableValue<KeyCode> keyCode) {
-				super(altPressed, ctrlPressed, shiftPressed);
-				theKeyCode = keyCode;
-			}
-
-			/** Creates a context with default value containers */
-			public Default() {
-				theKeyCode = SettableValue.<KeyCode> build().build();
-			}
-
-			@Override
-			public SettableValue<KeyCode> getKeyCode() {
-				return theKeyCode;
-			}
-		}
-	}
-
 	/** A listener for the user typing a character while focused on a widget */
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		/** The XML name of this type */
@@ -185,13 +119,13 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		private ModelComponentId theTypedCharValue;
-		private SettableValue<SettableValue<Character>> theTypedChar;
+		private SettableValue<Character> theTypedChar;
 		private char theCharFilter;
 
 		/** @param id The element ID for this listener */
 		public QuickKeyTypedListener(Object id) {
 			super(id);
-			theTypedChar = SettableValue.<SettableValue<Character>> build().build();
+			theTypedChar = SettableValue.create();
 		}
 
 		/**
@@ -202,10 +136,8 @@ public interface QuickKeyListener extends QuickEventListener {
 			return theCharFilter;
 		}
 
-		/** @param ctx Context for this listener from the Quick implementation */
-		public void setListenerContext(KeyTypedContext ctx) {
-			setListenerContext((ListenerContext) ctx);
-			theTypedChar.set(ctx.getTypedChar(), null);
+		public SettableValue<Character> getTypedChar() {
+			return theTypedChar;
 		}
 
 		@Override
@@ -217,16 +149,17 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
-			ExFlexibleElementModelAddOn.satisfyElementValue(theTypedCharValue, myModels, SettableValue.flatten(theTypedChar));
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theTypedCharValue, myModels, theTypedChar);
+			return myModels;
 		}
 
 		@Override
 		protected QuickKeyTypedListener clone() {
 			QuickKeyTypedListener copy = (QuickKeyTypedListener) super.clone();
 
-			copy.theTypedChar = SettableValue.<SettableValue<Character>> build().build();
+			copy.theTypedChar = SettableValue.create();
 
 			return copy;
 		}
@@ -333,20 +266,14 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 		}
 
-		private SettableValue<SettableValue<KeyCode>> theEventKeyCode;
+		private SettableValue<KeyCode> theEventKeyCode;
 		private boolean isPressed;
 		private KeyCode theKeyCode;
 		private ModelComponentId theKeyCodeValue;
 
 		QuickKeyCodeListener(Object id) {
 			super(id);
-			theEventKeyCode = SettableValue.<SettableValue<KeyCode>> build().build();
-		}
-
-		/** @param ctx The listener context from the Quick implementation */
-		public void setListenerContext(KeyCodeContext ctx) {
-			setListenerContext((ListenerContext) ctx);
-			theEventKeyCode.set(ctx.getKeyCode(), null);
+			theEventKeyCode = SettableValue.create();
 		}
 
 		/** @return Whether this listener is for pressed or released events */
@@ -357,6 +284,10 @@ public interface QuickKeyListener extends QuickEventListener {
 		/** @return The key code that this listener's action will be fired for, or null if the action will be fired for all key events */
 		public KeyCode getKeyCode() {
 			return theKeyCode;
+		}
+
+		public SettableValue<KeyCode> getEventKeyCode() {
+			return theEventKeyCode;
 		}
 
 		@Override
@@ -370,16 +301,17 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
-			ExFlexibleElementModelAddOn.satisfyElementValue(theKeyCodeValue, myModels, SettableValue.flatten(theEventKeyCode));
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theKeyCodeValue, myModels, theEventKeyCode);
+			return myModels;
 		}
 
 		@Override
 		public QuickKeyCodeListener copy(ExElement parent) {
 			QuickKeyCodeListener copy = (QuickKeyCodeListener) super.copy(parent);
 
-			copy.theEventKeyCode = SettableValue.<SettableValue<KeyCode>> build().build();
+			copy.theEventKeyCode = SettableValue.create();
 
 			return copy;
 		}

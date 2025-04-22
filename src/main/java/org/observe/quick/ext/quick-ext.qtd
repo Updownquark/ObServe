@@ -16,7 +16,7 @@
 				<?DOC The color to use for shadows?>
 				<style-attribute name="shadow-color" type="java.awt.Color" trickle-down="false" />
 				<?DOC The corner radius to use to render the corners of the &lt;widget>?>
-				<style-attribute name="corner-radius" type="org.observe.quick.base.QuickSize" trickle-down="false" />
+				<style-attribute name="corner-radius" type="org.observe.quick.QuickSize" trickle-down="false" />
 				<?DOC The maximum shading amount--the maximum proportion of the color that can be a result of shading.  A number between 0 and 1.?>
 				<style-attribute name="max-shade-amount" type="float" trickle-down="false" />
 			</styles>

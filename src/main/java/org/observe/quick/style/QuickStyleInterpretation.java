@@ -1,7 +1,9 @@
 package org.observe.quick.style;
 
+import java.util.Map;
 import java.util.Set;
 
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -51,7 +53,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				exS.setExpressoEnv(exS.getExpressoEnv().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
+				for (Map.Entry<String, CompiledExpressoEnv> env : exS.getExpressoEnvs().entrySet())
+					env.setValue(env.getValue().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
 				return null;
 			}
 
@@ -65,7 +68,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				exS.setExpressoEnv(exS.getExpressoEnv().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
+				for (Map.Entry<String, CompiledExpressoEnv> env : exS.getExpressoEnvs().entrySet())
+					env.setValue(env.getValue().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
 				return null;
 			}
 

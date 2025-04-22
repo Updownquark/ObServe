@@ -11,7 +11,6 @@ import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -93,12 +92,13 @@ public class DbugModelValue<A> extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<A>> getValue(InterpretedExpressoEnv env)
-			throws ExpressoInterpretationException {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<A>> getValue() throws ExpressoInterpretationException {
 			if (theValue == null && (!getDefinition().getTags().isEmpty() || !getDefinition().getWatches().isEmpty())) {
 				ModelValueElement.Interpreted<?, ?, ?> mve = getElement().as(ModelValueElement.Interpreted.class, null);
 				try {
-					theValue = mve.getElementValue().as(ModelTypes.Value.anyAsV(), env, ExceptionHandler.thrower());
+					theValue = mve.getElementValue().as(ModelTypes.Value.anyAsV(),
+						getElement().getExpressoEnv(getElement().getDefinition().getElement().getValue().fileLocation),
+						ExceptionHandler.thrower());
 				} catch (TypeConversionException e) {
 					getElement().reporting()
 					.error("Could not express value " + mve + " (" + mve.getElementValue().getType() + ") as a value", e);
@@ -138,7 +138,7 @@ public class DbugModelValue<A> extends ExAddOn.Abstract<ExElement> {
 		@Override
 		public void postUpdate(ExElement.Interpreted<? extends ExElement> element) throws ExpressoInterpretationException {
 			super.postUpdate(element);
-			getValue(element.getExpressoEnv());
+			getValue();
 			element.syncChildren(getDefinition().getTags(), theTags, d -> d.interpret(element), DbugTag.Interpreted::updateTag);
 			element.syncChildren(getDefinition().getWatches(), theWatches, d -> (DbugAnchorWatch.Interpreted<A>) d.interpret(element),
 				DbugAnchorWatch.Interpreted::updateWatch);
@@ -182,7 +182,7 @@ public class DbugModelValue<A> extends ExAddOn.Abstract<ExElement> {
 		Interpreted<A> myInterpreted = (Interpreted<A>) interpreted;
 
 		try {
-			theValueInstantiator = myInterpreted.getValue(null) == null ? null : myInterpreted.getValue(null).instantiate();
+			theValueInstantiator = myInterpreted.getValue() == null ? null : myInterpreted.getValue().instantiate();
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Should not happen", e);
 		}
@@ -217,8 +217,8 @@ public class DbugModelValue<A> extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-		super.instantiate(models);
+	public ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		models = super.instantiate(models);
 
 		theValue = theValueInstantiator == null ? null : theValueInstantiator.get(models);
 
@@ -258,6 +258,7 @@ public class DbugModelValue<A> extends ExAddOn.Abstract<ExElement> {
 					watch.watch(anchor, valueUntil);
 			});
 		}
+		return models;
 	}
 
 	@Override

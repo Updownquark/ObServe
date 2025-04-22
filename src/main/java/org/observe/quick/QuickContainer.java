@@ -2,7 +2,6 @@ package org.observe.quick;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -119,8 +118,8 @@ public interface QuickContainer<W extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
+			protected void doUpdate() throws ExpressoInterpretationException {
+				super.doUpdate();
 				syncChildren(getDefinition().getContents(), theContents,
 					def -> (QuickWidget.Interpreted<? extends C>) def.interpret(Interpreted.Abstract.this),
 					QuickWidget.Interpreted::updateElement);
@@ -166,23 +165,23 @@ public interface QuickContainer<W extends QuickWidget> extends QuickWidget {
 			try (Transaction t = theContents.lock(true, null)) {
 				CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 					(widget, child) -> widget.getIdentity() == child.getIdentity())//
-					.<ModelInstantiationException> simpleX(child -> (W) child.create())//
-					.rightOrder()//
-					.onRightX(element -> {
-						try {
-							element.getLeftValue().update(element.getRightValue(), this);
-						} catch (RuntimeException | Error e) {
-							element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-						}
-					})//
-					.onCommonX(element -> {
-						try {
-							element.getLeftValue().update(element.getRightValue(), this);
-						} catch (RuntimeException | Error e) {
-							element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-						}
-					})//
-					.adjust();
+				.<ModelInstantiationException> simpleX(child -> (W) child.create())//
+				.rightOrder()//
+				.onRightX(element -> {
+					try {
+						element.getLeftValue().update(element.getRightValue(), this);
+					} catch (RuntimeException | Error e) {
+						element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+					}
+				})//
+				.onCommonX(element -> {
+					try {
+						element.getLeftValue().update(element.getRightValue(), this);
+					} catch (RuntimeException | Error e) {
+						element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+					}
+				})//
+				.adjust();
 			}
 		}
 
@@ -194,11 +193,12 @@ public interface QuickContainer<W extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
-			super.doInstantiate(myModels);
+		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			myModels = super.doInstantiate(myModels);
 
 			for (W content : theContents)
 				content.instantiate(myModels);
+			return myModels;
 		}
 
 		@Override

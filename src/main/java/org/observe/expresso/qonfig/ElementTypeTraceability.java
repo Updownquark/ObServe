@@ -669,10 +669,11 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				reporting.warn("For traceable class " + type.getName() + ": " + e.getMessage());
 				qonfigType = null;
 			}
-			if (targetTK != null && qonfigType == null)
-				reporting
-				.warn("For traceable class " + type.getName() + ": No such Qonfig type: " + targetTK + "." + traceable.qonfigType());
-			else if (ExElement.Def.class.isAssignableFrom(type)) {
+			if (qonfigType == null) {
+				if (targetTK != null)
+					reporting.warn(
+						"For traceable class " + type.getName() + ": No such Qonfig type: " + targetTK + "." + traceable.qonfigType());
+			} else if (ExElement.Def.class.isAssignableFrom(type)) {
 				Class<ExElement.Interpreted<E>> interpretation = traceable.interpretation() == void.class ? null
 					: (Class<Interpreted<E>>) traceable.interpretation();
 				Class<E> instance = traceable.instance() == void.class ? null : (Class<E>) traceable.instance();
@@ -1532,7 +1533,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 					ret = theElementGetter.invoke(element);
 				} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
 					System.err.println("Could not invoke " + theInterpretedGetter.getDeclaringClass() + "." + theInterpretedGetter.getName()
-						+ "() on instance " + element + " of type " + (element == null ? "null" : element.getClass().getName()));
+					+ "() on instance " + element + " of type " + (element == null ? "null" : element.getClass().getName()));
 					e.printStackTrace();
 					return Collections.emptyList();
 				}
