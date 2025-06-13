@@ -189,8 +189,15 @@ public interface Equivalence<E> {
 				this.compare = compare;
 			else
 				this.compare = LambdaUtils.printableComparator((o1, o2) -> {
-					o1 = theParentEquivalence.getSetMember(o1);
-					o2 = theParentEquivalence.getSetMember(o2);
+					E o1SM = theParentEquivalence.getSetMember(o1);
+					E o2SM = theParentEquivalence.getSetMember(o2);
+					if (o1 != null && o1SM == null) {
+						// o1 is not a set member. Can't pass to the source for risk of exceptions.
+						return o2SM == null ? 0 : 1;
+					} else if (o2 != null && o2SM == null) {
+						// o2 is not a set member. Can't pass to the source for risk of exceptions.
+						return -1;
+					}
 					return compare.compare(o1, o2);
 				}, compare::toString, compare);
 		}
@@ -286,8 +293,14 @@ public interface Equivalence<E> {
 
 		@Override
 		public boolean elementEquals(T element, Object value) {
-			if (theFilter != null && !theFilter.test((T) value))
-				return false;
+			if (theFilter != null) {
+				if (!theFilter.test((T) value))
+					return false;
+				// This seems useless, but there are situations in which the equivalence of a collection can change
+				// (e.g. swapping combined values in a transformation)
+				if (!theFilter.test(element))
+					return false;
+			}
 			return theWrapped.elementEquals(theReverse.apply(element), theReverse.apply((T) value));
 		}
 

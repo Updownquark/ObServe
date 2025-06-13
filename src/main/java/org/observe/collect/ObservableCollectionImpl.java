@@ -1,16 +1,6 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -39,37 +29,12 @@ import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollection
 import org.observe.dbug.DbugAnchor;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.WeakListening;
-import org.qommons.ArrayUtils;
-import org.qommons.BiTuple;
-import org.qommons.BreakpointHere;
-import org.qommons.Causable;
+import org.qommons.*;
 import org.qommons.Causable.CausableKey;
-import org.qommons.ConcurrentHashSet;
-import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.IdentityKey;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.QommonsUtils;
-import org.qommons.Stamped;
-import org.qommons.Ternian;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
-import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterCollections;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.tree.BetterTreeSet;
@@ -87,17 +52,21 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * @param <E> The type for the set
-	 * @param collection The collection to create the value set for (whose {@link ObservableCollection#equivalence() equivalence} will be
-	 *        used)
 	 * @param equiv The equivalence set to make a set of
 	 * @param c The collection whose values to add to the set
 	 * @return The set
 	 */
-	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c) {
+	public static <E> Set<E> toSet(Equivalence<? super E> equiv, Collection<?> c) {
 		try (Transaction t = Transactable.lock(c, false, null)) {
-			Set<E> set = equiv.createSet();
+			BetterSet<E> set = equiv.createSet();
 			for (Object value : c) {
-				set.add((E) value);
+				try {
+					if (set.canAdd((E) value) == null)
+						set.add((E) value);
+				} catch (ClassCastException | IllegalArgumentException e) {
+					// For mapped collections, we have no way to detect whether a value can be mapped,
+					// and un-mappable values may cause exceptions in the mapped equivalence.
+				}
 			}
 			return set;
 		}
@@ -1117,16 +1086,11 @@ public final class ObservableCollectionImpl {
 				if (lastMatch != null) {
 					msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
 					if (msg == null)
-						return null;
+						return null; // We can modify the current match
 				}
-				if (msg != null) {
-					String msg2 = getCollection().canAdd(value, //
-						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
-					if (msg2 == null)
-						return null;
-				}
-				if (msg == null)
-					return null;
+				// Can't modify the current match (or there isn't one), but maybe we can add an element that will then be the match
+				msg = getCollection().canAdd(value, //
+					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
 			}
 			return msg;
 		}
@@ -2012,9 +1976,7 @@ public final class ObservableCollectionImpl {
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
 				ObservableCollectionEvent<E> reversed = (ObservableCollectionEvent<E>) evt.derive(evt.getElementId().reverse(), index);
-				try (Transaction t = reversed.use()) {
-					theObserver.accept(reversed);
-				}
+				theObserver.accept(reversed);
 			}
 		}
 	}
@@ -2583,9 +2545,7 @@ public final class ObservableCollectionImpl {
 									if (isReversed() || oldValue != evt.getOldValue() || newValue != evt.getNewValue()) {
 										ObservableCollectionEvent<? extends T> evt2 = evt.derive(mapId(evt.getElementId()), index, oldValue,
 											newValue);
-										try (Transaction evtT = evt2.use()) {
-											observer.accept(evt2);
-										}
+										observer.accept(evt2);
 									} else {
 										// If the values aren't mapped and the order is the same, there's no reason to make a new event
 										observer.accept((ObservableCollectionEvent<T>) evt);
@@ -4044,7 +4004,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			boolean check(FlattenedValueCollection<E> flat, ObservableCollection<? extends E> collection) {
-				if (flat != FlattenedValueCollection.this)
+				if (flat != FlattenedValueCollection.this && !flat.getIdentity().equals(getIdentity()))
 					return false;
 				else if (collection == theCollection)
 					return true;
@@ -4428,6 +4388,8 @@ public final class ObservableCollectionImpl {
 					return ((BetterCollection<T>) coll).canAdd(value, getBackingElement(after), getBackingElement(before));
 				} else if (coll instanceof List)
 					return null;
+				else if (after == null && before == null)
+					return null;
 				else
 					return StdMsg.UNSUPPORTED_OPERATION;
 			}
@@ -4462,8 +4424,19 @@ public final class ObservableCollectionImpl {
 					((List<T>) coll).add(index, value);
 					result = theCollection.addElement(index, value);
 				} else if (after == null && before == null) {
-					// In theory we could try to add here, but it would be difficult to figure out where the element was added
-					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
+					// We need to figure out where it's added so we can return the element
+					if (!coll.add(value)) {
+						return null;
+					}
+					int i = 0;
+					for (T v : coll) {
+						if (v == value) {
+							break;
+						}
+					}
+					if (i == coll.size())
+						return null; // The collection said it got added but it didn't?
+					result = theCollection.addElement(i, value);
 				} else
 					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
 

@@ -241,6 +241,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		return isSelected;
 	}
 
+	/** @return The index of the active value (e.g. the one being rendered or interacted with) */
 	public SettableValue<Integer> getValueIndex() {
 		return theValueIndex;
 	}

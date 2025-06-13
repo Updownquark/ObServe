@@ -545,6 +545,8 @@ public abstract class AbstractObservableTableModel<R> {
 				rowValue = () -> (R) ((ObservableTreeModel<?>.TreeNode) modelValue).getValuePath();
 			} else
 				rowValue = LambdaUtils.constantSupplier(modelValue, modelValue::toString, modelValue);
+			if (value instanceof ObservableTreeModel.TreeNode)
+				value = ((ObservableTreeModel<?>.TreeNode) value).get();
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowValue, (C) value, //
 				row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
 			Component c = renderer.getCellRendererComponent(component, cell,

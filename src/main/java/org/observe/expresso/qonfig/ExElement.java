@@ -1,18 +1,6 @@
 package org.observe.expresso.qonfig;
 
-import java.util.AbstractSet;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -41,6 +29,8 @@ import org.qommons.ClassMap;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionUtils;
@@ -48,22 +38,8 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MappedList;
-import org.qommons.config.AbstractQIS;
-import org.qommons.config.PartialQonfigElement;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigAttributeDef;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.*;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigElementDef;
-import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreterCore;
-import org.qommons.config.QonfigMetadata;
-import org.qommons.config.QonfigPromiseDef;
-import org.qommons.config.QonfigToolkit;
-import org.qommons.config.QonfigValueDef;
-import org.qommons.config.QonfigValueType;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
@@ -122,16 +98,25 @@ public interface ExElement extends Identifiable {
 		 */
 		ErrorReporting reporting(String file);
 
+		/** @return The location of the document that declared this element */
 		String getDocument();
 
+		/** @return All expresso environments usable by expressions in this element */
 		List<CompiledExpressoEnv> getExpressoEnvs();
 
+		/** @return All expresso documents which expressions in this element may be from */
 		Set<String> getExpressoDocuments();
 
-		/** @return The expresso environment for this element */
+		/**
+		 * @param document The document to get the environment for
+		 * @return The expresso environment for this element for the document
+		 */
 		CompiledExpressoEnv getExpressoEnv(String document);
 
-		/** @param env An expresso environment for this element */
+		/**
+		 * @param document The document to set the environment for
+		 * @param env An expresso environment for this element and document
+		 */
 		void setExpressoEnv(String document, CompiledExpressoEnv env);
 
 		/**
@@ -281,6 +266,7 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
+		/** Compares interpreted elements by their position */
 		static final Comparator<ExElement.Interpreted<?>> EL_INTERP_COMPARE = (el1, el2) -> el1.reporting().getPosition()
 			.compareTo(el2.reporting().getPosition());
 
@@ -364,6 +350,14 @@ public interface ExElement extends Identifiable {
 			return getExpression(session.getValue().getDefinition(), session);
 		}
 
+		/**
+		 * Parses an expression in the context of this element
+		 *
+		 * @param type The value type of the expression to parse
+		 * @param session The expresso session to use for parsing
+		 * @return The parsed expression, or null if none was specified in this element for the given value/attribute
+		 * @throws QonfigInterpretationException If the expression could not be parsed
+		 */
 		default CompiledExpression getExpression(QonfigValueDef type, ExpressoQIS session) throws QonfigInterpretationException {
 			if (type == null)
 				reporting().error("This element has no value definition");
@@ -995,6 +989,12 @@ public interface ExElement extends Identifiable {
 		/** @return The interpretation of the parent element */
 		Interpreted<?> getParentElement();
 
+		/**
+		 * Enables expressions in this element to reference the environment of the given element
+		 *
+		 * @param parent The element to inherit the expresso environment from
+		 * @return This element
+		 */
 		Interpreted<E> addLogicalParent(Interpreted<?> parent);
 
 		/** @return The promise that was specified to load this element's content */
@@ -1013,32 +1013,47 @@ public interface ExElement extends Identifiable {
 			return getDefinition().reporting(file);
 		}
 
-		/** @return This element's models */
+		/**
+		 * @param document The document to get the models for
+		 * @return This element's models for the given document
+		 */
 		default InterpretedModelSet getModels(String document) {
 			InterpretedExpressoEnv env = getExpressoEnv(document);
 			return env == null ? null : env.getModels();
 		}
 
+		/** @return The location of the document that declared this element */
 		default String getDocument() {
 			return getDefinition().getDocument();
 		}
 
+		/** @return The expresso environment for this element and the document that declared it */
 		default InterpretedExpressoEnv getDefaultEnv() {
 			return getExpressoEnv(getDocument());
 		}
 
-		/** @return The expresso environment for this element */
+		/**
+		 * @param document The document to get the environment for
+		 * @return The expresso environment for this element and the given document
+		 */
 		InterpretedExpressoEnv getExpressoEnv(String document);
 
-		/** @param env The expresso environment for this element */
+		/**
+		 * @param document The document to set the environment for
+		 * @param env The expresso environment for this element and the given document
+		 */
 		void setExpressoEnv(String document, InterpretedExpressoEnv env);
 
+		/** @return All expresso documents which expressions in this element may be from */
 		Set<String> getExpressoDocuments();
 
+		/** @return All expresso documents which declare local models for this element */
 		Set<String> getLocalModelDocuments();
 
+		/** @return All expresso environments usable by expressions in this element */
 		List<InterpretedExpressoEnv> getExpressoEnvs();
 
+		/** @return Instantiated model sets for all documents visible to this element */
 		DocumentMap<ModelInstantiator> instantiateLocalModels();
 
 		/**
@@ -1137,6 +1152,11 @@ public interface ExElement extends Identifiable {
 			return env;
 		}
 
+		/**
+		 * @param type The variable type to interpret
+		 * @return The interpreted type
+		 * @throws ExpressoInterpretationException If the variable type could not be interpreted for this element
+		 */
 		default TypeToken<?> interpretType(VariableType type) throws ExpressoInterpretationException {
 			if (type == null)
 				return null;
@@ -1418,7 +1438,7 @@ public interface ExElement extends Identifiable {
 				if (definition != null) {
 					if (existing == null)
 						existing = interpret.apply(definition);
-					if (existing != null)
+					if (existing != null && update != null)
 						update.accept(existing);
 				}
 				return existing;
@@ -1585,6 +1605,7 @@ public interface ExElement extends Identifiable {
 	/** @return The parent element */
 	ExElement getParentElement();
 
+	/** @return The location of the document that declared this element */
 	String getDocument();
 
 	/**
@@ -1618,9 +1639,17 @@ public interface ExElement extends Identifiable {
 		return ao == null ? null : fn.apply(ao);
 	}
 
-	/** @return The instantiator for this element's models */
+	/**
+	 * @param document The document to get the instantiated models for
+	 * @return The instantiator for this element's models and the given document
+	 */
 	ModelInstantiator getModels(String document);
 
+	/**
+	 * Enables expressions in this element to reference the environment of the given element
+	 *
+	 * @param parent The element to inherit the expresso environment from
+	 */
 	void addLogicalParent(ExElement parent);
 
 	/**
@@ -1741,25 +1770,27 @@ public interface ExElement extends Identifiable {
 	default <I extends ExElement.Interpreted<?>, E extends ExElement> void syncChildren(List<? extends I> definitions, List<E> existing,
 		ExFunction<? super I, ? extends E, ModelInstantiationException> interpret,
 		ExTriConsumer<? super E, ? super I, ExElement, ModelInstantiationException> update) throws ModelInstantiationException {
-		CollectionUtils.synchronize(existing, definitions, (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.<ModelInstantiationException> simpleX(interpret)//
-		.onLeftX(el -> el.getLeftValue().destroy())//
-		.onRightX(el -> {
-			try {
-				update.accept(el.getLeftValue(), el.getRightValue(), this);
-			} catch (RuntimeException | Error e) {
-				el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-			}
-		})//
-		.onCommonX(el -> {
-			try {
-				update.accept(el.getLeftValue(), el.getRightValue(), this);
-			} catch (RuntimeException | Error e) {
-				el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-			}
-		})//
-		.rightOrder()//
-		.adjust();
+		try (Transaction t = Transactable.lock(definitions, false, null); Transaction t2 = Transactable.lock(existing, true, null)) {
+			CollectionUtils.synchronize(existing, definitions, (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
+			.<ModelInstantiationException> simpleX(interpret)//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(el -> {
+				try {
+					update.accept(el.getLeftValue(), el.getRightValue(), this);
+				} catch (RuntimeException | Error e) {
+					el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+				}
+			})//
+			.onCommonX(el -> {
+				try {
+					update.accept(el.getLeftValue(), el.getRightValue(), this);
+				} catch (RuntimeException | Error e) {
+					el.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+				}
+			})//
+			.rightOrder()//
+			.adjust();
+		}
 	}
 
 	/**

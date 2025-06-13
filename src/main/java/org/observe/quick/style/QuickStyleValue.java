@@ -1,19 +1,18 @@
 package org.observe.quick.style;
 
-import javax.swing.Icon;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.LocatedExpression;
-import org.observe.util.TypeTokens;
+import org.observe.quick.style.StyleInterpretationCache.InterpretedStyleData;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 
@@ -102,7 +101,7 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 
 	/**
 	 * @return The application of this value, determining which elements it
-	 *         {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to and
+	 *         {@link StyleApplicationDef#appliesToElement(org.observe.expresso.qonfig.ExElement.Def) applies} to and
 	 *         {@link StyleApplicationDef#getConditions() when}
 	 */
 	public StyleApplicationDef getApplication() {
@@ -137,61 +136,54 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	}
 
 	/**
-	 * @param env The expresso environment with which to
+	 * @param element The element with which to
 	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *        evaluate} this value's expressions
 	 * @param styleSheet The style sheet that this value belongs to
-	 * @param appCache The interpreted style cache to avoid duplicating applications
+	 * @param valueCache The source for interpreted style expressions in this value's scope
 	 * @return The compiled style value
 	 * @throws ExpressoInterpretationException If the expressions could not be compiled
 	 */
-	public InterpretedStyleValue<?> interpret(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet,
-		QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
-		if (theStyleSheet == null)
-			styleSheet = null;
-		else
-			styleSheet = styleSheet.findInterpretation(theStyleSheet);
-		QuickStyleSet.Interpreted styleSet = theStyleSet == null ? null : styleSheet.getStyleSets().get(theStyleSet.getName());
+	public InterpretedStyleValue<?> interpret(ExElement.Interpreted<?> element,
+		QuickStyleSheet.Interpreted styleSheet, StyleInterpretationCache valueCache) throws ExpressoInterpretationException {
 		InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
-		InterpretedStyleApplication application = appCache.getApplication(theApplication, element);
 		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
 		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, defaultEnv);
-		return _interpret(application, attribute, styleSheet, element, defaultEnv);
+		return _interpret(attribute, styleSheet, defaultEnv, valueCache);
 	}
 
-	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
-		QuickStyleSheet.Interpreted styleSheet, ExElement.Interpreted<?> element, InterpretedExpressoEnv contextEnv)
-			throws ExpressoInterpretationException {
-		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = interpretStyleValue(theValueExpression,
-			ModelTypes.Value.forType(attribute.getType()), element.getEnvironmentFor(theValueExpression));
+	private <T> InterpretedStyleValue<T> _interpret(QuickStyleAttribute<T> attribute, QuickStyleSheet.Interpreted styleSheet,
+		InterpretedExpressoEnv contextEnv, StyleInterpretationCache valueCache) throws ExpressoInterpretationException {
+		InterpretedStyleData<T> styleData = valueCache.get(theValueExpression.getFilePosition(0));
+		List<ModelInstantiator> models = null;
 		ExWithRequiredModels.InterpretedRequiredModelContext modelContext = null;
-		if (theModelContext == null)
-			modelContext = null;
-		else {
-			if (theStyleSheet != null) {
-				styleSheet = styleSheet.findInterpretation(theStyleSheet);
-				ExWithRequiredModels.Interpreted reqModels = styleSheet.getAddOn(ExWithRequiredModels.Interpreted.class);
+		if (theStyleSheet != null) {
+			styleSheet = styleSheet.findInterpretation(theStyleSheet);
+			for (String doc : styleSheet.getLocalModelDocuments()) {
+				if (models == null)
+					models = new ArrayList<>();
+				models.add(styleSheet.getModels(doc).instantiate());
+			}
+			ExWithRequiredModels.Interpreted reqModels = styleSheet.getAddOn(ExWithRequiredModels.Interpreted.class);
+			if (theModelContext != null)
 				modelContext = reqModels.getContextConverter(theModelContext, contextEnv);
-			}
-			if (theStyleSet != null) {
-				QuickStyleSet.Interpreted styleSet = styleSheet.getStyleSets().get(theStyleSet.getName());
-				ExWithRequiredModels.Interpreted reqModels = styleSet.getAddOn(ExWithRequiredModels.Interpreted.class);
-				if (modelContext == null)
-					modelContext = reqModels.getContextConverter(theModelContext, contextEnv);
-				else
-					modelContext = modelContext.and(reqModels.getContextConverter(theModelContext, contextEnv));
-			}
 		}
-		return new InterpretedStyleValue<>(this, application, attribute, value, modelContext);
-	}
-
-	private <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> interpretStyleValue(LocatedExpression valueExpression,
-		SingleTyped<SettableValue<?>, T, SettableValue<T>> type, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-		if (TypeTokens.getRawType(type.getType(0)) == Icon.class)
-			return (InterpretedValueSynth<SettableValue<?>, SettableValue<T>>) (InterpretedValueSynth<?, ?>) QuickStyleUtils
-				.evaluateIcon(valueExpression, env);
-		else
-			return valueExpression.interpret(type, env);
+		if (theStyleSet != null) {
+			QuickStyleSet.Interpreted styleSet = styleSheet.getStyleSets().get(theStyleSet.getName());
+			for (String doc : styleSet.getLocalModelDocuments()) {
+				if (models == null)
+					models = new ArrayList<>();
+				models.add(styleSet.getModels(doc).instantiate());
+			}
+			ExWithRequiredModels.Interpreted reqModels = styleSet.getAddOn(ExWithRequiredModels.Interpreted.class);
+			if (theModelContext == null) {
+			} else if (modelContext == null)
+				modelContext = reqModels.getContextConverter(theModelContext, contextEnv);
+			else
+				modelContext = modelContext.and(reqModels.getContextConverter(theModelContext, contextEnv));
+		}
+		return new InterpretedStyleValue<>(this, styleData.application, attribute, styleData.value,
+			models == null ? Collections.emptyList() : Collections.unmodifiableList(models), modelContext);
 	}
 
 	/**
@@ -237,6 +229,8 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 		if (str.length() > 0)
 			str.append(':');
 		str.append(theAttribute.getName()).append('=').append(theValueExpression).toString();
+		if (theValueExpression.getFilePosition() != null)
+			str.append(" @").append(theValueExpression.getFilePosition(0).toShortString());
 		return str.toString();
 	}
 }

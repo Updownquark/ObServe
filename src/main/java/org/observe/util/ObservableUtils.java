@@ -120,6 +120,14 @@ public class ObservableUtils {
 		}
 	}
 
+	/**
+	 * Synchronizes the value between two settable observable values
+	 *
+	 * @param <T> The type of the values to link
+	 * @param v1 The first value to link
+	 * @param v2 The second value to link
+	 * @return The subscription to stop the linkage
+	 */
 	public static <T> Subscription link(SettableValue<T> v1, SettableValue<T> v2) {
 		Subscription sub1;
 		try (Transaction initT = v2.lock(true, null)) {

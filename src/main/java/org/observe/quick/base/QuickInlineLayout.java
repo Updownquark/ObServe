@@ -88,6 +88,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			return thePadding;
 		}
 
+		/** @return Whether invisible components in this field panel should occupy space */
 		@QonfigAttributeGetter("show-invisible")
 		public boolean isShowInvisible() {
 			return isShowInvisible;
@@ -166,6 +167,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		return thePadding;
 	}
 
+	/** @return Whether invisible components in this field panel should occupy space */
 	public boolean isShowInvisible() {
 		return isShowInvisible;
 	}

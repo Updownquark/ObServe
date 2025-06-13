@@ -2,6 +2,7 @@ package org.observe.supertest.collect;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import org.junit.Assert;
@@ -86,7 +87,8 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @param oldValue The previous value of the element in the collection
 	 */
 	public void removed(T oldValue) {
-		if (theCollectionLink.getDef().checkOldValues
+		// Equivalence sometimes changes, so we need to check equals as well
+		if (theCollectionLink.getDef().checkOldValues && !Objects.equals(theCollectionValue, oldValue)
 			&& !theCollectionLink.getCollection().equivalence().elementEquals(theCollectionValue, oldValue))
 			throw new AssertionError(
 				theCollectionLink.getPath() + ": Old values do not match: Expected " + theCollectionValue + " but was " + oldValue);
@@ -100,10 +102,15 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 * @param newValue The new value of the element in the collection
 	 */
 	public void updated(T oldValue, T newValue) {
-		if (theCollectionLink.getDef().checkOldValues
-			&& !theCollectionLink.getCollection().equivalence().elementEquals(theCollectionValue, oldValue))
-			throw new AssertionError(
-				theCollectionLink.getPath() + ": Old values do not match: Expected " + theCollectionValue + " but was " + oldValue);
+		if (theCollectionLink.getDef().checkOldValues) {
+			// In the crazy collections the tester generates, equivalence can change (e.g. by switching out combined values)
+			// So we can't rely on the equivalence alone.
+			boolean equal = Objects.equals(theCollectionValue, oldValue)
+				|| theCollectionLink.getCollection().equivalence().elementEquals(theCollectionValue, oldValue);
+			if (!equal)
+				throw new AssertionError(
+					theCollectionLink.getPath() + ": Old values do not match: Expected " + theCollectionValue + " but was " + oldValue);
+		}
 		wasUpdated = true;
 		theCollectionValue = newValue;
 	}
@@ -373,9 +380,13 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 				if (sourceLink.getElementAddress().isPresent())
 					sourceLink.theDerivedElements[siblingIndex].remove(this);
 			}
-		} else if (!collection.equivalence().elementEquals(getCollectionValue(), theValue)) {
+			// Equivalence sometimes changes, so we need to check equals as well
+		} else if (!Objects.equals(getCollectionValue(), theValue)
+			&& !collection.equivalence().elementEquals(getCollectionValue(), theValue)) {
 			if (wasUpdated)
-				error(err -> err.append("Unexpected update from ").append(theValue));
+				error(err -> err.append("Unexpected update from ").append(theValue).append(" to ").append(getCollectionValue()));
+			else if (wasAdded)
+				error(err -> err.append("Expected add of ").append(theValue).append(", not ").append(getCollectionValue()));
 			else
 				error(err -> err.append("Expected update to ").append(theCollectionValue));
 		}

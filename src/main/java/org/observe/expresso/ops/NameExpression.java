@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -210,6 +211,7 @@ public class NameExpression implements ObservableExpression, Named {
 				clazz = env.getClassView().getType(typeName.toString());
 			}
 			if (clazz == null) {
+				// BreakpointHere.breakpoint();
 				exHandler.handle1(
 					() -> new ExpressoInterpretationException("'" + theNames.get(0).getName() + "' cannot be resolved to a variable",
 						env.reporting().getPosition(), theNames.get(0).length()));
@@ -464,6 +466,31 @@ public class NameExpression implements ObservableExpression, Named {
 				context == null ? null : context.instantiate(), field));
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			(InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
+	}
+
+	/**
+	 * @param expression The expression to search
+	 * @param test A test for a name expression
+	 * @return The first {@link NameExpression} component of the given expression passing the test
+	 */
+	public static NameExpression findNameExpression(ObservableExpression expression, Predicate<? super NameExpression> test) {
+		if (expression instanceof NameExpression && test.test(((NameExpression) expression)))
+			return (NameExpression) expression;
+		for (ObservableExpression component : expression.getComponents()) {
+			NameExpression found = findNameExpression(component, test);
+			if (found != null)
+				return found;
+		}
+		return null;
+	}
+
+	/**
+	 * @param expression The expression to search
+	 * @param name The name of the expression to search for
+	 * @return The first {@link NameExpression} component of the given expression with the given name
+	 */
+	public static NameExpression findNameExpression(ObservableExpression expression, String name) {
+		return findNameExpression(expression, named -> named.getNames().size() == 1 && named.getName().equals(name));
 	}
 
 	static class FieldInstantiator<C, F> implements ModelValueInstantiator<SettableValue<F>> {

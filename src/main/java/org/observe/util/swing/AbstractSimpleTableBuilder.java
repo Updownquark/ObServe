@@ -927,6 +927,8 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 			Dimension pref = scroll.getPreferredSize();
 			Dimension max = scroll.getMaximumSize();
 
+			if (table.getColumnModel().getColumnCount() == 0)
+				maxW = Integer.MAX_VALUE;
 			// if (psvs.width != prefW) {
 			// if (vsbVisible)
 			// table.setPreferredScrollableViewportSize(new Dimension(prefW, psvs.height));

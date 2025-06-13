@@ -6,7 +6,6 @@ import java.util.function.Supplier;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -40,7 +39,8 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		theListeners = listeners;
 	}
 
-	public LightWeightObservable(Function<? super LightWeightObservable<T>, ListenerList> listening) {
+	/** @param listening Produces the listener list for this observable */
+	public LightWeightObservable(Function<? super LightWeightObservable<T>, ListenerList<Observer<? super T>>> listening) {
 		theListeners = listening.apply(this);
 	}
 
@@ -135,8 +135,7 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 
 	/** Increments this observable's {@link #getStamp()} without invoking any listeners */
 	public void incrementStamp() {
-		if (!theListeners.isFiring())
-			theListeners.forEach(LambdaUtils.CONSUME_DO_NOTHING);
+		theListeners.incrementStamp();
 	}
 
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */

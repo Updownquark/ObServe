@@ -78,8 +78,8 @@ public interface ObservableConfigFormat<E> {
 	/** Persists {@link Duration}s */
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
 	/** Persists {@link Instant}s */
-	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(
-		Format.flexibleDate("ddMMMyyyy HH:mm:ss.SSS", TimeZone.getDefault()), () -> null);
+	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.flexibleDate("ddMMMyyyy", TimeZone.getDefault()),
+		() -> null);
 
 	/** An accessor for a config element at a particular location in the hierarchy, even if such an element does not currently exist */
 	interface ConfigGetter {
@@ -2680,7 +2680,7 @@ public interface ObservableConfigFormat<E> {
 			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx) throws ParseException {
 				ComponentField<E, F> field = (ComponentField<E, F>) getFields().get(fieldIdx);
 				E value = entityCtx.getPreviousValue();
-				if (entityCtx.getChange().getCauseLike(c -> {
+				if (entityCtx.getChange() != null && entityCtx.getChange().getCauseLike(c -> {
 					if (!(c instanceof EntityConfigFormatImpl.FieldSetEvent) || ((FieldSetEvent) c).getFormat() != this)
 						return null;
 					FieldSetEvent fse = (FieldSetEvent) c;

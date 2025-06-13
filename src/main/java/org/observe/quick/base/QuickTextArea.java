@@ -144,7 +144,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			if (isDocumentStale) {
 				isDocumentStale = false;
 				theDocument = syncChild(getDefinition().getTextDocument(), theDocument,
-					def -> (StyledDocument.Interpreted<T, ?>) def.interpret(this), d -> d.updateDocument());
+					def -> (StyledDocument.Interpreted<T, ?>) def.interpret(this), null);
 			}
 			return getValue();
 		}
@@ -153,6 +153,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		protected void doUpdate() throws ExpressoInterpretationException {
 			isDocumentStale = true;
 			super.doUpdate();
+			if (theDocument != null)
+				theDocument.updateDocument();
 			theRows = interpret(getDefinition().getRows(), ModelTypes.Value.forType(Integer.class));
 		}
 

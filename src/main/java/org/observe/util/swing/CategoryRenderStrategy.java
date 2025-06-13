@@ -105,6 +105,13 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 			return this;
 		}
 
+		public CategoryMutationStrategy asText(Function<? super R, Format<C>> format) {
+			withEditor(ObservableCellEditor.createTextEditor(format, null));
+			if (isRenderDefault)
+				formatText(LambdaUtils.printableBiFn((r, c) -> format.apply(r).format(c), format::toString, format));
+			return this;
+		}
+
 		public CategoryMutationStrategy asText(Format<C> format, Consumer<ObservableTextField<C>> textField) {
 			withEditor(ObservableCellEditor.createTextEditor(format, textField));
 			if (isRenderDefault)

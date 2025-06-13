@@ -96,14 +96,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public <F> AbstractQuickContainerPopulator addTreeTable(ObservableValue<F> root,
+	public <F> AbstractQuickContainerPopulator addTreeTable(ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addTreeTable(root, children, modify));
 	}
 
 	@Override
-	public <F> AbstractQuickContainerPopulator addTreeTable3(ObservableValue<F> root,
+	public <F> AbstractQuickContainerPopulator addTreeTable3(ObservableValue<? extends F> root,
 		BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),

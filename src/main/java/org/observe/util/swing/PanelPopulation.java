@@ -250,15 +250,15 @@ public class PanelPopulation {
 			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 				Consumer<TreeEditor<F, ?>> modify);
 
-		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+		<F> P addTreeTable(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify);
 
-		default <F> P addTreeTable2(ObservableValue<F> root,
+		default <F> P addTreeTable2(ObservableValue<? extends F> root,
 			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
 			return addTreeTable3(root, (path, until) -> children.apply(path), modify);
 		}
 
-		<F> P addTreeTable3(ObservableValue<F> root,
+		<F> P addTreeTable3(ObservableValue<? extends F> root,
 			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 				Consumer<TreeTableEditor<F, ?>> modify);
 
@@ -885,7 +885,8 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+		default <F> P addTreeTable(ObservableValue<? extends F> root,
+			Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify) {
 			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable(this, root, children, getUntil());
 			if (modify != null)
@@ -895,7 +896,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addTreeTable3(ObservableValue<F> root,
+		default <F> P addTreeTable3(ObservableValue<? extends F> root,
 			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 				Consumer<TreeTableEditor<F, ?>> modify) {
 			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable3(this, root, children, getUntil());

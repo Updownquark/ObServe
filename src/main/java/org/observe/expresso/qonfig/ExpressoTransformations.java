@@ -969,6 +969,7 @@ public class ExpressoTransformations {
 		/** @return The model ID of the variable that will contain the source value being transformed */
 		ModelComponentId getSourceName();
 
+		/** @return The model ID containing the previous result of the transformation, if it is currently available */
 		ModelComponentId getPreviousResultAs();
 
 		@Override
@@ -1358,6 +1359,7 @@ public class ExpressoTransformations {
 				return theReverse;
 			}
 
+			/** @return Whether this transformation is being interpreted in a testing environment */
 			public boolean isTesting() {
 				return isTesting;
 			}
@@ -1427,11 +1429,14 @@ public class ExpressoTransformations {
 			/**
 			 * @param localModel The instantiator for the local model of the transformation
 			 * @param map The instantiator for the map operation to produce transformed values from source values
+			 * @param defaultSource Default value for the source variable
 			 * @param combinedValues The instantiators for the &lt;combine-with> elements to combine with the source value to produce
 			 *        transformed values
 			 * @param reverse The instantiator for the &lt;map-reverse> element to allow modification of the transformed model value by
 			 *        operations on the source value
 			 * @param sourceVariable The model variable in which to publish the source value currently being transformed
+			 * @param previousResultVariable The model ID of the value containing the previous result of the transformation when it is
+			 *        available
 			 * @param cached See {@link XformDef#isCached()}
 			 * @param reEvalOnUpdate See {@link XformDef#isReEvalOnUpdate()}
 			 * @param fireIfUnchanged See {@link XformDef#isFireIfUnchanged()}
@@ -1439,6 +1444,7 @@ public class ExpressoTransformations {
 			 * @param manyToOne See {@link XformDef#isManyToOne()}
 			 * @param oneToMany See {@link XformDef#isOneToMany()}
 			 * @param equivalence The equivalence for the transformed model value
+			 * @param testing Whether this transformation is being instantiated in a testing environment
 			 */
 			protected Instantiator(DocumentMap<ModelInstantiator> localModel, ModelValueInstantiator<SettableValue<T>> map, S defaultSource,
 				List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
@@ -1544,6 +1550,7 @@ public class ExpressoTransformations {
 			 *
 			 * @param builder The transformation builder
 			 * @param sourceValue The container for the source value to transform
+			 * @param previousResultValue The value containing the previous result of the transformation when it is available
 			 * @param mappedValue The container for the transformed value
 			 * @param modifications Modifications from {@link ExpressoTransformations.CombineWith}s to
 			 *        {@link ExpressoTransformations.CombineWith.TransformationModification#prepareTransformOperation(TransformationValues)
@@ -1572,6 +1579,7 @@ public class ExpressoTransformations {
 			 * Produces a default reverse for the transformation if no &lt;map-reverse> is specified
 			 *
 			 * @param sourceV The container for the source value to reverse
+			 * @param previousResultValue The value containing the previous result of the transformation when it is available
 			 * @param mappedValue The container for the transformed value to reverse
 			 * @param modifications Modifications from {@link ExpressoTransformations.CombineWith}s to
 			 *        {@link ExpressoTransformations.CombineWith.TransformationModification#prepareTransformOperation(TransformationValues)
@@ -1650,11 +1658,14 @@ public class ExpressoTransformations {
 			/**
 			 * @param localModel The instantiator for the local model of the transformation
 			 * @param map The instantiator for the &lt;map-with> operator to produce transformed values from source values
+			 * @param defaultSource Default value for the source variable
 			 * @param combinedValues The instantiators for the &lt;combine-with> elements to combine with the source value to produce
 			 *        transformed values
 			 * @param reverse The instantiator for the &lt;map-reverse> element to allow modification of the transformed model value by
 			 *        operations on the source value
 			 * @param sourceVariable The model variable in which to publish the source value currently being transformed
+			 * @param previousResultVariable The model ID of the value containing the previous result of the transformation when it is
+			 *        available
 			 * @param cached See {@link XformDef#isCached()}
 			 * @param reEvalOnUpdate See {@link XformDef#isReEvalOnUpdate()}
 			 * @param fireIfUnchanged See {@link XformDef#isFireIfUnchanged()}
@@ -1662,6 +1673,7 @@ public class ExpressoTransformations {
 			 * @param manyToOne See {@link XformDef#isManyToOne()}
 			 * @param oneToMany See {@link XformDef#isOneToMany()}
 			 * @param equivalence The equivalence for the transformed model value
+			 * @param testing Whether this transformation is being instantiated in a testing environment
 			 */
 			protected EfficientCopyingInstantiator(DocumentMap<ModelInstantiator> localModel, ModelValueInstantiator<SettableValue<T>> map,
 				S defaultSource, List<CombineWith.Instantiator<?>> combinedValues, CompiledMapReverse.Instantiator<S, T> reverse,
@@ -2178,6 +2190,11 @@ public class ExpressoTransformations {
 				theReverse.instantiate();
 			}
 
+			/**
+			 * @param models The models to wrap
+			 * @return The given models, wrapped with this map-reverse's internal models, if any
+			 * @throws ModelInstantiationException If this map-reverse's internal models couldn't be instantiated
+			 */
 			protected ModelSetInstance wrapModels(ModelSetInstance models) throws ModelInstantiationException {
 				return theLocalModel.operate(models, (m, mi) -> mi.wrap(m));
 			}
@@ -2237,6 +2254,7 @@ public class ExpressoTransformations {
 			 * @param tvs The transformation values to prepare the transformation with
 			 * @param stateful Whether the reverse operation depends on the current source value
 			 * @param sourceV The container to populate the source value of the reverse in
+			 * @param previousResultV The value containing the previous result of the transformation when it is available
 			 * @param targetV The container to populate the target value of the reverse in
 			 * @param target The target value to reverse
 			 * @param modifications The {@link ExpressoTransformations.CombineWith} modifications to

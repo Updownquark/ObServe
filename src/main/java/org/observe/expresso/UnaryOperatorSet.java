@@ -2,14 +2,15 @@ package org.observe.expresso;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.expresso.ops.UnaryOperator;
-import org.qommons.BiTuple;
-import org.qommons.ClassMap;
-import org.qommons.ClassMap.TypeMatch;
+import org.qommons.MultiInheritanceView;
+import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
+import org.qommons.MultiInheritanceView.TypeMatch;
 import org.qommons.QommonsUtils;
 import org.qommons.SelfDescribed;
 
@@ -269,9 +270,9 @@ public class UnaryOperatorSet {
 	/** A {@link UnaryOperatorSet} that configures a builder to support the standard set of Java unary operators */
 	public static final UnaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
 
-	private final Map<String, ClassMap<UnaryOp<?, ?>>> theOperators;
+	private final Map<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> theOperators;
 
-	private UnaryOperatorSet(Map<String, ClassMap<UnaryOp<?, ?>>> operators) {
+	private UnaryOperatorSet(Map<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> operators) {
 		theOperators = operators;
 	}
 
@@ -280,10 +281,10 @@ public class UnaryOperatorSet {
 	 * @return All operators in this operator set with the given name
 	 */
 	public Set<UnaryOp<?, ?>> getOperators(String operator) {
-		ClassMap<UnaryOp<?, ?>> ops = theOperators.get(operator);
+		MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>> ops = theOperators.get(operator);
 		if (ops == null)
 			return Collections.emptySet();
-		return QommonsUtils.unmodifiableDistinctCopy(ops.getAllValues());
+		return QommonsUtils.unmodifiableDistinctCopy(ops.values());
 	}
 
 	/**
@@ -291,8 +292,12 @@ public class UnaryOperatorSet {
 	 * @return All input types that this operator set knows of for which the given operator may be applied
 	 */
 	public Set<Class<?>> getSupportedInputTypes(String operator) {
-		ClassMap<UnaryOp<?, ?>> ops = theOperators.get(operator);
-		return ops == null ? Collections.emptySet() : ops.getTopLevelKeys();
+		MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>> ops = theOperators.get(operator);
+		if (ops == null)
+			return Collections.emptySet();
+		Set<Class<?>> types = new LinkedHashSet<>();
+		ops.getTopLevelKeys().forEach(types::add);
+		return types;
 	}
 
 	/**
@@ -302,7 +307,7 @@ public class UnaryOperatorSet {
 	 * @return The unary operator supported by this operator set with the given operator and input type
 	 */
 	public <T> UnaryOp<T, ?> getOperator(String operator, Class<T> type) {
-		ClassMap<UnaryOp<?, ?>> ops = theOperators.get(operator);
+		MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>> ops = theOperators.get(operator);
 		return ops == null ? null : (UnaryOp<T, ?>) ops.get(type, TypeMatch.SUPER_TYPE);
 	}
 
@@ -316,8 +321,8 @@ public class UnaryOperatorSet {
 		int missing = theOperators.size() - other.theOperators.size();
 		if (missing < 0)
 			return false;
-		for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : theOperators.entrySet()) {
-			ClassMap<UnaryOp<?, ?>> otherOp = other.theOperators.get(op.getKey());
+		for (Map.Entry<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> op : theOperators.entrySet()) {
+			MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>> otherOp = other.theOperators.get(op.getKey());
 			if (otherOp == null) {
 				missing--;
 				if (missing < 0)
@@ -327,9 +332,9 @@ public class UnaryOperatorSet {
 			}
 			if (otherOp.size() > op.getValue().size())
 				return false;
-			for (BiTuple<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().getAllEntries()) {
-				UnaryOp<?, ?> otherOp2 = otherOp.get(op2.getValue1(), TypeMatch.EXACT);
-				if (otherOp2 != null && !otherOp2.equals(op2.getValue2()))
+			for (Map.Entry<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().allEntries()) {
+				UnaryOp<?, ?> otherOp2 = otherOp.get(op2.getKey(), TypeMatch.EXACT);
+				if (otherOp2 != null && !otherOp2.equals(op2.getValue()))
 					return false;
 			}
 		}
@@ -349,9 +354,9 @@ public class UnaryOperatorSet {
 	/** @return A builder pre-configured for all of this operator set's operations */
 	public Builder copy() {
 		Builder copy = build();
-		for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : theOperators.entrySet()) {
-			for (BiTuple<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().getAllEntries()) {
-				copy.with(op.getKey(), (Class<Object>) op2.getValue1(), (UnaryOp<Object, ?>) op2.getValue2());
+		for (Map.Entry<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> op : theOperators.entrySet()) {
+			for (Map.Entry<Class<?>, UnaryOp<?, ?>> op2 : op.getValue().allEntries()) {
+				copy.with(op.getKey(), (Class<Object>) op2.getKey(), (UnaryOp<Object, ?>) op2.getValue());
 			}
 		}
 		return copy;
@@ -364,7 +369,7 @@ public class UnaryOperatorSet {
 
 	/** A builder that may be configured to support various unary operations */
 	public static class Builder {
-		private final Map<String, ClassMap<UnaryOp<?, ?>>> theOperators;
+		private final Map<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> theOperators;
 
 		Builder() {
 			theOperators = new LinkedHashMap<>();
@@ -380,7 +385,7 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <S> Builder with(String operator, Class<S> type, UnaryOp<? super S, ?> op) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, op);
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap()).with(type, op);
 			return this;
 		}
 
@@ -418,7 +423,7 @@ public class UnaryOperatorSet {
 		 */
 		public <S, T> Builder with2(String operator, Class<S> source, Class<T> target, Function<? super S, ? extends T> op,
 			Function<? super T, ? extends S> reverse, String description) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(source,
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap()).with(source,
 				UnaryOp.of2(operator, target, op, reverse, description));
 			return this;
 		}
@@ -435,7 +440,8 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <T> Builder withSymmetric(String operator, Class<T> type, Function<T, T> op, String description) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofSym(operator, type, op, description));
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap()).with(type,
+				UnaryOp.ofSym(operator, type, op, description));
 			return this;
 		}
 
@@ -449,7 +455,8 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <T> Builder withIdentity(String operator, Class<T> type, String description) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.identity(operator, type, description));
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap()).with(type,
+				UnaryOp.identity(operator, type, description));
 			return this;
 		}
 
@@ -464,7 +471,8 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op, String description) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofAction(type, op, description));
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap()).with(type,
+				UnaryOp.ofAction(type, op, description));
 			return this;
 		}
 
@@ -473,17 +481,17 @@ public class UnaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withAll(UnaryOperatorSet ops) {
-			for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : ops.theOperators.entrySet()) {
-				for (BiTuple<Class<?>, UnaryOp<?, ?>> classOp : op.getValue().getAllEntries())
-					with(op.getKey(), (Class<Object>) classOp.getValue1(), (UnaryOp<Object, ?>) classOp.getValue2());
+			for (Map.Entry<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> op : ops.theOperators.entrySet()) {
+				for (Map.Entry<Class<?>, UnaryOp<?, ?>> classOp : op.getValue().allEntries())
+					with(op.getKey(), (Class<Object>) classOp.getKey(), (UnaryOp<Object, ?>) classOp.getValue());
 			}
 			return this;
 		}
 
 		/** @return A unary operator set with the support installed in this builder */
 		public UnaryOperatorSet build() {
-			Map<String, ClassMap<UnaryOp<?, ?>>> operators = new LinkedHashMap<>();
-			for (Map.Entry<String, ClassMap<UnaryOp<?, ?>>> op : theOperators.entrySet())
+			Map<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> operators = new LinkedHashMap<>();
+			for (Map.Entry<String, MultiInheritanceMap2<Class<?>, UnaryOp<?, ?>>> op : theOperators.entrySet())
 				operators.put(op.getKey(), op.getValue().copy());
 			return new UnaryOperatorSet(operators);
 		}

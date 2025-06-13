@@ -459,14 +459,8 @@ public class QuickTransfer {
 			private boolean hasVariable(ObservableExpression expression, ModelComponentId vbl) {
 				if (vbl == null)
 					return false;
-				if (expression instanceof NameExpression && ((NameExpression) expression).getNames().size() == 1
-					&& ((NameExpression) expression).getName().equals(vbl.getName()))
-					return true;
-				for (ObservableExpression component : expression.getComponents()) {
-					if (hasVariable(component, vbl))
-						return true;
-				}
-				return false;
+				else
+					return NameExpression.findNameExpression(expression, vbl.getName()) != null;
 			}
 
 			/**

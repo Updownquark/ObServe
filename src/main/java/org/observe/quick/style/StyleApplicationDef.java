@@ -186,7 +186,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	/**
 	 * @param ex The expression to find model values in
 	 * @param modelValues The collection to add the model values into
-	 * @param models The models to use to find referenced model values
+	 * @param element The element whose models to use to find referenced model values
 	 * @param expresso A toolkit inheriting Expresso-Core
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
 	 *        {@link org.observe.expresso.qonfig.ElementModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
@@ -239,7 +239,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 			@Override
 			public boolean equals(Object obj) {
-				return ex.equals(obj);
+				return this == obj || ex.equals(obj);
 			}
 
 			@Override
@@ -479,13 +479,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param element The element to test
 	 * @return Whether the given element should use values from {@link QuickStyleValue style values} with this application
 	 */
-	public boolean applies(QonfigElement element) {
-		QonfigElement parentApply = appliesLocal(element);
-		if (parentApply == null)
+	public boolean appliesToElement(ExElement.Def<?> element) {
+		if (!appliesLocal(element))
 			return false;
+		ExElement.Def<?> parentApply = theRole == null ? element : element.getParentElement();
 		StyleApplicationDef parent = getParent();
-		if (parent != null && !parent.applies(parentApply))
-			return false;
+		if (parent != null)
+			return parentApply != null && parent.appliesToElement(parentApply);
 		return true;
 	}
 
@@ -496,36 +496,40 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param element The element to test
 	 * @return Whether the given element should use values from {@link QuickStyleValue style values} with this application
 	 */
-	protected QonfigElement appliesLocal(QonfigElement element) {
+	protected boolean appliesLocal(ExElement.Def<?> element) {
+		QonfigElement qonfigEl = element.getElement();
 		for (QonfigElementOrAddOn type : theTypes.values()) {
-			if (!element.isInstance(type)) {
-				if (element.getPromise() == null || !element.getPromise().isInstance(type))
-					return null;
+			if (!qonfigEl.isInstance(type)) {
+				if (qonfigEl.getPromise() == null || !qonfigEl.getPromise().isInstance(type))
+					return false;
 			}
 		}
 		if (theRole != null) {
-			if (theRole.getType() != null && !element.isInstance(theRole.getType())) {
-				if (element.getPromise() == null || !element.getPromise().isInstance(theRole.getType()))
-					return null;
+			if (theRole.getType() != null && !qonfigEl.isInstance(theRole.getType())) {
+				if (qonfigEl.getPromise() == null || !qonfigEl.getPromise().isInstance(theRole.getType()))
+					return false;
 			}
-			if (!element.getDeclaredRoles().contains(theRole.getDeclared())) {
-				if (element.getPromise() == null || !element.getPromise().getDeclaredRoles().contains(theRole.getDeclared()))
-					return null;
+			if (!qonfigEl.getDeclaredRoles().contains(theRole.getDeclared())) {
+				if (qonfigEl.getPromise() == null || !qonfigEl.getPromise().getDeclaredRoles().contains(theRole.getDeclared()))
+					return false;
 			}
-			QonfigElement parent = element.getParent();
-			if (parent == null || !parent.isInstance(theRole.getOwner())) {
-				if (element.getPromise() == null || element.getPromise().getParent() == null
-					|| !element.getPromise().getParent().isInstance(theRole.getOwner()))
-					return null;
+			ExElement.Def<?> parent = element.getParentElement();
+			if (parent == null)
+				return false;
+			QonfigElement qonfigParent = parent.getElement();
+			if (!qonfigParent.isInstance(theRole.getOwner())) {
+				if (qonfigEl.getPromise() == null || qonfigEl.getPromise().getParent() == null
+					|| !qonfigEl.getPromise().getParent().isInstance(theRole.getOwner()))
+					return false;
 			}
-			return parent;
+			return true;
 		} else
-			return element;
+			return true;
 	}
 
 	/**
 	 * @return The application that an {@link QonfigElement element}'s {@link QonfigElement#getParent() parent} must pass for this
-	 *         application to {@link #applies(QonfigElement) apply} to it
+	 *         application to {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) apply} to it
 	 */
 	public StyleApplicationDef getParent() {
 		return theParent;
@@ -533,7 +537,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @return All the types that an {@link QonfigElement element} must be an {@link QonfigElement#isInstance(QonfigElementOrAddOn)
-	 *         instance} of for this application to {@link #applies(QonfigElement) apply} to it
+	 *         instance} of for this application to {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) apply} to it
 	 */
 	public MultiInheritanceSet<QonfigElementOrAddOn> getTypes() {
 		return theTypes;
@@ -541,13 +545,16 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @return The child role that an {@link QonfigElement element} must {@link QonfigElement#getParentRoles() fulfill} for this application
-	 *         to {@link #applies(QonfigElement) apply} to it
+	 *         to {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) apply} to it
 	 */
 	public QonfigChildDef getRole() {
 		return theRole;
 	}
 
-	/** @return The condition that an element's model must pass for this application to {@link #applies(QonfigElement) apply} to it */
+	/**
+	 * @return The condition that an element's model must pass for this application to
+	 *         {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) apply} to it
+	 */
 	public List<LocatedExpression> getConditions() {
 		return theConditions;
 	}
@@ -708,7 +715,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @param condition The condition to apply to
-	 * @param models The model set containing model values that the condition may use
+	 * @param element The element whose environment the condition may use
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
 	 * @param styleSheet Whether the application is defined from a style-sheet, as opposed to inline under the element
 	 * @param dmvCache The model value cache to use
@@ -742,8 +749,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @param other The other application to combine with this one
-	 * @return An application that {@link #applies(QonfigElement) applies} to an element if and only if both this application and
-	 *         <code>other</code> apply to it
+	 * @return An application that {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) applies} to an element if and only if
+	 *         both this application and <code>other</code> apply to it
 	 */
 	public StyleApplicationDef and(StyleApplicationDef other) {
 		if (!isCompatible(other.getTypes().values().toArray(new QonfigElementOrAddOn[0])))
@@ -814,7 +821,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @return A measure of the specificity of this application's {@link #getTypes() types}. A greater value means this application will
-	 *         {@link #applies(QonfigElement) apply} fewer {@link QonfigElement}s
+	 *         {@link #appliesToElement(org.observe.expresso.qonfig.ExElement.Def) apply} fewer {@link QonfigElement}s
 	 */
 	public int getTypeComplexity() {
 		return theTypeComplexity;
@@ -822,30 +829,35 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 *
-	 * @param envs The Expresso environments in which to
+	 * @param element The element for which to
 	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *        evaluate} {@link #getConditions() conditions}
-	 * @param appCache A cache of compiled applications for re-use
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
 	 * @throws ExpressoInterpretationException If a condition could not be
 	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *         evaluated}
 	 */
-	public InterpretedStyleApplication interpret(QuickInterpretedStyleCache.Applications appCache, ExElement.Interpreted<?> element)
-		throws ExpressoInterpretationException {
-		InterpretedStyleApplication parent;
-		if (theParent == null)
-			parent = null;
-		else
-			parent = appCache.getApplication(theParent, element);
-		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions;
+	public InterpretedStyleApplication interpret(InterpretedStyleApplication parent,
+		LocatedExpression compiledCondition, InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> interpretedCondition)
+			throws ExpressoInterpretationException {
+		Map<LocatedExpression, InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions;
 		if (theConditions.isEmpty())
-			conditions = Collections.emptyList();
+			conditions = Collections.emptyMap();
 		else {
-			conditions = new ArrayList<>(theConditions.size());
-			for (LocatedExpression c : theConditions)
-				conditions.add(element.interpret(c, ModelTypes.Value.BOOLEAN));
-			conditions = Collections.unmodifiableList(conditions);
+			conditions = new LinkedHashMap<>(theConditions.size() * 3 / 2 + 1);
+			for (LocatedExpression c : theConditions) {
+				InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> ic;
+				if (c.equals(compiledCondition))
+					ic = interpretedCondition;
+				else if (parent != null) {
+					ic = parent.getConditions().get(c);
+					if (ic == null)
+						throw new IllegalStateException("No interpretation for condition '" + c + "' found");
+				} else
+					throw new IllegalStateException("No interpretation for condition '" + c + "' found");
+				conditions.put(c, ic);
+			}
+			conditions = Collections.unmodifiableMap(conditions);
 		}
 		return new InterpretedStyleApplication(parent, this, conditions);
 	}

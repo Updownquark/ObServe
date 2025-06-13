@@ -59,23 +59,23 @@ import org.qommons.collect.ElementId;
  */
 class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends AbstractSimpleTableBuilder<BetterList<F>, JXTreeTable, P>
 implements TreeTableEditor<F, P> {
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ComponentEditor<?, ?> parent, ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
 		return new SimpleTreeTableBuilder<>(parent, root, children, null, null, until);
 	}
 
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ComponentEditor<?, ?> parent, ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
 		return new SimpleTreeTableBuilder<>(parent, root, null, children, null, until);
 	}
 
-	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable3(ComponentEditor<?, ?> parent, ObservableValue<F> root,
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable3(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children,
 			Observable<?> until) {
 		return new SimpleTreeTableBuilder<>(parent, root, null, null, children, until);
 	}
 
-	private final ObservableValue<F> theRoot;
+	private final ObservableValue<? extends F> theRoot;
 	private final Function<? super F, ? extends ObservableCollection<? extends F>> theChildren1;
 	private final Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> theChildren2;
 	private final BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> theChildren3;
@@ -92,7 +92,7 @@ implements TreeTableEditor<F, P> {
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
 	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theDisplayedColumns;
 
-	private SimpleTreeTableBuilder(ComponentEditor<?, ?> parent, ObservableValue<F> root,
+	private SimpleTreeTableBuilder(ComponentEditor<?, ?> parent, ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children1,
 			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
 				BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children3,

@@ -1511,7 +1511,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public boolean isEventing() {
-			return isEventing;
+			return isEventing || theWrapped.isEventing();
 		}
 
 		@Override

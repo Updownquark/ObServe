@@ -16,6 +16,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
+import org.qommons.IterableUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -91,8 +92,6 @@ public interface QuickCompiledStyle {
 	 *
 	 * @param parentEl The parent for the interpreted style
 	 * @param parent The interpreted style of this style's element's {@link QonfigElement#getParent() parent}
-	 * @param env The expresso environment to interpret expressions with
-	 * @param applications A cache of interpreted style applications for re-use
 	 * @return The interpreted style for this style's element
 	 * @throws ExpressoInterpretationException If this structure's expressions could not be evaluated
 	 */
@@ -149,9 +148,7 @@ public interface QuickCompiledStyle {
 
 			theValues.clear();
 			Map<QuickStyleAttributeDef, BetterSortedList<QuickStyleValue>> values = new HashMap<>();
-			for (QuickStyleValue sv : theDeclaredValues)
-				values.computeIfAbsent(sv.getAttribute(), __ -> createStyleValueList()).add(sv);
-			for (QuickStyleValue sv : otherValues)
+			for (QuickStyleValue sv : IterableUtils.concat(theDeclaredValues, otherValues))
 				values.computeIfAbsent(sv.getAttribute(), __ -> createStyleValueList()).add(sv);
 			if (theParent != null)
 				addInheritedStyleValues(theParent, values, env.getModels());
@@ -250,7 +247,7 @@ public interface QuickCompiledStyle {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
-			str.append(theElement.getType().getName()).append(" style:");
+			str.append(theElement.toLocatedString()).append(" style:");
 			for (QuickStyleValue value : theDeclaredValues)
 				str.append("\n\t").append(value);
 			return str.toString();
@@ -368,21 +365,20 @@ public interface QuickCompiledStyle {
 
 		/**
 		 * @param elementStyle The element style to interpret this attribute value into
-		 * @param env The expresso environment to use to evaluate the style values
+		 * @param element The element to use to evaluate the style values
 		 * @param styleSheet The application style sheet
-		 * @param appCache The application cache for re-use of {@link InterpretedStyleApplication}s
 		 * @return The interpreted value for this style attribute on the element
 		 * @throws ExpressoInterpretationException If the condition or the value could not be interpreted
 		 */
 		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, ExElement.Interpreted<?> element,
-			QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
+			QuickStyleSheet.Interpreted styleSheet)
 				throws ExpressoInterpretationException {
 			InterpretedExpressoEnv defaultEnv = element.getDefaultEnv();
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(defaultEnv);
 			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, defaultEnv);
 			List<InterpretedStyleValue<T>> values = new ArrayList<>(theValues.size());
 			for (QuickStyleValue v : theValues)
-				values.add((InterpretedStyleValue<T>) v.interpret(element, styleSheet, appCache));
+				values.add((InterpretedStyleValue<T>) elementStyle.interpret(v, element));
 			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values));
 		}
 

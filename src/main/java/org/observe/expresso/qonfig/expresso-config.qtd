@@ -239,7 +239,8 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="max-resolution" type="string" default="Second" />
 			<?DOC Whether to print the time in 24-hour time as opposed to 12-hour a.m./p.m. time?>
 			<attribute name="format-24h" type="boolean" default="false" />
-			<?DOC Whether to parse relative instant text as the "Closest" matching time to the "relative-to" value, the closest matching time in its "Past" it, or the closest matching time in its "Future"?>
+			<?DOC Whether to parse relative instant text as the "Closest" matching time to the "relative-to" value,
+				the closest matching time in its "Past" it, or the closest matching time in its "Future"?>
 			<attribute name="relative-evaluation" type="string" default="Closest" />
 			<?DOC A time to parse times relative to.<br>
 				E.g. if the text "Wednesday 2pm" is entered, this instant is a reference point to provide which week the Wednesay refers to.<br>

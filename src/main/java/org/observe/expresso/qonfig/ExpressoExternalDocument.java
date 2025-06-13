@@ -152,6 +152,7 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 		// return theContentModelVariable;
 		// }
 
+		/** @return The model ID of the value containing the model set of the reference document */
 		public ModelComponentId getPromiseModelVariable() {
 			return thePromiseModelVariable;
 		}
@@ -248,9 +249,9 @@ public class ExpressoExternalDocument extends QonfigExternalDocument {
 			session.setExpressoEnv(doc, getExpressoEnv(doc));
 			session.put(ExtModelValueElement.EXT_MODEL_VALUE_HANDLER, new ExtModelValueElement.ExtModelValueHandler() {
 				@Override
-				public <M> void handleExtValue(ExtModelValueElement.Def<M> value, Builder builder, ExpressoQIS valueSession)
+				public <M> void handleExtValue(ExtModelValueElement.Def<M> value, Builder builder2, ExpressoQIS valueSession)
 					throws QonfigInterpretationException {
-					populateExtModelValue(value, builder, valueSession);
+					populateExtModelValue(value, builder2, valueSession);
 				}
 			});
 

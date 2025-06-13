@@ -52,23 +52,32 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return this;
 	}
 
+	/** @return Compiled expresso environments for each document expressions may reference */
 	public DocumentMap<CompiledExpressoEnv> getExpressoEnvs() {
 		return theExpressoEnvs;
 	}
 
+	/**
+	 * @param expressoEnvs Compiled expresso environments for each document expressions may reference
+	 * @return This session
+	 */
 	public ExpressoQIS setExpressoEnvs(DocumentMap<CompiledExpressoEnv> expressoEnvs) {
 		theExpressoEnvs = expressoEnvs;
 		theWrapped.put(EXPRESSO_ENVS, expressoEnvs);
 		return this;
 	}
 
-	/** @return The expresso environment to use to evaluate expressions under this session */
+	/**
+	 * @param document The document to get the environment for
+	 * @return The expresso environment to use to evaluate expressions under this session for the given document
+	 */
 	public CompiledExpressoEnv getExpressoEnv(String document) {
 		return theExpressoEnvs.get(document);
 	}
 
 	/**
-	 * @param env The expresso environment to use to evaluate expressions under this session
+	 * @param document The document to set the environment for
+	 * @param env The expresso environment to use to evaluate expressions under this session for the given document
 	 * @return This session
 	 */
 	public ExpressoQIS setExpressoEnv(String document, CompiledExpressoEnv env) {

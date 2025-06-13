@@ -602,6 +602,11 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 			return evaluate(models);
 		}
 
+		/**
+		 * @param models The models to evaluate this value with
+		 * @return The instantiated value
+		 * @throws ModelInstantiationException If the value could not be instantiated
+		 */
 		protected abstract MV evaluate(ModelSetInstance models) throws ModelInstantiationException;
 	}
 }

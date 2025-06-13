@@ -77,15 +77,14 @@
 				<constant name="constant2">anyInt</constant>
 				<value name="derivedInt">anyInt*10</value>
 				<transform name="derivedIntModifiable" source="test">
-					<map-to source-as="entity">
-						<map-with>entity.getInt()</map-with>
+					<map-to source-as="entity">entity.getInt()
 						<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue)</map-reverse>
 					</map-to>
 				</transform>
 				<transform name="combinedInt" source="test">
 					<map-to source-as="entity">
 						<combine-with name="other">anyInt</combine-with>
-						<map-with>entity.getInt()+other</map-with>
+						entity.getInt()+other
 						<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue-other)</map-reverse>
 					</map-to>
 				</transform>
@@ -476,8 +475,7 @@
 		<action>assertEquals(2, intAdivB)</action>
 		<action>assertEquals(1, intAmodB)</action>
 
-		<!-- The operator throws an IllegalArgumentException, but this is converted to an IllegalStateException by the assignment action -->
-		<action expect-throw="IllegalStateException">intAtimesB=4</action>
+		<action expect-throw="IllegalArgumentException">intAtimesB=4</action>
 
 		<action>intAdivB=10</action>
 		<action>assertEquals(30, intA)</action>
@@ -496,7 +494,7 @@
 		<action>assertEquals(10, intAdivB)</action>
 		<action>assertEquals(2, intAmodB)</action>
 		
-		<action expect-throw="IllegalStateException">intAmodB=4</action>
+		<action expect-throw="IllegalArgumentException">intAmodB=4</action>
 
 		<!-- Now, same thing for other types, starting with double -->
 		<action>assertEquals(0, dblAplusB, 0.0)</action>
@@ -575,7 +573,7 @@
 		<action>assertEquals(10.64, dblAdivB, dblTol)</action>
 		<action>assertEquals(2, dblAmodB, dblTol)</action>
 		
-		<action expect-throw="IllegalStateException">dblAmodB=4</action>
+		<action expect-throw="IllegalArgumentException">dblAmodB=4</action>
 
 		<!-- long -->
 		<action>assertEquals(0, longAplusB)</action>
@@ -629,7 +627,7 @@
 		<action>assertEquals(2, longAdivB)</action>
 		<action>assertEquals(1, longAmodB)</action>
 
-		<action expect-throw="IllegalStateException">longAtimesB=4</action>
+		<action expect-throw="IllegalArgumentException">longAtimesB=4</action>
 
 		<action>longAdivB=10</action>
 		<action>assertEquals(30, longA)</action>
@@ -647,7 +645,7 @@
 		<action>assertEquals(10, longAdivB)</action>
 		<action>assertEquals(2, longAmodB)</action>
 		
-		<action expect-throw="IllegalStateException">longAmodB=4</action>
+		<action expect-throw="IllegalArgumentException">longAmodB=4</action>
 
 		<!-- float -->
 		<action>assertEquals(0, fltAplusB, 0.0)</action>
@@ -725,7 +723,7 @@
 		<action>assertEquals(10.64f, fltAdivB, fltTol)</action>
 		<action>assertEquals(2f, fltAmodB, fltTol)</action>
 		
-		<action expect-throw="IllegalStateException">fltAmodB=4</action>
+		<action expect-throw="IllegalArgumentException">fltAmodB=4</action>
 
 		<!-- short -->
 		<action>assertEquals(0, shortAplusB)</action>
@@ -779,7 +777,7 @@
 		<action>assertEquals(2, shortAdivB)</action>
 		<action>assertEquals(1, shortAmodB)</action>
 
-		<action expect-throw="IllegalStateException">shortAtimesB=(short) 4</action>
+		<action expect-throw="IllegalArgumentException">shortAtimesB=(short) 4</action>
 
 		<action>shortAdivB=(short) 10</action>
 		<action>assertEquals(30, shortA)</action>
@@ -797,7 +795,7 @@
 		<action>assertEquals(10, shortAdivB)</action>
 		<action>assertEquals(2, shortAmodB)</action>
 		
-		<action expect-throw="IllegalStateException">shortAmodB=(short) 4</action>
+		<action expect-throw="IllegalArgumentException">shortAmodB=(short) 4</action>
 
 		<!-- byte -->
 		<action>assertEquals(0, byteAplusB)</action>
@@ -851,7 +849,7 @@
 		<action>assertEquals(2, byteAdivB)</action>
 		<action>assertEquals(1, byteAmodB)</action>
 
-		<action expect-throw="IllegalStateException">byteAtimesB=(byte) 4</action>
+		<action expect-throw="IllegalArgumentException">byteAtimesB=(byte) 4</action>
 
 		<action>byteAdivB=(byte) 10</action>
 		<action>assertEquals(30, byteA)</action>
@@ -869,7 +867,7 @@
 		<action>assertEquals(10, byteAdivB)</action>
 		<action>assertEquals(2, byteAmodB)</action>
 		
-		<action expect-throw="IllegalStateException">byteAmodB=(byte) 4</action>
+		<action expect-throw="IllegalArgumentException">byteAmodB=(byte) 4</action>
 
 		<!-- char -->
 		<action>assertEquals(0, charAplusB)</action>
@@ -918,7 +916,7 @@
 		<action>assertEquals(2, charAdivB)</action>
 		<action>assertEquals(1, charAmodB)</action>
 
-		<action expect-throw="IllegalStateException">charAtimesB=(char) 4</action>
+		<action expect-throw="IllegalArgumentException">charAtimesB=(char) 4</action>
 
 		<action>charAdivB=(char) 10</action>
 		<action>assertEquals(30, charA)</action>
@@ -936,7 +934,7 @@
 		<action>assertEquals(10, charAdivB)</action>
 		<action>assertEquals(2, charAmodB)</action>
 		
-		<action expect-throw="IllegalStateException">charAmodB=(char) 4</action>
+		<action expect-throw="IllegalArgumentException">charAmodB=(char) 4</action>
 
 		<!-- Test all math operations with different type operands -->
 		<action>intA=5</action>
@@ -1291,11 +1289,10 @@
 		<action>assertEquals("0.0First", dPlusStr)</action>
 		<action>assertEquals("First"+instS, strPlusInst)</action>
 
-		<!-- These operators throws IllegalArgumentExceptions, but this is converted to an IllegalStateException by the assignment actions -->
 		<!-- If an assignment results in a value that is not what was assigned, it is not allowed -->
-		<action expect-throw="IllegalStateException">str1plus1="BlahFirst"</action>
+		<action expect-throw="IllegalArgumentException">str1plus1="BlahFirst"</action>
 		<!-- The assigned value must end with the concatenated strings, because only the first string may be modified by the assignment -->
-		<action expect-throw="IllegalStateException">str1plus2="BlahBlah"</action>
+		<action expect-throw="IllegalArgumentException">str1plus2="BlahBlah"</action>
 
 		<!-- Assignment of string concatenated values -->
 		<action>str1plus2="NewFirstSecond"</action>
@@ -1341,36 +1338,36 @@
 		<action>assertEquals("FirstAgain"+instS, strPlusInst)</action>
 
 		<!-- Assignment of non-String concatenated values -->
-		<action expect-throw="IllegalStateException">strPlusB="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusB="Test1"</action>
 		<action>strPlusB="TestB0"</action>
 		<action>assertEquals("TestB", str1)</action>
 		<!-- We'll lay off testing the other values, we've ensured the change will propagate by now -->
 
-		<action expect-throw="IllegalStateException">strPlusS="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusS="Test1"</action>
 		<action>strPlusS="TestS0"</action>
 		<action>assertEquals("TestS", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusI="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusI="Test1"</action>
 		<action>strPlusI="TestI0"</action>
 		<action>assertEquals("TestI", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusL="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusL="Test1"</action>
 		<action>strPlusL="TestL0"</action>
 		<action>assertEquals("TestL", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusC="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusC="Test1"</action>
 		<action>strPlusC="TestCa"</action>
 		<action>assertEquals("TestC", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusF="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusF="Test1"</action>
 		<action>strPlusF="TestF0.0"</action>
 		<action>assertEquals("TestF", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusD="Test1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusD="Test1"</action>
 		<action>strPlusD="TestD0.0"</action>
 		<action>assertEquals("TestD", str1)</action>
 
-		<action expect-throw="IllegalStateException">strPlusInst="Test1/1/1"</action>
+		<action expect-throw="IllegalArgumentException">strPlusInst="Test1/1/1"</action>
 		<action>strPlusInst="TestInst"+instS</action>
 		<action>assertEquals("TestInst", str1)</action>
 	</test>
@@ -1433,14 +1430,14 @@
 		<action>assertEquals(tempI, intA)</action>
 		<action>assertEquals(tempI, intAOrB)</action>
 		<!-- Assignment can't modify b, so the assigned value must have all 1 bits that b has -->
-		<action expect-throw="IllegalStateException">intAOrB=0b10110110</action>
+		<action expect-throw="IllegalArgumentException">intAOrB=0b10110110</action>
 
 		<action>tempI=0b10000010</action>
 		<action>intAAndB=tempI</action>
 		<action>assertEquals(tempI, intA)</action>
 		<action>assertEquals(tempI, intAAndB)</action>
 		<!-- Assignment can't modify b, so the assigned value must have all 0 bits that b has -->
-		<action expect-throw="IllegalStateException">intAAndB=0b10110110</action>
+		<action expect-throw="IllegalArgumentException">intAAndB=0b10110110</action>
 
 		<action>tempI=0b11001100</action>
 		<action>intAXorB=tempI</action>
@@ -1479,14 +1476,14 @@
 		<action>assertEquals(tempL, longA)</action>
 		<action>assertEquals(tempL, longAOrB)</action>
 		<!-- Assignment can't modify b, so the assigned value must have all 1 bits that b has -->
-		<action expect-throw="IllegalStateException">longAOrB=0b10110110L</action>
+		<action expect-throw="IllegalArgumentException">longAOrB=0b10110110L</action>
 
 		<action>tempL=0b10000010L</action>
 		<action>longAAndB=tempL</action>
 		<action>assertEquals(tempL, longA)</action>
 		<action>assertEquals(tempL, longAAndB)</action>
 		<!-- Assignment can't modify b, so the assigned value must have all 0 bits that b has -->
-		<action expect-throw="IllegalStateException">longAAndB=0b10110110L</action>
+		<action expect-throw="IllegalArgumentException">longAAndB=0b10110110L</action>
 
 		<action>tempL=0b11001100L</action>
 		<action>longAXorB=tempL</action>
@@ -1589,21 +1586,16 @@
 	<test name="mapTo">
 		<model>
 			<transform name="mapped" source="models.anyInt">
-				<map-to source-as="source">
-					<map-with>source+10</map-with>
+				<map-to source-as="source">source+10
 					<map-reverse type="replace-source" target-as="target">target-10</map-reverse>
 				</map-to>
 			</transform>
 			<!-- Test the default reverse functionality of map-to -->
 			<transform name="mappedValueDR" source="models.anyInt">
-				<map-to source-as="source">
-					<map-with>source+25</map-with>
-				</map-to>
+				<map-to source-as="source">source+25</map-to>
 			</transform>
 			<transform name="mappedListDR" source="models.list">
-				<map-to source-as="source">
-					<map-with>source+100</map-with>
-				</map-to>
+				<map-to source-as="source">source+100</map-to>
 			</transform>
 			<value name="initSource" init="models.anyInt" />
 		</model>

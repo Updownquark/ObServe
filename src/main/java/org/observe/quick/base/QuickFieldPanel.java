@@ -35,6 +35,7 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 			super(parent, type);
 		}
 
+		/** @return Whether invisible components in this field panel should occupy space */
 		@QonfigAttributeGetter("show-invisible")
 		public boolean isShowInvisible() {
 			return isShowInvisible;
@@ -84,7 +85,7 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 		super(id);
 	}
 
-	@QonfigAttributeGetter("show-invisible")
+	/** @return Whether invisible components in this field panel should occupy space */
 	public boolean isShowInvisible() {
 		return isShowInvisible;
 	}

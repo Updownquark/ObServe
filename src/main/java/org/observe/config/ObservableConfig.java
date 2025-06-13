@@ -70,11 +70,11 @@ import org.qommons.config.QommonsConfig;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
 import org.qommons.io.Format;
-import org.qommons.io.SimpleXMLParser;
-import org.qommons.io.SimpleXMLParser.XmlAttribute;
-import org.qommons.io.SimpleXMLParser.XmlCdata;
-import org.qommons.io.SimpleXMLParser.XmlElementContent;
-import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
+import org.qommons.io.MinML;
+import org.qommons.io.MinML.XmlAttribute;
+import org.qommons.io.MinML.XmlCdata;
+import org.qommons.io.MinML.XmlElementContent;
+import org.qommons.io.MinML.XmlElementTerminal;
 import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeMap;
 
@@ -1696,7 +1696,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 				}
 			}
 		}
-		class ConfigParser implements SimpleXMLParser.ParseHandler {
+		class ConfigParser implements MinML.ParseHandler {
 			ParsedConfig theRoot;
 			private final LinkedList<ParsedConfig> theStack = new LinkedList<>();
 			private final ArrayList<StringBuilder> theContentStack = new ArrayList<>();
@@ -1754,7 +1754,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			}
 		}
 		ConfigParser handler = new ConfigParser();
-		new SimpleXMLParser().parseXml(null, in, handler);
+		new MinML().parseXml(null, in, handler);
 		try (Transaction t = config.lock(true, null)) {
 			handler.theRoot.pushTo(config);
 		}

@@ -170,7 +170,7 @@ public interface Observer<T> {
 
 		@Override
 		public void onNext(T value) {
-			getLambda().onNext(value);
+			theLambda.onNext(value);
 		}
 
 		@Override

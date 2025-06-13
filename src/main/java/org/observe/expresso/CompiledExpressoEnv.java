@@ -5,10 +5,12 @@ import java.lang.reflect.Modifier;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -20,12 +22,12 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
-import org.qommons.ClassMap;
-import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Colors;
+import org.qommons.IterableUtils;
+import org.qommons.MultiInheritanceView;
+import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
+import org.qommons.MultiInheritanceView.TypeMatch;
 import org.qommons.TimeUtils;
-import org.qommons.collect.BetterList;
 import org.qommons.config.SessionValues;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
@@ -48,8 +50,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	private final Map<String, ModelComponentId> theAttributes;
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
-	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
-	private final ClassMap<Map<String, SyntheticField.Def<?, ?>>> theSyntheticFields;
+	private final MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> theNonStructuredParsers;
+	private final MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> theSyntheticFields;
 	private final ErrorReporting theErrorReporting;
 	private SessionValues theProperties;
 
@@ -76,19 +78,20 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param properties The properties for this environment
 	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties) {
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators,
+		BinaryOperatorSet binaryOperators, MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> syntheticFields,
+		ErrorReporting reporting, SessionValues properties) {
 		theModels = models;
 		theAttributes = attributes;
 		theUnaryOperators = unaryOperators;
 		theBinaryOperators = binaryOperators;
-		theNonStructuredParsers = new ClassMap<>();
+		theNonStructuredParsers = MultiInheritanceView.createClassMap();
 		if (nonStructuredParsers != null)
 			theNonStructuredParsers.putAll(nonStructuredParsers);
-		theSyntheticFields = new ClassMap<>();
+		theSyntheticFields = MultiInheritanceView.createClassMap();
 		if (syntheticFields != null) {
-			for (BiTuple<Class<?>, Map<String, SyntheticField.Def<?, ?>>> field : syntheticFields.getAllEntries()) {
-				theSyntheticFields.computeIfAbsent(field.getValue1(), () -> new HashMap<>()).putAll(field.getValue2());
+			for (Map.Entry<Class<?>, Map<String, SyntheticField.Def<?, ?>>> field : syntheticFields.allEntries()) {
+				theSyntheticFields.computeIfAbsent(field.getKey(), () -> new HashMap<>()).putAll(field.getValue());
 			}
 		}
 		theErrorReporting = reporting;
@@ -107,8 +110,9 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return A copy of this environment with the given information
 	 */
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties) {
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators,
+		BinaryOperatorSet binaryOperators, MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> syntheticFields,
+		ErrorReporting reporting, SessionValues properties) {
 		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, syntheticFields,
 			reporting, properties);
 	}
@@ -129,7 +133,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	}
 
 	/** @return All this environment's {@link NonStructuredParser}s */
-	protected ClassMap<Set<NonStructuredParser>> getNonStructuredParsers() {
+	protected MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> getNonStructuredParsers() {
 		return theNonStructuredParsers;
 	}
 
@@ -157,7 +161,7 @@ public class CompiledExpressoEnv implements SessionValues {
 	}
 
 	/** @return The set of synthetic fields available for expressions */
-	protected ClassMap<Map<String, SyntheticField.Def<?, ?>>> getSyntheticFields() {
+	protected MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> getSyntheticFields() {
 		return theSyntheticFields;
 	}
 
@@ -227,19 +231,19 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return This environment
 	 */
 	public CompiledExpressoEnv withNonStructuredParser(Class<?> type, NonStructuredParser parser) {
-		Set<NonStructuredParser> parsers = theNonStructuredParsers.get(type, ClassMap.TypeMatch.EXACT);
+		Set<NonStructuredParser> parsers = theNonStructuredParsers.get(type, TypeMatch.EXACT);
 		if (parsers != null && parsers.contains(parser))
 			return this;
-		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nspCopy = nspCopy();
 		nspCopy.computeIfAbsent(type, () -> new LinkedHashSet<>()).add(parser);
 		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theSyntheticFields, theErrorReporting,
 			getProperties());
 	}
 
-	ClassMap<Set<NonStructuredParser>> nspCopy() {
-		ClassMap<Set<NonStructuredParser>> nspCopy = new ClassMap<>();
-		for (BiTuple<Class<?>, Set<NonStructuredParser>> entry : theNonStructuredParsers.getAllEntries())
-			nspCopy.put(entry.getValue1(), new LinkedHashSet<>(entry.getValue2()));
+	MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nspCopy() {
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nspCopy = MultiInheritanceView.createClassMap();
+		for (Map.Entry<Class<?>, Set<NonStructuredParser>> entry : theNonStructuredParsers.allEntries())
+			nspCopy.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
 		return nspCopy;
 	}
 
@@ -252,11 +256,11 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return This environment
 	 */
 	public CompiledExpressoEnv removeNonStructuredParser(Class<?> type, NonStructuredParser parser) {
-		Set<NonStructuredParser> parsers = theNonStructuredParsers.get(type, ClassMap.TypeMatch.EXACT);
+		Set<NonStructuredParser> parsers = theNonStructuredParsers.get(type, TypeMatch.EXACT);
 		if (parsers == null || !parsers.contains(parser))
 			return this;
-		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
-		nspCopy.get(type, ClassMap.TypeMatch.EXACT).remove(parser);
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nspCopy = nspCopy();
+		nspCopy.get(type, TypeMatch.EXACT).remove(parser);
 		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators, theSyntheticFields, theErrorReporting,
 			getProperties());
 	}
@@ -265,13 +269,8 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @param type The type to parse
 	 * @return All non-structured parsers that may be able to parse a value of the given type
 	 */
-	public Set<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
-		BetterList<Set<NonStructuredParser>> nsps = theNonStructuredParsers.getAll(type, null);
-		// ClassMap returns values from least- to most- type-specific, but we want to try the most specific types first
-		Set<NonStructuredParser> ret = new LinkedHashSet<>();
-		for (Set<NonStructuredParser> nsp : nsps.reverse())
-			ret.addAll(nsp);
-		return ret;
+	public Iterable<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
+		return IterableUtils.flatten(theNonStructuredParsers.getAll(type, null));
 	}
 
 	/**
@@ -279,19 +278,19 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return A copy of this environment with all the {@link NonStructuredParser}s from this environment and the other
 	 */
 	public CompiledExpressoEnv withAllNonStructuredParsers(CompiledExpressoEnv env) {
-		ClassMap<Set<NonStructuredParser>> nspCopy = null;
-		for (BiTuple<Class<?>, Set<NonStructuredParser>> entry : env.theNonStructuredParsers.getAllEntries()) {
-			if (nspCopy == null && theNonStructuredParsers.getOrDefault(entry.getValue1(), ClassMap.TypeMatch.EXACT, Collections.emptySet())
-				.containsAll(entry.getValue2()))
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nspCopy = null;
+		for (Map.Entry<Class<?>, Set<NonStructuredParser>> entry : env.theNonStructuredParsers.allEntries()) {
+			if (nspCopy == null && theNonStructuredParsers.getOrDefault(entry.getKey(), TypeMatch.EXACT, Collections.emptySet())
+				.containsAll(entry.getValue()))
 				continue;
 			if (nspCopy == null)
 				nspCopy = nspCopy();
-			Set<NonStructuredParser> forType = nspCopy.get(entry.getValue1(), ClassMap.TypeMatch.EXACT);
+			Set<NonStructuredParser> forType = nspCopy.get(entry.getKey(), TypeMatch.EXACT);
 			if (forType == null) {
 				forType = new LinkedHashSet<>();
-				nspCopy.put(entry.getValue1(), forType);
+				nspCopy.put(entry.getKey(), forType);
 			}
-			forType.addAll(entry.getValue2());
+			forType.addAll(entry.getValue());
 		}
 		if (nspCopy == null)
 			return this;
@@ -400,8 +399,11 @@ public class CompiledExpressoEnv implements SessionValues {
 	 * @return The field defined for the given entity type with the given name, or null if no such field was defined
 	 */
 	public <E> SyntheticField.Def<? super E, ?> getSyntheticField(Class<E> entityType, String fieldName) {
+		List<Map<String, SyntheticField.Def<?, ?>>> fieldList = new ArrayList<>();
+		theSyntheticFields.getAll(entityType, TypeMatch.SUPER_TYPE).forEach(fieldList::add);
 		// Traverse from most specific to least
-		for (Map<String, SyntheticField.Def<?, ?>> fields : theSyntheticFields.getAll(entityType, TypeMatch.SUPER_TYPE).reverse()) {
+		Collections.reverse(fieldList);
+		for (Map<String, SyntheticField.Def<?, ?>> fields : fieldList) {
 			SyntheticField.Def<?, ?> field = fields.get(fieldName);
 			if (field != null)
 				return (SyntheticField.Def<? super E, ?>) field;
@@ -409,10 +411,14 @@ public class CompiledExpressoEnv implements SessionValues {
 		return null;
 	}
 
+	/**
+	 * @param other The environment to copy synthetic fields from
+	 * @return This environment
+	 */
 	public CompiledExpressoEnv withAllSyntheticFields(CompiledExpressoEnv other) {
-		for (BiTuple<Class<?>, Map<String, SyntheticField.Def<?, ?>>> fieldOwner : other.theSyntheticFields.getAllEntries()) {
-			for (Map.Entry<String, SyntheticField.Def<?, ?>> field : fieldOwner.getValue2().entrySet())
-				withSyntheticField(fieldOwner.getValue1(), field.getKey(), (SyntheticField.Def<Object, ?>) field.getValue());
+		for (Map.Entry<Class<?>, Map<String, SyntheticField.Def<?, ?>>> fieldOwner : other.theSyntheticFields.allEntries()) {
+			for (Map.Entry<String, SyntheticField.Def<?, ?>> field : fieldOwner.getValue().entrySet())
+				withSyntheticField(fieldOwner.getKey(), field.getKey(), (SyntheticField.Def<Object, ?>) field.getValue());
 		}
 		return this;
 	}

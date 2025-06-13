@@ -2,8 +2,8 @@ package org.observe.expresso.ops;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -213,18 +213,19 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		String operator = action ? theOperator.substring(0, theOperator.length() - 1) : theOperator;
 		Class<?> targetType = type.getModelType().getTypeCount() == 0 ? Object.class : TypeTokens.getRawType(type.getType(0));
-		Set<Class<?>> primaryTypes = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator, targetType);
-		switch (primaryTypes.size()) {
-		case 0:
+		Iterable<Class<?>> primaryTypes = env.getBinaryOperators().getSupportedPrimaryInputTypes(operator, targetType);
+		Iterator<Class<?>> ptTestIter = primaryTypes.iterator();
+		if (!ptTestIter.hasNext()) {
 			exHandler.handle1(() -> new ExpressoInterpretationException(
 				"Unsupported or unimplemented binary operator '" + theOperator + "' targeting type " + targetType.getName(),
 				env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
 			return null;
-		case 1:
-			return evaluatePrimary(type, env, expressionOffset, action, operator, targetType,
-				TypeTokens.get().of(primaryTypes.iterator().next()), exHandler);
-		default:
-			break;
+		} else {
+			ptTestIter.next();
+			if (!ptTestIter.hasNext()) {
+				return evaluatePrimary(type, env, expressionOffset, action, operator, targetType,
+					TypeTokens.get().of(primaryTypes.iterator().next()), exHandler);
+			}
 		}
 		// Multiple possible primary types
 		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tempHandler = ExceptionHandler.placeHolder();
@@ -285,20 +286,21 @@ public class BinaryOperator implements ObservableExpression {
 			return null;
 		primaryType = (TypeToken<P>) left.getType().getType(0);
 		Class<P> leftType = TypeTokens.getRawType(primaryType);
-		Set<Class<?>> secondaryTypes = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
-		switch (secondaryTypes.size()) {
-		case 0:
+		Iterable<Class<?>> secondaryTypes = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
+		Iterator<Class<?>> stTestIter = secondaryTypes.iterator();
+		if (!stTestIter.hasNext()) {
 			TypeToken<P> fpt = primaryType;
 			exHandler.handle1(() -> new ExpressoInterpretationException(
 				"Binary operator '" + theOperator + "' is not supported for left operand type " + fpt + ", target type "
 					+ targetType.getName(),
 					env.reporting().at(theLeft.getExpressionLength()).getPosition(), theOperator.length()));
 			return null;
-		case 1:
-			return evaluateSecondary(type, env, expressionOffset, action, operator, targetType, primaryType,
-				TypeTokens.get().of(secondaryTypes.iterator().next()), left, exHandler);
-		default:
-			break;
+		} else {
+			stTestIter.next();
+			if (!stTestIter.hasNext()) {
+				return evaluateSecondary(type, env, expressionOffset, action, operator, targetType, primaryType,
+					TypeTokens.get().of(secondaryTypes.iterator().next()), left, exHandler);
+			}
 		}
 		// Multiple possible secondary types
 		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tempHandler = ExceptionHandler.placeHolder();

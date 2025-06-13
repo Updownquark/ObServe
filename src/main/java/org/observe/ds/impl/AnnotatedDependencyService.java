@@ -16,8 +16,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
@@ -25,6 +27,7 @@ import org.observe.ds.ComponentController;
 import org.observe.ds.DSComponent;
 import org.observe.ds.DependencyService;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
@@ -148,20 +151,23 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 	}
 
 	class ComponentActivate<T> extends ComponentMethod<T> {
-		private final String theLoadStatus;
+		private final Function<T, ObservableValue<String>> theLoadStatus;
 
-		ComponentActivate(Invokable<T, ?> m, boolean constructor, String loadStatus) {
+		ComponentActivate(Invokable<T, ?> m, boolean constructor, Function<T, ObservableValue<String>> loadStatus) {
 			super(m, constructor);
 			theLoadStatus = loadStatus;
 		}
 
 		@Override
 		Object invoke(ComponentController<Object> controller, Object param) {
-			String preStatus = theLoadStatus;
-			theCurrentLoadStatus = theLoadStatus;
+			String preStatus = theCurrentLoadStatus;
+			SimpleObservable<Void> until = new SimpleObservable<>();
+			ObservableValue<String> status = theLoadStatus.apply((T) controller.getComponentValue());
+			status.changes().takeUntil(until).act(evt -> theCurrentLoadStatus = evt.getNewValue());
 			try {
 				return super.invoke(controller, param);
 			} finally {
+				until.act(null);
 				theCurrentLoadStatus = preStatus;
 			}
 		}
@@ -302,16 +308,14 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			int[] count = new int[1];
 			ObservableCollection<S> services = controller.getDependencies(service);
 			Subscription sub = services.subscribe(evt -> {
-				if (evt.getIndex() > max)
+				if (evt.getIndex() >= max)
 					return;
 				switch (evt.getType()) {
 				case add:
-					if (count[0] == max) {
-						release(controller, services.get(max - 1));
-						count[0]--;
+					if (count[0] < max) {
+						accepter.invoke(controller, evt.getNewValue());
+						count[0]++;
 					}
-					accepter.invoke(controller, evt.getNewValue());
-					count[0]++;
 					break;
 				case remove:
 					release(controller, evt.getOldValue());
@@ -463,11 +467,68 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			}
 			Activate activate = m.getAnnotation(Activate.class);
 			if (activate != null) {
-				String loadStatus;
-				if (compAnn != null && !compAnn.loadStatus().isEmpty())
-					loadStatus = compAnn.loadStatus();
-				else
-					loadStatus = "Initializing " + componentType.getSimpleName();
+				String status = compAnn == null ? "" : compAnn.loadStatus();
+				Function<T, ObservableValue<String>> loadStatus;
+				if (status.isEmpty())
+					loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()), "simpleStatus",
+						null);
+				else if (status.endsWith("()")) {
+					Method statusMethod;
+					try {
+						statusMethod = componentType.getDeclaredMethod(status.substring(0, status.length() - 2));
+						if (!statusMethod.isAccessible())
+							statusMethod.setAccessible(true);
+					} catch (NoSuchMethodException | SecurityException e) {
+						statusMethod = null;
+						System.err.println("Load status method " + componentType.getName() + "." + status + " could not be retrieved: ");
+						e.printStackTrace();
+					}
+
+					Method fStatusMethod = statusMethod;
+					Type statusType = statusMethod == null ? null : statusMethod.getGenericReturnType();
+					if (statusType == null) {
+						loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+							"simpleStatus", null);
+					} else if (statusType == String.class) {
+						loadStatus = inst -> {
+							try {
+								return ObservableValue.of((String) fStatusMethod.invoke(inst));
+							} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+								System.err
+								.println("Load status method " + componentType.getName() + "." + status + " could not be invoked: ");
+								e.printStackTrace();
+								return ObservableValue.of("Initializing " + componentType.getSimpleName());
+							}
+						};
+					} else if (statusType instanceof ParameterizedType) {
+						ParameterizedType pst = (ParameterizedType) statusType;
+						if (pst.getActualTypeArguments().length == 1 && pst.getRawType() instanceof Class//
+							&& ObservableValue.class.isAssignableFrom((Class<?>) pst.getRawType())//
+							&& pst.getActualTypeArguments()[0] == String.class) {
+							loadStatus = inst -> {
+								try {
+									return (ObservableValue<String>) fStatusMethod.invoke(inst);
+								} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+									System.err.println(
+										"Load status method " + componentType.getName() + "." + status + " could not be invoked: ");
+									e.printStackTrace();
+									return ObservableValue.of("Initializing " + componentType.getSimpleName());
+								}
+							};
+						} else {
+							System.err.println("Load status method " + componentType.getName() + "." + status + " returns " + statusType
+								+ ", which cannot be interpreted.  Return a String or an ObservableValue<String>.");
+							loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+								"simpleStatus", null);
+						}
+					} else {
+						System.err.println("Load status method " + componentType.getName() + "." + status + " returns " + statusType
+							+ ", which cannot be interpreted.  Return a String or an ObservableValue<String>.");
+						loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+							"simpleStatus", null);
+					}
+				} else
+					loadStatus = LambdaUtils.constantFn(ObservableValue.of(status), status, null);
 				ComponentActivate<T> cm = new ComponentActivate<>(ct.method(m), false, loadStatus);
 				if (cm.getType() != null)
 					throw new IllegalArgumentException(componentType + ": Activate method " + cm
@@ -604,9 +665,15 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 				return Format.BOOLEAN.parse(value);
 			} else if (configType.isAssignableFrom(Instant.class)) {
 				return INSTANT_FORMAT.parse(value);
-			} else if (configType.isAssignableFrom(Duration.class))
+			} else if (configType.isAssignableFrom(Duration.class)) {
 				return Format.DURATION.parse(value);
-			else if (configType.isAssignableFrom(URL.class)) {
+			} else if (configType.isEnum()) {
+				try {
+					return Format.parseEnum((Class<? extends Enum<?>>) configType, value.trim());
+				} catch (IllegalArgumentException e) {
+					throw new ParseException("No such " + configType.getSimpleName() + " value '" + value.trim() + "'", 0);
+				}
+			} else if (configType.isAssignableFrom(URL.class)) {
 				URL found = loader.getResource(value);
 				if (found == null)
 					throw new ParseException("Could not locate resource '" + value + "' in " + loader, 0);
@@ -631,9 +698,9 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					throw new IllegalArgumentException("Unrecognized collection type: " + raw.getName());
 
 				int start = 0;
-				int comma = value.indexOf(',');
+				int delimiter = value.indexOf('+'); // OSGi manifest attribute values can't use ','
 				do {
-					String v = value.substring(start, comma < 0 ? value.length() : comma);
+					String v = value.substring(start, delimiter < 0 ? value.length() : delimiter);
 					try {
 						if (!collection.add(parseConfigurationValue(v, param.getType(), loader)))
 							throw new IllegalArgumentException("Duplicate values in collection: " + v);
@@ -642,9 +709,9 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 						e2.setStackTrace(e.getStackTrace());
 						throw e2;
 					}
-					start = comma + 1;
-					comma = value.indexOf(',', comma + 1);
-				} while (comma >= 0);
+					start = delimiter + 1;
+					delimiter = value.indexOf('+', start);
+				} while (start > 0);
 				return collection;
 			} else if (Map.class.isAssignableFrom(raw)) {
 				Map<Object, Object> map;
@@ -660,12 +727,12 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					throw new IllegalArgumentException("Unrecognized map type: " + raw.getName());
 
 				int start = 0;
-				int comma = value.indexOf(',');
+				int delimiter = value.indexOf('+'); // OSGi manifest attribute values can't use ','
 				do {
-					String entry = value.substring(start, comma < 0 ? value.length() : comma);
-					int sep = entry.indexOf(':'); // OSGi manifest attribute values can't use '='
+					String entry = value.substring(start, delimiter < 0 ? value.length() : delimiter);
+					int sep = entry.indexOf('#'); // OSGi manifest attribute values can't use '=' or ':'
 					if (sep < 0)
-						throw new ParseException("No ':' found in entry to separate key from value", start);
+						throw new ParseException("No '#' found in entry to separate key from value", start);
 					Object key, v;
 					try {
 						key = parseConfigurationValue(entry.substring(0, sep), keyType.getType(), loader);
@@ -683,9 +750,9 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					}
 					if (null != map.putIfAbsent(key, v))
 						throw new IllegalArgumentException("Duplicate keys in map: " + key);
-					start = comma + 1;
-					comma = value.indexOf(',', comma + 1);
-				} while (comma >= 0);
+					start = delimiter + 1;
+					delimiter = value.indexOf('+', start);
+				} while (start > 0);
 				return map;
 			} else if (MultiMap.class.isAssignableFrom(raw)) {
 				MultiMap<Object, Object> map;
@@ -706,7 +773,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					if (valuesEnd < 0)
 						throw new ParseException("Multi-map entries must end with ']'", start);
 					String entry = value.substring(start, valuesEnd < 0 ? value.length() : valuesEnd);
-					int sep = entry.indexOf(':'); // OSGi manifest attribute values can't use '='
+					int sep = entry.indexOf('#'); // OSGi manifest attribute values can't use '=' or ':'
 					if (sep < 0)
 						throw new ParseException("No ':' found in entry to separate key from values", start);
 					if (sep == entry.length() - 1 || entry.charAt(sep + 1) != '[')
@@ -720,21 +787,21 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 						throw e2;
 					}
 					int valueStart = sep + 2;
-					int comma = entry.indexOf(',', valueStart);
+					int delimiter = entry.indexOf('+', valueStart); // OSGi manifest attribute values can't use ','
 					do {
 						try {
 							Object v = parseConfigurationValue(entry.substring(sep + 1), valueType.getType(), loader);
 							map.add(key, v);
 						} catch (ParseException e) {
-							ParseException e2 = new ParseException(e.getMessage(), start + comma + e.getErrorOffset());
+							ParseException e2 = new ParseException(e.getMessage(), start + delimiter + e.getErrorOffset());
 							e2.setStackTrace(e.getStackTrace());
 							throw e2;
 						}
-						valueStart = comma;
-						comma = entry.indexOf(',', comma + 1);
-					} while (comma >= 0);
+						valueStart = delimiter + 1;
+						delimiter = entry.indexOf('+', valueStart);
+					} while (valueStart > 0);
 					start = valuesEnd + 1;
-					valuesEnd = value.indexOf(']', valuesEnd + 1);
+					valuesEnd = value.indexOf(']', start);
 				} while (valuesEnd < value.length() - 1);
 				return map;
 			} else

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -114,7 +115,7 @@ public class ConditionalExpression implements ObservableExpression {
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
-		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
+		if (type.getModelType() == ModelTypes.Event || type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
 			|| type.getModelType() == ModelTypes.Collection || type.getModelType() == ModelTypes.Set) {//
 		} else {
 			throw new ExpressoInterpretationException(
@@ -294,6 +295,13 @@ public class ConditionalExpression implements ObservableExpression {
 					else
 						((ObservableAction) secondaryX).act(evt);
 				}, () -> conditionX + " ? " + primaryX + " : " + secondaryX, null));
+			} else if (theType.getModelType() == ModelTypes.Event) {
+				return (MV) ObservableValue.flattenObservableValue(conditionX.map(LambdaUtils.printableFn(cv -> {
+					if (Boolean.TRUE.equals(cv))
+						return (Observable<?>) primaryX;
+					else
+						return (Observable<?>) secondaryX;
+				}, () -> "? " + primaryX + " : " + secondaryX, null)));
 			} else
 				throw new IllegalStateException("Conditional expressions not supported for model type " + theType.getModelType());
 		}

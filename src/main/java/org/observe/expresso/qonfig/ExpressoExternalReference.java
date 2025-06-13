@@ -64,11 +64,13 @@ public class ExpressoExternalReference extends ExElement.Abstract implements Qon
 			return theExternalContent == null ? null : theExternalContent.getElement().getDocument();
 		}
 
+		/** @return The promised &lt;element-def> type of this promise To satisfy traceability */
 		@QonfigAttributeGetter("promised")
 		public QonfigElementDef getPromisedType() {
 			return ((QonfigPromiseDef) getQonfigType()).getPromisedType();
 		}
 
+		/** @return The promised &lt;add-on> inheritance of this promise To satisfy traceability */
 		@QonfigAttributeGetter("promised-inheritance")
 		public MultiInheritanceSet<QonfigAddOn> getPromisedInheritance() {
 			return ((QonfigPromiseDef) getQonfigType()).getPromisedInheritance();

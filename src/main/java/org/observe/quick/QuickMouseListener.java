@@ -102,10 +102,12 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		theEventY = SettableValue.create();
 	}
 
+	/** @return The X-coordinate of the screen location relative to is listener's owning widget where the event occurred */
 	public SettableValue<Integer> getEventX() {
 		return theEventX;
 	}
 
+	/** @return The Y-coordinate of the screen location relative to is listener's owning widget where the event occurred */
 	public SettableValue<Integer> getEventY() {
 		return theEventY;
 	}
@@ -351,6 +353,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			return theButton;
 		}
 
+		/** @return The mouse button the user operated to result in this event */
 		public SettableValue<MouseButton> getEventButton() {
 			return theEventButton;
 		}
@@ -641,6 +644,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			theScrollAmount = SettableValue.create();
 		}
 
+		/** @return The amount the user scrolled for this event */
 		public SettableValue<Integer> getScrollAmount() {
 			return theScrollAmount;
 		}

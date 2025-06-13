@@ -362,7 +362,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 
 			@Override
 			public ObservableConfig get() {
-				return unmodifiable(theBackingElement.get());
+				return UnmodifiableObservableConfig.unmodifiable(theBackingElement.get());
 			}
 
 			@Override

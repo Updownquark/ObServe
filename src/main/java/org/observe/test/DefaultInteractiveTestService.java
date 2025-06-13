@@ -55,7 +55,10 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 		theGlobalConfigLocation = globalConfig;
 		theTestResourceLocations = new ArrayList<>();
 		theTestResourceCacheSizeLimit = 25 * 1024 * 1024; // 25MB
+	}
 
+	/** Initializes this test service */
+	protected void activate() {
 		String testRsrcLoc = System.getProperty("qtest.resources");
 		if (testRsrcLoc != null) {
 			for (String loc : testRsrcLoc.split(",")) {

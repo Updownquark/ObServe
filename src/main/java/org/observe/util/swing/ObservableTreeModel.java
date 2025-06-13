@@ -159,7 +159,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 		for (TreeModelListener listener : theListeners) {
 			try {
-				listener.treeNodesChanged(event);
+				listener.treeStructureChanged(event);
 			} catch (RuntimeException e) {
 				e.printStackTrace();
 			}
@@ -1105,7 +1105,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	}
 
 	public static <T> boolean eventApplies(TreeModelEvent e, BetterList<T> path, Equivalence<? super T> equivalence, IntSupplier index) {
-		if (!isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath(), equivalence))
+		if (path.size() >= e.getTreePath().getPathCount()
+			&& !isSamePath(path.subList(0, e.getTreePath().getPathCount()), e.getTreePath(), equivalence))
 			return false;
 		return Arrays.binarySearch(e.getChildIndices(), index.getAsInt()) >= 0;
 	}

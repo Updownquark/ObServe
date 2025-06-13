@@ -30,6 +30,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	ObservableSet<E> alias(String alias);
 
 	@Override
+	boolean isEmpty();
+
+	@Override
 	default Iterator<E> iterator() {
 		return ObservableCollection.super.iterator();
 	}

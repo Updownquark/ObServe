@@ -43,14 +43,13 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigDocument;
-import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.io.LocatedFilePosition;
-import org.qommons.io.SimpleXMLParser;
+import org.qommons.io.MinML;
 
 /** A structure containing many style values that may apply to all &lt;styled> elements in a document */
 @ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
@@ -125,7 +124,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref,
 					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
 						address.text.length(), e);
-			} catch (SimpleXMLParser.XmlParseException e) {
+			} catch (MinML.XmlParseException e) {
 				throw new QonfigInterpretationException("Could not parse style-sheet reference " + ref,
 					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
 						address.text.length(), e);
@@ -231,12 +230,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 
 	/**
 	 * @param styleValues Collection into which to add style values in this style sheet that
-	 *        {@link StyleApplicationDef#applies(QonfigElement) apply} to the given element
+	 *        {@link StyleApplicationDef#appliesToElement(ExElement.Def) apply} to the given element
 	 * @param element The element to get style values for
 	 * @param env The compiled environment to validate against
 	 * @throws QonfigInterpretationException If this style sheet's styles cannot be applied in the given environment
 	 */
-	public final void getStyleValues(Collection<QuickStyleValue> styleValues, QonfigElement element, CompiledExpressoEnv env)
+	public final void getStyleValues(Collection<QuickStyleValue> styleValues, ExElement.Def<?> element, CompiledExpressoEnv env)
 		throws QonfigInterpretationException {
 		ExWithRequiredModels.RequiredModelContext styleSheetModelContext = getAddOn(ExWithRequiredModels.Def.class).getContext(env);
 		for (QuickStyleElement.Def style : theStyleElements)
@@ -440,12 +439,14 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 		private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
 		private final Map<String, QuickStyleSheet.Interpreted> theImportedStyleSheets;
 		private final Map<String, QuickStyleSet.Interpreted> theStyleSets;
+		private final StyleInterpretationCache.Modifiable theInterpretedValues;
 
 		Interpreted(QuickStyleSheet definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theStyleElements = new ArrayList<>();
 			theImportedStyleSheets = new LinkedHashMap<>();
 			theStyleSets = new LinkedHashMap<>();
+			theInterpretedValues = StyleInterpretationCache.create();
 		}
 
 		@Override
@@ -468,6 +469,10 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 			return Collections.unmodifiableMap(theStyleSets);
 		}
 
+		public StyleInterpretationCache getInterpretedValues() {
+			return theInterpretedValues.unmodifiable();
+		}
+
 		/**
 		 * @param styleSheet The style sheet to find the interpretation of
 		 * @return The interpretation of this style sheet or one of its imported style sheets whose definition is given, or null if this
@@ -487,6 +492,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 		/**
 		 * Initializes or updates this style sheet
 		 *
+		 * @param env The expresso environment to use to interpret style values
 		 * @throws ExpressoInterpretationException If this style sheet could not be interpreted
 		 */
 		public void updateStyleSheet(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
@@ -553,8 +559,15 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 			})//
 			.rightOrder()//
 			.adjust();
+
+			// Compile all style values
+			theInterpretedValues.clear();
+			for (QuickStyleElement.Interpreted<?> styleEl : theStyleElements) {
+				styleEl.addToCache(theInterpretedValues);
+			}
 		}
 
+		/** @return The instantiated style sheet */
 		public Instance create() {
 			return new Instance(getIdentity());
 		}
@@ -588,6 +601,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 		// }
 	}
 
+	/** An instantiated style sheet */
 	public static class Instance extends ExElement.Abstract {
 		private List<QuickStyleElement<?>> theStyleElements;
 		private Map<String, Instance> theImportedStyleSheets;

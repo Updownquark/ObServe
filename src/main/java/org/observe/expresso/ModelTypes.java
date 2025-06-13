@@ -1,10 +1,14 @@
 package org.observe.expresso;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -15,6 +19,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.observe.CausableChanging;
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -32,6 +37,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
+import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.StampedUpdateFilteredCollection;
@@ -45,14 +51,19 @@ import org.qommons.MultiInheritanceView;
 import org.qommons.MultiInheritanceView.TypeMatch;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -938,6 +949,18 @@ public class ModelTypes {
 					}, "asObservableCollection", null), collectionConverter.getType());
 				}
 			});
+			builder.convertibleTo(ModelTypes.Value, new ModelConverter<ObservableCollection<?>, SettableValue<?>>() {
+				@Override
+				public ModelInstanceConverter<ObservableCollection<?>, SettableValue<?>> convert(
+					ModelInstanceType<ObservableCollection<?>, ?> source, ModelInstanceType<SettableValue<?>, ?> target,
+					InterpretedExpressoEnv env) {
+					if (target.getType(0).isArray()) {
+						TypeToken<?> componentType = target.getType(0).getComponentType();
+						return convertToArray(source, target, componentType);
+					} else
+						return null;
+				}
+			});
 		}
 
 		@Override
@@ -981,6 +1004,87 @@ public class ModelTypes {
 				return this;
 			return null;
 		}
+	}
+
+	static <S, C extends ObservableCollection<?>, T> ModelInstanceConverter<C, SettableValue<?>> convertToArray(
+		ModelInstanceType<C, ?> source, ModelInstanceType<SettableValue<?>, ?> target, TypeToken<T> componentType) {
+		TypeToken<S> sourceType = (TypeToken<S>) source.getType(0);
+		TypeConverter<? super S, ? extends S, ? super T, ? extends T> valueConverter;
+		valueConverter = TypeTokens.get().getCast(componentType, sourceType, true, true, ExceptionHandler.placeHolder());
+		if (valueConverter == null)
+			return null;
+		T[] empty = (T[]) Array.newInstance(TypeTokens.getRawType(componentType), 0);
+		return ModelType.<C, SettableValue<?>> converter(LambdaUtils.printableFn(collectionValue -> {
+			ObservableCollection<S> cv = (ObservableCollection<S>) collectionValue;
+			ObservableValue<T[]> arrayOV = ObservableValue.<T[]> of(() -> cv.toArray(empty), //
+				cv::getStamp, cv.simpleChanges(), //
+				() -> Identifiable.wrap(cv.getIdentity(), "toArray"));
+			SettableValue<T[]> arraySV = SettableValue.<T[]> settable(arrayOV, cv, newArray -> {
+				List<S> reversed = new ArrayList<>(newArray.length);
+				for (T value : newArray)
+					reversed.add(valueConverter.reverse(value));
+				Equivalence<? super S> eq = cv.equivalence();
+				CollectionUtils.synchronize(cv, reversed, eq::elementEquals)//
+				.simple(LambdaUtils.identity())//
+				.commonUses(true, true)//
+				.adjust();
+			});
+			if (valueConverter.getReverse() == null)
+				return arraySV.disableWith(ObservableValue.of(valueConverter + " is not reversible"));
+			return arraySV.filterAccept(newArray -> {
+				if (newArray == null)
+					return "Cannot set a collection-sourced array to null";
+				Set<String> msgs = new LinkedHashSet<>();
+				List<S> reversed = new ArrayList<>(newArray.length);
+				for (T value : newArray) {
+					String msg = valueConverter.isReversible(value);
+					if (msg != null)
+						msgs.add(msg);
+					else if (msgs.isEmpty())
+						reversed.add(valueConverter.reverse(value));
+				}
+				if (!msgs.isEmpty())
+					return StringUtils.print("\n", msgs, s -> s).toString();
+				Equivalence<? super S> eq = cv.equivalence();
+				CollectionUtils.synchronize(cv.elements(), reversed, (el, v) -> eq.elementEquals(el.get(), v))//
+				.adjust(new CollectionUtils.CollectionSynchronizer<CollectionElement<S>, S>() {
+					@Override
+					public boolean getOrder(ElementSyncInput<CollectionElement<S>, S> element) {
+						return true;
+					}
+
+					@Override
+					public ElementSyncAction leftOnly(ElementSyncInput<CollectionElement<S>, S> element) {
+						String msg = cv.mutableElement(element.getLeftValue().getElementId()).canRemove();
+						if (msg != null)
+							msgs.add(msg);
+						return element.preserve();
+					}
+
+					@Override
+					public ElementSyncAction rightOnly(ElementSyncInput<CollectionElement<S>, S> element) {
+						String msg = cv.canAdd(element.getTargetIndex(), element.getRightValue());
+						if (msg != null)
+							msgs.add(msg);
+						return element.preserve();
+					}
+
+					@Override
+					public ElementSyncAction common(ElementSyncInput<CollectionElement<S>, S> element) {
+						String msg = cv.mutableElement(element.getLeftValue().getElementId()).isAcceptable(element.getRightValue()); // TODO
+						// Auto-generated
+						// method
+						// stub
+						if (msg != null)
+							msgs.add(msg);
+						return element.preserve();
+					}
+				}, CollectionUtils.AdjustmentOrder.RightOrder);
+				if (!msgs.isEmpty())
+					return StringUtils.print("\n", msgs, s -> s).toString();
+				return null;
+			});
+		}, "toArray", null), target);
 	}
 
 	/** See {@link ModelTypes#SortedCollection} */
@@ -1076,6 +1180,18 @@ public class ModelTypes {
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
+				}
+			});
+			builder.convertibleTo(ModelTypes.Value, new ModelConverter<ObservableSortedCollection<?>, SettableValue<?>>() {
+				@Override
+				public ModelInstanceConverter<ObservableSortedCollection<?>, SettableValue<?>> convert(
+					ModelInstanceType<ObservableSortedCollection<?>, ?> source, ModelInstanceType<SettableValue<?>, ?> target,
+					InterpretedExpressoEnv env) {
+					if (target.getType(0).isArray()) {
+						TypeToken<?> componentType = target.getType(0).getComponentType();
+						return convertToArray(source, target, componentType);
+					} else
+						return null;
 				}
 			});
 		}
@@ -1181,6 +1297,17 @@ public class ModelTypes {
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
+				}
+			});
+			builder.convertibleTo(ModelTypes.Value, new ModelConverter<ObservableSet<?>, SettableValue<?>>() {
+				@Override
+				public ModelInstanceConverter<ObservableSet<?>, SettableValue<?>> convert(ModelInstanceType<ObservableSet<?>, ?> source,
+					ModelInstanceType<SettableValue<?>, ?> target, InterpretedExpressoEnv env) {
+					if (target.getType(0).isArray()) {
+						TypeToken<?> componentType = target.getType(0).getComponentType();
+						return convertToArray(source, target, componentType);
+					} else
+						return null;
 				}
 			});
 		}
@@ -1370,6 +1497,18 @@ public class ModelTypes {
 						} else
 							throw new IllegalArgumentException("Cannot convert from " + source + " to " + dest);
 					}
+				}
+			});
+			builder.convertibleTo(ModelTypes.Value, new ModelConverter<ObservableSortedSet<?>, SettableValue<?>>() {
+				@Override
+				public ModelInstanceConverter<ObservableSortedSet<?>, SettableValue<?>> convert(
+					ModelInstanceType<ObservableSortedSet<?>, ?> source, ModelInstanceType<SettableValue<?>, ?> target,
+					InterpretedExpressoEnv env) {
+					if (target.getType(0).isArray()) {
+						TypeToken<?> componentType = target.getType(0).getComponentType();
+						return convertToArray(source, target, componentType);
+					} else
+						return null;
 				}
 			});
 		}

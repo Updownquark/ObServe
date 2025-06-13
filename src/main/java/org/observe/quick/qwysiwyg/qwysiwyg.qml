@@ -71,11 +71,11 @@
 						</column-edit>
 					</column>
 					<column name="`Value`" value="ex.getValue()" />
-					<multi-value-action allow-for-empty="true" icon="&quot;/icons/add.png&quot;"
+					<multi-value-action allow-for-empty="true" icon="`/icons/add.png$16x16`"
 						enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
 						app.qwysiwyg.addWatchExpression(app.qwysiwyg.selectedNode)
 					</multi-value-action>
-					<value-action allow-for-multiple="true" icon="&quot;/icons/remove.png&quot;" value-name="exp">
+					<value-action allow-for-multiple="true" icon="`/icons/remove.png$16x16`" value-name="exp">
 						exp.remove()
 					</value-action>
 				</table>
@@ -84,14 +84,12 @@
 						<value name="editWatchVisible" init="false" />
 						<value name="editingAction" type="Qwysiwyg.WatchAction" />
 						<transform name="editActionType" source="editingAction">
-							<map-to source-as="a">
-								<map-with>a==null ? null : a.getActionType()</map-with>
+							<map-to source-as="a">a==null ? null : a.getActionType()
 								<map-reverse type="modify-source" target-as="newType">a.setActionType(newType)</map-reverse>
 							</map-to>
 						</transform>
 						<transform name="editActionConfig" source="editingAction">
-							<map-to source-as="a">
-								<map-with>a==null ? null : a.getActionConfiguration()</map-with>
+							<map-to source-as="a">a==null ? null : a.getActionConfiguration()
 								<map-reverse type="modify-source" target-as="newConfig" enabled="a==null ? `No Action` : a.isActionConfigurable()">a.setActionConfiguration(newConfig)</map-reverse>
 							</map-to>
 						</transform>
@@ -119,11 +117,11 @@
 							<on-click button="left">editWatchAction</on-click>
 						</label>
 					</column>
-					<multi-value-action allow-for-empty="true" icon="`/icons/add.png`"
+					<multi-value-action allow-for-empty="true" icon="`/icons/add.png$16x16`"
 						enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
 						app.qwysiwyg.addWatchAction(app.qwysiwyg.selectedNode)
 					</multi-value-action>
-					<value-action allow-for-multiple="true" icon="`/icons/remove.png`" value-name="exp">
+					<value-action allow-for-multiple="true" icon="`/icons/remove.png$16x16`" value-name="exp">
 						exp.remove()
 					</value-action>
 				</table>

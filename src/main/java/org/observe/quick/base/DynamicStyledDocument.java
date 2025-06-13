@@ -307,6 +307,11 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		return theNodeValue;
 	}
 
+	/**
+	 * @param node The node to create a copy of this document's models for
+	 * @return A copy of this document's models for the given node value
+	 * @throws ModelInstantiationException If the model copy could not be instantiated
+	 */
 	protected ModelSetInstance copyModels(SettableValue<T> node) throws ModelInstantiationException {
 		ModelSetInstance myModels = getUpdatingModels();
 		ModelSetInstanceBuilder builder = myModels.copy();

@@ -107,7 +107,7 @@ public interface ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 
 		@Override
 		public ElementId getElementId() {
-			return theSource.getElementId();
+			return theSource.getKeyElement();
 		}
 
 		@Override
@@ -195,6 +195,23 @@ public interface ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 		@Override
 		public K getKey() {
 			return theSource.getOldKey();
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder().append('[').append(getElementId()).append(':').append(getKey()).append("]: ");
+			switch (getType()) {
+			case add:
+				str.append("+:").append(getNewValue());
+				break;
+			case remove:
+				str.append("-:").append(getOldValue());
+				break;
+			case set:
+				str.append(':').append(getOldValue()).append("->").append(getNewValue());
+				break;
+			}
+			return str.toString();
 		}
 	}
 
@@ -310,6 +327,23 @@ public interface ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 		@Override
 		public V getNewValue() {
 			return theNewValue;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder().append('[').append(getElementId()).append(':').append(getKey()).append("]: ");
+			switch (getType()) {
+			case add:
+				str.append("+:").append(getNewValue());
+				break;
+			case remove:
+				str.append("-:").append(getOldValue());
+				break;
+			case set:
+				str.append(':').append(getOldValue()).append("->").append(getNewValue());
+				break;
+			}
+			return str.toString();
 		}
 	}
 }

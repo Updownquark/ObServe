@@ -215,7 +215,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		/**
 		 * Initializes or updates this model element
 		 *
-		 * @param env The expresso environment to use to interpret expressions
 		 * @throws ExpressoInterpretationException If this model element could not be interpreted
 		 */
 		public void updateSubModel() throws ExpressoInterpretationException {

@@ -26,24 +26,13 @@ import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMap;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoCompilationException;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoParseException;
-import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.JavaExpressoParser;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.*;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
@@ -99,17 +88,17 @@ import org.qommons.io.FilePosition;
 import org.qommons.io.FileUtils;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
+import org.qommons.io.MinML;
+import org.qommons.io.MinML.XmlAttribute;
+import org.qommons.io.MinML.XmlCdata;
+import org.qommons.io.MinML.XmlComment;
+import org.qommons.io.MinML.XmlDeclaration;
+import org.qommons.io.MinML.XmlElementContent;
+import org.qommons.io.MinML.XmlElementOpen;
+import org.qommons.io.MinML.XmlElementTerminal;
+import org.qommons.io.MinML.XmlParseException;
+import org.qommons.io.MinML.XmlProcessingInstruction;
 import org.qommons.io.PositionedContent;
-import org.qommons.io.SimpleXMLParser;
-import org.qommons.io.SimpleXMLParser.XmlAttribute;
-import org.qommons.io.SimpleXMLParser.XmlCdata;
-import org.qommons.io.SimpleXMLParser.XmlComment;
-import org.qommons.io.SimpleXMLParser.XmlDeclaration;
-import org.qommons.io.SimpleXMLParser.XmlElementContent;
-import org.qommons.io.SimpleXMLParser.XmlElementOpen;
-import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
-import org.qommons.io.SimpleXMLParser.XmlParseException;
-import org.qommons.io.SimpleXMLParser.XmlProcessingInstruction;
 import org.qommons.io.TextParseException;
 
 import com.google.common.reflect.TypeToken;
@@ -716,7 +705,7 @@ public class Qwysiwyg {
 				theDocumentContent.setLength(0);
 				URL appFile = quickApp.resolveAppFile();
 				try (InputStream in = appFile.openStream()) {
-					Reader reader = new SimpleXMLParser().readXmlFile(appFile.toString(), in);
+					Reader reader = new MinML().readXmlFile(appFile.toString(), in);
 					CircularCharBuffer buffer = new CircularCharBuffer(-1);
 					FileUtils.copy(reader, buffer.asWriter(), null, null);
 					theDocumentContent.append(buffer);
@@ -994,7 +983,7 @@ public class Qwysiwyg {
 		DequeList<DocumentComponent> stack = new CircularArrayList<>();
 		stack.add(document.get().getRoot());
 		try (InputStream in = quickFile.openStream()) {
-			new SimpleXMLParser().parseXml(quickFile.toString(), in, new SimpleXMLParser.ParseHandler() {
+			new MinML().parseXml(quickFile.toString(), in, new MinML.ParseHandler() {
 				@Override
 				public void handleDeclaration(XmlDeclaration declaration) {
 					DocumentComponent elementComp = stack.getLast().addChild(declaration.getContent().getPosition(0)).color(ELEMENT_COLOR);

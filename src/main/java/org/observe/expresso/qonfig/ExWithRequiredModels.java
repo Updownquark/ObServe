@@ -345,17 +345,17 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 		}
 
 		/**
-		 * @param model The model instance to populate with required model values
+		 * @param containerModel The model instance to populate with required model values
 		 * @throws ModelInstantiationException If any of the required values could not be instantiated
 		 */
-		public void populateModel(ModelSetInstance model) throws ModelInstantiationException {
+		public void populateModel(ModelSetInstance containerModel, ModelSetInstance sourceModel) throws ModelInstantiationException {
 			for (Map.Entry<ModelComponentId, ContextValueConverter<?>> contextValue : theContextValues.entrySet())
-				installInternalValue(model, contextValue.getKey(), contextValue.getValue());
+				installInternalValue(containerModel, sourceModel, contextValue.getKey(), contextValue.getValue());
 		}
 
-		private <M> void installInternalValue(ModelSetInstance model, ModelComponentId externalValue, ContextValueConverter<M> value)
-			throws ModelInstantiationException {
-			value.installInternalValue(model, (M) model.get(externalValue));
+		private <M> void installInternalValue(ModelSetInstance containerModel, ModelSetInstance sourceModel, ModelComponentId externalValue,
+			ContextValueConverter<M> value) throws ModelInstantiationException {
+			value.installInternalValue(containerModel, (M) sourceModel.get(externalValue));
 		}
 	}
 

@@ -187,6 +187,7 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 				super(parent, qonfigType);
 			}
 
+			/** @return An action to perform after rows have been dragged within the table */
 			@QonfigAttributeGetter("post-drag")
 			public CompiledExpression getPostDrag() {
 				return thePostDrag;
@@ -221,6 +222,7 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 				return (Def) super.getDefinition();
 			}
 
+			/** @return An action to perform after rows have been dragged within the table */
 			public InterpretedValueSynth<ObservableAction, ObservableAction> getPostDrag() {
 				return thePostDrag;
 			}
@@ -253,6 +255,7 @@ public class QuickSuperTable<R, C> extends QuickTable<R, C> {
 			super(id);
 		}
 
+		/** @return An action to perform after rows have been dragged within the table */
 		public ObservableAction getPostDrag() {
 			return thePostDrag;
 		}

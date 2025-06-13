@@ -81,8 +81,6 @@ public class ObservableConfigContent {
 				if (inUse) {
 					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH)
 						.act(Observer.<ObservableConfigEvent> printableObserver(evt -> {
-							if (evt.relativePath.size() > thePathElements.length)
-								return;
 							int pathIndex = 0;
 							ObservableConfigEvent pathChange = evt;
 							boolean childChange = false;
@@ -97,7 +95,7 @@ public class ObservableConfigContent {
 							try (Transaction ct = childChange ? pathChange.use() : Transaction.NONE) {
 								handleChange(pathIndex, pathChange, evt);
 							}
-						}, () -> thePath.toString(), null));
+						}, thePath::toString, null));
 				} else {
 					thePathSubscription.unsubscribe();
 					thePathSubscription = null;

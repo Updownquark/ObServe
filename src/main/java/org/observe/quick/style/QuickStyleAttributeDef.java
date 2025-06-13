@@ -5,9 +5,9 @@ import org.qommons.Named;
 import org.qommons.SelfDescribed;
 
 /**
- * An attribute whose value for a given element will be determined by the
- * highest-{@link StyleApplicationDef#compareTo(StyleApplicationDef) priority} {@link QuickStyleValue} that
- * {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to it.
+ * An attribute whose value for a given element will be determined by the highest-{@link StyleApplicationDef#compareTo(StyleApplicationDef)
+ * priority} {@link QuickStyleValue} that {@link StyleApplicationDef#appliesToElement(org.observe.expresso.qonfig.ExElement.Def) applies} to
+ * it.
  */
 public class QuickStyleAttributeDef implements Named, SelfDescribed {
 	private final QuickTypeStyle theDeclarer;
@@ -20,8 +20,9 @@ public class QuickStyleAttributeDef implements Named, SelfDescribed {
 	 * @param declarer The type that declared this style attribute
 	 * @param name The name for the attribute
 	 * @param type The type of the attribute
-	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement)
-	 *        applies} to an element, its value will be that of its most recent ancestor element that for which this attribute also applies
+	 * @param trickleDown Whether, if not {@link QuickStyleValue}
+	 *        {@link StyleApplicationDef#appliesToElement(org.observe.expresso.qonfig.ExElement.Def) applies} to an element, its value will
+	 *        be that of its most recent ancestor element that for which this attribute also applies
 	 * @param description A description of the attribute
 	 */
 	public QuickStyleAttributeDef(QuickTypeStyle declarer, String name, VariableType type, boolean trickleDown, String description) {
@@ -49,8 +50,9 @@ public class QuickStyleAttributeDef implements Named, SelfDescribed {
 	}
 
 	/**
-	 * @return Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to an
-	 *         element, its value will be that of its most recent ancestor element that for which this attribute also applies
+	 * @return Whether, if not {@link QuickStyleValue}
+	 *         {@link StyleApplicationDef#appliesToElement(org.observe.expresso.qonfig.ExElement.Def) applies} to an element, its value will
+	 *         be that of its most recent ancestor element that for which this attribute also applies
 	 */
 	public boolean isTrickleDown() {
 		return isTrickleDown;

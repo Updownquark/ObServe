@@ -136,6 +136,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			return theCharFilter;
 		}
 
+		/** @return The character typed by the user */
 		public SettableValue<Character> getTypedChar() {
 			return theTypedChar;
 		}
@@ -286,6 +287,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			return theKeyCode;
 		}
 
+		/** @return The code of the key that the user pressed or released */
 		public SettableValue<KeyCode> getEventKeyCode() {
 			return theEventKeyCode;
 		}

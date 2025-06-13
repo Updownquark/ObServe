@@ -616,7 +616,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public Transaction tryLock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
+			return theWrapped.tryLock(write, cause);
 		}
 
 		@Override

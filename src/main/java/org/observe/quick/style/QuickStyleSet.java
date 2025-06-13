@@ -14,7 +14,6 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.Named;
-import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -67,7 +66,7 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 	 * @param modelContext The model context for externally-required models
 	 * @throws QonfigInterpretationException If the style values could not be compiled
 	 */
-	public void getStyleValues(Collection<QuickStyleValue> styleValues, StyleApplicationDef application, QonfigElement element,
+	public void getStyleValues(Collection<QuickStyleValue> styleValues, StyleApplicationDef application, ExElement.Def<?> element,
 		CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
 		ExWithRequiredModels.RequiredModelContext styleSetModelContext = getAddOn(ExWithRequiredModels.Def.class).getContext(env);
 		if (modelContext == null)
@@ -102,10 +101,12 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 	/** Interpretation of a {@link QuickStyleSet} */
 	public static class Interpreted extends ExElement.Interpreted.Abstract<ExElement.Void> {
 		private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
+		private final StyleInterpretationCache.Modifiable theInterpretedValues;
 
 		Interpreted(QuickStyleSet definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theStyleElements = new ArrayList<>();
+			theInterpretedValues = StyleInterpretationCache.create();
 		}
 
 		@Override
@@ -116,6 +117,10 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 		/** @return All style elements in this style set */
 		public List<QuickStyleElement.Interpreted<?>> getStyleElements() {
 			return Collections.unmodifiableList(theStyleElements);
+		}
+
+		public StyleInterpretationCache getInterpretedValues() {
+			return theInterpretedValues.unmodifiable();
 		}
 
 		/**
@@ -132,6 +137,11 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 			super.doUpdate();
 
 			syncChildren(getDefinition().getStyleElements(), theStyleElements, def -> def.interpret(this), i -> i.updateStyle());
+
+			theInterpretedValues.clear();
+			for (QuickStyleElement.Interpreted<?> styleEl : theStyleElements) {
+				styleEl.addToCache(theInterpretedValues);
+			}
 		}
 	}
 }

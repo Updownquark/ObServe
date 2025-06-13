@@ -18,6 +18,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
+import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
@@ -3668,6 +3669,7 @@ public interface ObservableModelSet extends Identifiable {
 				model = theInheritance.get(modelId);
 				if (model != null)
 					return model;
+				BreakpointHere.breakpoint();
 				throw new IllegalArgumentException("This model " + getTopLevelModels() + " does not inherit " + modelId);
 			}
 

@@ -20,18 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ExAddOn;
-import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElementTraceable;
-import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
-import org.observe.expresso.qonfig.ExModelAugmentation;
-import org.observe.expresso.qonfig.ExMultiElementTraceable;
-import org.observe.expresso.qonfig.ExWithElementModel;
-import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.expresso.qonfig.ExpressoTransformations;
-import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.expresso.qonfig.*;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
@@ -247,6 +236,7 @@ public interface QuickTableColumn<R, C> {
 				return isAcceptable;
 			}
 
+			/** @return Whether the enabled state of this column editing should affect the rendering */
 			@QonfigAttributeGetter("render-enabled")
 			public boolean isRenderingEnabled() {
 				return isRenderingEnabled;
@@ -375,8 +365,7 @@ public interface QuickTableColumn<R, C> {
 				super.doUpdate();
 
 				isAcceptable = ExpressoTransformations.parseFilter(getDefinition().isAcceptable(), this, true);
-				syncChildren(getDefinition().getEditors(), theEditors, def -> def.interpret(this),
-					e -> e.updateElement());
+				syncChildren(getDefinition().getEditors(), theEditors, def -> def.interpret(this), e -> e.updateElement());
 			}
 
 			/** @return The editing strategy */
@@ -447,6 +436,7 @@ public interface QuickTableColumn<R, C> {
 			return Collections.unmodifiableList(theEditors);
 		}
 
+		/** @return The list of visible values for each of this column editing's editor widgets */
 		public List<SettableValue<Boolean>> getEditorVisibilities() {
 			return Collections.unmodifiableList(theEditorVisibilities);
 		}
@@ -466,6 +456,7 @@ public interface QuickTableColumn<R, C> {
 			return theFilteredColumnEditValue;
 		}
 
+		/** @return Whether the enabled state of this column editing should affect the rendering */
 		public boolean isRenderingEnabled() {
 			return isRenderingEnabled;
 		}
@@ -475,22 +466,27 @@ public interface QuickTableColumn<R, C> {
 			return theClicks;
 		}
 
+		/** @return The row value of the cell being edited */
 		public SettableValue<R> getEditRowValue() {
 			return theEditRowValue;
 		}
 
+		/** @return The cell value being edited */
 		public SettableValue<C> getEditColumnValue() {
 			return theEditColumnValue;
 		}
 
+		/** @return Whether the value being edited is in a selected row */
 		public SettableValue<Boolean> isSelected() {
 			return isSelected;
 		}
 
+		/** @return The row index of the cell being edited */
 		public SettableValue<Integer> getRowIndex() {
 			return theRowIndex;
 		}
 
+		/** @return The column index of the cell being edited */
 		public SettableValue<Integer> getColumnIndex() {
 			return theColumnIndex;
 		}
@@ -1010,11 +1006,11 @@ public interface QuickTableColumn<R, C> {
 			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 				qonfigType = COLUMN,
 				interpretation = Interpreted.class,
-				instance = SingleColumnSet.class),
+				instance = AbstractSingleColumn.class),
 			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 			qonfigType = "rendering",
 			interpretation = Interpreted.class,
-			instance = SingleColumnSet.class) })
+			instance = AbstractSingleColumn.class) })
 		public static abstract class Def<SCS extends AbstractSingleColumn<?, ?>> extends QuickStyledElement.Def.Abstract<SCS>
 		implements TableColumnSet.Def<SCS> {
 			private CompiledExpression theId;
@@ -1287,8 +1283,7 @@ public interface QuickTableColumn<R, C> {
 					def -> (QuickTransfer.TransferSource.Interpreted<C, ?>) def.interpret(this),
 					interp -> interp.updateTransferSource(getType()));
 				syncChildren(getDefinition().getTransferAccepters(), theTransferAccepters,
-					ta -> (QuickTransfer.TransferAccept.Interpreted<C, ?>) ta.interpret(this),
-					ta -> ta.updateTransferAccepter(getType()));
+					ta -> (QuickTransfer.TransferAccept.Interpreted<C, ?>) ta.interpret(this), ta -> ta.updateTransferAccepter(getType()));
 			}
 
 			@Override

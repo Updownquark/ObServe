@@ -56,6 +56,29 @@ public class QuickStyleUtils {
 		}
 	}
 
+	private static class ResourceLocatorKey {
+		private final String theDocument;
+
+		ResourceLocatorKey(String document) {
+			theDocument = document;
+		}
+
+		@Override
+		public int hashCode() {
+			return theDocument.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ResourceLocatorKey && theDocument.equals(((ResourceLocatorKey) obj).theDocument);
+		}
+
+		@Override
+		public String toString() {
+			return theDocument;
+		}
+	}
+
 	private static class IconKey {
 		private final String theLocation;
 
@@ -172,9 +195,15 @@ public class QuickStyleUtils {
 			return resize((ImageIcon) found, size);
 		else if (found instanceof String)
 			throw new ParseException((String) found, 0);
+		ResourceLocatorKey rlk = new ResourceLocatorKey(sourceDocument);
+		ResourceLocator locator = (ResourceLocator) cache.getCacheItem(rlk);
+		if (locator == null) {
+			locator = createLocator(sourceDocument, contextClassLoader);
+			cache.setCacheItem(rlk, locator);
+		}
 		ImageIcon img;
 		try {
-			img = parseIcon(iconLocation, sourceDocument, contextClassLoader);
+			img = parseIcon(iconLocation, locator);
 			if (img == null) {
 				String msg = "Icon file not found@ '" + iconLocation + "'";
 				cache.setCacheItem(key, msg);
@@ -185,7 +214,7 @@ public class QuickStyleUtils {
 			String msg = "Icon could not be loaded@ '" + iconLocation + "': " + e.getMessage();
 			cache.setCacheItem(key, msg);
 			throw new ParseException(msg, 0);
-		} catch (ParseException e) {
+		} catch (ParseException | RuntimeException e) {
 			cache.setCacheItem(key, e.getMessage());
 			throw e;
 		}
@@ -193,13 +222,16 @@ public class QuickStyleUtils {
 		return resize(img, size);
 	}
 
-	private static ImageIcon parseIcon(String iconLocation, String sourceDocument, ClassLoader contextClassLoader)
-		throws IOException, ParseException {
+	private static ResourceLocator createLocator(String sourceDocument, ClassLoader contextClassLoader) {
 		// Try a whole bunch of different ways to resolve the icon resource
 		ResourceLocator locator = new ResourceLocator();
 		locator.relativeTo(ObservableSwingUtils.class);
 		locator.relativeTo(contextClassLoader);
 		locator.relativeTo(sourceDocument);
+		return locator;
+	}
+
+	private static ImageIcon parseIcon(String iconLocation, ResourceLocator locator) throws IOException, ParseException {
 		URL url = locator.findResource(iconLocation);
 		if (url == null) {
 			BreakpointHere.breakpoint(); // TODO Remove

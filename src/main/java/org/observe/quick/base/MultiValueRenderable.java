@@ -57,7 +57,9 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 	/** @return The model ID of the variable by which the selected status of the active value will be available to expressions */
 	ModelComponentId getSelectedVariable();
 
+	/** @return The currently active value (e.g. the one being rendered or interacted with by the user) */
 	SettableValue<T> getActiveValue();
 
+	/** @return Whether the currently active value (e.g. the one being rendered or interacted with by the user) is selected */
 	SettableValue<Boolean> isSelected();
 }

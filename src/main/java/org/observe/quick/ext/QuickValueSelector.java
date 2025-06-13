@@ -115,21 +115,28 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 			return theInclude;
 		}
 
+		/** @return Configuration for the button that causes all values in the available table to be transferred to the included table */
 		@QonfigChildGetter("include-all-button")
 		public QuickButton.Def<?> getIncludeAllConfig() {
 			return theIncludeAllConfig;
 		}
 
+		/**
+		 * @return Configuration for the button that causes all selected values in the available table to be transferred to the included
+		 *         table
+		 */
 		@QonfigChildGetter("include-button")
 		public QuickButton.Def<?> getIncludeConfig() {
 			return theIncludeConfig;
 		}
 
+		/** @return Configuration for the button that causes all selected values in the included table to be removed */
 		@QonfigChildGetter("exclude-button")
 		public QuickButton.Def<?> getExcludeConfig() {
 			return theExcludeConfig;
 		}
 
+		/** @return Configuration for the button that causes all values in the included table to be removed */
 		@QonfigChildGetter("exclude-all-button")
 		public QuickButton.Def<?> getExcludeAllConfig() {
 			return theExcludeAllConfig;
@@ -234,18 +241,25 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 			return theIncluded;
 		}
 
+		/** @return Configuration for the button that causes all values in the available table to be transferred to the included table */
 		public QuickButton.Interpreted<?> getIncludeAllConfig() {
 			return theIncludeAllConfig;
 		}
 
+		/**
+		 * @return Configuration for the button that causes all selected values in the available table to be transferred to the included
+		 *         table
+		 */
 		public QuickButton.Interpreted<?> getIncludeConfig() {
 			return theIncludeConfig;
 		}
 
+		/** @return Configuration for the button that causes all selected values in the included table to be removed */
 		public QuickButton.Interpreted<?> getExcludeConfig() {
 			return theExcludeConfig;
 		}
 
+		/** @return Configuration for the button that causes all values in the included table to be removed */
 		public QuickButton.Interpreted<?> getExcludeAllConfig() {
 			return theExcludeAllConfig;
 		}
@@ -378,18 +392,24 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 		return theIncluded;
 	}
 
+	/** @return Configuration for the button that causes all values in the available table to be transferred to the included table */
 	public QuickButton getIncludeAllConfig() {
 		return theIncludeAllConfig;
 	}
 
+	/**
+	 * @return Configuration for the button that causes all selected values in the available table to be transferred to the included table
+	 */
 	public QuickButton getIncludeConfig() {
 		return theIncludeConfig;
 	}
 
+	/** @return Configuration for the button that causes all selected values in the included table to be removed */
 	public QuickButton getExcludeConfig() {
 		return theExcludeConfig;
 	}
 
+	/** @return Configuration for the button that causes all values in the included table to be removed */
 	public QuickButton getExcludeAllConfig() {
 		return theExcludeAllConfig;
 	}

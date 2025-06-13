@@ -190,7 +190,7 @@
 			In this way, a rendering widget may specify different renderers for different kinds of rendered values.?>
 		<add-on name="rendering" abstract="true">
 			<?DOC Optionally rendering widgets may specify a renderer to be used by default if one is not specified on the element?>
-			<element-meta name="default-renderer" type="widget" inherits="renderer" min="0" max="inf" />
+			<element-meta name="default-renderer" role="renderer" type="widget" min="0" max="inf" />
 			<?DOC The widget used to render each value for this rendering widget?>
 			<child-def name="renderer" type="widget" inherits="renderer" min="0" max="inf" />
 		</add-on>

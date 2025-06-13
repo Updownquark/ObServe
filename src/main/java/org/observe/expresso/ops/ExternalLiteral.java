@@ -2,8 +2,8 @@ package org.observe.expresso.ops;
 
 import java.text.ParseException;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
@@ -81,14 +81,15 @@ public class ExternalLiteral implements ObservableExpression {
 		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		Class<T> rawType = TypeTokens.getRawType(asType);
-		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
-		if (parsers.isEmpty()) {
+		Iterator<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType).iterator();
+		if (!parsers.hasNext()) {
 			exHandler.handle1(() -> new ExpressoInterpretationException("No literal parsers available for type " + rawType.getName(),
 				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		NonStructuredParser parser = null;
-		for (NonStructuredParser p : parsers) {
+		while (parsers.hasNext()) {
+			NonStructuredParser p = parsers.next();
 			if (p.canParse(asType, theText, env)) {
 				parser = p;
 				break;

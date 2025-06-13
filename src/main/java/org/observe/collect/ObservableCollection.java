@@ -35,6 +35,7 @@ import org.observe.dbug.DbugAnchorType;
 import org.observe.util.ObservableUtils;
 import org.observe.util.SafeObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.Betterable;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -46,6 +47,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -119,28 +121,50 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	@Override
 	default boolean containsAny(Collection<?> c) {
+		BetterSet<E> myValuesSet;
 		try (Transaction ct = Transactable.lock(c, false, null)) {
 			if (c.isEmpty())
 				return false;
+			boolean cSet = c instanceof Set;
+			boolean thisSet = this instanceof Set;
+			boolean testArgValues;
+			if (cSet == thisSet)
+				testArgValues = c.size() < size();
+			else
+				testArgValues = !cSet;
 			try (Transaction t = lock(false, null)) {
-				if (c.size() < size()) {
+				if (testArgValues) { // Likely faster to test the argument's elements against this collection
 					for (Object o : c)
 						if (contains(o))
 							return true;
 					return false;
-				} else {
-					if (c.isEmpty())
-						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
+				} else if (c instanceof ObservableSet && ((ObservableSet<?>) c).equivalence().equals(equivalence())) {
 					CollectionElement<E> el = getTerminalElement(true);
 					while (el != null) {
-						if (cSet.contains(el.get()))
+						if (c.contains(el.get()))
 							return true;
 						el = getAdjacentElement(el.getElementId(), true);
 					}
 					return false;
+				} else {
+					myValuesSet = equivalence().createSet();
+					CollectionElement<E> el = getTerminalElement(true);
+					while (el != null) {
+						try {
+							myValuesSet.add(el.get());
+						} catch (ClassCastException | IllegalArgumentException e) {
+							// Certain typed of mapped collections (e.g. double-typed collections combined with another double value)
+							// may contain values which cannot actually be added to its equivalence.
+						}
+						el = getAdjacentElement(el.getElementId(), true);
+					}
 				}
 			}
+			for (E o : myValuesSet) {
+				if (c.contains(o))
+					return true;
+			}
+			return false;
 		}
 	}
 
@@ -150,17 +174,26 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			if (c.isEmpty())
 				return true;
 			try (Transaction t = lock(false, null)) {
-				if (c.size() < size()) {
+				if (this instanceof Set || c.size() < size()) { // Likely faster to test the argument's elements against this collection
 					for (Object o : c)
 						if (!contains(o))
 							return false;
 					return true;
 				} else {
-					if (c.isEmpty())
-						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
-					cSet.removeAll(this);
-					return cSet.isEmpty();
+					Set<? super E> cValuesSet = equivalence().createSet();
+					for (Object o : c) {
+						try {
+							cValuesSet.add((E) o);
+						} catch (ClassCastException | IllegalArgumentException e) {
+							// Equivalence doesn't have API that allows it to determine whether a particular object could potentially
+							// be a part of it.
+							// In the case of mapped collections, this call may throw an argument exception.
+							// If an element isn't part of a set governed by this collection's equivalence, we know we don't contain it.
+							return false;
+						}
+					}
+					cValuesSet.removeAll(this);
+					return cValuesSet.isEmpty();
 				}
 			}
 		}
@@ -225,6 +258,11 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @return The equivalence that governs this collection
 	 */
 	Equivalence<? super E> equivalence();
+
+	@Override
+	default Betterable<E> distinct() {
+		return distinct(() -> equivalence().createSet());
+	}
 
 	// Default implementations of redundant Collection methods
 

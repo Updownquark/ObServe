@@ -48,6 +48,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 
 		/**
 		 * @param session The expresso interpretation session whose model to augment
+		 * @param document The location of the document whose models to augment
 		 * @return A model builder to inject model values in to augment the tagged element's model view
 		 */
 		protected ObservableModelSet.Builder createBuilder(ExpressoQIS session, String document) {

@@ -1370,8 +1370,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickRadioButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 			panel.addRadioField(null, quick.getValue(), quick.getValues(), rf -> {
-				rf.withValueTooltip(v -> {
-					quick.getActiveValue().set(v, null);
+				rf.render((rb, v) -> {
+					if (quick.getActiveValue().get() != v)
+						quick.getActiveValue().set(v);
+					rb.setText(quick.getRender().get());
+				}).withValueTooltip(v -> {
+					if (quick.getActiveValue().get() != v)
+						quick.getActiveValue().set(v, null);
 					return quick.getValueTooltip().get();
 				});
 				component.accept(rf);
@@ -2083,7 +2088,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 								break;
 							}
 						}
-						System.out.println("Visible " + dialog);
 						if (icon != null)
 							JOptionPane.showMessageDialog(parent, theContent, theTitle.get(), swingType, new ImageIcon(icon));
 						else

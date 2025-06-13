@@ -34,17 +34,37 @@
 
 	<!-- Nice UI for table row colors -->
 	<style element="tabular-widget">
-		<style child="columns">
-			<style if="selected">
-				<style attr="widget.color">baseColors.tableRowSelected</style>
-				<style attr="with-text.font-color">`white`</style>
+		<style child="columns" element="column">
+			<!-- We don't want buttons affected by these styles. Applied to buttons, these styles make buttons unreadable.
+				But we do want to apply them to text widgets and check boxes (and maybe other things).
+			-->
+			<style child="renderer">
+				<style element="text-widget" style-set="baseTableRendered" />
+				<style element="check-box" style-set="baseTableRendered" />
 			</style>
-			<style if="rowIndex % 2 == 1" attr="widget.color">baseColors.tableOddRow
-				<style if="selected">baseColors.tableOddRowSelected</style>
+			<style child="edit">
+				<style child="editor">
+					<style element="text-widget" style-set="baseTableRendered" />
+					<style element="check-box" style-set="baseTableRendered" />
+				</style>
 			</style>
-			<style attr="widget.color">baseColors.tableRowDefault</style>
 		</style>
 	</style>
+	
+	<style-set name="baseTableRendered">
+		<ext-model>
+			<value name="selected" type="boolean" />
+			<value name="rowIndex" type="int" />
+		</ext-model>
+		<style if="selected">
+			<style attr="widget.color">baseColors.tableRowSelected</style>
+			<style attr="with-text.font-color">`white`</style>
+		</style>
+		<style if="rowIndex % 2 == 1" attr="widget.color">baseColors.tableOddRow
+			<style if="selected">baseColors.tableOddRowSelected</style>
+		</style>
+		<style attr="widget.color">baseColors.tableRowDefault</style>
+	</style-set>
 
 	<!-- Default style interpretation for the simple styled text model -->
 	<style-set name="simpleTreeModelData">

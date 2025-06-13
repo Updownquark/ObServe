@@ -59,6 +59,18 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 	 * @throws Exception If the task throws any exception
 	 */
 	default <T> T onEQ(ExSupplier<T, ?> task) throws Exception {
+		if (EventQueue.isDispatchThread()) {
+			try {
+				return task.get();
+			} catch (Throwable e) {
+				if (e instanceof Exception)
+					throw (Exception) e;
+				else if (e instanceof Error)
+					throw (Error) e;
+				else
+					throw new CheckedExceptionWrapper(e);
+			}
+		}
 		class UnsafeSupplier {
 			T get() {
 				try {
@@ -107,7 +119,7 @@ public interface InteractiveTest extends InteractiveTestOrSuite {
 
 	/**
 	 * Blocks until a condition is met or the user cancels the test.
-	 * 
+	 *
 	 * @param condition Checks a condition that will cause this method to exit. It should execute fairly quickly, at least in the case of a
 	 *        negative.
 	 * @param testing The current state of testing

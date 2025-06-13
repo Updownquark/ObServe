@@ -426,10 +426,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			return true;
 		}
 
-		void deactivate(K key, int keyIndex, Object... causes) {
+		void remove() {
 			if (keyEntryId == null || !keyEntryId.isPresent())
 				return; // Already removed
 			theKeyEntries.mutableElement(keyEntryId).remove();
+		}
+
+		void fireRemoved(K key, int keyIndex, Object... causes) {
 			if (!theKeySetListeners.isEmpty()) {
 				ObservableCollectionEvent<K> keyEvent = ObservableCollectionEvent.createCollectionEvent(theExposedId, keyIndex,
 					CollectionChangeType.remove, key, key, causes);
@@ -795,6 +798,11 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			}
 			if (move != null)
 				causes = ArrayUtils.add(causes, move);
+
+			boolean removeKey = theValues.isEmpty();
+			if (removeKey)
+				theKeyEntry.remove();
+
 			if (!theMapListeners.isEmpty()) {
 				ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent.Default<>(//
 					theKeyEntry.theExposedId, valueId, keyIndex, valueIndex, //
@@ -815,8 +823,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				}
 			}
 
-			if (theValues.isEmpty())
-				theKeyEntry.deactivate(key, keyIndex, causes);
+			if (removeKey)
+				theKeyEntry.fireRemoved(key, keyIndex, causes);
 		}
 
 		@Override

@@ -48,6 +48,12 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 		theValue = initialValue;
 	}
 
+	/**
+	 * @param description The description for this value
+	 * @param nullable Whether this value can accept null values
+	 * @param eventableData The lock/listener data for the value
+	 * @param initialValue The initial value for this value
+	 */
 	protected SimpleSettableValue(String description, boolean nullable,
 		AbstractEventableBuilder.EventableData<? super SimpleSettableValue<T>> eventableData, T initialValue) {
 		isNullable = nullable;
@@ -195,6 +201,7 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 
 	/**
 	 * @param lock The lock for this value
+	 * @param eventableData The lock/listener data for the value
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock,

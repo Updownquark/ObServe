@@ -332,7 +332,10 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
-				if (getDefinition().getValueType() != null || getElementValue() != null)
+				TypeToken<T> type = getAddOnValue(ExTyped.Interpreted.class, ExTyped.Interpreted::getValueType);
+				if (type != null)
+					return ModelTypes.Value.forType(type);
+				else if (getDefinition().getValueType() != null || getElementValue() != null)
 					return super.getType();
 				return getInit().getType();
 			}

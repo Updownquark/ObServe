@@ -270,6 +270,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="with" type="expression" />
 		</element-def>
+		
+		<?DOC Produces, from an action or value, a String that is the reason why the action cannot currently be executed
+			or why the value cannot currently be set to anything, or null if the action or value is currently enabled?>
+		<element-def name="enabled" inherits="operation" />
 
 		<?DOC Prevents some modifications to a transformed result?>
 		<element-def name="filter-accept" inherits="complex-operation">

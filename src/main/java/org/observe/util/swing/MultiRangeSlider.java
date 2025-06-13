@@ -1,6 +1,16 @@
 package org.observe.util.swing;
 
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.Stroke;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -1612,9 +1622,11 @@ public class MultiRangeSlider extends ConformingPanel {
 			RangePoint hovered = range.getElementId().equals(theHoveredRange) ? theHoveredRangePoint : null;
 			RangePoint focused = range.getElementId().equals(theFocusedRange) ? theFocusedRangePoint : null;
 			Component render = theRangeRenderer.renderRange(range, hovered, focused);
-			if (isVertical) {
-				int pos = (int) Math.round((range.get().getMin() - min) * getHeight() / sliderRange.getExtent());
-				int max = (int) Math.round((range.get().getMax() - min) * getHeight() / sliderRange.getExtent());
+			Range rangeVal = range.get();
+			if (rangeVal == null) {
+			} else if (isVertical) {
+				int pos = (int) Math.round((rangeVal.getMin() - min) * getHeight() / sliderRange.getExtent());
+				int max = (int) Math.round((rangeVal.getMax() - min) * getHeight() / sliderRange.getExtent());
 				int temp = getHeight() - max;
 				max = getHeight() - pos;
 				pos = temp;
@@ -1629,8 +1641,8 @@ public class MultiRangeSlider extends ConformingPanel {
 				}
 				setRangeRenderBounds(index, x, width);
 			} else {
-				int pos = (int) Math.round((range.get().getMin() - min) * getWidth() / sliderRange.getExtent());
-				int max = (int) Math.round((range.get().getMax() - min) * getWidth() / sliderRange.getExtent());
+				int pos = (int) Math.round((rangeVal.getMin() - min) * getWidth() / sliderRange.getExtent());
+				int max = (int) Math.round((rangeVal.getMax() - min) * getWidth() / sliderRange.getExtent());
 				int height = render.getPreferredSize().height;
 				int y = center - (height - theRangeRenderer.getCenter());
 				render.setBounds(0, 0, max - pos, height);

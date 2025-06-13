@@ -43,6 +43,7 @@ import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.BreakpointHere;
+import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
@@ -119,9 +120,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	}
 
 	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format, Consumer<ObservableTextField<C>> textField) {
+		return createTextEditor(LambdaUtils.constantFn(format, format::toString, format), textField);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Function<? super M, Format<C>> format,
+		Consumer<ObservableTextField<C>> textField) {
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
-		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty());
+		ObservableTextField<C> field = new ObservableTextField<>(value, Format.printOnly(String::valueOf), Observable.empty());
 		if (textField != null)
 			textField.accept(field);
 		// Default margins for the text field don't fit into the rendered cell
@@ -129,6 +135,9 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		boolean[] editing = new boolean[1];
 		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(field, value, (e, c, cell, f, tt, vtt) -> {
 			field.revertEdits();
+			Format<C> newFormat = format.apply(cell.getModelValue());
+			if (newFormat != field.getFormat())
+				field.getEditor().setFormat(newFormat);
 			if (c instanceof JTable) {
 				Insets margin = field.getMargin();
 				if (margin.top != 0 || margin.bottom != 0) {

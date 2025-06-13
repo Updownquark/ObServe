@@ -197,10 +197,13 @@ public interface QuickEventListener extends ExElement {
 		}
 	}
 
+	/** @return Whether the alt key is currently pressed */
 	SettableValue<Boolean> isAltPressed();
 
+	/** @return Whether the control key is currently pressed */
 	SettableValue<Boolean> isCtrlPressed();
 
+	/** @return Whether the shift key is currently pressed */
 	SettableValue<Boolean> isShiftPressed();
 
 	/** @return The list of filters that must be passed by an event if this listener's action is to be performed on it */

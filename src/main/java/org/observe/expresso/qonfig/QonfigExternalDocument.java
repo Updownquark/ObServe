@@ -40,6 +40,7 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 			return theFulfills;
 		}
 
+		/** @return The promise that this external document fulfills */
 		public QonfigPromise.Def<?> getFulfilledPromise() {
 			return theFulfilledPromise;
 		}
@@ -113,6 +114,7 @@ public abstract class QonfigExternalDocument extends ExElement.Abstract {
 			return (Def<? super C>) super.getDefinition();
 		}
 
+		/** @return The promise that this external document fulfills */
 		public QonfigPromise.Interpreted<?> getFulfilledPromise() {
 			return theFulfilledPromise;
 		}

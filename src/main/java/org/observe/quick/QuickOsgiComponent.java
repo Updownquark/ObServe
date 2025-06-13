@@ -68,7 +68,7 @@ import org.qommons.threading.QommonsTimer;
  * it.
  * </p>
  */
-@Component(loadStatus = "Loading User Interface")
+@Component(loadStatus = "loadStatus()")
 public abstract class QuickOsgiComponent {
 	private final ThreadConstraint theThreading;
 	private final SimpleObservable<Void> theUntil;
@@ -81,20 +81,16 @@ public abstract class QuickOsgiComponent {
 	private final Set<Class<?>> theWaitingServices;
 	private QuickDocument.Interpreted theWaitingDoc;
 
-	/**
-	 * @param threading The thread constraint for creating and modifying UI components
-	 * @param dynamicRefresh Whether this component should watch the Quick source documents and reload itself when they change. This feature
-	 *        has not been well-tested
-	 */
-	protected QuickOsgiComponent(ThreadConstraint threading, boolean dynamicRefresh) {
+	/** @param threading The thread constraint for creating and modifying UI components */
+	protected QuickOsgiComponent(ThreadConstraint threading) {
 		theThreading = threading;
 		theUntil = new SimpleObservable<>();
 		theWaitingServices = new LinkedHashSet<>();
 
-		if (dynamicRefresh) {
+		if (isDynamicRefresh()) {
 			theRefreshFiles = new ConcurrentHashMap<>();
 			QommonsTimer.getCommonInstance().build(() -> {
-				if (theClassLoader == null)
+				if (theClassLoader == null || !isDynamicRefresh())
 					return;
 				BetterFile refresh = checkForRefresh();
 				if (refresh != null) {
@@ -134,10 +130,30 @@ public abstract class QuickOsgiComponent {
 		return theQuickApp;
 	}
 
+	/** @return The status message to display to the user while this component is loading */
+	protected ObservableValue<String> loadStatus() {
+		return ObservableValue.of("Loading User Interface");
+	}
+
 	/** @return An observable that will fire when the Quick source documents have changed and need to be reloaded */
 	public SimpleObservable<Void> getUntil() {
 		return theUntil;
 	}
+
+	/**
+	 * <p>
+	 * Whether this component should watch the Quick source documents and reload itself when they change
+	 * </p>
+	 * <p>
+	 * This method is called once from the constructor to determine whether to set up the mechanism, and then periodically thereafter (if
+	 * the first call returned true). This gives the component the opportunity to stop refreshing. E.g. if the component was not built with
+	 * refreshing in mind, refreshing an active document can be destructive, so a component might enable auto-refreshing until the document
+	 * is successfully displayed, whereupon auto-refresh can be stopped.
+	 * </p>
+	 *
+	 * @return Whether this component dynamically refreshes
+	 */
+	protected abstract boolean isDynamicRefresh();
 
 	/** @param file A file to watch. When the file changes this component will refresh itself (if so configured). */
 	protected void addRefreshFile(BetterFile file) {

@@ -8,7 +8,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.SyntheticField.Def;
 import org.observe.expresso.ops.ExternalLiteral;
-import org.qommons.ClassMap;
+import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
 import org.qommons.config.SessionValues;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
@@ -42,8 +42,9 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 
 	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
 		Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties,
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators,
+		BinaryOperatorSet binaryOperators, MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> syntheticFields,
+		ErrorReporting reporting, SessionValues properties,
 		boolean testing) {
 		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, syntheticFields, reporting, properties);
 		theExtModels = extModels;
@@ -53,8 +54,9 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 
 	@Override
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ClassMap<Map<String, SyntheticField.Def<?, ?>>> syntheticFields, ErrorReporting reporting, SessionValues properties) {
+		MultiInheritanceMap2<Class<?>, Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators,
+		BinaryOperatorSet binaryOperators, MultiInheritanceMap2<Class<?>, Map<String, SyntheticField.Def<?, ?>>> syntheticFields,
+		ErrorReporting reporting, SessionValues properties) {
 		if (models != null && !(models instanceof InterpretedModelSet))
 			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, syntheticFields, reporting,
 				getProperties());
@@ -186,7 +188,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 * @return All non-structured parsers that may be able to parse a value of the given type
 	 */
 	@Override
-	public Set<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
+	public Iterable<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
 		return super.getNonStructuredParsers(type);
 	}
 

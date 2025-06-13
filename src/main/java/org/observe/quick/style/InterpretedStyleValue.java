@@ -1,10 +1,13 @@
 package org.observe.quick.style;
 
+import java.util.List;
+
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.ExWithRequiredModels.InterpretedRequiredModelContext;
@@ -19,6 +22,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	private final InterpretedStyleApplication theApplication;
 	private final QuickStyleAttribute<T> theAttribute;
 	private final InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+	private final List<ModelInstantiator> theModels;
 	private final ExWithRequiredModels.InterpretedRequiredModelContext theModelContext;
 
 	/**
@@ -29,11 +33,13 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	 * @param modelContext The required model context for the style value
 	 */
 	public InterpretedStyleValue(QuickStyleValue styleValue, InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
-		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value, InterpretedRequiredModelContext modelContext) {
+		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value, List<ModelInstantiator> models,
+		InterpretedRequiredModelContext modelContext) {
 		theStyleValue = styleValue;
 		theApplication = application;
 		theAttribute = attribute;
 		theValue = value;
+		theModels = models;
 		theModelContext = modelContext;
 	}
 
@@ -67,7 +73,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	 * @throws ModelInstantiationException If any model values cannot be initialized
 	 */
 	public StyleValueInstantiator<T> instantiate() throws ModelInstantiationException {
-		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(), theValue.instantiate(), theModelContext);
+		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(), theValue.instantiate(), theModels, theModelContext);
 	}
 
 	@Override
@@ -90,6 +96,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		public final ModelValueInstantiator<ObservableValue<Boolean>> condition;
 		/** The model value instantiator for the style value's value */
 		public final ModelValueInstantiator<SettableValue<T>> value;
+		public final List<ModelInstantiator> models;
 		/** The required model context for the style value */
 		public final ExWithRequiredModels.InterpretedRequiredModelContext modelContext;
 
@@ -99,13 +106,17 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		 * @param modelContext The required model context for the style value
 		 */
 		public StyleValueInstantiator(ModelValueInstantiator<ObservableValue<Boolean>> condition,
-			ModelValueInstantiator<SettableValue<T>> value, ExWithRequiredModels.InterpretedRequiredModelContext modelContext) {
+			ModelValueInstantiator<SettableValue<T>> value, List<ModelInstantiator> models,
+			ExWithRequiredModels.InterpretedRequiredModelContext modelContext) {
 			this.condition = condition;
 			this.value = value;
+			this.models = models;
 			this.modelContext = modelContext;
 		}
 
 		void instantiate() throws ModelInstantiationException {
+			for (ModelInstantiator model : models)
+				model.instantiate();
 			if (condition != null)
 				condition.instantiate();
 			value.instantiate();

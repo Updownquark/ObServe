@@ -30,7 +30,6 @@ import org.observe.quick.QuickWithBackground;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
-import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
@@ -348,9 +347,9 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				}
 
 				@Override
-				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet)
 					throws ExpressoInterpretationException {
-					super.update(element, styleSheet, appCache);
+					super.update(element, styleSheet);
 					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theLineColor = get(cache.getAttribute(getDefinition().getLineColor(), Color.class, env));

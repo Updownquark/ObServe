@@ -27,8 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.ClassMap;
 import org.qommons.LambdaUtils;
+import org.qommons.MultiInheritanceView;
+import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ex.ExceptionHandler;
@@ -56,6 +57,8 @@ public class TypeTokens implements TypeParser {
 	public class TypeKey<T> {
 		/** The class that this holder is for */
 		public final Class<T> clazz;
+		/** The class's {@link Class#getSimpleName() simple name}, cached for performance */
+		private String theSimpleName;
 		/** The number of type parameters that */
 		public final int typeParameters;
 		/** The raw type-token of the class */
@@ -77,6 +80,13 @@ public class TypeTokens implements TypeParser {
 			if (typeParameters > 0)
 				theCompoundTypes = new ConcurrentHashMap<>();
 			unity = new NoOpTypeConverter<>(type, type);
+		}
+
+		/** @return {@link Class#getSimpleName()}, but cached */
+		public String getSimpleName() {
+			if (theSimpleName == null)
+				theSimpleName = clazz.getSimpleName();
+			return theSimpleName;
 		}
 
 		/**
@@ -316,7 +326,7 @@ public class TypeTokens implements TypeParser {
 	}
 
 	private final ConcurrentHashMap<Class<?>, TypeKey<?>> TYPES;
-	private final ClassMap<ClassMap<SupplementaryCast<?, ?>>> theSupplementaryCasts;
+	private final MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, SupplementaryCast<?, ?>>> theSupplementaryCasts;
 	private final TypeTokensParser theParser;
 
 	/** TypeToken&lt;String> */
@@ -368,7 +378,7 @@ public class TypeTokens implements TypeParser {
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
 		theParser = new TypeTokensParser();
-		theSupplementaryCasts = new ClassMap<>();
+		theSupplementaryCasts = MultiInheritanceView.createClassMap();
 
 		// Populate the primitive types as both the primitive type and the wrapper
 		PrimitiveTypeData<Void> voidData = new PrimitiveTypeData<>(Void.class, void.class, false, false, true, false, 0, null);
@@ -899,7 +909,7 @@ public class TypeTokens implements TypeParser {
 	 * @return This TypeTokens
 	 */
 	public <S, T> TypeTokens addSupplementaryCast(Class<S> sourceType, Class<T> targetType, SupplementaryCast<S, T> cast) {
-		theSupplementaryCasts.computeIfAbsent(targetType, ClassMap::new).put(sourceType, cast);
+		theSupplementaryCasts.computeIfAbsent(targetType, MultiInheritanceView::createClassMap).put(sourceType, cast);
 		return this;
 	}
 
@@ -910,9 +920,10 @@ public class TypeTokens implements TypeParser {
 	 * @return Whether the cast was found and removed for the given source/target type pair
 	 */
 	public boolean removeSupplementaryCast(Class<?> sourceType, Class<?> targetType, SupplementaryCast<?, ?> cast) {
-		ClassMap<SupplementaryCast<?, ?>> srcCasts = theSupplementaryCasts.get(targetType, ClassMap.TypeMatch.EXACT);
+		MultiInheritanceMap2<Class<?>, SupplementaryCast<?, ?>> srcCasts = theSupplementaryCasts.get(targetType,
+			MultiInheritanceView.TypeMatch.EXACT);
 		boolean[] match = new boolean[1];
-		srcCasts.compute(sourceType, existing -> {
+		srcCasts.compute(sourceType, (type, existing) -> {
 			if (existing == cast) {
 				match[0] = true;
 				return null;
@@ -1575,9 +1586,8 @@ public class TypeTokens implements TypeParser {
 		final Function<Object, String> check;
 		final Function<Object, T> cast;
 
-		InstanceChecker(Class<T> type) {
+		InstanceChecker(Class<T> type, String simpleName) {
 			String error = "Not an instance of " + type.getName();
-			String simpleName = type.getSimpleName();
 			checkString = "check:" + simpleName;
 			check = LambdaUtils.printableFn(value -> {
 				if (value == null)
@@ -1674,7 +1684,7 @@ public class TypeTokens implements TypeParser {
 				return null;
 			} else if (rawSource.isAssignableFrom(Comparable.class) // All remaining possible primitives are comparable
 				|| (primTarget.number && rawSource.isAssignableFrom(Number.class))) {
-				InstanceChecker<T> checker = new InstanceChecker<>(primTarget.clazz);
+				InstanceChecker<T> checker = new InstanceChecker<>(primTarget.clazz, primTarget.getSimpleName());
 				TypeConverter<S, S, T, T> typeCheckConverter = new TypeConverter<>(checker.toString(), "no-op", (TypeToken<S>) target,
 					target, //
 					checker.check, checker.cast, null, LambdaUtils.<T, S> unenforcedCast());
@@ -1718,7 +1728,7 @@ public class TypeTokens implements TypeParser {
 			if (isAssignable(source, target))
 				return new NoOpTypeConverter<>(source, target);
 			else {
-				InstanceChecker<S> sourceChecker = new InstanceChecker<>(rawSource);
+				InstanceChecker<S> sourceChecker = new InstanceChecker<>(rawSource, sourceKey.getSimpleName());
 				return new TypeConverter<>("no-op", sourceChecker.checkString, source, (TypeToken<T>) source, //
 					null, LambdaUtils.<S, T> unenforcedCast(), sourceChecker.check, sourceChecker.cast);
 			}
@@ -1750,13 +1760,15 @@ public class TypeTokens implements TypeParser {
 
 	private <S, T> TypeConverter<S, ? extends S, ? super T, T> getSpecialCast(TypeToken<S> sourceType, TypeToken<T> targetType,
 		Class<S> sourceClass, Class<T> targetClass) {
-		ClassMap<SupplementaryCast<?, ?>> sourceCasts = theSupplementaryCasts.get(targetClass, ClassMap.TypeMatch.SUB_TYPE);
+		MultiInheritanceMap2<Class<?>, SupplementaryCast<?, ?>> sourceCasts = theSupplementaryCasts.get(targetClass,
+			MultiInheritanceView.TypeMatch.SUB_TYPE);
 		SupplementaryCast<S, T> suppCast = sourceCasts == null ? null
-			: (SupplementaryCast<S, T>) sourceCasts.get(sourceClass, ClassMap.TypeMatch.SUPER_TYPE);
+			: (SupplementaryCast<S, T>) sourceCasts.get(sourceClass, MultiInheritanceView.TypeMatch.SUPER_TYPE);
 		if (suppCast != null) {
-			ClassMap<SupplementaryCast<?, ?>> targetCasts = theSupplementaryCasts.get(sourceClass, ClassMap.TypeMatch.SUB_TYPE);
+			MultiInheritanceMap2<Class<?>, SupplementaryCast<?, ?>> targetCasts = theSupplementaryCasts.get(sourceClass,
+				MultiInheritanceView.TypeMatch.SUB_TYPE);
 			SupplementaryCast<T, S> reverseCast = targetCasts == null ? null
-				: (SupplementaryCast<T, S>) targetCasts.get(targetClass, ClassMap.TypeMatch.SUPER_TYPE);
+				: (SupplementaryCast<T, S>) targetCasts.get(targetClass, MultiInheritanceView.TypeMatch.SUPER_TYPE);
 			if (reverseCast != null)
 				return new TypeConverter<>(suppCast.toString(), reverseCast.toString(), //
 					sourceType, (TypeToken<T>) suppCast.getCastType(sourceType), //

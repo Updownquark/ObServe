@@ -79,6 +79,7 @@ public class QuickApp extends QonfigApp {
 	 * @param appDefUrl The location of the {@link #getQonfigAppToolkit() Qonfig-App}-formatted application to parse
 	 * @param appToolkits The locations of other toolkit definitions that may be needed to parse the application
 	 * @param clArgs The command-line arguments to use to populate the application's external models
+	 * @param printDocument If given, the Quick document (with promised content spliced in) will be printed to this appendable
 	 * @return The parsed application
 	 * @throws IOException If the application could not be read
 	 * @throws TextParseException If the application could not be parsed as XML
@@ -111,6 +112,7 @@ public class QuickApp extends QonfigApp {
 	 * @param interpretations Qonfig interpretations to transform Qonfig-parsed elements into usable structures
 	 * @param quickInterpretations Quick interpretations to transform Quick elements into application behaviors
 	 * @param commandLineArgs The command-line arguments to pass to the application as external model values
+	 * @param printDocument If given, the Quick document (with promised content spliced in) will be printed to this appendable
 	 */
 	protected QuickApp(QonfigDocument document, String appFile, Set<QonfigToolkit> toolkits,
 		List<SpecialSessionImplementation<?>> sessionTypes,

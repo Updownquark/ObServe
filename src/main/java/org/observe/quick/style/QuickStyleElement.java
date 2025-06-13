@@ -8,11 +8,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.swing.Icon;
+
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -27,6 +30,7 @@ import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
+import org.observe.util.TypeTokens;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
@@ -66,7 +70,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		private LocatedExpression theValue;
 		private StyleApplicationDef theApplication;
 		private final List<Def> theChildren;
-		private final List<QuickStyleValue> theStyleValues;
+		private QuickStyleValue theStyleValue;
 
 		/**
 		 * @param parent The parent of this style element
@@ -76,7 +80,6 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			super(parent, qonfigType);
 			theRoles = new ArrayList<>();
 			theChildren = new ArrayList<>();
-			theStyleValues = new ArrayList<>();
 		}
 
 		/** @return The type of element that this style element will affect style for */
@@ -131,33 +134,35 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return Collections.unmodifiableList(theChildren);
 		}
 
+		public QuickStyleValue getStyleValue() {
+			return theStyleValue;
+		}
+
 		/**
 		 * Populates conditional values for this style element (and its children)
 		 *
 		 * @param values The values collection to populate
-		 * @param application The style application of the parent environment
+		 * @param parentApplication The style application of the parent environment
 		 * @param element The element to get style values for
 		 * @param env The expresso environment of the evaluation
 		 * @param modelContext Model context for expected model values
 		 * @throws QonfigInterpretationException If the style values could not be compiled
 		 */
-		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element,
+		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef parentApplication, ExElement.Def<?> element,
 			CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
-			if (theApplication.applies(element)) {
-				for (QuickStyleValue value : theStyleValues) {
-					if (value.getApplication().applies(element))
-						values.add(value.when(application).withModelContext(modelContext));
-				}
+			if (theApplication.appliesToElement(element)) {
+				if (theStyleValue != null && theStyleValue.getApplication().appliesToElement(element))
+					values.add(theStyleValue.when(parentApplication).withModelContext(modelContext));
 				if (theStyleSet != null)
-					theStyleSet.getStyleValues(values, theApplication.and(application), element, env.at(reporting().getFileLocation()),
+					theStyleSet.getStyleValues(values, theApplication.and(parentApplication), element,
+						env.at(reporting().getFileLocation()),
 						modelContext);
-			} else if (application.equals(StyleApplicationDef.ALL)) {
-				for (QuickStyleValue value : theStyleValues)
-					if (value.getApplication().applies(element))
-						values.add(value.withModelContext(modelContext));
+			} else if (parentApplication.equals(StyleApplicationDef.ALL)) {
+				if (theStyleValue != null && theStyleValue.getApplication().appliesToElement(element))
+					values.add(theStyleValue.withModelContext(modelContext));
 			}
 			for (QuickStyleElement.Def child : theChildren)
-				child.getStyleValues(values, application, element, env, modelContext);
+				child.getStyleValues(values, parentApplication, element, env, modelContext);
 		}
 
 		@Override
@@ -199,15 +204,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				for (String roleName : rolePath.text.split("\\.")) {
 					roleName = roleName.trim();
 					QonfigChildDef child = null;
-					if (application.getRole() != null) {
-						if (application.getRole().getType() != null)
-							child = application.getRole().getType().getChild(roleName);
-						else
-							throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
-								rolePath.position == null ? null
-									: new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
-									rolePath.text.length());
-					}
+					if (application.getRole() != null && application.getRole().getType() != null)
+						child = application.getRole().getType().getChild(roleName);
 					for (QonfigElementOrAddOn type : application.getTypes().values()) {
 						if (child != null)
 							break;
@@ -289,7 +287,6 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			else
 				theEffectiveAttribute = null;
 
-			theStyleValues.clear();
 			theValue = getValueExpression(session);
 			if (theValue != null && theValue.getExpression() != ObservableExpression.EMPTY) {
 				if (theEffectiveAttribute == null)
@@ -298,8 +295,9 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
 				theValue = theApplication.findModelValues(theValue, new HashSet<>(), this,
 					getQonfigType().getDeclarer(), ancestorSS != null, emvCache, reporting());
-				theStyleValues.add(new QuickStyleValue(ancestorSS, styleSet, theApplication, theEffectiveAttribute, theValue));
-			}
+				theStyleValue = new QuickStyleValue(ancestorSS, styleSet, theApplication, theEffectiveAttribute, theValue);
+			} else
+				theStyleValue = null;
 			QonfigValue styleSetName = session.attributes().get("style-set").get();
 			if (styleSetName != null) {
 				if (styleSheet == null) {
@@ -562,6 +560,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		private QuickStyleAttribute<T> theDeclaredAttribute;
 		private QuickStyleAttribute<T> theEffectiveAttribute;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
+		private InterpretedStyleApplication theApplication;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 		private final List<Interpreted<?>> theChildren;
 
@@ -588,6 +587,10 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		/** @return A condition that must be true for this style to be effective */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
 			return theCondition;
+		}
+
+		public InterpretedStyleApplication getApplication() {
+			return theApplication;
 		}
 
 		/** @return The expression containing the value for the style */
@@ -619,11 +622,35 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theEffectiveAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getEffectiveAttribute(), env);
 
 			theCondition = interpret(getDefinition().getCondition(), ModelTypes.Value.BOOLEAN);
+			InterpretedStyleApplication parentApplication;
+			if (getParentElement() instanceof QuickStyleElement.Interpreted)
+				parentApplication = ((QuickStyleElement.Interpreted<?>) getParentElement()).getApplication();
+			else
+				parentApplication = null;
+			theApplication = getDefinition().getApplication().interpret(parentApplication, getDefinition().getCondition(), theCondition);
+
 			if (getDefinition().getValue() != null && getDefinition().getValue().getExpression() != ObservableExpression.EMPTY)
-				theValue = interpret(getDefinition().getValue(), ModelTypes.Value.forType(getEffectiveAttribute().getType()));
+				theValue = interpretStyleValue(getDefinition().getValue(), ModelTypes.Value.forType(theEffectiveAttribute.getType()));
 			else
 				theValue = null;
+
 			syncChildren(getDefinition().getChildren(), theChildren, def -> def.interpret(this), i -> i.updateStyle());
+		}
+
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> interpretStyleValue(LocatedExpression valueExpression,
+			ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type) throws ExpressoInterpretationException {
+			if (TypeTokens.getRawType(type.getType(0)) == Icon.class)
+				return (InterpretedValueSynth<SettableValue<?>, SettableValue<T>>) (InterpretedValueSynth<?, ?>) QuickStyleUtils
+					.evaluateIcon(valueExpression, getEnvironmentFor(valueExpression));
+			else
+				return interpret(valueExpression, type);
+		}
+
+		public void addToCache(StyleInterpretationCache.Modifiable cache) {
+			if (theValue != null)
+				cache.with(getDefinition().getValue().getFilePosition(0), theApplication, theValue);
+			for (QuickStyleElement.Interpreted<?> child : theChildren)
+				child.addToCache(cache);
 		}
 
 		/** @return The style element */
@@ -674,6 +701,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		theConditionInstantiator = myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().instantiate();
 		if (theValue != null)
 			theValueInstantiator = myInterpreted.getValue().instantiate();
+		else
+			theValue=null;
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
 		.<ModelInstantiationException> simpleX(interp -> interp.create())//
 		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), this))

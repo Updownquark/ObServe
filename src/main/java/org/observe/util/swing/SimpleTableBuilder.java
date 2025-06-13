@@ -504,7 +504,7 @@ implements TableBuilder<R, T, P> {
 		ObservableTableModel<R> tableModel = (ObservableTableModel<R>) model;
 		ObservableSwingUtils.syncSelection(table, tableModel.getRowModel(), table::getSelectionModel, tableModel.getRows().equivalence(),
 			selection, getUntil(), (index, cause) -> {
-				if (index >= getRows().size())
+				if (index < 0 || index >= getRows().size())
 					return;
 				MutableCollectionElement<R> el = (MutableCollectionElement<R>) getRows()
 					.mutableElement(getRows().getElement(index).getElementId());

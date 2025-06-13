@@ -18,15 +18,17 @@
 	<import-style-sheet name="base" ref="../base/quick-base.qss" />
 
 	<!-- Same as the table row UI in quick-base.qss, but for tree-table.tree-column, which can't be addressed by quick-base -->
-	<style attr="widget.color">
-		<style element="tree-table">
-			<style child="tree-column">
-				<style if="selected">`cornflower-blue`</style>
-				<style if="rowIndex % 2 == 1">
-					<style>`light-gray`</style>
-					<style if="selected">`steel-blue`</style>
+	<style element="tree-table">
+		<style child="tree-column" element="column">
+			<style child="renderer">
+				<style element="text-widget" style-set="base.baseTableRendered" />
+				<style element="check-box" style-set="base.baseTableRendered" />
+			</style>
+			<style child="edit">
+				<style child="editor">
+					<style element="text-widget" style-set="base.baseTableRendered" />
+					<style element="check-box" style-set="base.baseTableRendered" />
 				</style>
-				<style>`white`</style>
 			</style>
 		</style>
 	</style>
@@ -41,5 +43,5 @@
 	</style>
 
 	<!-- Default icon for settings-menu -->
-	<style element="settings-menu" attr="icon">`/icons/gear.png`</style>
+	<style element="settings-menu" attr="icon">`/icons/gear.png$20x20`</style>
 </style-sheet>

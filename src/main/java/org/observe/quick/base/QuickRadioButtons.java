@@ -30,6 +30,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		interpretation = Interpreted.class,
 		instance = QuickRadioButtons.class)
 	public static class Def extends CollectionSelectorWidget.Def<QuickRadioButtons<?>> {
+		private CompiledExpression theRender;
 		private CompiledExpression theValueTooltip;
 
 		/**
@@ -38,6 +39,12 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		 */
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+		}
+
+		/** @return The text to use to render each radio button */
+		@QonfigAttributeGetter("render")
+		public CompiledExpression getRender() {
+			return theRender;
 		}
 
 		/** @return The tooltip to display for each radio button individually */
@@ -50,6 +57,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
+			theRender = getAttributeExpression("render", session);
 			theValueTooltip = getAttributeExpression("value-tooltip", session);
 		}
 
@@ -65,6 +73,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 	 * @param <T> The type of the value to select
 	 */
 	public static class Interpreted<T> extends CollectionSelectorWidget.Interpreted<T, QuickRadioButtons<T>> {
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theRender;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theValueTooltip;
 
 		/**
@@ -80,6 +89,11 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 			return (Def) super.getDefinition();
 		}
 
+		/** @return The text to use to render each radio button */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getRender() {
+			return theRender;
+		}
+
 		/** @return The tooltip to display for each radio button individually */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getValueTooltip() {
 			return theValueTooltip;
@@ -89,6 +103,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		protected void doUpdate() throws ExpressoInterpretationException {
 			super.doUpdate();
 
+			theRender = interpret(getDefinition().getRender(), ModelTypes.Value.STRING);
 			theValueTooltip = interpret(getDefinition().getValueTooltip(), ModelTypes.Value.STRING);
 		}
 
@@ -98,14 +113,22 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<String>> theRenderInstantiator;
 	private ModelValueInstantiator<SettableValue<String>> theValueTooltipInstantiator;
 
+	private SettableValue<SettableValue<String>> theRender;
 	private SettableValue<SettableValue<String>> theValueTooltip;
 
 	/** @param id The element ID for this widget */
 	protected QuickRadioButtons(Object id) {
 		super(id);
+		theRender = SettableValue.create();
 		theValueTooltip = SettableValue.create();
+	}
+
+	/** @return The text to use to render each radio button */
+	public SettableValue<String> getRender() {
+		return SettableValue.flatten(theRender);
 	}
 
 	/** @return The tooltip to display for each radio button individually */
@@ -118,12 +141,16 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 		super.doUpdate(interpreted);
 
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
+		theRenderInstantiator = myInterpreted.getRender() == null ? null : myInterpreted.getRender().instantiate();
 		theValueTooltipInstantiator = myInterpreted.getValueTooltip() == null ? null : myInterpreted.getValueTooltip().instantiate();
 	}
 
 	@Override
 	public void instantiated() throws ModelInstantiationException {
 		super.instantiated();
+
+		if (theRenderInstantiator != null)
+			theRenderInstantiator.instantiate();
 		if (theValueTooltipInstantiator != null)
 			theValueTooltipInstantiator.instantiate();
 	}
@@ -132,6 +159,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		myModels = super.doInstantiate(myModels);
 
+		theRender.set(theRenderInstantiator == null ? null : theRenderInstantiator.get(myModels), null);
 		theValueTooltip.set(theValueTooltipInstantiator == null ? null : theValueTooltipInstantiator.get(myModels), null);
 		return myModels;
 	}
@@ -140,6 +168,7 @@ public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
 	public QuickRadioButtons<T> copy(ExElement parent) {
 		QuickRadioButtons<T> copy = (QuickRadioButtons<T>) super.copy(parent);
 
+		copy.theRender = SettableValue.create();
 		copy.theValueTooltip = SettableValue.create();
 
 		return copy;

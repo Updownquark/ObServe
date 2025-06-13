@@ -70,7 +70,8 @@ public class ObservableValueTransformations {
 	 * @param interpreter The interpretation builder to configure
 	 */
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("disable", ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
+		interpreter.createWith(DisabledValueTransform.DISABLE, ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
+		interpreter.createWith(EnabledValueTransform.ENABLED, ValueTransform.class, ExElement.creator(EnabledValueTransform::new));
 		interpreter.createWith(FilterAcceptValueTransform.FILTER_ACCEPT, ValueTransform.class,
 			ExElement.creator(FilterAcceptValueTransform::new));
 		interpreter.createWith(OnChangeTransform.ON_CHANGE, ValueTransform.class, ExElement.creator(OnChangeTransform::new));
@@ -83,9 +84,12 @@ public class ObservableValueTransformations {
 		interpreter.createWith("flatten", ValueTransform.class, ExElement.creator(FlattenValueTransform::new));
 	}
 
-	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "disable", interpretation = DisabledActionTransform.Interpreted.class)
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = DisabledValueTransform.DISABLE,
+		interpretation = DisabledActionTransform.Interpreted.class)
 	static class DisabledValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
+		public static final String DISABLE = "disable";
 		private CompiledExpression theDisablement;
 
 		DisabledValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -202,6 +206,119 @@ public class ObservableValueTransformations {
 			@Override
 			protected SettableValue<T> getWrapped() {
 				return super.getWrapped();
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = EnabledValueTransform.ENABLED,
+		interpretation = EnabledValueTransform.Interpreted.class)
+	static class EnabledValueTransform extends ExElement.Def.Abstract<ExElement> implements ValueTransform<SettableValue<?>, ExElement> {
+		public static final String ENABLED = "enabled";
+
+		EnabledValueTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public ModelType<? extends SettableValue<?>> getTargetModelType() {
+			return ModelTypes.Value;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
+		}
+
+		@Override
+		public Interpreted interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			return new Interpreted(this, parent);
+		}
+
+		static class Interpreted extends ExElement.Interpreted.Abstract<ExElement>
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<?>, SettableValue<?>, SettableValue<String>, ExElement> {
+			Interpreted(EnabledValueTransform definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public EnabledValueTransform getDefinition() {
+				return (EnabledValueTransform) super.getDefinition();
+			}
+
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public void update(ModelInstanceType<SettableValue<?>, SettableValue<?>> sourceType) throws ExpressoInterpretationException {
+			}
+
+			@Override
+			public ModelInstanceType<? extends SettableValue<?>, ? extends SettableValue<String>> getTargetType() {
+				return ModelTypes.Value.STRING;
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<?>, SettableValue<String>> instantiate() throws ModelInstantiationException {
+				return new Instantiator();
+			}
+
+			@Override
+			public String toString() {
+				return "enabled";
+			}
+		}
+
+		static class Instantiator implements Operation.EfficientCopyingInstantiator<SettableValue<?>, SettableValue<String>> {
+			Instantiator() {
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
+			public void instantiate() throws ModelInstantiationException {
+			}
+
+			@Override
+			public SettableValue<String> transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
+				return new EnabledValue(source);
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				return false;
+			}
+
+			@Override
+			public SettableValue<?> getSource(SettableValue<String> value) {
+				return ((EnabledValue) value).getSettableValue();
+			}
+
+			@Override
+			public SettableValue<String> forModelCopy(SettableValue<String> prevValue, SettableValue<?> newSource,
+				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				EnabledValue ev = (EnabledValue) prevValue;
+				if (ev.getSettableValue() == newSource)
+					return ev;
+				else
+					return new EnabledValue(newSource);
+			}
+		}
+
+		static class EnabledValue extends SettableValue.AlwaysDisabledValue<String> {
+			private final SettableValue<?> theSettableValue;
+
+			EnabledValue(SettableValue<?> wrapped) {
+				super(wrapped.isEnabled(), LambdaUtils.constantFn("Enablement is not settable", "Enablement is not settable", null));
+				theSettableValue = wrapped;
+			}
+
+			SettableValue<?> getSettableValue() {
+				return theSettableValue;
 			}
 		}
 	}

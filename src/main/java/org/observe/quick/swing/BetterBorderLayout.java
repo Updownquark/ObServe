@@ -230,16 +230,22 @@ public class BetterBorderLayout implements LayoutManager2 {
 				cross = cs.height;
 				vStacks.add(height.plus(cross));
 				width = width.plus(size);
-				if (type >= 0) {
-					int minH = height.plus(c.getMinimumSize().height).resolveExponential();
-					if (minH > largestMinH)
-						largestMinH = minH;
+				int minH;
+				if (type < 0)
+					minH = cs.height;
+				else {
+					minH = height.plus(c.getMinimumSize().height).resolveExponential();
 				}
-				if (type <= 0) {
-					int maxH = height.plus(c.getMaximumSize().height).resolveExponential();
-					if (maxH < smallestMaxH)
-						smallestMaxH = maxH;
+				if (minH > largestMinH)
+					largestMinH = minH;
+				int maxH;
+				if (type > 0)
+					maxH = cs.height;
+				else {
+					maxH = height.plus(c.getMaximumSize().height).resolveExponential();
 				}
+				if (maxH < smallestMaxH)
+					smallestMaxH = maxH;
 				break;
 			default:
 				if (centerIdx >= 0) {

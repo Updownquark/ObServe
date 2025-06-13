@@ -362,12 +362,12 @@ public class DistinctCollectionLink<T> extends ObservableCollectionLink<T, T> im
 				if (theValues.containsKey(sourceOp.getValue())) {
 					newValueEl = theValues.get(sourceOp.getValue());
 					if (derivedEls.size() != 2)
-						Assert.assertEquals(getPath() + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
+						Assert.assertEquals(getPath() + " " + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
 					Assert.assertEquals(newValueEl.element, derivedEls.getLast());
 				} else if (valueEl.sourceElements.size() > 1
 					|| (theHelper != null && theHelper.expectMoveFromSource(sourceOp, getSiblingIndex(), getElements()))) {
 					if (derivedEls.size() != 2)
-						Assert.assertEquals(getPath() + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
+						Assert.assertEquals(getPath() + " " + this + ":" + sourceOp.getElement().toString(), 2, derivedEls.size());
 					newValueEl = new ValueElement((CollectionLinkElement<T, T>) derivedEls.getLast());
 					theValues.put(sourceOp.getValue(), newValueEl);
 				} else if (derivedEls.size() > 1) {

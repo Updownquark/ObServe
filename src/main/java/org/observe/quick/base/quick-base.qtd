@@ -414,6 +414,7 @@
 		</element-def>
 		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
 		<element-def name="radio-buttons" extends="collection-selector-widget">
+			<attribute name="render" type="expression" default="{active-value-name}==null ? `` : {active-value-name}.toString()" />
 			<attribute name="value-tooltip" type="expression" specify="optional" />
 		</element-def>
 		<?DOC A set of toggle buttons, one for each available value, only one of which may be selected?>

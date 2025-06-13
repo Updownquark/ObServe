@@ -253,7 +253,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	public Object getIdentity() {
 		if (theIdentity == null) {
 			if (theArgs.isEmpty()) {
-				theIdentity = Identifiable.baseId(theCombination.toString(), theCombination);
+				theIdentity = theCombination;
 			} else {
 				StringBuilder descrip = new StringBuilder("combine(");
 				List<Object> ids = new ArrayList<>(theArgs.size() + 1);
@@ -1901,6 +1901,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			return get(true);
 		}
 
+		/**
+		 * @param withLock Whether a lock should be obtained before retrieving the transformation state. This should only be false if the
+		 *        caller has already locked it.
+		 * @return The current transformation state
+		 */
 		TransformationState get(boolean withLock);
 
 		/** @return The transformation definition of this engine */
@@ -2277,7 +2282,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 								}
 							}
 							long newStamp = Stamped.compositeStamp(cache.argStamps);
-							StampedArgValues newState = new StampedArgValues(argValues, argStamps, newStamp);
+							StampedArgValues newState = new StampedArgValues(argValues.clone(), argStamps, newStamp);
 							if (initialized)
 								newState(newState, evt);
 							else

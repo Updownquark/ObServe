@@ -155,7 +155,12 @@ public class ObservableSortedSetImpl {
 
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, CollectionElementMove move, int index,
 						E oldValue, E newValue) {
-						ObservableCollectionEvent<? extends E> evt2 = evt.derive(wrap(evt.getElementId()), index);
+						ObservableCollectionEvent<? extends E> evt2;
+						if (type == evt.getType())
+							evt2 = evt.derive(wrap(evt.getElementId()), index);
+						else
+							evt2 = ObservableCollectionEvent.createCollectionEvent(wrap(evt.getElementId()), index, type, oldValue,
+								newValue, evt);
 						try (Transaction evtT = evt2.use()) {
 							observer.accept(evt2);
 						}

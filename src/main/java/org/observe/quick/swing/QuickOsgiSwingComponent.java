@@ -30,9 +30,9 @@ public abstract class QuickOsgiSwingComponent extends QuickOsgiComponent {
 	private final JPanel thePanel;
 	private JTextPane theErrorDisplay;
 
-	/** @param dynamicRefresh Whether to refresh the user interface when any of the source documents change */
-	protected QuickOsgiSwingComponent(boolean dynamicRefresh) {
-		super(ThreadConstraint.EDT, dynamicRefresh);
+	/** Creates the component */
+	protected QuickOsgiSwingComponent() {
+		super(ThreadConstraint.EDT);
 		thePanel = new JPanel(new JustifiedBoxLayout(true).mainJustified().crossJustified());
 		theScroll = new JScrollPane(theErrorDisplay);
 		theScroll.getVerticalScrollBar().setUnitIncrement(10);

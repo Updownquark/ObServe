@@ -1,18 +1,23 @@
 package org.observe.quick.style;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.Transformation;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.qonfig.LocatedExpression;
+import org.qommons.ArrayUtils;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.ThreadConstraint;
 
 /** A {@link StyleApplicationDef} evaluated for an {@link InterpretedExpressoEnv environment} */
 public class InterpretedStyleApplication {
@@ -21,7 +26,7 @@ public class InterpretedStyleApplication {
 
 	private final InterpretedStyleApplication theParent;
 	private final StyleApplicationDef theDefinition;
-	private final List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theConditions;
+	private final Map<LocatedExpression, InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theConditions;
 
 	/**
 	 * @param parent The parent application (see {@link StyleApplicationDef#getParent()})
@@ -29,7 +34,7 @@ public class InterpretedStyleApplication {
 	 * @param conditions The style conditions
 	 */
 	public InterpretedStyleApplication(InterpretedStyleApplication parent, StyleApplicationDef definition,
-		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions) {
+		Map<LocatedExpression, InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> conditions) {
 		theParent = parent;
 		theDefinition = definition;
 		theConditions = conditions;
@@ -42,14 +47,15 @@ public class InterpretedStyleApplication {
 
 	/**
 	 * @return The application definition this structure is
-	 *         {@link StyleApplicationDef#interpret(QuickInterpretedStyleCache.Applications, InterpretedExpressoEnv[]) interpreted} from
+	 *         {@link StyleApplicationDef#interpret(InterpretedStyleApplication, org.observe.expresso.qonfig.ExElement.Interpreted)
+	 *         interpreted} from
 	 */
 	public StyleApplicationDef getDefinition() {
 		return theDefinition;
 	}
 
 	/** @return The style conditions */
-	public List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> getConditions() {
+	public Map<LocatedExpression, InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> getConditions() {
 		return theConditions;
 	}
 
@@ -60,7 +66,7 @@ public class InterpretedStyleApplication {
 	public ModelValueInstantiator<ObservableValue<Boolean>> getConditionInstantiator()
 		throws ModelInstantiationException {
 		return new Instantiator(theParent == null ? null : theParent.getConditionInstantiator(), //
-			QommonsUtils.filterMapE(theConditions, null, c -> c.instantiate()));
+			QommonsUtils.filterMapE(theConditions.values(), null, c -> c.instantiate()));
 	}
 
 	@Override
@@ -106,42 +112,27 @@ public class InterpretedStyleApplication {
 			return combine(parentCond, localCond);
 		}
 
+		static final Predicate<Boolean> NOT_TRUE = LambdaUtils.printablePred(v -> !Boolean.TRUE.equals(v), "not true", null);
+		static final Supplier<Boolean> GET_TRUE = LambdaUtils.constantSupplier(true, "true", true);
+
 		ObservableValue<Boolean> combine(ObservableValue<Boolean> parentCond, ObservableValue<Boolean>[] localCond) {
 			if (localCond.length == 0)
 				return parentCond;
-			else if (TRUE.equals(parentCond)) {
-				if (localCond.length == 1)
-					return localCond[0];
-				else {
-					return localCond[0].transform(tx -> {
-						Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
-						for (int i = 1; i < localCond.length; i++)
-							txb = txb.combineWith(localCond[i]);
-						return txb.build(LambdaUtils.printableBiFn((c1, txv) -> {
-							if (c1 == null || !c1)
-								return false;
-							for (int i = 1; i < localCond.length; i++)
-								if (!Boolean.TRUE.equals(txv.get(localCond[i])))
-									return false;
-							return true;
-						}, "&&", null));
-					});
-				}
+			else if (parentCond.getThreadConstraint() == ThreadConstraint.NONE) {
+				if (Boolean.TRUE.equals(parentCond.get()))
+					return evalLocal(localCond);
+				else
+					return parentCond;
 			} else {
-				return parentCond.transform(tx -> {
-					Transformation.TransformationBuilder<Boolean, Boolean, ?> txb = tx;
-					for (int i = 0; i < localCond.length; i++)
-						txb = txb.combineWith(localCond[i]);
-					return txb.build(LambdaUtils.printableBiFn((pc, txv) -> {
-						if (pc == null || !pc)
-							return false;
-						for (int i = 0; i < localCond.length; i++)
-							if (!Boolean.TRUE.equals(txv.get(localCond[i])))
-								return false;
-						return true;
-					}, "&&", null));
-				});
+				return ObservableValue.firstValue(NOT_TRUE, GET_TRUE, ArrayUtils.add(localCond, 0, parentCond));
 			}
+		}
+
+		private ObservableValue<Boolean> evalLocal(ObservableValue<Boolean>[] localCond) {
+			if (localCond.length == 1)
+				return localCond[0];
+			else
+				return ObservableValue.firstValue(NOT_TRUE, GET_TRUE, localCond);
 		}
 
 		@Override

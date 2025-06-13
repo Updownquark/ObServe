@@ -15,6 +15,11 @@ import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
 
+/**
+ * A high-performance, tailored map of values stored by document paths
+ *
+ * @param <T> The type of values in the map
+ */
 public class DocumentMap<T> implements Map<String, T> {
 	static final Comparator<String> DOCUMENT_COMPARE = (doc1, doc2) -> {
 		if (doc1 == doc2)
@@ -43,6 +48,7 @@ public class DocumentMap<T> implements Map<String, T> {
 	private List<T> theExposedValues;
 	private BiTuple<String, T> theQueryCache;
 
+	/** @param inherited The document map to inherit from (may be null for a root document map) */
 	public DocumentMap(DocumentMap<T> inherited) {
 		theInherited = inherited;
 		if (theInherited == null)
@@ -67,6 +73,7 @@ public class DocumentMap<T> implements Map<String, T> {
 		theInherited = null;
 	}
 
+	/** @return A new document map that extends this one */
 	public DocumentMap<T> extend() {
 		return new DocumentMap<>(this);
 	}
@@ -247,18 +254,40 @@ public class DocumentMap<T> implements Map<String, T> {
 		return entrySet().toString();
 	}
 
+	/**
+	 * @param <X> The type of exception that may be thrown by the action
+	 * @param action The action to perform on each value in this map
+	 * @return This map
+	 * @throws X The thrown exception, if any
+	 */
 	public <X extends Throwable> DocumentMap<T> forEach(ExConsumer<? super T, X> action) throws X {
 		for (T value : theValues)
 			action.accept(value);
 		return this;
 	}
 
+	/**
+	 * Performs a successive operation on a value for each item in this map
+	 *
+	 * @param <X> The type of exception that may be thrown by the action
+	 * @param init The initial value to operate on
+	 * @param op The action to perform with each value in this map
+	 * @return The result of the operation
+	 * @throws X The thrown exception, if any
+	 */
 	public <T2, X extends Throwable> T2 operate(T2 init, ExBiFunction<? super T2, ? super T, ? extends T2, X> op) throws X {
 		for (T value : theValues)
 			init = op.apply(init, value);
 		return init;
 	}
 
+	/**
+	 * @param <T2> The type of the mapped values
+	 * @param <X> The type of exeption that mapping function may throw
+	 * @param map A copy of this map whose values are mapped (now, not lazily) with the given function
+	 * @return The mapped map
+	 * @throws X If the mapping function throws an exception
+	 */
 	public <T2, X extends Throwable> DocumentMap<T2> map(ExFunction<? super T, ? extends T2, X> map) throws X {
 		DocumentMap<T2> mapped = new DocumentMap<>(null);
 		for (Map.Entry<String, T> entry : entrySet())

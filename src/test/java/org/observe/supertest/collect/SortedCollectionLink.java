@@ -200,7 +200,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 			// so we'll accommodate if it's moved unexpectedly
 			if (element.getFirstSource().getDerivedElements(getSiblingIndex()).size() > 1) {
 				// This can happen multiple times in some cases, e.g. because of flattened values and distinctness
-				Assert.assertTrue(!element.isPresent());
+				Assert.assertFalse(element.isPresent());
 				if (!element.isRemoveExpected())
 					element.expectRemoval();
 				element = (CollectionLinkElement<T, T>) sourceOp.getElement().getDerivedElements(getSiblingIndex()).getLast();

@@ -140,11 +140,13 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theNodeMultiSelection;
 		}
 
+		/** @return An event which will cause this tree to expand all its nodes */
 		@QonfigAttributeGetter(asType = TREE, value = "expand-all")
 		public CompiledExpression getExpandAll() {
 			return theExpandAll;
 		}
 
+		/** @return An event which will cause this tree to collapse all its nodes */
 		@QonfigAttributeGetter(asType = TREE, value = "collapse-all")
 		public CompiledExpression getCollapseAll() {
 			return theCollapseAll;
@@ -282,10 +284,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theNodeMultiSelection;
 		}
 
+		/** @return An event which will cause this tree to expand all its nodes */
 		public InterpretedValueSynth<Observable<?>, Observable<?>> getExpandAll() {
 			return theExpandAll;
 		}
 
+		/** @return An event which will cause this tree to collapse all its nodes */
 		public InterpretedValueSynth<Observable<?>, Observable<?>> getCollapseAll() {
 			return theCollapseAll;
 		}
@@ -491,10 +495,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return ObservableCollection.flattenValue(theNodeMultiSelection);
 	}
 
+	/** @return An event which will cause this tree to expand all its nodes */
 	public Observable<?> getExpandAll() {
 		return ObservableValue.flattenObservableValue(theExpandAll);
 	}
 
+	/** @return An event which will cause this tree to collapse all its nodes */
 	public Observable<?> getCollapseAll() {
 		return ObservableValue.flattenObservableValue(theCollapseAll);
 	}

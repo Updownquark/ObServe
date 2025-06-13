@@ -2,19 +2,19 @@ package org.observe.expresso;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
-import org.qommons.ClassMap;
-import org.qommons.ClassMap.TypeMatch;
+import org.qommons.IterableUtils;
+import org.qommons.MultiInheritanceView;
+import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
+import org.qommons.MultiInheritanceView.TypeMatch;
 import org.qommons.SelfDescribed;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
@@ -568,90 +568,6 @@ public class BinaryOperatorSet {
 		operators.with("!=", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) != unwrapBool(b2),
 			(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r), null, "Boolean inequality comparison");
 
-		operators.with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return i2;
-				else if (unwrapI(s) != unwrapI(i2))
-					return s; // Leave it alone--it's already false
-				else
-					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null,
-			"Integer equality comparison");
-		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) {// Trying to make the expression true
-					if (unwrapI(s) == unwrapI(i2))
-						return s; // Leave it alone--it's already true
-					else
-						return null; // Don't make up a value to make it true--prevent with the enabled fn
-				} else
-					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null,
-			"Integer inequality comparison");
-		operators.with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return i2;
-				else if (unwrapL(s) != unwrapL(i2))
-					return s; // Leave it alone--it's already false
-				else
-					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null,
-			"Long integer equality comparison");
-		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) {// Trying to make the expression true
-					if (unwrapL(s) == unwrapL(i2))
-						return s; // Leave it alone--it's already true
-					else
-						return null; // Don't make up a value to make it true--prevent with the enabled fn
-				} else
-					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null,
-			"Long integer inequality comparison");
-		operators.with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return i2;
-				else if (unwrapD(s) != unwrapD(i2))
-					return s; // Leave it alone--it's already false
-				else
-					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null,
-			"Double-precision floating-point value equality comparison");
-		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) {// Trying to make the expression true
-					if (unwrapD(s) == unwrapD(i2))
-						return s; // Leave it alone--it's already true
-					else
-						return null; // Don't make up a value to make it true--prevent with the enabled fn
-				} else
-					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null,
-			"Double-precision floating-point value inequality comparison");
-		operators.with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) // Trying to make the expression true
-					return i2;
-				else if (unwrapF(s) != unwrapF(i2))
-					return s; // Leave it alone--it's already false
-				else
-					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null,
-			"Floating-point value equality comparison");
-		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
-			(s, i2, r) -> {
-				if (unwrapBool(r)) {// Trying to make the expression true
-					if (unwrapF(s) == unwrapF(i2))
-						return s; // Leave it alone--it's already true
-					else
-						return null; // Don't make up a value to make it true--prevent with the enabled fn
-				} else
-					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null,
-			"Floating-point value inequality comparison");
 		operators.with2("==", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) == unwrapByte(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -715,6 +631,91 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Character inequality comparison");
+
+		operators.with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapI(s) != unwrapI(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null,
+			"Integer equality comparison");
+		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapI(s) == unwrapI(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Integer inequality comparison");
+		operators.with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapL(s) != unwrapL(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null,
+			"Long integer equality comparison");
+		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapL(s) == unwrapL(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Long integer inequality comparison");
+		operators.with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapF(s) != unwrapF(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null,
+			"Floating-point value equality comparison");
+		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapF(s) == unwrapF(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Floating-point value inequality comparison");
+		operators.with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) // Trying to make the expression true
+					return i2;
+				else if (unwrapD(s) != unwrapD(i2))
+					return s; // Leave it alone--it's already false
+				else
+					return null; // Don't make up a value to make it false--prevent with the enabled fn
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null,
+			"Double-precision floating-point value equality comparison");
+		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
+			(s, i2, r) -> {
+				if (unwrapBool(r)) {// Trying to make the expression true
+					if (unwrapD(s) == unwrapD(i2))
+						return s; // Leave it alone--it's already true
+					else
+						return null; // Don't make up a value to make it true--prevent with the enabled fn
+				} else
+					return i2;
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Double-precision floating-point value inequality comparison");
 
 		// Use the same-type equality methods above to implement cross-type primitive equal comparisons
 
@@ -980,14 +981,16 @@ public class BinaryOperatorSet {
 			"Double-precision floating-point greater than or equal to comparison");
 
 		// Comparable comparison ops
-		class ComparableComparisonOp implements BinaryOp<Comparable<?>, Comparable<?>, Boolean> {
+		class ComparableComparisonOp<T extends Comparable<T>> implements BinaryOp<T, T, Boolean> {
 			private final String theName;
 			private final String theDescription;
+			private final Predicate<? super T> isValid;
 			private final IntPredicate theTest;
 
-			public ComparableComparisonOp(String name, String description, IntPredicate test) {
+			public ComparableComparisonOp(String name, String description, Predicate<? super T> valid, IntPredicate test) {
 				theName = name;
 				theDescription = description + " comparison between java.lang.Comparables";
+				isValid = valid;
 				theTest = test;
 			}
 
@@ -1002,9 +1005,9 @@ public class BinaryOperatorSet {
 			}
 
 			@Override
-			public <EX extends Throwable> TypeToken<Boolean> getTargetType(TypeToken<? extends Comparable<?>> leftOpType,
-				TypeToken<? extends Comparable<?>> rightOpType, LocatedFilePosition position, int length,
-					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
+			public <EX extends Throwable> TypeToken<Boolean> getTargetType(TypeToken<? extends T> leftOpType,
+				TypeToken<? extends T> rightOpType, LocatedFilePosition position, int length,
+				ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 				TypeToken<?> leftTarget = leftOpType.resolveType(Comparable.class.getTypeParameters()[0]);
 				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType)) {
 					exHandler.handle1(() -> new ExpressoInterpretationException(
@@ -1016,7 +1019,9 @@ public class BinaryOperatorSet {
 			}
 
 			@Override
-			public Boolean apply(Comparable<?> source, Comparable<?> other) {
+			public Boolean apply(T source, T other) {
+				if (isValid != null && (!isValid.test(source) || !isValid.test(other)))
+					return Boolean.FALSE;
 				// Put nulls at the end
 				if (source == null) {
 					if (other == null)
@@ -1030,12 +1035,12 @@ public class BinaryOperatorSet {
 			}
 
 			@Override
-			public String canReverse(Comparable<?> currentSource, Comparable<?> other, Boolean value) {
+			public String canReverse(T currentSource, T other, Boolean value) {
 				return "Comparison operations cannot be reversed";
 			}
 
 			@Override
-			public Comparable<?> reverse(Comparable<?> currentSource, Comparable<?> other, Boolean value) {
+			public T reverse(T currentSource, T other, Boolean value) {
 				throw new IllegalStateException("Comparison operations cannot be reversed");
 			}
 
@@ -1044,14 +1049,31 @@ public class BinaryOperatorSet {
 				return theName;
 			}
 		}
+		// Treat Float and Double wrappers specially to handle NaN correctly
+		Predicate<Float> floatNaN = f -> f != null && !Float.isNaN(f.floatValue());
+		operators.with("<", Float.class, Float.class, new ComparableComparisonOp<>("<", "Float less than", floatNaN, i -> i < 0));
+		operators.with("<=", Float.class, Float.class,
+			new ComparableComparisonOp<>("<", "Float less than or equal", floatNaN, i -> i <= 0));
+		operators.with(">", Float.class, Float.class, new ComparableComparisonOp<>("<", "Float greater than", floatNaN, i -> i > 0));
+		operators.with(">=", Float.class, Float.class,
+			new ComparableComparisonOp<>("<", "Float greater than or equal", floatNaN, i -> i >= 0));
+
+		Predicate<Double> doubleNaN = f -> f != null && !Double.isNaN(f.doubleValue());
+		operators.with("<", Double.class, Double.class, new ComparableComparisonOp<>("<", "Double less than", doubleNaN, i -> i < 0));
+		operators.with("<=", Double.class, Double.class,
+			new ComparableComparisonOp<>("<", "Double less than or equal", doubleNaN, i -> i <= 0));
+		operators.with(">", Double.class, Double.class, new ComparableComparisonOp<>("<", "Double greater than", doubleNaN, i -> i > 0));
+		operators.with(">=", Double.class, Double.class,
+			new ComparableComparisonOp<>("<", "Double greater than or equal", doubleNaN, i -> i >= 0));
+
 		operators.with("<", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
-			new ComparableComparisonOp("<", "Less than", i -> i < 0));
+			new ComparableComparisonOp("<", "Less than", null, i -> i < 0));
 		operators.with("<=", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
-			new ComparableComparisonOp("<=", "Less than or equal", i -> i <= 0));
+			new ComparableComparisonOp("<=", "Less than or equal", null, i -> i <= 0));
 		operators.with(">", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
-			new ComparableComparisonOp(">", "Greater than", i -> i > 0));
+			new ComparableComparisonOp(">", "Greater than", null, i -> i > 0));
 		operators.with(">=", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
-			new ComparableComparisonOp(">=", "Greater than or equal", i -> i >= 0));
+			new ComparableComparisonOp(">=", "Greater than or equal", null, i -> i >= 0));
 
 		// Bit shifting
 		operators.withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null,
@@ -1211,6 +1233,7 @@ public class BinaryOperatorSet {
 					return e.getMessage();
 				}
 			}, "String concatenation operator");
+
 		return operators;
 	}
 
@@ -1218,9 +1241,11 @@ public class BinaryOperatorSet {
 	public static final BinaryOperatorSet STANDARD_JAVA = standardJava(build()).build();
 
 	/** Operators by name, target type, primary type, and secondary type */
-	private final Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> theOperators;
+	private final Map<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+	BinaryOp<?, ?, ?>>>>> theOperators;
 
-	private BinaryOperatorSet(Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> operators) {
+	private BinaryOperatorSet(Map<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+		BinaryOp<?, ?, ?>>>>> operators) {
 		theOperators = operators;
 	}
 
@@ -1229,14 +1254,13 @@ public class BinaryOperatorSet {
 	 * @param targetType The type of the operator's output
 	 * @return All primary input types that this operator set knows of for which the given operator may be applied
 	 */
-	public Set<Class<?>> getSupportedPrimaryInputTypes(String operator, Class<?> targetType) {
-		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+	public Iterable<Class<?>> getSupportedPrimaryInputTypes(String operator, Class<?> targetType) {
+		MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> ops = theOperators
+			.get(operator);
 		if (ops == null || ops.isEmpty())
 			return Collections.emptySet();
-		Set<Class<?>> primaryTypes = new LinkedHashSet<>();
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null))
-			primaryTypes.addAll(targetOps.getTopLevelKeys());
-		return primaryTypes;
+		return IterableUtils
+			.distinct(IterableUtils.flatten(IterableUtils.map(ops.getAll(targetType, null), ops2 -> ops2.getTopLevelKeys())));
 	}
 
 	/**
@@ -1246,16 +1270,14 @@ public class BinaryOperatorSet {
 	 * @return All secondary input types that this operator set knows of for which the given operator may be applied with the given primary
 	 *         input
 	 */
-	public Set<Class<?>> getSupportedSecondaryInputTypes(String operator, Class<?> targetType, Class<?> primaryType) {
-		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+	public Iterable<Class<?>> getSupportedSecondaryInputTypes(String operator, Class<?> targetType, Class<?> primaryType) {
+		MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> ops = theOperators
+			.get(operator);
 		if (ops == null || ops.isEmpty())
 			return Collections.emptySet();
-		Set<Class<?>> secondaryTypes = new LinkedHashSet<>();
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
-			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE))
-				secondaryTypes.addAll(ops2.getTopLevelKeys());
-		}
-		return secondaryTypes;
+		return IterableUtils.distinct(IterableUtils.flatten(IterableUtils.map(ops.getAll(targetType, null), targetOps -> //
+		IterableUtils.flatten(IterableUtils.map(targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE), ops2 -> ops2.getTopLevelKeys()))//
+			)));
 	}
 
 	/**
@@ -1268,19 +1290,19 @@ public class BinaryOperatorSet {
 	 * @return The binary operator supported by this operator set with the given operator and input types
 	 */
 	public <S, T> BinaryOp<S, T, ?> getOperator(String operator, Class<?> targetType, Class<S> primaryType, Class<T> secondaryType) {
-		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
+		MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> ops = theOperators
+			.get(operator);
 		if (ops == null || ops.isEmpty())
 			return null;
 		// Use the most specific type
-		BinaryOp<S, T, ?> ret = null;
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
-			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE)) {
-				BinaryOp<?, ?, ?> op = ops2.getAll(secondaryType, TypeMatch.SUPER_TYPE).peekLast();
+		for (MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
+			for (MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE)) {
+				BinaryOp<?, ?, ?> op = ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
 				if (op != null)
-					ret = (BinaryOp<S, T, ?>) op;
+					return (BinaryOp<S, T, ?>) op;
 			}
 		}
-		return ret;
+		return null;
 	}
 
 	/**
@@ -1293,8 +1315,10 @@ public class BinaryOperatorSet {
 		int missing = theOperators.size() - other.theOperators.size();
 		if (missing < 0)
 			return false;
-		for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
-			ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> otherOp = other.theOperators.get(op.getKey());
+		for (Map.Entry<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>>> op : theOperators
+			.entrySet()) {
+			MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> otherOp = other.theOperators
+				.get(op.getKey());
 			if (otherOp == null) {
 				missing--;
 				if (missing < 0)
@@ -1312,12 +1336,13 @@ public class BinaryOperatorSet {
 		return true;
 	}
 
-	private static <T> boolean containsAll(ClassMap<T> map1, ClassMap<T> map2, BiPredicate<T, T> containment) {
+	private static <T> boolean containsAll(MultiInheritanceMap2<Class<?>, T> map1, MultiInheritanceMap2<Class<?>, T> map2,
+		BiPredicate<T, T> containment) {
 		int missing = map1.size() - map2.size();
 		if (missing < 0)
 			return false;
-		for (BiTuple<Class<?>, T> entry1 : map1.getAllEntries()) {
-			T value2 = map2.get(entry1.getValue1(), TypeMatch.EXACT);
+		for (Map.Entry<Class<?>, T> entry1 : map1.allEntries()) {
+			T value2 = map2.get(entry1.getKey(), TypeMatch.EXACT);
 			if (value2 == null) {
 				missing--;
 				if (missing < 0)
@@ -1325,7 +1350,7 @@ public class BinaryOperatorSet {
 				else
 					continue;
 			}
-			if (!containment.test(entry1.getValue2(), value2))
+			if (!containment.test(entry1.getValue(), value2))
 				return false;
 		}
 		return true;
@@ -1343,18 +1368,7 @@ public class BinaryOperatorSet {
 
 	/** @return A builder pre-configured for all of this operator set's operations */
 	public Builder copy() {
-		Builder copy = build();
-		for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
-			for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
-				for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries()) {
-					for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op4 : op3.getValue2().getAllEntries()) {
-						copy.with(op.getKey(), (Class<Object>) op3.getValue1(), (Class<Object>) op4.getValue1(),
-							(BinaryOp<Object, Object, ?>) op4.getValue2());
-					}
-				}
-			}
-		}
-		return copy;
+		return build().withAll(this);
 	}
 
 	/** @return A builder that may be configured to support various binary operations */
@@ -1364,7 +1378,9 @@ public class BinaryOperatorSet {
 
 	/** A builder that may be configured to support various binary operations */
 	public static class Builder {
-		private final Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> theOperators;
+		private final Map<String, MultiInheritanceMap2<Class<?>, //
+		MultiInheritanceMap2<Class<?>, //
+		MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>>> theOperators;
 
 		Builder() {
 			theOperators = new LinkedHashMap<>();
@@ -1382,9 +1398,9 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BinaryOp<S, T, ?> op) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(op.getTargetSuperType(), () -> new ClassMap<>())//
-			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap())//
+			.computeIfAbsent(op.getTargetSuperType(), MultiInheritanceView::createClassMap)//
+			.computeIfAbsent(primary, MultiInheritanceView::createClassMap)//
 			.with(secondary, op);
 			return this;
 		}
@@ -1433,9 +1449,9 @@ public class BinaryOperatorSet {
 		public <S, T, V> Builder with2(String operator, Class<S> primary, Class<T> secondary, Class<V> target,
 			BiFunction<? super S, ? super T, ? extends V> op, TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled, String description) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(target, () -> new ClassMap<>())//
-			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap())//
+			.computeIfAbsent(target, MultiInheritanceView::createClassMap)//
+			.computeIfAbsent(primary, MultiInheritanceView::createClassMap)//
 			.with(secondary, BinaryOp.of2(operator, TypeTokens.get().of(target), op, reverse, reverseEnabled, description));
 			return this;
 		}
@@ -1459,9 +1475,9 @@ public class BinaryOperatorSet {
 			BinaryOp<T, T, V> otherOp = (BinaryOp<T, T, V>) theOperators.get(operator).get(targetType, TypeMatch.EXACT)
 				.get(secondary, TypeMatch.EXACT).get(secondary, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = cast.castPrimary(otherOp);
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(targetType, () -> new ClassMap<>())//
-			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap())//
+			.computeIfAbsent(targetType, MultiInheritanceView::createClassMap)//
+			.computeIfAbsent(primary, MultiInheritanceView::createClassMap)//
 			.with(secondary, castOp);
 			return this;
 		}
@@ -1485,9 +1501,9 @@ public class BinaryOperatorSet {
 			BinaryOp<S, S, V> sourceOp = (BinaryOp<S, S, V>) theOperators.get(operator).get(targetType, TypeMatch.EXACT)
 				.get(primary, TypeMatch.EXACT).get(primary, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = cast.castSecondary(sourceOp);
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(targetType, () -> new ClassMap<>())//
-			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap())//
+			.computeIfAbsent(targetType, MultiInheritanceView::createClassMap)//
+			.computeIfAbsent(primary, MultiInheritanceView::createClassMap)//
 			.with(secondary, castOp);
 			return this;
 		}
@@ -1513,9 +1529,9 @@ public class BinaryOperatorSet {
 			BinaryOp<T2, T2, V> otherOp = (BinaryOp<T2, T2, V>) theOperators.get(operator).get(opTarget, TypeMatch.EXACT)
 				.get(castTarget, TypeMatch.EXACT).get(castTarget, TypeMatch.EXACT);
 			BinaryOp<S, T, V> castOp = CastOp.castBoth(otherOp, primaryCast, secondaryCast);
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(castTarget, () -> new ClassMap<>())//
-			.computeIfAbsent(primary, () -> new ClassMap<>())//
+			theOperators.computeIfAbsent(operator, __ -> MultiInheritanceView.createClassMap())//
+			.computeIfAbsent(castTarget, MultiInheritanceView::createClassMap)//
+			.computeIfAbsent(primary, MultiInheritanceView::createClassMap)//
 			.with(secondary, castOp);
 			return this;
 		}
@@ -1752,14 +1768,16 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withAll(BinaryOperatorSet ops) {
-			for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : ops.theOperators.entrySet()) {
-				for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
-					for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries()) {
-						for (BiTuple<Class<?>, BinaryOp<?, ?, ?>> op4 : op3.getValue2().getAllEntries()) {
-							theOperators.computeIfAbsent(op.getKey(), __ -> new ClassMap<>())//
-							.computeIfAbsent(op2.getValue1(), () -> new ClassMap<>())//
-							.computeIfAbsent(op3.getValue1(), () -> new ClassMap<>())//
-							.put(op4.getValue1(), op4.getValue2());
+			for (Map.Entry<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+				BinaryOp<?, ?, ?>>>>> op : ops.theOperators.entrySet()) {
+				for (Map.Entry<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+					BinaryOp<?, ?, ?>>>> op2 : op.getValue().entries()) {
+					for (Map.Entry<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>> op3 : op2.getValue().entries()) {
+						for (Map.Entry<Class<?>, BinaryOp<?, ?, ?>> op4 : op3.getValue().entries()) {
+							theOperators.computeIfAbsent(op.getKey(), __ -> MultiInheritanceView.createClassMap())//
+							.computeIfAbsent(op2.getKey(), MultiInheritanceView::createClassMap)//
+							.computeIfAbsent(op3.getKey(), MultiInheritanceView::createClassMap)//
+							.put(op4.getKey(), op4.getValue());
 						}
 					}
 				}
@@ -1769,15 +1787,20 @@ public class BinaryOperatorSet {
 
 		/** @return A binary operator set with the support installed in this builder */
 		public BinaryOperatorSet build() {
-			Map<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> operators = new LinkedHashMap<>();
-			for (Map.Entry<String, ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
-				ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = new ClassMap<>();
+			Map<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+			BinaryOp<?, ?, ?>>>>> operators = new LinkedHashMap<>();
+			for (Map.Entry<String, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, //
+				BinaryOp<?, ?, ?>>>>> op : theOperators.entrySet()) {
+				MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> ops;
+				ops = MultiInheritanceView.createClassMap();
 				operators.put(op.getKey(), ops);
-				for (BiTuple<Class<?>, ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> op2 : op.getValue().getAllEntries()) {
-					ClassMap<ClassMap<BinaryOp<?, ?, ?>>> ops2 = new ClassMap<>();
-					ops.put(op2.getValue1(), ops2);
-					for (BiTuple<Class<?>, ClassMap<BinaryOp<?, ?, ?>>> op3 : op2.getValue2().getAllEntries())
-						ops2.with(op3.getValue1(), op3.getValue2().copy());
+				for (Map.Entry<Class<?>, MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>>> op2//
+					: op.getValue().entries()) {
+					MultiInheritanceMap2<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>> ops2 = MultiInheritanceView
+						.createClassMap();
+					ops.put(op2.getKey(), ops2);
+					for (Map.Entry<Class<?>, MultiInheritanceMap2<Class<?>, BinaryOp<?, ?, ?>>> op3 : op2.getValue().entries())
+						ops2.with(op3.getKey(), op3.getValue().copy());
 				}
 			}
 			return new BinaryOperatorSet(operators);

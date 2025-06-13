@@ -58,6 +58,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 */
 	void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify);
 
+	/**
+	 * Performs this populator's modifiers (e.g. decoration) on a component
+	 *
+	 * @param component The component editor to modify
+	 * @param widget The QuickWidget to modify
+	 */
 	void modify(ComponentEditor<?, ?> component, W widget);
 
 	/**

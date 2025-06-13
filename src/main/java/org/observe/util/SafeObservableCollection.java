@@ -300,13 +300,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private boolean doHandleEvent(ObservableCollectionEvent<? extends E> evt) {
 		if (isFinished)
 			return true;
-		if (!hasQueuedEvents() && theThreadConstraint.isEventThread()) {
+		if (evt.getMovement() == null && !hasQueuedEvents() && theThreadConstraint.isEventThread()) {
 			// If the event is happening on the event thread and we don't have any cached changes,
 			// we can just execute the change directly without any batching or thread worries.
 			// Listeners who want batched changes can use the changes() observable.
 			// We're fully sync'd with the backing collection, so this should be cake.
 			// This feature should make this collection much lighter-weight in the most common case
 			// where the source collection is modified on the event thread.
+			// But we don't want to do this when it's possible this change is part of a move operation
 			try (Transaction t = theSyntheticCollection.lock(true, evt)) { // Link the events
 				switch (evt.getType()) {
 				case add:

@@ -10,7 +10,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
-import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyleSheet;
@@ -246,9 +245,9 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				public void update(ExElement.Interpreted<?> element, QuickStyleSheet.Interpreted styleSheet)
 					throws ExpressoInterpretationException {
-					super.update(element, styleSheet, appCache);
+					super.update(element, styleSheet);
 					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theFontColor = get(cache.getAttribute(getDefinition().getFontColor(), Color.class, env));
