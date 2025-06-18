@@ -973,7 +973,10 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return Collections.emptyList(); // Elements are initialization only, this value is independent (fundamental)
+				if (getElementValue() != null)
+					return Collections.singletonList(getElementValue());
+				else
+					return Collections.emptyList(); // Elements are initialization only, this value is independent (fundamental)
 			}
 
 			@Override

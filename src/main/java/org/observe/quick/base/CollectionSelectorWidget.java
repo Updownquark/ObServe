@@ -136,7 +136,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	/** @param id The element identity of the widget */
 	protected CollectionSelectorWidget(Object id) {
 		super(id);
-		theValues = SettableValue.<ObservableCollection<T>> build().build();
+		theValues = SettableValue.create();
 		theActiveValue = SettableValue.create();
 		theSelectedValue = SettableValue.create(b -> b.withValue(false));
 	}
@@ -195,7 +195,7 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 	protected CollectionSelectorWidget<T> clone() {
 		CollectionSelectorWidget<T> copy = (CollectionSelectorWidget<T>) super.clone();
 
-		copy.theValues = SettableValue.<ObservableCollection<T>> build().build();
+		copy.theValues = SettableValue.create();
 		copy.theActiveValue = SettableValue.create();
 		copy.theSelectedValue = SettableValue.create(b -> b.withValue(false));
 
