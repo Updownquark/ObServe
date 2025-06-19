@@ -21,6 +21,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelSetInstanceBuilder;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -2017,6 +2018,18 @@ public interface ExElement extends Identifiable {
 				.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 		}
 
+		/**
+		 * A utility for instantiating a (potentially null) expression
+		 *
+		 * @param <MV> The type of the model value to create
+		 * @param expression The expression to instantiate
+		 * @return The instantiated expression, or null if the expression is null
+		 * @throws ModelInstantiationException If the expression throws an exception upon instantiation
+		 */
+		protected <MV> ModelValueInstantiator<MV> instantiate(InterpretedValueSynth<?, MV> expression) throws ModelInstantiationException {
+			return expression == null ? null : expression.instantiate();
+		}
+
 		@Override
 		public void instantiated() throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
@@ -2083,6 +2096,19 @@ public interface ExElement extends Identifiable {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				theUpdatingModels = myModels = addOn.instantiate(myModels);
 			return myModels;
+		}
+
+		/**
+		 * A utility for evaluating a (potentially null) model instantiator
+		 *
+		 * @param <MV> The type of the model value to create
+		 * @param instantiator The instantiator to get the model value for
+		 * @param models The model instance set to get the value from
+		 * @return The model value, or null if the instantiator was null
+		 * @throws ModelInstantiationException If the instantiator throws it
+		 */
+		protected <MV> MV get(ModelValueInstantiator<MV> instantiator, ModelSetInstance models) throws ModelInstantiationException {
+			return instantiator == null ? null : instantiator.get(models);
 		}
 
 		@Override

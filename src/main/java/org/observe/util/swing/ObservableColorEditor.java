@@ -83,7 +83,8 @@ public class ObservableColorEditor extends JPanel {
 				return;
 			valueCallbackLock[0] = true;
 			try {
-				theSelectedHsbColor.set(hsb, evt);
+				if (theSelectedHsbColor.isAcceptable(hsb) == null)
+					theSelectedHsbColor.set(hsb, evt);
 			} finally {
 				valueCallbackLock[0] = false;
 			}

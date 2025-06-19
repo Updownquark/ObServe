@@ -828,10 +828,9 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	/**
-	 *
-	 * @param element The element for which to
-	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
-	 *        evaluate} {@link #getConditions() conditions}
+	 * @param parent The style application that this application inherits from
+	 * @param compiledCondition The located condition expression for this application, if any
+	 * @param interpretedCondition The interpreted condition for this application, if any
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
 	 * @throws ExpressoInterpretationException If a condition could not be
 	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)

@@ -47,8 +47,7 @@ public class InterpretedStyleApplication {
 
 	/**
 	 * @return The application definition this structure is
-	 *         {@link StyleApplicationDef#interpret(InterpretedStyleApplication, org.observe.expresso.qonfig.ExElement.Interpreted)
-	 *         interpreted} from
+	 *         {@link StyleApplicationDef#interpret(InterpretedStyleApplication, LocatedExpression, InterpretedValueSynth) interpreted} from
 	 */
 	public StyleApplicationDef getDefinition() {
 		return theDefinition;

@@ -689,17 +689,22 @@ public class ObservableSortedSetImpl {
 	 * @param <T> The type of this set
 	 */
 	public static class ActiveDerivedSortedSet<T> extends ObservableSetImpl.ActiveDerivedSet<T> implements ObservableSortedSet<T> {
-		private final Equivalence.SortedEquivalence<? super T> theEquivalence;
-
 		/**
 		 * @param flow The active manager to drive this set
 		 * @param compare The comparator by which this set's values will be sorted
 		 * @param until The observable to terminate this derived set
 		 */
 		public ActiveDerivedSortedSet(ActiveValueStoredManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
-			super(flow, until);
-			theEquivalence = flow.equivalence() instanceof Equivalence.SortedEquivalence
-				? (Equivalence.SortedEquivalence<? super T>) flow.equivalence() : flow.equivalence().sorted(compare, true);
+			super(sortedFlow(flow, compare), until);
+			equivalence(); // Make sure we create the equivalence
+		}
+
+		private static <T> ActiveValueStoredManager<?, ?, T> sortedFlow(ActiveValueStoredManager<?, ?, T> flow,
+			Comparator<? super T> compare) {
+			if (flow.equivalence() instanceof Equivalence.SortedEquivalence)
+				return flow;
+			else
+				return new ObservableCollectionActiveManagers.SortedManager<>(flow, compare);
 		}
 
 		@Override
@@ -710,12 +715,12 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public Equivalence.SortedEquivalence<? super T> equivalence() {
-			return theEquivalence;
+			return (Equivalence.SortedEquivalence<? super T>) super.equivalence();
 		}
 
 		@Override
 		public Comparator<? super T> comparator() {
-			return theEquivalence.comparator();
+			return equivalence().comparator();
 		}
 
 		@Override

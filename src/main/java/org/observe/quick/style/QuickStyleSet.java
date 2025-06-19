@@ -119,6 +119,7 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implem
 			return Collections.unmodifiableList(theStyleElements);
 		}
 
+		/** @return The cache containing interpreted style applications and values for this style set */
 		public StyleInterpretationCache getInterpretedValues() {
 			return theInterpretedValues.unmodifiable();
 		}

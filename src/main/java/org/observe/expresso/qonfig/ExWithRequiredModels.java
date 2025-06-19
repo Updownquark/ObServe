@@ -346,6 +346,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 
 		/**
 		 * @param containerModel The model instance to populate with required model values
+		 * @param sourceModel The source model supplying the actual values
 		 * @throws ModelInstantiationException If any of the required values could not be instantiated
 		 */
 		public void populateModel(ModelSetInstance containerModel, ModelSetInstance sourceModel) throws ModelInstantiationException {

@@ -30,6 +30,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	 * @param application The application for this value
 	 * @param attribute The style attribute this value is for
 	 * @param value The value container
+	 * @param models The local model instantiators for this style value
 	 * @param modelContext The required model context for the style value
 	 */
 	public InterpretedStyleValue(QuickStyleValue styleValue, InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
@@ -96,6 +97,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		public final ModelValueInstantiator<ObservableValue<Boolean>> condition;
 		/** The model value instantiator for the style value's value */
 		public final ModelValueInstantiator<SettableValue<T>> value;
+		/** The local model instantiators for this style value */
 		public final List<ModelInstantiator> models;
 		/** The required model context for the style value */
 		public final ExWithRequiredModels.InterpretedRequiredModelContext modelContext;
@@ -103,6 +105,7 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		/**
 		 * @param condition The model value instantiator for the style value's condition
 		 * @param value The model value instantiator for the style value's value
+		 * @param models The local model instantiators for this style value
 		 * @param modelContext The required model context for the style value
 		 */
 		public StyleValueInstantiator(ModelValueInstantiator<ObservableValue<Boolean>> condition,

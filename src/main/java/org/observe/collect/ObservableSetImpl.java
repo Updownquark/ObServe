@@ -1512,12 +1512,49 @@ public class ObservableSetImpl {
 	 * @param <T> The type of this set
 	 */
 	public static class ActiveDerivedSet<T> extends ActiveDerivedCollection<T> implements ObservableSet<T> {
+		private Map<T, DerivedElementHolder<T>> theElementsByValue;
+
 		/**
 		 * @param flow The active manager to drive this set
 		 * @param until The observable to terminate this derived set
 		 */
 		public ActiveDerivedSet(ActiveValueStoredManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
+			if (theElementsByValue == null)
+				theElementsByValue = equivalence().createMap();
+		}
+
+		@Override
+		protected DerivedElementHolder<T> createHolder(DerivedCollectionElement<T> el) {
+			DerivedElementHolder<T> holder = super.createHolder(el);
+			if (theElementsByValue == null)
+				theElementsByValue = equivalence().createMap();
+			theElementsByValue.put(el.get(), holder);
+			return holder;
+		}
+
+		@Override
+		protected void updateHolder(T oldValue, DerivedElementHolder<T> element) {
+			T newValue = element.get();
+			if (!equivalence().elementEquals(oldValue, newValue)) {
+				theElementsByValue.remove(oldValue);
+				theElementsByValue.put(newValue, element);
+			}
+			super.updateHolder(oldValue, element);
+		}
+
+		@Override
+		protected void removeHolder(DerivedElementHolder<T> element) {
+			theElementsByValue.remove(element.get());
+			super.removeHolder(element);
+		}
+
+		@Override
+		public CollectionElement<T> getElement(T value, boolean first) {
+			try (Transaction t = lock(false, null)) {
+				DerivedElementHolder<T> element = theElementsByValue.get(value);
+				return element == null ? null : elementFor(element);
+			}
 		}
 
 		@Override

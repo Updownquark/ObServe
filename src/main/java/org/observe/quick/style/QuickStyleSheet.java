@@ -469,6 +469,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<QuickStyleSheet.Inst
 			return Collections.unmodifiableMap(theStyleSets);
 		}
 
+		/** @return The cache containing interpreted style applications and values for this style sheet */
 		public StyleInterpretationCache getInterpretedValues() {
 			return theInterpretedValues.unmodifiable();
 		}

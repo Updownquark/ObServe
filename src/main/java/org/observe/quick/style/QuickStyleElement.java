@@ -134,6 +134,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return Collections.unmodifiableList(theChildren);
 		}
 
+		/** @return The style value definition for this element's style, if specified on this element */
 		public QuickStyleValue getStyleValue() {
 			return theStyleValue;
 		}
@@ -589,6 +590,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return theCondition;
 		}
 
+		/** @return The interpreted style application for this element */
 		public InterpretedStyleApplication getApplication() {
 			return theApplication;
 		}
@@ -646,6 +648,11 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				return interpret(valueExpression, type);
 		}
 
+		/**
+		 * Adds interpreted style applications and values for this element and all its children to the given style cache
+		 *
+		 * @param cache The cache to populate
+		 */
 		public void addToCache(StyleInterpretationCache.Modifiable cache) {
 			if (theValue != null)
 				cache.with(getDefinition().getValue().getFilePosition(0), theApplication, theValue);

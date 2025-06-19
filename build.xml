@@ -6,7 +6,7 @@
 	<property name="app.name" value="ObServe" />
 	<property name="app.short.name" value="${app.name}" />
 	<property name="app.vendor" value="Updownquark" />
-	<property name="app.version" value="2.0.0" />
+	<property name="app.version" value="3.0.0" />
 	<property name="app.descrip" value="Observable structures and utilities" />
 
     <property name="dir.buildfile" value="."/>

@@ -455,7 +455,7 @@ public interface QuickBorder extends QuickStyledElement {
 				 * @param styledElement The border element being styled
 				 * @param wrapped The generic compiled style that this style class wraps
 				 */
-				public Default(QuickInstanceStyle.Def parent, QuickBorder.Def<?> styledElement, QuickCompiledStyle wrapped) {
+				public Default(QuickInstanceStyle.Def parent, ExElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
 					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(), QuickCoreInterpretation.NAME,
 						QuickCoreInterpretation.VERSION, "border");
@@ -504,7 +504,7 @@ public interface QuickBorder extends QuickStyledElement {
 				 * @param parent The parent style for this style to inherit from
 				 * @param wrapped The generic interpreted style that this style class wraps
 				 */
-				public Default(Def definition, QuickBorder.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
+				public Default(Def definition, ExElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}

@@ -2,51 +2,30 @@
 
 <?DOC The Quick-Draw toolkit.  Contains definitions for the <canvas> element and shapes and various general drawing tools.?>
 <qonfig-def name="Quick-Draw" version="0.1" xmlns:core="Quick-Core v0.1" xmlns:expresso="Expresso-Base v0.1" xmlns:style="Quick-Style v0.1">
-	<value-types>
-	</value-types>
-	
 	<add-ons>
-		<add-on name="size-publishing" extends="styled" >
-			<element-model>
-				<value name-attribute="width-as" type="int" priority="1" />
-				<value name-attribute="height-as" type="int" priority="1" />
-			</element-model>
-			<attribute name="width-as" type="identifier" specify="optional" />
-			<attribute name="height-as" type="identifier" specify="optional" />
-		</add-on>
-		<add-on name="position-publishing" extens="styled">
-			<element-model>
-				<value name-attribute="left-as" type="int" priority="1" />
-				<value name-attribute="right-as" type="int" priority="1" />
-				<value name-attribute="top-as" type="int" priority="1" />
-				<value name-attribute="bottom-as" type="int" priority="1" />
-			</element-model>
-			<attribute name="left-as" type="identifier" specify="optional" />
-			<attribute name="right-as" type="identifier" specify="optional" />
-			<attribute name="top-as" type="identifier" specify="optional" />
-			<attribute name="bottom-as" type="identifier" specify="optional" />
-		</add-on>
 		<add-on name="shape-publisher" abstract="true" />
 		<add-on name="shape-container" abstract="true">
-			<styles>
-				<?DOC A value between 0 and 1 determining how this container's shapes are drawn to the canvas.<br>
-					0 indicates that the contents should not be drawn at all to the canvas,<br>
-					while 1 indicates that the contents should completely cover any content rendered under this container.?>
-				<style-attribute name="content-opacity" type="float" />
-			</styles>
 			<child-def name="shape" type="shape-publisher" min="0" max="inf" />
 		</add-on>
-		<add-on name="shape" abstract="true" inherits="shape-publisher,with-background,size-publishing,position-publishing">
+		<add-on name="shape" abstract="true" inherits="shape-publisher,with-background">
 			<styles>
 				<?DOC A value between 0 and 1 determining how this shape is drawn to the canvas.<br>
 					0 indicates that this shape should not be drawn at all to the canvas,<br>
 					while 1 indicates that this shape should completely cover any content rendered under it.?>
 				<style-attribute name="opacity" type="float" />
 			</styles>
-			<attribute name="shape-id" type="expression" />
+			<?DOC The tooltip to display when the user hovers the mouse over the shape, for user feedback?>
+			<attribute name="tooltip" type="expression" specify="optional" />
+			<?DOC Determines when the shape is displayed to the user or hidden?>
+			<attribute name="visible" type="expression" specify="optional" />
+			<?DOC An event that will cause this shape to repaint itself?>
+			<attribute name="repaint" type="expression" specify="optional" />
+			<?DOC Listeners to events like mouse clicks or key presses?>
+			<child-def name="event-listener" type="event-listener" min="0" max="inf" />
 		</add-on>
 		<add-on name="rotated" abstract="true">
-			<attribute name="rotation" type="expression" />
+			<?DOC The counter-clockwise rotation of this object in radians?>
+			<attribute name="rotation" type="expression" default="0" />
 		</add-on>
 		<add-on name="with-stroke" abstract="true" inherits="styled">
 			<styles>
@@ -59,36 +38,42 @@
 				<style-attribute name="thickness" type="double" />
 			</styles>
 		</add-on>
-		<add-on name="simple-shape" abstract="true"
-			inherits="shape,with-border,with-stroke,v-positionable,h-positionable,v-sizeable,h-sizeable,rotated" />
+		<add-on name="bordered-shape" abstract="true" inherits="shape,with-border,with-stroke" />
+		<add-on name="simple-shape" abstract="true" inherits="bordered-shape,v-positionable,h-positionable,rotated">
+			<attribute name="width" type="expression" specify="optional" />
+			<attribute name="height" type="expression" specify="optional" />
+		</add-on>
 		<add-on name="point-shape" requires="point" inherits="shape" />
 	</add-ons>
 	
 	<elements>
-		<element-def name="canvas" extends="widget" inherits="shape-container,size-publishing" />
-		<element-def name="shape-collection" inherits="shape-publisher,shape-container">
+		<element-def name="canvas" extends="widget" inherits="shape-container,h-sizeable,v-sizeable">
+			<attribute name="publish-width" type="expression" specify="optional" />
+			<attribute name="publish-height" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="shape-collection" inherits="shape-publisher,shape-container,styled,with-element-model">
 			<element-model>
 				<?DOC The value that the user has entered for the current shape?>
-				<value name-attribute="shape-element-as" priority="100" />
+				<value name-attribute="active-shape-as" priority="100" />
 				<?DOC The index of the value representing the shape currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name="shapeIndex" type="int" priority="2" />
 			</element-model>
 			<attribute name="for-each" type="expression" />
 			<?DOC The name of the variable holding the active value in the for-each expression (the one being rendered or edited)?>
-			<attribute name="shape-element-as" type="identifier" />
-			<attr-mod name="shape.shape-id" default="{shape-element-as}" />
-			<child-mod name="shape-container.shape" type="shape-publisher" min="1" />
+			<attribute name="active-shape-as" type="identifier" />
+			<child-mod child="shape-container.shape" min="1" />
 		</element-def>
 		<element-def name="rectangle" inherits="simple-shape,shape-container" />
 		<element-def name="ellipse" inherits="simple-shape" />
-		<element-def name="polygon" inherits="shape,with-border">
+		<element-def name="polygon" inherits="bordered-shape">
 			<element-model>
 				<?DOC The value for the current vertex?>
-				<value name-attribute="vertex" priority="100" />
+				<value name-attribute="active-vertex-as" priority="100" />
 				<?DOC The index of the value representing the vertex currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name="vertexIndex" type="int" priority="2" />
 			</element-model>
 			<attribute name="vertices" type="expression" />
+			<attribute name="active-vertex-as" type="identifier" />
 			<attribute name="vertex-x" type="expression" />
 			<attribute name="vertex-y" type="expression" />
 		</element-def>
@@ -96,24 +81,31 @@
 			<value type="expression" />
 		</element-def>
 		<element-def name="point" inherits="v-positionable,h-positionable" />
+		<?DOC A line with a constant number of points.  Each of the points may change locations, but the number is constant.?>
 		<element-def name="line" inherits="linear-shape">
 			<child-def name="points" type="point" min="2" />
 		</element-def>
+		<?DOC A line with a variable number of points?>
 		<element-def name="variable-line" inherits="linear-shape">
 			<element-model>
 				<?DOC The value for the current point?>
-				<value name-attribute="point" priority="100" />
+				<value name-attribute="active-point-as" priority="100" />
 				<?DOC The index of the value representing the point currently in use (e.g. being rendered, hovered, etc.)?>
-				<value name="pointIndex" type="int" priority="2" />
+				<value name-attribute="point-index-as" type="int" priority="2" />
 				<?DOC The value for the point after the current point in the points list?>
-				<value name-attribute="nextPoint" priority="100" />
+				<value name-attribute="next-point-as" priority="100" />
 				<?DOC The distance between <code>point</code> and <code>nextPoint</code>?>
-				<value name="pointDistance" type="float" priority="2" />
+				<value name-attribute="point-distance-as" type="float" priority="2" />
 				<?DOC The distance between <code>point</code> and the 2D point currently in use
 					(e.g. the point where the color is being determined or where the mouse is positioned)
 					along the line to <code>nextPoint</code> divided by the <code>pointDistance</code>?>
-				<value name="linearP" type="float" priority="2" />
+				<value name-attribute="linear-p-as" type="float" priority="2" />
 			</element-model>
+			<attribute name="active-point-as" type="identifier" />
+			<attribute name="point-index-as" type="identifier" specify="optional" />
+			<attribute name="next-point-as" type="identifier" specify="optional" />
+			<attribute name="point-distance-as" type="identifier" specify="optional" />
+			<attribute name="linear-p-as" type="identifier" specify="optional" />
 			<attribute name="points" type="expression" />
 			<attribute name="point-x" type="expression" />
 			<attribute name="point-y" type="expression" />
@@ -125,11 +117,27 @@
 			<attribute name="start-angle" type="expression" />
 			<attribute name="end-angle" type="expression" />
 		</element-def>
+		<element-def name="parameteric-curve" inherits="linear-shape">
+			<element-model>
+				<value name-attribute="parameter-as" priority="100" />
+				<value name-attribute="point-as" priority="100" />
+			</element-model>
+			<attribute name="parameter-as" type="identifier" />
+			<attribute name="point" type="expression" specify="optional" />
+			<attribute name="point-as" type="identifier" specify="optional" />
+			<attribute name="x" type="expression" />
+			<attribute name="y" type="expression" />
+		</element-def>
 		<element-def name="image" inherits="simple-shape,iconized" />
+		<element-def name="shape-view" inherits="shape-publisher,shape-container,rotated">
+			<attribute name="translate-x" type="expression" default="0" />
+			<attribute name="translate-y" type="expression" default="0" />
+			<attribute name="zoom" type="expression" default="1" />
+		</element-def>
 	</elements>
 
 	<auto-inheritance>
-		<auto-inherit role="point-shape">
+		<auto-inherit inherits="point-shape">
 			<target element="point" role="shape-container.shape" />
 		</auto-inherit>
 	</auto-inheritance>

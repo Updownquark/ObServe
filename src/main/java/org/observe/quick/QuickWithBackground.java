@@ -241,11 +241,8 @@ public interface QuickWithBackground extends QuickStyledElement {
 	/** @return Whether the mouse pointer is currently positioned over this element and the right mouse button is down */
 	SettableValue<Boolean> isRightPressed();
 
-	/**
-	 * @param ctx The background context for this element from the Quick implementation
-	 * @throws ModelInstantiationException If the context could not be installed in the element's models
-	 */
-	void setContext(BackgroundContext ctx) throws ModelInstantiationException;
+	/** @param ctx The background context for this element from the Quick implementation */
+	void setContext(BackgroundContext ctx);
 
 	/** An abstract {@link QuickWithBackground} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWithBackground {
@@ -294,7 +291,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 		}
 
 		@Override
-		public void setContext(BackgroundContext ctx) throws ModelInstantiationException {
+		public void setContext(BackgroundContext ctx) {
 			isHovered.set(ctx.isHovered(), null);
 			isFocused.set(ctx.isFocused(), null);
 			isPressed.set(ctx.isPressed(), null);
@@ -357,7 +354,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				 * @param styledElement The element being styled
 				 * @param wrapped The generic compiled style that this style class wraps
 				 */
-				public Default(QuickInstanceStyle.Def parent, QuickWithBackground.Def<?> styledElement, QuickCompiledStyle wrapped) {
+				public Default(QuickInstanceStyle.Def parent, ExElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement.getAddOn(QuickStyled.Def.class), wrapped);
 					QuickTypeStyle typeStyle = QuickStyled.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-background");
@@ -378,7 +375,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				@Override
 				public QuickBackgroundStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent)
 					throws ExpressoInterpretationException {
-					return new Interpreted.Default(this, (QuickWithBackground.Interpreted<?>) parentEl,
+					return new Interpreted.Default(this, parentEl,
 						(QuickInstanceStyle.Interpreted) parent, getWrapped().interpret(parentEl, parent));
 				}
 			}
@@ -406,7 +403,7 @@ public interface QuickWithBackground extends QuickStyledElement {
 				 * @param parent The parent style for this style to inherit from
 				 * @param wrapped The generic interpreted style that this style class wraps
 				 */
-				public Default(Def definition, QuickWithBackground.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
+				public Default(Def definition, ExElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
 					QuickInterpretedStyle wrapped) {
 					super(definition, styledElement.getAddOn(QuickStyled.Interpreted.class), parent, wrapped);
 				}

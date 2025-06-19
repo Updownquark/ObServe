@@ -40,6 +40,12 @@ public interface QuickInterpretedStyle {
 	/** @return All style values that may apply to this style */
 	Collection<InterpretedStyleValue<?>> getDeclaredValues();
 
+	/**
+	 * @param styleValue The style value to interpret
+	 * @param element The expresso element containing the environments for interpretation
+	 * @return The interpreted style value
+	 * @throws ExpressoInterpretationException
+	 */
 	InterpretedStyleValue<?> interpret(QuickStyleValue styleValue, ExElement.Interpreted<?> element) throws ExpressoInterpretationException;
 
 	/** @return All style attributes that apply to this element */

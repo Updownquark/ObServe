@@ -2741,11 +2741,14 @@ public final class ObservableCollectionImpl {
 							if (holder[0].successor != null) {
 								while (holder[0].successor != null)
 									holder[0] = holder[0].successor;
-							} else // Since we weren't actually moved in the repair, we need to fire the listener
+							} else {// Since we weren't actually moved in the repair, we need to fire the listener
+								updateHolder(oldValue, holder[0]);
 								fireListeners(
 									ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getNodesBefore(),
 										CollectionChangeType.set, oldValue, newValue, elCauses));
+							}
 						} else {
+							updateHolder(oldValue, holder[0]);
 							fireListeners(ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getNodesBefore(),
 								CollectionChangeType.set, oldValue, newValue, elCauses));
 						}
@@ -2757,8 +2760,10 @@ public final class ObservableCollectionImpl {
 							holder[0] = holder[0].successor;
 						theStamp.incrementAndGet();
 						int index = holder[0].treeNode.getNodesBefore();
-						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
+						if (holder[0].treeNode.getElementId().isPresent()) {// May have been removed already
+							removeHolder(holder[0]);
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+						}
 						CollectionElementMove terminalMove = null;
 						for (Object elCause : elCauses) {
 							if (elCause instanceof ObservableCollectionEvent
@@ -2785,6 +2790,23 @@ public final class ObservableCollectionImpl {
 		 */
 		protected DerivedElementHolder<T> createHolder(ObservableCollectionActiveManagers.DerivedCollectionElement<T> el) {
 			return new DerivedElementHolder<>(el);
+		}
+
+		/**
+		 * Called when a collection element is updated
+		 *
+		 * @param oldValue The element's previous value
+		 * @param element The element
+		 */
+		protected void updateHolder(T oldValue, DerivedElementHolder<T> element) {
+		}
+
+		/**
+		 * Called when a collection element is removed
+		 *
+		 * @param element The removed element
+		 */
+		protected void removeHolder(DerivedElementHolder<T> element) {
 		}
 
 		/** @return This collection's data manager */

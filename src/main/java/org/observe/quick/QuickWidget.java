@@ -509,7 +509,7 @@ public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 		}
 
 		@Override
-		public void setContext(BackgroundContext ctx) throws ModelInstantiationException {
+		public void setContext(BackgroundContext ctx) {
 			isHovered.set(ctx.isHovered(), null);
 			isFocused.set(ctx.isFocused(), null);
 			isPressed.set(ctx.isPressed(), null);
