@@ -447,7 +447,11 @@ public class PanelPopulation {
 		@Override
 		Observable<?> getUntil();
 
-		void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
+		void doAdd(int componentIndex, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
+
+		default void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			doAdd(getContainer().getComponentCount(), field, fieldLabel, postLabel, scrolled);
+		}
 
 		default void doAdd(SimpleComponentEditor<?, ?> field) {
 			doAdd(field, false);
@@ -887,7 +891,7 @@ public class PanelPopulation {
 		@Override
 		default <F> P addTreeTable(ObservableValue<? extends F> root,
 			Function<? super F, ? extends ObservableCollection<? extends F>> children,
-			Consumer<TreeTableEditor<F, ?>> modify) {
+				Consumer<TreeTableEditor<F, ?>> modify) {
 			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable(this, root, children, getUntil());
 			if (modify != null)
 				modify.accept(treeTableEditor);
@@ -954,7 +958,7 @@ public class PanelPopulation {
 	}
 
 	public static void setText(String text, Consumer<String> setter) {
-		if (!text.startsWith("<html>") && text.indexOf('\n') >= 0)
+		if (text != null && !text.startsWith("<html>") && text.indexOf('\n') >= 0)
 			text = "<html>" + text.replace("\n", "<br>");
 		setter.accept(text);
 	}
@@ -2063,7 +2067,11 @@ public class PanelPopulation {
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
-		P withCountTitle(String displayedText);
+		default P withCountTitle(String displayedText) {
+			return withCountTitle(ObservableValue.of(displayedText));
+		}
+
+		P withCountTitle(ObservableValue<String> displayedText);
 
 		ObservableCollection<R> getFilteredRows();
 

@@ -9,7 +9,6 @@ import java.util.Set;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -255,8 +254,8 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 				default:
 					break;
 				}
-				elModels.satisfyElementValueType(getActiveValueVariable(), ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(getRowType((TabularWidget.Interpreted<?, ?, ?>) interp, env)));
+				elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(getActiveValueVariable(), ModelTypes.Value,
+					this::getRowType);
 				syncChildren(QuickTableColumn.TableColumnSet.Def.class, theColumns, session.forChildren("columns"));
 				syncChildren(QuickTransfer.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
 				syncChildren(QuickTransfer.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
@@ -264,11 +263,10 @@ public interface TabularWidget<R, C> extends MultiValueWidget<R> {
 
 			/**
 			 * @param interpreted The interpreted widget
-			 * @param env The expresso environment for interpreting expressions
 			 * @return The row type of the tabular widget
 			 * @throws ExpressoInterpretationException If the row type could not be interpreted
 			 */
-			protected abstract TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?, ?> interpreted, InterpretedExpressoEnv env)
+			protected abstract TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?, ?> interpreted)
 				throws ExpressoInterpretationException;
 
 			@Override

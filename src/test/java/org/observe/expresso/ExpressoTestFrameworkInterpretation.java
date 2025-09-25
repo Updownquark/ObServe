@@ -133,7 +133,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 

@@ -1,6 +1,7 @@
 package org.observe.config;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
 
@@ -19,6 +20,15 @@ public interface ObservableValueSet<E> {
 	/** @return A creator structure that may be used to add values to the set */
 	default ConfigurableValueCreator<E, E> create() {
 		return create(getType().getType());
+	}
+
+	/**
+	 * @param <E2> The sub-type of value to add
+	 * @param subType The sub-type of value to add
+	 * @return A creator structure that may be used to add values to the set
+	 */
+	default <E2 extends E> ConfigurableValueCreator<E, E2> create(Class<E2> subType) {
+		return create(TypeTokens.get().of(subType));
 	}
 
 	/**

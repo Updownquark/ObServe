@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <quick xmlns:x="Quick-X v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Quick Tiled Pane Demo`" close-action="exit">
+	title="`Quick Multi Pane Demo`" close-action="exit">
 	<head>
 		<imports>
 			<import>org.observe.quick.swing.SwingTestEntity</import>
@@ -26,7 +26,7 @@
 		</box>
 		<text-field value="app.focusText" />
 		<scroll>
-			<tiled-pane role="content" values="app.values" active-value-name="entity" layout="inline-layout" orientation="vertical">
+			<virtual-multi-pane role="content" values="app.values" active-value-name="entity" layout="inline-layout" orientation="vertical">
 				<model>
 					<field-value name="name" source="entity==null ? null : entity.getName()" target-as="newValue" save="entity.setName(newValue)" />
 					<field-value name="b" source="entity==null ? false : entity.getBoolean()" target-as="newValue" save="entity.setBoolean(newValue)" />
@@ -44,7 +44,7 @@
 						<on-click>app.values.remove(entity)</on-click>
 					</label>
 				</box>
-			</tiled-pane>
+			</virtual-multi-pane>
 		</scroll>
 		<text-field value="app.focusText" />
 	</box>

@@ -45,12 +45,23 @@ public class QuickDrawInterpretation implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith(QuickCanvas.CANVAS, QuickCanvas.Def.class, ExElement.creator(QuickCanvas.Def::new));
+		interpreter.createWith(QuickRotated.ROTATED, QuickRotated.Def.class, ExAddOn.creator(QuickRotated.Def::new));
 		interpreter.createWith(QuickRectangle.RECTANGLE, QuickRectangle.Def.class, ExElement.creator(QuickRectangle.Def::new));
 		interpreter.createWith(QuickEllipse.ELLIPSE, QuickEllipse.Def.class, ExElement.creator(QuickEllipse.Def::new));
+		interpreter.createWith(QuickPolygon.POLYGON, QuickPolygon.Def.class, ExElement.creator(QuickPolygon.Def::new));
+		interpreter.createWith(QuickDrawText.TEXT, QuickDrawText.Def.class, ExElement.creator(QuickDrawText.Def::new));
+		interpreter.createWith(QuickLine.LINE, QuickLine.Def.class, ExElement.creator(QuickLine.Def::new));
+		interpreter.createWith(QuickPoint.POINT, QuickPoint.Def.class, ExElement.creator(QuickPoint.Def::new));
+		interpreter.createWith(QuickFlexLine.FLEX_LINE, QuickFlexLine.Def.class, ExElement.creator(QuickFlexLine.Def::new));
 		interpreter.createWith(QuickShapeContainer.SHAPE_CONTAINER, QuickShapeContainer.Def.class,
 			ExAddOn.creator(QuickShapeContainer.Def::new));
 		interpreter.createWith(QuickShapeCollection.SHAPE_COLLECTION, QuickShapeCollection.Def.class,
 			ExElement.creator(QuickShapeCollection.Def::new));
+		interpreter.createWith(QuickShapeView.SHAPE_VIEW, QuickShapeView.Def.class, ExElement.creator(QuickShapeView.Def::new));
+		interpreter.createWith(Translate.TRANSLATE, Translate.Def.class, ExElement.creator(Translate.Def::new));
+		interpreter.createWith(Scale.SCALE, Scale.Def.class, ExElement.creator(Scale.Def::new));
+		interpreter.createWith(Rotate.ROTATE, Rotate.Def.class, ExElement.creator(Rotate.Def::new));
+
 		return interpreter;
 	}
 }

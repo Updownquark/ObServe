@@ -16,6 +16,11 @@ public interface SyncValueSet<E> extends ObservableValueSet<E> {
 	}
 
 	@Override
+	default <E2 extends E> SyncValueCreator<E, E2> create(Class<E2> subType) {
+		return (SyncValueCreator<E, E2>) ObservableValueSet.super.create(subType);
+	}
+
+	@Override
 	<E2 extends E> SyncValueCreator<E, E2> create(TypeToken<E2> subType);
 
 	/**

@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -23,6 +24,8 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.Transformation;
+import org.observe.Transformation.ReversibleTransformation;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
@@ -38,19 +41,21 @@ import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.QuickButton;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickTable;
-import org.observe.quick.ext.QuickBarChart;
+import org.observe.quick.ext.QuickAbstractMultiSlider;
+import org.observe.quick.ext.QuickAbstractMultiSlider.Interpreted;
+import org.observe.quick.ext.QuickAbstractMultiSlider.SliderBgRenderer;
+import org.observe.quick.ext.QuickAbstractMultiSlider.SliderHandleRenderer;
 import org.observe.quick.ext.QuickCollapsePane;
 import org.observe.quick.ext.QuickComboButton;
+import org.observe.quick.ext.QuickMultiRangeSlider;
 import org.observe.quick.ext.QuickMultiSlider;
-import org.observe.quick.ext.QuickMultiSlider.SliderBgRenderer;
-import org.observe.quick.ext.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.ext.QuickSettingsMenu;
 import org.observe.quick.ext.QuickShaded;
 import org.observe.quick.ext.QuickShading;
 import org.observe.quick.ext.QuickSuperTable;
-import org.observe.quick.ext.QuickTiledPane;
 import org.observe.quick.ext.QuickTreeTable;
 import org.observe.quick.ext.QuickValueSelector;
+import org.observe.quick.ext.QuickVirtualMultiPane;
 import org.observe.quick.swing.QuickSwingColumnSet.TabularContext;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
@@ -67,10 +72,13 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.observe.util.swing.PanelPopulation.SliderEditor;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.Shading;
 import org.observe.util.swing.TableContentControl;
-import org.observe.util.swing.TiledPane;
+import org.observe.util.swing.VirtualMultiPane;
+import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transformer;
@@ -81,6 +89,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.io.ErrorReporting;
 
 /** Swing implementation for the Quick-X toolkit */
 public class QuickXSwing implements QuickInterpretation {
@@ -108,11 +117,11 @@ public class QuickXSwing implements QuickInterpretation {
 		tx.with(QuickComboButton.Interpreted.class, QuickSwingPopulator.class, SwingComboButton::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
+		tx.with(QuickMultiRangeSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiRangeSlider::new);
 		tx.with(QuickSettingsMenu.Interpreted.class, QuickSwingPopulator.class, SwingSettingsMenu::new);
-		tx.with(QuickTiledPane.Interpreted.class, QuickSwingPopulator.class, SwingTiledPane::new);
+		tx.with(QuickVirtualMultiPane.Interpreted.class, QuickSwingPopulator.class, SwingVirtualMultiPane::new);
 		tx.with(QuickSuperTable.Interpreted.class, QuickSwingPopulator.class, SwingSuperTable::new);
 		tx.with(QuickValueSelector.Interpreted.class, QuickSwingPopulator.class, SwingValueSelector::new);
-		tx.with(QuickBarChart.Interpreted.class, QuickSwingPopulator.class, SwingBarChart::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
@@ -314,23 +323,28 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingMultiSlider extends QuickSwingPopulator.Abstract<QuickMultiSlider> {
+	static abstract class AbstractSwingMultiSlider<T, S extends QuickAbstractMultiSlider<T>> extends QuickSwingPopulator.Abstract<S> {
 		private final Transformer<ExpressoInterpretationException> theTransformer;
 
-		SwingMultiSlider(QuickMultiSlider.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+		AbstractSwingMultiSlider(QuickAbstractMultiSlider.Interpreted<T, S> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			theTransformer = tx;
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickMultiSlider quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void doPopulate(PanelPopulator<?, ?> panel, S quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			HandleRenderer handleRenderer = quick.getHandleRenderer() == null ? null
-				: new HandleRenderer(false, quick.getValues(), quick.getHandleRenderer(), theTransformer);
 			BgRenderer bgRenderer = quick.getBgRenderers().isEmpty() ? null
 				: new BgRenderer(quick.getBgRenderers(), Observable.or(panel.getUntil(), quick.onDestroy()));
-			panel.addMultiSlider(null, quick.getValues(), slider -> {
+			createSlider(panel, quick, slider -> {
 				component.accept(slider);
+				HandleRenderer<T> handleRenderer;
+				try {
+					handleRenderer = quick.getHandleRenderer() == null ? null : new HandleRenderer<>(quick.isVertical(), quick.getValues(),
+						slider.getEditor().getRanges(), quick.getHandleRenderer(), theTransformer);
+				} catch (ModelInstantiationException e) {
+					throw new CheckedExceptionWrapper(e);
+				}
 				if (bgRenderer != null)
 					bgRenderer.setSlider(slider.getEditor());
 				slider.withBounds(quick.getMin(), quick.getMax());
@@ -345,22 +359,27 @@ public class QuickXSwing implements QuickInterpretation {
 			});
 		}
 
-		static class HandleRenderer extends MultiRangeSlider.RangeRenderer.Default {
-			private final ObservableCollection<Double> theValues;
-			private final QuickMultiSlider.SliderHandleRenderer theQuickRenderer;
-			private final QuickMultiSlider.SliderHandleRenderer.HandleRenderContext theHandleContext;
+		protected abstract void createSlider(PanelPopulation.PanelPopulator<?, ?> panel, S quick,
+			Consumer<PanelPopulation.SliderEditor<? extends MultiRangeSlider, ?>> onSlider);
+
+		static class HandleRenderer<T> extends MultiRangeSlider.RangeRenderer.Default {
+			private final ObservableCollection<T> theValues;
+			private final ObservableCollection<Range> theRanges;
+			private final QuickAbstractMultiSlider.SliderHandleRenderer<T> theQuickRenderer;
+			private final QuickAbstractMultiSlider.MultiSliderContext<T> theHandleContext;
 			private final QuickWithBackground.BackgroundContext theBackgroundContext;
 			private final ObservableValue<Cursor> theCursor;
 
 			private BasicStroke theStroke;
 
-			HandleRenderer(boolean vertical, ObservableCollection<Double> values, SliderHandleRenderer quickRenderer,
-				Transformer<ExpressoInterpretationException> tx) throws ModelInstantiationException {
+			HandleRenderer(boolean vertical, ObservableCollection<T> values, ObservableCollection<Range> ranges,
+				SliderHandleRenderer<T> quickRenderer, Transformer<ExpressoInterpretationException> tx) throws ModelInstantiationException {
 				super(vertical);
 				theValues = values;
+				theRanges = ranges;
 				theQuickRenderer = quickRenderer;
 				withColor(__ -> getLineColor(), __ -> getFillColor());
-				theHandleContext = new QuickMultiSlider.SliderHandleRenderer.HandleRenderContext.Default();
+				theHandleContext = new QuickAbstractMultiSlider.MultiSliderContext.Default<>();
 				theBackgroundContext = new QuickWithBackground.BackgroundContext.Default();
 				theQuickRenderer.setHandleContext(theHandleContext);
 				theQuickRenderer.setContext(theBackgroundContext);
@@ -387,11 +406,23 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			private void setContext(CollectionElement<Range> range, boolean hovered, boolean focused) {
-				theHandleContext.getHandleValue().set(range.get().getValue(), null);
-				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(range.getElementId()), null);
+				BetterList<ElementId> equivIds = theRanges.getSourceElements(range.getElementId(), theValues);
+				if (equivIds.isEmpty()) {
+					System.out.println("No equivalent value found for range " + range.get());
+					BreakpointHere.breakpoint();
+					theRanges.getSourceElements(range.getElementId(), theValues);
+				} else if (equivIds.size() > 1) {
+					System.out.println("Multiple equivalent value found for range " + range.get());
+					BreakpointHere.breakpoint();
+					theRanges.getSourceElements(range.getElementId(), theValues);
+				}
+
+				CollectionElement<T> valueEl = theValues.getElement(equivIds.getFirst());
+				theHandleContext.getHandleValue().set(valueEl.get(), null);
+				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(valueEl.getElementId()), null);
 				theBackgroundContext.isHovered().set(hovered, null);
 				theBackgroundContext.isFocused().set(focused, null);
-				// TODO Clicked
+				// TODO Pressed, right-pressed
 			}
 
 			@Override
@@ -423,7 +454,7 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 
 		static class BgRenderer extends MultiRangeSlider.MRSliderRenderer.Default {
-			private final List<QuickMultiSlider.SliderBgRenderer> theQuickRenderers;
+			private final List<QuickAbstractMultiSlider.SliderBgRenderer> theQuickRenderers;
 			private MultiRangeSlider theSlider;
 
 			BgRenderer(List<SliderBgRenderer> quickRenderers, Observable<?> until) {
@@ -461,6 +492,106 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
+	static class SwingMultiSlider extends AbstractSwingMultiSlider<Double, QuickMultiSlider> {
+		SwingMultiSlider(QuickMultiSlider.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			super(interpreted, tx);
+		}
+
+		@Override
+		protected void createSlider(PanelPopulation.PanelPopulator<?, ?> panel, QuickMultiSlider quick,
+			Consumer<SliderEditor<? extends MultiRangeSlider, ?>> onSlider) {
+			panel.addMultiSlider(null, quick.getValues(), onSlider::accept);
+		}
+	}
+
+	static class SwingMultiRangeSlider<T> extends AbstractSwingMultiSlider<T, QuickMultiRangeSlider<T>> {
+		SwingMultiRangeSlider(Interpreted<T, QuickMultiRangeSlider<T>> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			super(interpreted, tx);
+		}
+
+		@Override
+		protected void createSlider(PanelPopulation.PanelPopulator<?, ?> panel, QuickMultiRangeSlider<T> quick,
+			Consumer<SliderEditor<? extends MultiRangeSlider, ?>> onSlider) {
+			QuickAbstractMultiSlider.MultiSliderContext<T> ctx = new QuickAbstractMultiSlider.MultiSliderContext.Default<>(//
+				SettableValue.<T> build().withDescription(quick.getActiveValueVariable().toString()).build(), //
+				SettableValue.<Integer> build().withDescription(quick.getActiveIndexVariable().toString()).build());
+			quick.setSliderContext(ctx);
+			ObservableCollection<T> values = quick.getValues();
+			SettableValue<Double> min = quick.getRangeMin();
+			SettableValue<Double> max = quick.getRangeMax();
+			boolean[] nullWarned = new boolean[1];
+			ErrorReporting reporting = quick.reporting();
+			boolean sourceModifying = quick.requiresSourceModification();
+			ObservableCollection<Range> ranges;
+			Transformation.ReversibleTransformationPrecursor<T, Range, ?> rangeTxBuilder = new Transformation.ReversibleTransformationPrecursor<>();
+			ReversibleTransformation<T, Range> rangeTransform = rangeTxBuilder//
+				.map(v -> {
+					if (v == null && !nullWarned[0]) {
+						nullWarned[0] = true;
+						reporting.warn("Null values in range sliders will not be editable");
+					}
+					ctx.getHandleValue().set(v);
+					ctx.getHandleIndex().set(values.indexOf(v));
+					Double minV = min.get();
+					Double maxV = max.get();
+					if (minV != null && maxV != null)
+						return Range.forMinMax(minV, maxV);
+					else
+						return null;
+				})//
+				.modifySource((v, r) -> {
+					ctx.getHandleValue().set(v);
+					ctx.getHandleIndex().set(values.indexOf(v));
+					if (!Objects.equals(min.get(), r.getMin()))
+						min.set(r.getMin());
+					if (!Objects.equals(max.get(), r.getMax()))
+						max.set(r.getMax());
+				}, mod -> mod//
+					.disableWith(tv -> {
+						ctx.getHandleValue().set(tv.getCurrentSource());
+						ctx.getHandleIndex().set(values.indexOf(tv.getCurrentSource()));
+						String msg = min.isEnabled().get();
+						if (msg == null)
+							msg = max.isEnabled().get();
+						return msg;
+					}).rejectWith((v, r) -> {
+						if (r == null)
+							return "Cannot set a null range";
+						ctx.getHandleValue().set(v);
+						ctx.getHandleIndex().set(values.indexOf(v));
+						String msg = Objects.equals(min.get(), r.getMin()) ? null : min.isAcceptable(r.getMin());
+						if (msg == null)
+							msg = Objects.equals(max.get(), r.getMax()) ? null : max.isAcceptable(r.getMax());
+						return msg;
+					})//
+					);
+			if (sourceModifying) { // Easy peasy
+				ranges = values.flow()//
+					.<Range> transform(__ -> rangeTransform)//
+					.collectActive(quick.onDestroy());
+			} else {
+				ranges = values.flow()//
+					// Create a value to facilitate notification of changes on each element without affecting the source
+					.<BiTuple<SettableValue<T>, SettableValue<Range>>> transform(tx -> tx//
+						.build((v, txv) -> {
+							BiTuple<SettableValue<T>, SettableValue<Range>> value = txv.getPreviousResult();
+							if (value == null) {
+								SettableValue<T> sourceV = SettableValue.create(v);
+								SettableValue<Range> rangeV = sourceV.transformReversible(__ -> rangeTransform);
+								value = new BiTuple<>(sourceV, rangeV);
+							} else
+								value.getValue1().set(v);
+							return value;
+						}))//
+					.flattenValues(BiTuple::getValue2)//
+					.collectActive(quick.onDestroy());
+			}
+			panel.addMultiRangeSlider(null, ranges, onSlider::accept);
+		}
+	}
+
 	static class SwingSettingsMenu extends QuickSwingPopulator.Abstract<QuickSettingsMenu> {
 		private final List<QuickSwingPopulator<?>> theChildren;
 
@@ -487,12 +618,12 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingTiledPane<T> extends QuickSwingPopulator.Abstract<QuickTiledPane<T>> {
+	static class SwingVirtualMultiPane<T> extends QuickSwingPopulator.Abstract<QuickVirtualMultiPane<T>> {
 		private final QuickSwingLayout<QuickLayout> theLayout;
 		private final QuickSwingPopulator<QuickWidget> theRenderer;
 		private final DocumentMap<ModelInstantiator> theModels;
 
-		SwingTiledPane(QuickTiledPane.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
+		SwingVirtualMultiPane(QuickVirtualMultiPane.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
 			interpreted.persistModelInstances(true);
 			theLayout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
@@ -500,7 +631,7 @@ public class QuickXSwing implements QuickInterpretation {
 			theModels = interpreted.instantiateLocalModels();
 		}
 
-		private ModelSetInstance copyModels(QuickTiledPane<T> quick) throws ModelInstantiationException {
+		private ModelSetInstance copyModels(QuickVirtualMultiPane<T> quick) throws ModelInstantiationException {
 			ModelSetInstanceBuilder builder = ObservableModelSet.createMultiModelInstanceBag(quick.getUpdatingModels().getUntil());
 			for (ModelInstantiator model : theModels.values())
 				builder.withAll(model.createCopy(quick.getUpdatingModels(), quick.getUpdatingModels().getUntil()).build());
@@ -508,11 +639,11 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTiledPane<T> quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickVirtualMultiPane<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
 
 			Observable<?> until = Observable.or(panel.getUntil(), quick.onDestroy());
-			TiledPane<T> tiledPane = new TiledPane<>(quick.getValues(), until);
+			VirtualMultiPane<T> tiledPane = new VirtualMultiPane<>(quick.getValues(), until);
 
 			LayoutManager layoutInst = theLayout.create(panel, quick.getLayout());
 			if (layoutInst instanceof AbstractLayout)
@@ -553,7 +684,7 @@ public class QuickXSwing implements QuickInterpretation {
 				}
 			};
 
-			QuickTiledPane<T> hoverCopy = quick.copy(quick.getParentElement());
+			QuickVirtualMultiPane<T> hoverCopy = quick.copy(quick.getParentElement());
 			ModelSetInstance hoverModels = copyModels(quick);
 			hoverCopy.instantiate(hoverModels);
 			hoverCopy.setContext(bgCtx);
@@ -563,7 +694,7 @@ public class QuickXSwing implements QuickInterpretation {
 				LambdaUtils.identity(), hoverCopy, hoverCopy.getActiveValue(), Arrays.asList(hoverCopy.getRenderer()), hoverCtx,
 				() -> populator[0], rendererMap, false);
 
-			QuickTiledPane<T> focusCopy = quick.copy(quick.getParentElement());
+			QuickVirtualMultiPane<T> focusCopy = quick.copy(quick.getParentElement());
 			ModelSetInstance focusModels = copyModels(quick);
 			focusCopy.instantiate(focusModels);
 			focusCopy.setContext(bgCtx);
@@ -801,18 +932,6 @@ public class QuickXSwing implements QuickInterpretation {
 				.strictOrder().synchronize();
 			until.take(1).act(__ -> includedSub.unsubscribe());
 			panel.addComponent(null, selector[0], c -> component.accept(c));
-		}
-	}
-
-	static class SwingBarChart<T> extends QuickSwingPopulator.Abstract<QuickBarChart<T>> {
-		SwingBarChart(QuickBarChart.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx) {
-		}
-
-		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickBarChart<T> quick, Consumer<ComponentEditor<?, ?>> component)
-			throws ModelInstantiationException {
-			QuickSwingBarChart<T> chart = new QuickSwingBarChart<>(quick);
-			panel.addComponent(null, chart, c -> component.accept(c));
 		}
 	}
 }

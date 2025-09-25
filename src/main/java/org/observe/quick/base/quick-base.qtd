@@ -228,7 +228,7 @@
 		</add-on>
 		<?DOC The means of rendering/editing values in a &lt;tree>?>
 		<add-on name="tree-column" requires="column">
-			<attr-mod name="column.value" default="{active-value-name} == null ? null : {active-value-name}.getLast()" />
+			<attr-mod name="column.value" default="${active-value-name} == null ? null : ${active-value-name}.getLast()" />
 			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
 		</add-on>
 
@@ -374,6 +374,8 @@
 			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<?DOC Whether to render the text as HTML?>
 			<attribute name="html" type="boolean" default="false" />
+			<attribute name="selection-anchor" type="expression" specify="optional" />
+			<attribute name="selection-lead" type="expression" specify="optional" />
 			<?DOC The document for the text area, to be used instead of a formatted value?>
 			<child-def name="document" type="styled-document" min="0" />
 		</element-def>
@@ -410,11 +412,11 @@
 		<?DOC A combo/drop-down box?>
 		<element-def name="combo" extends="collection-selector-widget" inherits="rendering">
 			<?DOC The default renderer for items in the combo box?>
-			<label role="default-renderer" value="{active-value-name}" />
+			<label role="default-renderer" value="${active-value-name}" />
 		</element-def>
 		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
 		<element-def name="radio-buttons" extends="collection-selector-widget">
-			<attribute name="render" type="expression" default="{active-value-name}==null ? `` : {active-value-name}.toString()" />
+			<attribute name="render" type="expression" default="${active-value-name}==null ? `` : ${active-value-name}.toString()" />
 			<attribute name="value-tooltip" type="expression" specify="optional" />
 		</element-def>
 		<?DOC A set of toggle buttons, one for each available value, only one of which may be selected?>
@@ -465,7 +467,7 @@
 		<?DOC A column in a tabular widget?>
 		<element-def name="column" inherits="column-set,styled,rendering">
 			<?DOC Default renderer for the column?>
-			<label role="default-renderer" value="{column-value-name}" />
+			<label role="default-renderer" value="${column-value-name}" />
 			<element-model>
 				<?DOC The current cell value, e.g. the one being rendered?>
 				<value name-attribute="column-value-name" priority="2" />
@@ -533,7 +535,7 @@
 			<attribute name="for-each" type="expression" />
 			<?DOC The name of the variable holding the active value in the for-each expression (the one being rendered or edited)?>
 			<attribute name="column-element-as" type="identifier" />
-			<attr-mod name="column.id" default="{column-element-as}" />
+			<attr-mod name="column.id" default="${column-element-as}" />
 		</element-def>
 		<?DOC Abstract action on a value or list of values in a widget that can display multiple values?>
 		<element-def name="abstract-value-action" abstract="true" inherits="with-local-model,iconized">
@@ -559,6 +561,8 @@
 			</element-model>
 			<?DOC The variable name of the value that the action is invoked upon, for expressions?>
 			<attribute name="value-name" type="identifier" default="actionValue" />
+			<?DOC Whether the action can be invoked when no value is selected?>
+			<attribute name="allow-for-empty" type="boolean" default="false" />
 			<?DOC Whether an action can be invoked by the user for multiple values at once.  The action would then be invoked separately for each value.?>
 			<attribute name="allow-for-multiple" type="boolean" default="false" />
 		</element-def>
@@ -588,7 +592,7 @@
 		<element-def name="tree" extends="multi-value-widget">
 			<element-model>
 				<?DOC The current value (e.g. the one that is being rendered)?>
-				<value name-attribute="active-node-name" priority="1">{active-value-name}==null ? null : {active-value-name}.getLast()</value>
+				<value name-attribute="active-node-name" priority="1">${active-value-name}==null ? null : ${active-value-name}.getLast()</value>
 				<?DOC Whether the current value (e.g. the one being rendered) is a leaf node with no possibility of children?>
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>

@@ -515,13 +515,21 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				}
 			}
 			if (collectionElement != null) {
-				for (ObservableConfig child : collectionElement.getContent(theChildName).getValues()) {
+				for (ObservableConfig child : collectionElement.getContent()) {
+					if (!isChild(child))
+						continue;
 					ConfigElement cve = createElement(child, null, findRefs);
 					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
 					fire(ObservableCollectionEvent.createCollectionEvent(cve.getElementId(), theElements.size() - 1,
 						CollectionChangeType.add, null, cve.get(), cause));
 				}
 			}
+		}
+
+		private boolean isChild(ObservableConfig config) {
+			return theChildName.equals(config.getName())//
+				|| (theFormat instanceof ObservableConfigFormat.HeterogeneousConfigFormat //
+					&& ((ObservableConfigFormat.HeterogeneousConfigFormat<E>) theFormat).isRecognized(config));
 		}
 
 		@Override
@@ -531,9 +539,10 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				return; // Doesn't affect us
 			boolean elementChange = collectionChange.relativePath.size() == 1;
 			ObservableConfig config = collectionChange.relativePath.get(0);
+			boolean relevant = isChild(collectionChange.relativePath.getFirst());
 			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
-				if (!collectionChange.relativePath.getFirst().getName().equals(theChildName))
-					return; // Not the right name
+				if (!relevant)
+					return; // Not my baby
 				ConfigElement newEl;
 				if (theNewElement != null)
 					newEl = theNewElement;
@@ -543,9 +552,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			} else {
 				CollectionElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef());
 				if (el == null) {
-					if (elementChange && collectionChange.relativePath.getFirst().getName().equals(theChildName)
-						&& !collectionChange.oldName.equals(theChildName)) {
-						// Renamed config to be relevant to us
+					if (relevant) {
+						// Modified config to be relevant to us
 						ConfigElement newEl;
 						if (theNewElement != null)
 							newEl = theNewElement;
@@ -554,9 +562,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 						initialize(newEl, thePreAddAction, collectionChange);
 					} else // Must be a different child
 						return;
-				} else if (elementChange && (//
-					!collectionChange.relativePath.getFirst().getName().equals(theChildName)// Renamed to be irrelevant to us
-					|| collectionChange.changeType == CollectionChangeType.remove)) {
+				} else if (!relevant // Modified to be irrelevant to us
+					|| (elementChange && collectionChange.changeType == CollectionChangeType.remove)) {
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
@@ -1150,14 +1157,14 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		@Override
-		public <E2 extends E> SyncValueCreator<E, E2> create(TypeToken<E2> subType) {
+		public <E2 extends E> SimpleValueCreator<E, E2> create(TypeToken<E2> subType) {
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			return new SimpleValueCreator<E, E2>(getFormat().create(getSession(), subType)) {
 				private ObservableConfig theTemplate;
 
 				@Override
-				public SyncValueCreator<E, E2> copy(E template) {
+				public SimpleValueCreator<E, E2> copy(E template) {
 					if (Proxy.isProxyClass(template.getClass())) {
 						theTemplate = (ObservableConfig) getFormat().getEntityType().getAssociated(template,
 							EntityConfigFormat.ENTITY_CONFIG_KEY);

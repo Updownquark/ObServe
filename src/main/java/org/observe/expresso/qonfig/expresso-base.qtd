@@ -101,8 +101,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 		<?DOC Abstract add-on extended by various methods of enacting changes to a mapped operation result?>
 		<add-on name="map-reverse-type" requires="map-reverse" abstract="true" />
-		<?DOC A reverse operation that produces a new source value for a given result?>
-		<add-on name="modify-source" inherits="map-reverse-type">
+		<add-on name="abst-map-reverse" inherits="map-reverse-type">
 			<?DOC Whether the reverse operation is currently enabled for modifying a current elemet in the source.  May be a boolean or a String.<br>
 				If a String, this will be a user-readable reason why the operation is not currently available, or null if it is.?>
 			<attribute name="enabled" type="expression" specify="optional" />
@@ -118,8 +117,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 				If a String, this will be a user-readable reason why the add operation is not allowed for the given result, or null if it is.?>
 			<attribute name="add-accept" type="expression" specify="optional" />
 		</add-on>
+		<?DOC A reverse operation that produces a new source value for a given result?>
+		<add-on name="modify-source" inherits="abst-map-reverse">
+			<?DOC Whether this reverse operation requires propagation of the updated value to the source.<br />
+				False here implies that the modification of the mapped value happens without any change that the source value needs to be aware of.?>
+			<attribute name="requires-source-modification" type="boolean" default="true" />
+		</add-on>
 		<?DOC A reverse operation that modifies source values with the result value?>
-		<add-on name="replace-source" inherits="modify-source">
+		<add-on name="replace-source" inherits="abst-map-reverse">
 			<?DOC Whether the reverse modification operation will only be approximately effective.<br>
 				That is, values given to the reverse operation may change the source so that the new result is not equivalent to the result value that was given.<br>
 				A common example of this is an int-to-float mapping.  If there is an int-typed value, but a floating-point value is required by some attribute,

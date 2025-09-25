@@ -220,6 +220,7 @@ public class QuickApp extends QonfigApp {
 		super.appFileParsed(doc);
 		if (printDocument != null) {
 			try {
+				printDocument.append(doc.getLocation()).append(":\n");
 				printElement(doc.getRoot(), 0);
 			} catch (IOException e) {
 				System.err.println("Failed to print parsed Quick document");

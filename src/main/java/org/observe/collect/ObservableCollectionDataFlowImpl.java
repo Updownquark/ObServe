@@ -1113,6 +1113,11 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
+				public boolean requiresSourceModification() {
+					return false;
+				}
+
+				@Override
 				public org.observe.Transformation.ReverseQueryResult<ObservableValue<? extends T>> reverse(T newValue,
 					Transformation.TransformationValues<ObservableValue<? extends T>, T> transformValues, boolean add, boolean test) {
 					ObservableValue<? extends T> sourceValue = transformValues.getCurrentSource();
@@ -1157,7 +1162,6 @@ public class ObservableCollectionDataFlowImpl {
 				})//
 				.manageActive();
 			if (manager instanceof AbstractTransformedManager) {
-				((AbstractTransformedManager<E, ?, I>) manager).propagateUpdatesToParent = false;
 				if (((AbstractTransformedManager<?, ?, ?>) manager)
 					.getParent() instanceof ObservableCollectionActiveManagers2.ElementRefreshingCollectionManager) {
 					/* There is a very narrow condition in which a child collection calls set on a settable element of this manager,
@@ -1287,10 +1291,6 @@ public class ObservableCollectionDataFlowImpl {
 		final CollectionOperation<E, ?, I> theParent;
 		final Transformation.Engine<I, T> theEngine;
 		private final Equivalence<? super T> theEquivalence;
-		/**
-		 * This boolean is a back door for FlattenedValuesOp to allow it to avoid firing events to the collection made of ObservableValues
-		 */
-		boolean propagateUpdatesToParent;
 
 		protected AbstractTransformedManager(CollectionOperation<E, ?, I> parent,
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
@@ -1299,7 +1299,6 @@ public class ObservableCollectionDataFlowImpl {
 				System.out.println("Transformation error @" + getIdentity());
 				err.printStackTrace();
 			});
-			propagateUpdatesToParent = true;
 			theEquivalence = equivalence;
 		}
 
@@ -1359,6 +1358,14 @@ public class ObservableCollectionDataFlowImpl {
 			return theEngine.getTransformation() instanceof Transformation.ReversibleTransformation;
 		}
 
+		protected boolean isSourceModifying() {
+			Transformation<I, T> tx = getTransformation();
+			if (tx instanceof Transformation.ReversibleTransformation) {
+				return ((Transformation.ReversibleTransformation<I, T>) tx).getReverse().requiresSourceModification();
+			} else
+				return false;
+		}
+
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(theParent.getIdentity(), "xform", theEngine.getTransformation().getIdentity());
@@ -1386,7 +1393,8 @@ public class ObservableCollectionDataFlowImpl {
 			List<Transformation.TransformedElement<I, T>> txElements = QommonsUtils.map(elements,
 				el -> ((AbstractTransformedElement) el).transformElement, false);
 			List<I> sourceValues = theEngine.setElementsValue(txElements, newValue);
-			if (!propagateUpdatesToParent) { // Don't notify the parent
+			if (!isSourceModifying()) {
+				// Don't notify the parent
 			} else if (sourceValues.size() == 1)
 				doParentMultiSet((Collection<AbstractTransformedElement>) elements, sourceValues.get(0));
 			else {
@@ -1414,7 +1422,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			protected String isEnabledLocal() {
 				String msg = transformElement.isEnabled(theEngine.get());
-				if (msg == null && propagateUpdatesToParent)
+				if (msg == null && isSourceModifying())
 					msg = isParentEnabled();
 				return msg;
 			}
@@ -1424,12 +1432,12 @@ public class ObservableCollectionDataFlowImpl {
 					theEngine.get(), true);
 				if (rq.getError() != null)
 					return rq.getError();
-				return propagateUpdatesToParent ? isParentAcceptable(rq.getReversed()) : null;
+				return isSourceModifying() ? isParentAcceptable(rq.getReversed()) : null;
 			}
 
 			protected void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				I reversed = transformElement.set(value, theEngine.get(), false).getReversed();
-				if (propagateUpdatesToParent)
+				if (isSourceModifying())
 					setParent(reversed);
 			}
 		}

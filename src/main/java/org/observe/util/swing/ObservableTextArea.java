@@ -107,29 +107,33 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 			setText(text);
 			return;
 		}
-		int s, e;
-		for (s = 0; s < text.length() && s < oldText.length() && text.charAt(s) == oldText.charAt(s); s++) {
-		}
-		if (s == text.length() && s == oldText.length())
-			return;// No change
-		for (e = 1; e < text.length() && e < oldText.length()
-			&& text.charAt(text.length() - e) == oldText.charAt(oldText.length() - e); e++) {
-		}
-		e--;
-		if (s + e < oldText.length()) {
-			try {
-				getDocument().remove(s, oldText.length() - s - e);
-			} catch (BadLocationException x) {
-				throw new IllegalStateException(x);
+		// The following optimization is throwing exceptions for plain text and I can't figure out why
+		if (isHtml()) {
+			int s, e;
+			for (s = 0; s < text.length() && s < oldText.length() && text.charAt(s) == oldText.charAt(s); s++) {
+			}
+			if (s == text.length() && s == oldText.length())
+				return;// No change
+			for (e = 1; e < text.length() && e < oldText.length()
+				&& text.charAt(text.length() - e) == oldText.charAt(oldText.length() - e); e++) {
+			}
+			e--;
+			if (s + e < oldText.length()) {
+				try {
+					getDocument().remove(s, oldText.length() - s - e);
+				} catch (BadLocationException x) {
+					throw new IllegalStateException(x);
+				}
+			}
+			if (s + e < text.length()) {
+				try {
+					getDocument().insertString(s, text.substring(s, text.length() - e), null);
+				} catch (BadLocationException x) {
+					throw new IllegalStateException(x);
+				}
 			}
 		}
-		if (s + e < text.length()) {
-			try {
-				getDocument().insertString(s, text.substring(s, text.length() - e), null);
-			} catch (BadLocationException x) {
-				throw new IllegalStateException(x);
-			}
-		}
+		setText(text);
 	}
 
 	/** @return The observable editor for this text area */

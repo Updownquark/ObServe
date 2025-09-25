@@ -209,11 +209,11 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(int index, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
 				BreakpointHere.breakpoint();
 			if (fieldLabel != null)
-				getContainer().add(fieldLabel, "align right");
+				getContainer().add(fieldLabel, "align right", index++);
 			StringBuilder constraints = new StringBuilder();
 			if (field.getLayoutConstraints() != null)
 				constraints.append(field.getLayoutConstraints());
@@ -246,11 +246,11 @@ class PanelPopulationImpl {
 			if (component == null)
 				throw new IllegalStateException();
 			if (scrolled)
-				getContainer().add(new JScrollPane(component), constraints.toString());
+				getContainer().add(new JScrollPane(component), constraints.toString(), index++);
 			else
-				getContainer().add(component, constraints.toString());
+				getContainer().add(component, constraints.toString(), index++);
 			if (postLabel != null)
-				getContainer().add(postLabel, "growx, wrap");
+				getContainer().add(postLabel, "growx, wrap", index++);
 			if (field.isVisible() != null)
 				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 		}
@@ -424,11 +424,11 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+		public void doAdd(int index, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
 				BreakpointHere.breakpoint();
 			if (fieldLabel != null)
-				getContainer().add(fieldLabel);
+				getContainer().add(fieldLabel, index++);
 			Component component = field.getComponent();
 			Object constraints;
 			if ((field.isFill() || field.isFillV()) && getContainer().getLayout().getClass().getName().startsWith("net.mig")) {
@@ -447,11 +447,11 @@ class PanelPopulationImpl {
 			} else
 				constraints = field.getLayoutConstraints();
 			if (scrolled)
-				getContainer().add(new JScrollPane(component), constraints);
+				getContainer().add(new JScrollPane(component), constraints, index++);
 			else
-				getContainer().add(component, constraints);
+				getContainer().add(component, constraints, index++);
 			if (postLabel != null)
-				getContainer().add(postLabel);
+				getContainer().add(postLabel, index++);
 			if (field.isVisible() != null)
 				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 		}
@@ -684,10 +684,11 @@ class PanelPopulationImpl {
 			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			return new SimpleMultiSliderEditor<>(parent, fieldName, //
-				MultiRangeSlider.multi(false, sliderBounds, values.flow().<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
-					.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
-					.replaceSource(r -> r.getValue(), null)//
-					).collectPassive(), //
+				MultiRangeSlider.multiRange(false, sliderBounds, values.flow()//
+				.<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
+						.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
+						.replaceSource(r -> r.getValue(), null)//
+						).collectPassive(), //
 					until),
 				minMax, until);
 		}
@@ -706,7 +707,7 @@ class PanelPopulationImpl {
 			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			return new SimpleMultiSliderEditor<>(parent, fieldName, //
-				MultiRangeSlider.multi(false, sliderBounds, ranges, until), //
+				MultiRangeSlider.multiRange(false, sliderBounds, ranges, until), //
 				minMax, until);
 		}
 
@@ -1819,8 +1820,8 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
-			theContentPanel.doAdd(field, fieldLabel, postLabel, scrolled);
+		public void doAdd(int index, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			theContentPanel.doAdd(index, field, fieldLabel, postLabel, scrolled);
 		}
 
 		@Override

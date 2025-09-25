@@ -80,7 +80,7 @@ implements TableBuilder<R, T, P> {
 	private final List<DynamicColumnSet<R, ?>> theDynamicColumns;
 	private Predicate<? super R> theInitialSelection;
 	private ObservableValue<? extends TableContentControl> theFilter;
-	private String theCountTitleDisplayedText;
+	private ObservableValue<String> theCountTitleDisplayedText;
 	private ObservableCollection<FilteredValue<R>> theFilteredValueRows;
 	private ObservableCollection<? extends CategoryRenderStrategy<R, ?>> theDisplayedColumns;
 	private boolean isRowsDraggable;
@@ -164,7 +164,7 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
-	public P withCountTitle(String displayedText) {
+	public P withCountTitle(ObservableValue<String> displayedText) {
 		theCountTitleDisplayedText = displayedText;
 		return (P) this;
 	}
@@ -639,35 +639,43 @@ implements TableBuilder<R, T, P> {
 			TitledBorder border = BorderFactory.createTitledBorder(singularItemName);
 			if (theFilteredValueRows != null) {
 				theRows.observeSize()
-				.<int[]> transform(tx -> tx.combineWith(theFilteredValueRows.observeSize()).combine((sz, f) -> new int[] { sz, f }))//
+					.<String> transform(tx -> tx//
+						.combineWith(theFilteredValueRows.observeSize())//
+						.combineWith(theCountTitleDisplayedText)//
+						.combine((sz, f, ttl) -> {
+							String text;
+							if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
+								if (f != sz)
+									text = numberFormat.format(f) + " of ";
+								else if (sz > 1)
+									text = "All ";
+								else
+									text = "";
+							} else
+								text = "";
+							text += numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
+							if (ttl != null && !ttl.isEmpty())
+								text += " " + ttl;
+							return text;
+						}))//
 				.changes().takeUntil(getUntil()).act(evt -> {
-					int sz = evt.getNewValue()[0];
-					int f = evt.getNewValue()[1];
-					String text;
-					if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
-						if (f != sz)
-							text = numberFormat.format(f) + " of ";
-						else if (sz > 1)
-							text = "All ";
-						else
-							text = "";
-					} else
-						text = "";
-					text += numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
-					if (!theCountTitleDisplayedText.isEmpty())
-						text += " " + theCountTitleDisplayedText;
-					border.setTitle(text);
+						border.setTitle(evt.getNewValue());
 					comp.repaint();
 				});
 			} else {
-				theRows.observeSize().changes().takeUntil(getUntil()).act(evt -> {
-					String text = numberFormat.format(evt.getNewValue()) + " "
-						+ (evt.getNewValue() == 1 ? singularItemName : pluralItemName);
-					if (!theCountTitleDisplayedText.isEmpty())
-						text += " " + theCountTitleDisplayedText;
-					border.setTitle(text);
-					comp.repaint();
-				});
+				theRows.observeSize()//
+					.<String> transform(tx -> tx//
+						.combineWith(theCountTitleDisplayedText)//
+						.combine((sz, ttl) -> {
+							String text = numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
+							if (ttl != null && !ttl.isEmpty())
+								text += " " + ttl;
+							return text;
+						}))
+					.changes().takeUntil(getUntil()).act(evt -> {
+						border.setTitle(evt.getNewValue());
+						comp.repaint();
+					});
 			}
 			((JComponent) comp).setBorder(border);
 		}

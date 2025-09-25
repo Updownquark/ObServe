@@ -20,7 +20,18 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.*;
+import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExModelAugmentation;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
+import org.observe.expresso.qonfig.ExWithElementModel;
+import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoTransformations;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
@@ -259,8 +270,8 @@ public interface QuickTableColumn<R, C> {
 				theClicks = session.getAttribute("clicks", Integer.class);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theColumnEditValueVariable = elModels.getElementValueModelId(columnEditValueName);
-				elModels.satisfyElementValueType(theColumnEditValueVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getColumnType()));
+				elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theColumnEditValueVariable, ModelTypes.Value,
+					Interpreted::getColumnType);
 			}
 
 			/**
@@ -1143,8 +1154,8 @@ public interface QuickTableColumn<R, C> {
 					renderers = session.metadata().get("default-renderer").get();
 				syncChildren(QuickWidget.Def.class, theRenderers, renderers);
 				theEditing = syncChild(ColumnEditing.Def.class, theEditing, session, "edit");
-				elModels.satisfyElementValueType(theColumnValueVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?, ?>) interp).interpretType()));
+				elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theColumnValueVariable, ModelTypes.Value,
+					Interpreted::interpretType);
 				syncChildren(QuickTransfer.TransferSource.Def.class, theTransferSources, session.forChildren("transfer-source"));
 				syncChildren(QuickTransfer.TransferAccept.Def.class, theTransferAccepters, session.forChildren("transfer-accept"));
 			}
@@ -1773,8 +1784,8 @@ public interface QuickTableColumn<R, C> {
 				String columnValueName = session.getAttributeText("column-element-as");
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theColumnElementVariable = elModels.getElementValueModelId(columnValueName);
-				elModels.satisfyElementValueType(theColumnElementVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?, ?>) interp).getColumnElementType()));
+				elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theColumnElementVariable, ModelTypes.Value,
+					Interpreted::getColumnElementType);
 			}
 
 			@Override

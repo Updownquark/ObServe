@@ -1354,7 +1354,7 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreChangeSources getChangeSources() {
 			return CoreChangeSources.of(theParent.getChangeSources(),
-				CoreChangeSources.of(theOuterElements, h -> h.manager.getChangeSources()));
+				CoreChangeSources.of(theOuterElements, h -> h.manager == null ? CoreChangeSources.empty() : h.manager.getChangeSources()));
 		}
 
 		@Override
@@ -1365,7 +1365,7 @@ public class ObservableCollectionActiveManagers2 {
 			// We're performing read-only operations here, so if anything fails, nobody else will be affected.
 			try {
 				for (FlattenedHolder el : theOuterElements) {
-					if (el.manager.isEventing())
+					if (el.manager != null && el.manager.isEventing())
 						return true;
 				}
 			} catch (RuntimeException e) {
@@ -1381,9 +1381,7 @@ public class ObservableCollectionActiveManagers2 {
 			if (theParent.getThreadConstraint() == ThreadConstraint.NONE) {
 				boolean anyControlled = false;
 				for (FlattenedHolder outerEl : theOuterElements) {
-					if (outerEl.manager == null)
-						continue;
-					anyControlled |= outerEl.manager.isContentControlled();
+					anyControlled |= outerEl.manager != null && outerEl.manager.isContentControlled();
 				}
 				return anyControlled;
 			} else { // Otherwise, we have to return true
@@ -1410,7 +1408,7 @@ public class ObservableCollectionActiveManagers2 {
 				}
 
 				for (FlattenedHolder holder : theOuterElements) {
-					if (parentEBS.contains(holder.theParentEl))
+					if (holder.manager == null || parentEBS.contains(holder.theParentEl))
 						continue;
 					BetterList<? extends DerivedCollectionElement<? extends V>> holderEls = holder.manager.getElementsBySource(sourceEl,
 						sourceCollection);

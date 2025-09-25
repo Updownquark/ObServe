@@ -114,8 +114,7 @@ public class ExpressoTesting extends ExElement.Abstract {
 			@Override
 			protected void doUpdate() throws ExpressoInterpretationException {
 				super.doUpdate();
-				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this),
-					a -> a.updateValue(getExpressoEnv(a.getDocument())));
+				syncChildren(getDefinition().getActions(), theActions, d -> d.interpretValue(this), a -> a.updateValue());
 			}
 
 			/** @return The test instance */

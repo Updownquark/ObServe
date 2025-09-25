@@ -41,6 +41,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		private boolean isHtml;
 		private StyledDocument.Def<?> theDocument;
 		private ModelComponentId theMousePositionVariable;
+		private CompiledExpression theSelectionAnchor;
+		private CompiledExpression theSelectionLead;
 
 		/**
 		 * @param parent The parent element of the widget
@@ -78,6 +80,18 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theMousePositionVariable;
 		}
 
+		/** @return The index of the selection anchor (the "start" of the selection interval) */
+		@QonfigAttributeGetter("selection-anchor")
+		public CompiledExpression getSelectionAnchor() {
+			return theSelectionAnchor;
+		}
+
+		/** @return The index of the selection lead (the "end" of the selection interval) */
+		@QonfigAttributeGetter("selection-lead")
+		public CompiledExpression getSelectionLead() {
+			return theSelectionLead;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
@@ -88,6 +102,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theMousePositionVariable = elModels.getElementValueModelId("mousePosition");
+
+			theSelectionAnchor = getAttributeExpression("selection-anchor", session);
+			theSelectionLead = getAttributeExpression("selection-lead", session);
 		}
 
 		@Override
@@ -105,6 +122,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
 		private StyledDocument.Interpreted<T, ?> theDocument;
 		private boolean isDocumentStale;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionAnchor;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionLead;
 
 		/**
 		 * @param definition The definition to interpret
@@ -138,6 +157,16 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theDocument;
 		}
 
+		/** @return The index of the selection anchor (the "start" of the selection interval) */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionAnchor() {
+			return theSelectionAnchor;
+		}
+
+		/** @return The index of the selection lead (the "end" of the selection interval) */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionLead() {
+			return theSelectionLead;
+		}
+
 		@Override
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException {
 			super.getOrInitValue();
@@ -155,7 +184,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.doUpdate();
 			if (theDocument != null)
 				theDocument.updateDocument();
-			theRows = interpret(getDefinition().getRows(), ModelTypes.Value.forType(Integer.class));
+			theRows = interpret(getDefinition().getRows(), ModelTypes.Value.INT);
+			theSelectionAnchor = interpret(getDefinition().getSelectionAnchor(), ModelTypes.Value.INT);
+			theSelectionLead = interpret(getDefinition().getSelectionLead(), ModelTypes.Value.INT);
 		}
 
 		@Override
@@ -206,15 +237,21 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	private ModelComponentId theMousePositionVariable;
 	private StyledDocument<T> theDocument;
 	private ModelValueInstantiator<SettableValue<Integer>> theRowsInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theSelectionAnchorInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theSelectionLeadInstantiator;
 	private SettableValue<SettableValue<Integer>> theRows;
 	private boolean isHtml;
 	private SettableValue<SettableValue<Integer>> theMousePosition;
+	private SettableValue<SettableValue<Integer>> theSelectionAnchor;
+	private SettableValue<SettableValue<Integer>> theSelectionLead;
 
 	/** @param id The element ID for this widget */
 	protected QuickTextArea(Object id) {
 		super(id);
-		theRows = SettableValue.<SettableValue<Integer>> build().build();
-		theMousePosition = SettableValue.<SettableValue<Integer>> build().build();
+		theRows = SettableValue.create();
+		theMousePosition = SettableValue.create();
+		theSelectionAnchor = SettableValue.create(SettableValue.create(0));
+		theSelectionLead = SettableValue.create(SettableValue.create(0));
 	}
 
 	/** @return The styled document for the text area */
@@ -225,6 +262,16 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	/** @return The number of rows of text to display at a time */
 	public SettableValue<Integer> getRows() {
 		return SettableValue.flatten(theRows, () -> 0);
+	}
+
+	/** @return The index of the selection anchor (the "start" of the selection interval) */
+	public SettableValue<Integer> getSelectionAnchor() {
+		return SettableValue.flatten(theSelectionAnchor);
+	}
+
+	/** @return The index of the selection lead (the "end" of the selection interval) */
+	public SettableValue<Integer> getSelectionLead() {
+		return SettableValue.flatten(theSelectionLead);
 	}
 
 	/** @return Whether to render the formatted value as HTML */
@@ -247,7 +294,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		super.doUpdate(interpreted);
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
 		theMousePositionVariable = myInterpreted.getDefinition().getMousePositionVariable();
-		theRowsInstantiator = myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate();
+		theRowsInstantiator = ExElement.instantiate(myInterpreted.getRows());
+		theSelectionAnchorInstantiator = ExElement.instantiate(myInterpreted.getSelectionAnchor());
+		theSelectionLeadInstantiator = ExElement.instantiate(myInterpreted.getSelectionLead());
 		isHtml = myInterpreted.getDefinition().isHtml();
 		theDocument = myInterpreted.getTextDocument() == null ? null : myInterpreted.getTextDocument().create();
 		if (theDocument != null)
@@ -260,6 +309,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		if (theRowsInstantiator != null)
 			theRowsInstantiator.instantiate();
+		if (theSelectionAnchorInstantiator != null)
+			theSelectionAnchorInstantiator.instantiate();
+		if (theSelectionLeadInstantiator != null)
+			theSelectionLeadInstantiator.instantiate();
 
 		if (theDocument != null)
 			theDocument.instantiated();
@@ -268,7 +321,11 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	@Override
 	protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		myModels = super.doInstantiate(myModels);
-		theRows.set(theRowsInstantiator == null ? null : theRowsInstantiator.get(myModels), null);
+		theRows.set(ExElement.get(theRowsInstantiator, myModels));
+		theSelectionAnchor
+			.set(theSelectionAnchorInstantiator == null ? SettableValue.create(0) : theSelectionAnchorInstantiator.get(myModels));
+		theSelectionLead.set(theSelectionLeadInstantiator == null ? SettableValue.create(0) : theSelectionLeadInstantiator.get(myModels));
+
 		if (theDocument != null)
 			theDocument.instantiate(myModels);
 		ExFlexibleElementModelAddOn.satisfyElementValue(theMousePositionVariable, myModels, getMousePosition());
@@ -279,8 +336,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public QuickTextArea<T> copy(ExElement parent) {
 		QuickTextArea<T> copy = (QuickTextArea<T>) super.copy(parent);
 
-		copy.theRows = SettableValue.<SettableValue<Integer>> build().build();
-		copy.theMousePosition = SettableValue.<SettableValue<Integer>> build().build();
+		copy.theRows = SettableValue.create();
+		copy.theMousePosition = SettableValue.create();
+		copy.theSelectionAnchor = SettableValue.create(SettableValue.create(0));
+		copy.theSelectionLead = SettableValue.create(SettableValue.create(0));
 
 		if (theDocument != null)
 			copy.theDocument = theDocument.copy(copy);

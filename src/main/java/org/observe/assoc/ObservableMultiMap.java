@@ -1090,8 +1090,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						LightWeightObservable<Object> entryUntil = new LightWeightObservable<>();
 						SettableValue<X> value = theValueProducer.apply(theMultiMap.get(multiEntry.getKey()), entryUntil);
 						return new MapEntryElement(multiEntry, value, entryUntil);
-					}).replaceSourceWith((mapEntry, txvs) -> ((MapEntryElement) mapEntry).multiEntry, //
-						reverse -> reverse//
+					}).replaceMappingSourceWith((mapEntry, txvs) -> ((MapEntryElement) mapEntry).multiEntry, //
+						reverse -> reverse.allowInexactReverse(true)//
 						.rejectWith(entry -> {
 							if (!(((Object) entry) instanceof ActiveObservableSingleMap.MapEntryElement))
 								return "Can't add entries this way";
@@ -1124,7 +1124,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					evt.getOldValue().unsubscribe(evt);
 					break;
 				case set:
-					break; // Nothing to do--the value should to the work
+					break; // Nothing to do--the value should do the work
 				}
 			}, true);
 			if (until != null) {

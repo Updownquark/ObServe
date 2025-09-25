@@ -8,7 +8,6 @@ import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -107,8 +106,7 @@ public class QuickTable<R, C> extends TabularWidget.Abstract<R, C> {
 		}
 
 		@Override
-		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?, ?> interpreted, InterpretedExpressoEnv env)
-			throws ExpressoInterpretationException {
+		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?, ?> interpreted) throws ExpressoInterpretationException {
 			return ((Interpreted<?, ?, ?>) interpreted).getValueType();
 		}
 

@@ -12,6 +12,8 @@ import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
 
@@ -110,19 +112,40 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 		ObservableValue<ObservableElement<E>> element = value.map(v -> observeElement(v, true));
 		ObservableValue<Boolean> found = ObservableValue.flatten(element.map(el -> el.map(__ -> el.getElementId() != null)));
 		ObservableValue<String> enabled = ObservableValue.flatten(element.map(el -> el.map(__ -> {
-			if (el.getElementId() != null)
-				return mutableElement(el.getElementId()).canRemove();
-			else
+			if (el.getElementId() != null) {
+				MutableCollectionElement<E> mutableEl = mutableElement(el.getElementId());
+				String msg = mutableEl.canRemove();
+				if (msg == null)
+					msg = mutableEl.isAcceptable(mutableEl.get());
+				return msg;
+			} else
 				return canAdd(value.get());
 		})));
 		return SettableValue.settable(found, this, LambdaUtils.printableConsumer(v -> {
-			if (v.equals(found.get()))
-				return;
-			else if (v)
-				add(value.get());
-			else
+			if (v) {
+				if (found.get()) {
+					MutableCollectionElement<E> el = mutableElement(element.get().getElementId());
+					el.set(el.get()); // Update
+				} else
+					add(value.get());
+			} else if (found.get())
 				mutableElement(element.get().getElementId()).remove();
+			else { // No way to generate an update in this case because there's no element to update
+			}
 		}, "modifyContainment", null))//
+			.filterAccept(v -> {
+				if (v) {
+					if (found.get()) {
+						MutableCollectionElement<E> el = mutableElement(element.get().getElementId());
+						return el.isAcceptable(el.get()); // Update
+					} else
+						return canAdd(value.get());
+				} else if (found.get())
+					return mutableElement(element.get().getElementId()).canRemove();
+				else {
+					return StdMsg.UNSUPPORTED_OPERATION; // No way to generate an update in this case because there's no element to update
+				}
+			})//
 			.disableWith(enabled);
 	}
 
@@ -203,5 +226,17 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	static <E> ObservableSet<E> flattenValue(ObservableValue<? extends ObservableSet<E>> collectionObservable,
 		Equivalence<Object> equivalence) {
 		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable, equivalence);
+	}
+
+	/**
+	 * Creates a singleton set from a settable value. The set will always have a single element. If the value is null, the element's value
+	 * be null, but the set will not be empty. Add and remove operations are disabled. The element can be set through the collection.
+	 *
+	 * @param <E> The type of the value and of the set
+	 * @param value The value to represent as a set
+	 * @return The singleton set
+	 */
+	static <E> ObservableSet<E> singleton(SettableValue<E> value) {
+		return new SingletonObservableSet<>(value);
 	}
 }

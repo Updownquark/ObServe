@@ -119,10 +119,10 @@ public interface QuickLinearShape extends QuickWithStroke {
 		}
 
 		public static interface Interpreted extends QuickWithStroke.QuickStrokeStyle.Interpreted {
-			QuickElementStyleAttribute<Float> getThickness();
+			QuickElementStyleAttribute<Double> getThickness();
 
 			public static class Default extends QuickWithStroke.QuickStrokeStyle.Interpreted.Default implements Interpreted {
-				private QuickElementStyleAttribute<Float> theThickness;
+				private QuickElementStyleAttribute<Double> theThickness;
 
 				protected Default(QuickLineShapeStyle.Def definition, QuickLinearShape.Interpreted<?> styledElement,
 					QuickStyled.QuickInstanceStyle.Interpreted parent, QuickInterpretedStyle wrapped) {
@@ -135,7 +135,7 @@ public interface QuickLinearShape extends QuickWithStroke {
 				}
 
 				@Override
-				public QuickElementStyleAttribute<Float> getThickness() {
+				public QuickElementStyleAttribute<Double> getThickness() {
 					return theThickness;
 				}
 
@@ -145,7 +145,7 @@ public interface QuickLinearShape extends QuickWithStroke {
 					super.update(element, styleSheet);
 					InterpretedExpressoEnv env = element.getDefaultEnv();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
-					theThickness = get(cache.getAttribute(getDefinition().getThickness(), Float.class, env));
+					theThickness = get(cache.getAttribute(getDefinition().getThickness(), Double.class, env));
 				}
 
 				@Override
@@ -155,18 +155,18 @@ public interface QuickLinearShape extends QuickWithStroke {
 			}
 		}
 
-		public ObservableValue<Float> getThickness();
+		public ObservableValue<Double> getThickness();
 
 		public static class Default extends QuickWithStroke.QuickStrokeStyle.Default implements QuickLineShapeStyle {
-			private QuickStyleAttribute<Float> theThicknessAttr;
-			private ObservableValue<Float> theThickness;
+			private QuickStyleAttribute<Double> theThicknessAttr;
+			private ObservableValue<Double> theThickness;
 
 			protected Default() {
 				super();
 			}
 
 			@Override
-			public ObservableValue<Float> getThickness() {
+			public ObservableValue<Double> getThickness() {
 				return theThickness;
 			}
 

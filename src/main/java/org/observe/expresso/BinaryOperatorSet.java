@@ -560,6 +560,7 @@ public class BinaryOperatorSet {
 	 * @param operators The builder to configure
 	 * @return The builder
 	 */
+	@SuppressWarnings("rawtypes")
 	public static Builder standardJava(Builder operators) {
 		// Do equality first, which is special
 		// First, same-type primitive equality

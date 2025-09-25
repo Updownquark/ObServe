@@ -27,7 +27,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.ex.ExBiFunction;
+import org.qommons.ex.ExFunction;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
@@ -188,13 +188,12 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		 * @param <M> The model type of the model value
 		 * @param elementValueId The model ID of the model value to satisfy the type of
 		 * @param modelType The model type of the model value
-		 * @param type A function to evaluate the type for the model value given the interpreted element and its expresso environment
+		 * @param type A function to evaluate the type for the model value given the interpreted element
 		 * @throws QonfigInterpretationException If no such element was injected from this add-on, or the injected value was not
 		 *         dynamically-typed
 		 */
 		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
-			ModelType<M> modelType,
-			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
+			ModelType<M> modelType, ExFunction<I, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
 				throws QonfigInterpretationException {
 			ModelComponentNode<?> value = null;
 			for (CompiledExpressoEnv env : getElement().getExpressoEnvs()) {
@@ -215,7 +214,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 			}
 			((PlaceholderModelValue<M>) value.getThing()).satisfyType(this::getCurrentInterpreting,
-				(ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
+				(ExFunction<ExElement.Interpreted<?>, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
 		}
 
 		/**
@@ -233,7 +232,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		 */
 		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
 			ModelInstanceType<M, ?> type) throws QonfigInterpretationException {
-			satisfyElementValueType(elementValueId, type.getModelType(), (interp, env) -> type);
+			satisfyElementValueType(elementValueId, type.getModelType(), interp -> type);
 		}
 
 		@Override
@@ -419,7 +418,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 	protected static abstract class PlaceholderModelValue<M> implements CompiledModelValue<M> {
 		private final String theName;
 		private Supplier<ExElement.Interpreted<?>> theInterpreting;
-		private ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> theType;
+		private ExFunction<ExElement.Interpreted<?>, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> theType;
 
 		/** @param name The name by which this value will be available to expressions */
 		protected PlaceholderModelValue(String name) {
@@ -435,7 +434,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		}
 
 		void satisfyType(Supplier<ExElement.Interpreted<?>> interpreting,
-			ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type) {
+			ExFunction<ExElement.Interpreted<?>, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type) {
 			theInterpreting = interpreting;
 			theType = type;
 		}
@@ -452,7 +451,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			ModelInstanceType<M, MV> type;
 			if (theType != null) {
 				// Get the primary element for the type function
-				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get().as(ExElement.Interpreted.class, null), env);
+				ModelInstanceType<?, ?> targetType = theType.apply(theInterpreting.get().as(ExElement.Interpreted.class, null));
 				for (int t = 0; t < getModelType().getTypeCount(); t++) {
 					TypeToken<?> pt = targetType.getType(t);
 					if (!TypeTokens.get().isAssignable(defaultType.getType(t), pt)) {

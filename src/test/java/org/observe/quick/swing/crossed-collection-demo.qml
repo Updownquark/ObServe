@@ -77,7 +77,7 @@
 			<label fill="true">G = A*F-C</label>
 			<box field-label="`A:`" fill="true" layout="inline-layout" orientation="horizontal" cross-align="center">
 				<line-border />
-				<tiled-pane
+				<virtual-multi-pane
 					layout="grid-flow-layout" max-row-count="10"
 					values="app.a" active-value-name="v">
 					<box layout="simple-layout">
@@ -85,13 +85,13 @@
 						<button right="`0xp`" width="6" height="6"
 							icon="`/icons/redX.png`" action="app.a.remove(rowIndex)" />
 					</box>
-				</tiled-pane>
+				</virtual-multi-pane>
 				<button icon="`/icons/add.png`" action="app.a.add(app.a.size())" />
 			</box>
 			<text-field field-label="`B:`" value="app.b" columns="5" />
 			<box field-label="`C:`" fill="true" layout="inline-layout" orientation="horizontal" cross-align="center">
 				<line-border />
-				<tiled-pane
+				<virtual-multi-pane
 					layout="grid-flow-layout" max-row-count="10"
 					values="app.c" active-value-name="v">
 					<box layout="simple-layout">
@@ -99,7 +99,7 @@
 						<button right="`0xp`" width="6" height="6"
 							icon="`/icons/redX.png`" action="app.c.remove(rowIndex)" />
 					</box>
-				</tiled-pane>
+				</virtual-multi-pane>
 				<button icon="`/icons/add.png`" action="app.c.add(app.c.size())" />
 			</box>
 			<split fill="true" orientation="vertical">

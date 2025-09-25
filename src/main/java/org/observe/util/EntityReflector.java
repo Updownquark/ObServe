@@ -43,6 +43,7 @@ import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IntList;
 import org.qommons.MethodRetrievingHandler;
+import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -50,16 +51,16 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
-import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
@@ -603,31 +604,93 @@ public class EntityReflector<E> {
 		}
 	}
 
-	static class MethodSignature implements Comparable<MethodSignature> {
+	static class MethodSignature implements Named, Comparable<MethodSignature> {
 		final String name;
 		final Class<?>[] parameters;
+		private final int hashCode;
 
 		MethodSignature(Method method) {
 			this.name = method.getName();
 			this.parameters = method.getParameterTypes();
+			int hash = name.hashCode();
+			for (Class<?> pt : parameters)
+				hash = 31 * hash + pt.hashCode();
+			hashCode = hash;
+		}
+
+		@Override
+		public String getName() {
+			return name;
+		}
+
+		public int getParameterCount() {
+			return parameters.length;
+		}
+
+		public Class<?> getParameter(int index) {
+			return parameters[index];
 		}
 
 		@Override
 		public int compareTo(MethodSignature o) {
 			if (this == o)
 				return 0;
-			int comp = QommonsUtils.compareNumberTolerant(name, o.name, true, true);
+			return compare(o.name, o.parameters);
+		}
+
+		/**
+		 * @param method The method to compare with
+		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
+		 *         method
+		 */
+		public int compare(Method method) {
+			return compare(method.getName(), method.getParameterTypes());
+		}
+
+		/**
+		 * @param sig The method signature to compare with
+		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
+		 *         method
+		 */
+		public int compare(MethodSignature sig) {
+			return compare(sig.name, sig.parameters);
+		}
+
+		private int compare(String methodName, Class<?>[] params) {
+			int comp = StringUtils.compareNumberTolerant(name, methodName, true, true);
 			if (comp != 0)
 				return comp;
-			comp = Integer.compare(parameters.length, o.parameters.length);
+			comp = Integer.compare(parameters.length, params.length);
 			if (comp != 0)
 				return comp;
-			for (int i = 0; i < parameters.length; i++) {
-				comp = QommonsUtils.compareNumberTolerant(parameters[i].getName(), o.parameters[i].getName(), true, true);
+			int i;
+			for (i = 0; i < parameters.length && i < params.length; i++) {
+				if (parameters[i].equals(params[i]))
+					continue;
+				comp = StringUtils.compareNumberTolerant(parameters[i].getName(), params[i].getName(), true, true);
 				if (comp != 0)
 					return comp;
 			}
+			if (i < parameters.length)
+				return 1;
+			else if (i < params.length)
+				return -1;
 			return 0;
+		}
+
+		@Override
+		public int hashCode() {
+			return hashCode;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof MethodSignature))
+				return false;
+			MethodSignature other = (MethodSignature) obj;
+			return name.equals(other.name) && Arrays.equals(parameters, other.parameters);
 		}
 
 		@Override
@@ -1169,14 +1232,13 @@ public class EntityReflector<E> {
 	 * @param <E> The type of the entity
 	 * @param <R> The return type of the method
 	 */
-	public static abstract class MethodInterpreter<E, R> implements Comparable<MethodInterpreter<?, ?>> {
+	public static abstract class MethodInterpreter<E, R> extends MethodSignature {
 		private final EntityReflector<E> theReflector;
 		private ElementId theMethodElement;
 		private final Method theMethod;
 		/** Methods in super interfaces of this method's entity that this method overrides */
 		protected MethodInterpreter<? super E, ? super R>[] theSuperMethods;
 		private SuperPath theDefaultSuper;
-		private final Class<?>[] theParameters;
 		private final Invokable<E, R> theInvokable;
 
 		MethodInterpreter(EntityReflector<E> reflector, Method method) {
@@ -1184,10 +1246,10 @@ public class EntityReflector<E> {
 		}
 
 		MethodInterpreter(EntityReflector<E> reflector, TypeToken<E> type, Method method) {
+			super(method);
 			theReflector = reflector;
 			theMethod = method;
 			theSuperMethods = new MethodInterpreter[(reflector == null || reflector.theSupers.isEmpty()) ? 0 : reflector.theSupers.size()];
-			theParameters = method.getParameterTypes();
 			theInvokable = (Invokable<E, R>) type.method(method);
 		}
 
@@ -1228,6 +1290,7 @@ public class EntityReflector<E> {
 		}
 
 		/** @return The name of this method */
+		@Override
 		public String getName() {
 			return theMethod.getName();
 		}
@@ -1324,77 +1387,22 @@ public class EntityReflector<E> {
 		 */
 		protected abstract R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable;
 
-		@Override
-		public int compareTo(MethodInterpreter<?, ?> o) {
-			if (this == o)
-				return 0;
-			return compare(o.theMethod.getName(), o.theParameters);
-		}
-
 		/**
 		 * @param method The method to compare with
 		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
 		 *         method
 		 */
+		@Override
 		public int compare(Method method) {
 			if (theMethod == method)
 				return 0;
-			return compare(method.getName(), method.getParameterTypes());
-		}
-
-		/**
-		 * @param sig The method signature to compare with
-		 * @return Whether this method should appear before (-) or after (+) the given method, or 0 if its signature is identical to this
-		 *         method
-		 */
-		public int compare(MethodSignature sig) {
-			return compare(sig.name, sig.parameters);
-		}
-
-		private int compare(String methodName, Class<?>[] parameters) {
-			int comp = StringUtils.compareNumberTolerant(theMethod.getName(), methodName, true, true);
-			if (comp != 0)
-				return comp;
-			comp = Integer.compare(theParameters.length, parameters.length);
-			if (comp != 0)
-				return comp;
-			int i;
-			for (i = 0; i < theParameters.length && i < parameters.length; i++) {
-				if (theParameters[i].equals(parameters[i]))
-					continue;
-				comp = StringUtils.compareNumberTolerant(theParameters[i].getName(), parameters[i].getName(), true, true);
-				if (comp != 0)
-					return comp;
-			}
-			if (i < theParameters.length)
-				return 1;
-			else if (i < parameters.length)
-				return -1;
-			return 0;
-		}
-
-		@Override
-		public int hashCode() {
-			int h = theMethod.getName().hashCode();
-			h ^= Objects.hash((Object[]) theParameters);
-			return h;
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			else if (!(obj instanceof MethodInterpreter))
-				return false;
-			MethodInterpreter<?, ?> other = (MethodInterpreter<?, ?>) obj;
-			// Although it's possible that the same method could be interpreted differently in different places, this seems safe enough
-			return theMethod.equals(other.theMethod);
+			return super.compare(method);
 		}
 
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder().append(theReflector.getType()).append('.').append(theMethod.getName()).append('(');
-			StringUtils.print(", ", Arrays.asList(theParameters), p -> p.getName());
+			StringUtils.print(", ", Arrays.asList(parameters), p -> p.getName());
 			str.append(')');
 			return str.toString();
 		}
@@ -1609,13 +1617,17 @@ public class EntityReflector<E> {
 		@Override
 		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
 			EntityReflector<E>.ProxyMethodHandler handler = getHandler(proxy);
-			ValueHolder<R> holder = (ValueHolder<R>) handler.getAssociated(this);
-			if (holder == null) {
+			Object valueOrHolder = handler.getAssociated(this);
+			if (valueOrHolder instanceof ValueHolder)
+				return ((ValueHolder<R>) valueOrHolder).get();
+			else if (valueOrHolder != null)
+				return (R) valueOrHolder;
+			else {
 				R value = theDefaultMethod.invokeLocal(proxy, args, backing);
-				holder = new ValueHolder<>(value);
+				ValueHolder<R> holder = new ValueHolder<>(value);
 				handler.associate(this, value);
+				return holder.get();
 			}
-			return holder.get();
 		}
 
 		/** @return The default method that this cached method fronts */
@@ -1990,7 +2002,7 @@ public class EntityReflector<E> {
 	private final Function<Method, String> theSetterFilter;
 	private final Function<Method, String> theObservableFilter;
 	private final QuickMap<String, ReflectedField<E, ?>> theFields;
-	private final BetterSortedSet<MethodInterpreter<E, ?>> theMethods;
+	private final BetterMap<MethodSignature, MethodInterpreter<E, ?>> theMethods;
 	private final Set<Integer> theIdFields;
 	private final boolean hasObservableFields;
 	private final boolean isIdentifiable;
@@ -2086,13 +2098,13 @@ public class EntityReflector<E> {
 				}
 			}
 		}
-		BetterSortedSet<MethodInterpreter<E, ?>> methods = BetterTreeSet
-			.<MethodInterpreter<E, ?>> buildTreeSet(MethodInterpreter::compareTo).build();
+		BetterMap<MethodSignature, MethodInterpreter<E, ?>> methods = BetterHashMap.build().build();
 		for (int i = 0; i < fields.keySize(); i++) {
 			String fieldName = fields.keySet().get(i);
 			Method getter = fieldGetters.get(fieldName);
 			fields.put(i, new ReflectedField<>(this, fields.keySet().get(i), i, idFields.contains(i), getter));
-			fields.get(i).getGetter().setElement(methods.addElement(fields.get(i).getGetter(), false).getElementId());
+			fields.get(i).getGetter()
+				.setElement(methods.putEntry(fields.get(i).getGetter(), fields.get(i).getGetter(), false).getElementId());
 		}
 		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 
@@ -2102,7 +2114,7 @@ public class EntityReflector<E> {
 		populateMethods(theType, superPaths, fields, methods, //
 			customMethods == null ? Collections.emptyMap() : customMethods, attrs, messages);
 		theFields = fields.unmodifiable();
-		theMethods = BetterCollections.unmodifiableSortedSet(methods);
+		theMethods = BetterCollections.unmodifiableMap(methods);
 		for (EntityReflector<? super E> superRef : theSupers)
 			if (superRef.hasObservableFields)
 				attrs.hasObservables = true;
@@ -2164,7 +2176,7 @@ public class EntityReflector<E> {
 	}
 
 	private void populateMethods(TypeToken<E> type, Map<Class<?>, SuperPath> superPaths, //
-		QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods, //
+		QuickMap<String, ReflectedField<E, ?>> fields, BetterMap<MethodSignature, MethodInterpreter<E, ?>> methods, //
 		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, MiscAttributes attrs,
 			List<EntityReflectionMessage> errors) {
 		Class<E> clazz = TypeTokens.getRawType(type);
@@ -2175,7 +2187,8 @@ public class EntityReflector<E> {
 				continue;
 
 			MethodInterpreter<E, ?> method = null; // Shouldn't have to initialize this, but the continues seem to be confusing the compiler
-			method = methods.searchValue(m2 -> -m2.compare(m), BetterSortedList.SortedSearchFilter.OnlyMatch);
+			MethodSignature signature = new MethodSignature(m);
+			method = methods.get(signature);
 			if (method instanceof FieldGetter) {
 				FieldGetter<E, ?> getter = (FieldGetter<E, ?>) method;
 				if (getter.getDefault() == null && m.isDefault()) {
@@ -2283,7 +2296,7 @@ public class EntityReflector<E> {
 					}
 				}
 				if (method != null)
-					method.setElement(methods.addElement(method, false).getElementId());
+					method.setElement(methods.putEntry(signature, method, false).getElementId());
 			}
 			ObjectMethodOverride override = m.getAnnotation(ObjectMethodOverride.class);
 			if (override != null) {
@@ -2320,7 +2333,7 @@ public class EntityReflector<E> {
 				} catch (NoSuchMethodException e) {
 					throw new IllegalStateException(e);
 				}
-				overrideMethod.setElement(methods.addElement(overrideMethod, false).getElementId());
+				overrideMethod.setElement(methods.putEntry(signature, overrideMethod, false).getElementId());
 			}
 		}
 		if (clazz == Object.class) {} else if (theSupers.isEmpty()) {
@@ -2357,7 +2370,7 @@ public class EntityReflector<E> {
 			return null;
 		}
 		DefaultMethod<E, ?> defaultMethod = new DefaultMethod<>(this, m, handle);
-		if (!field && m.getAnnotation(Cached.class) != null) {
+		if (m.getAnnotation(Cached.class) != null) {
 			if (m.getParameterCount() > 0) {
 				errors.add(
 					new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m, "Cached Default methods cannot have parameters"));
@@ -2370,10 +2383,12 @@ public class EntityReflector<E> {
 		return defaultMethod;
 	}
 
-	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
+	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields,
+		BetterMap<MethodSignature, MethodInterpreter<E, ?>> methods,
 		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
-		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
-			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), BetterSortedList.SortedSearchFilter.OnlyMatch);
+		for (MapEntryHandle<MethodSignature, MethodInterpreter<S, ?>> superMethod = superR.getMethods().getTerminalEntry(
+			true); superMethod != null; superMethod = superR.getMethods().getAdjacentEntry(superMethod.getElementId(), true)) {
+			MethodInterpreter<E, ?> subMethod = methods.get(superMethod.getKey());
 			if (subMethod == null) {
 				if (superMethod.get() instanceof FieldGetter) {
 					FieldGetter<?, ?> superGetter = (FieldGetter<?, ?>) superMethod.get();
@@ -2395,7 +2410,7 @@ public class EntityReflector<E> {
 					subMethod = new CachedMethod<>(subDefault);
 				} else
 					subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
-				subMethod.setElement(methods.addElement(subMethod, false).getElementId());
+				subMethod.setElement(methods.putEntry(subMethod, subMethod, false).getElementId());
 			}
 			((MethodInterpreter<E, Object>) subMethod).setSuper(superIndex, (MethodInterpreter<? super E, Object>) superMethod.get());
 			theSuperMethodMappings.get(superIndex).put(superMethod.getElementId(), subMethod);
@@ -2474,7 +2489,7 @@ public class EntityReflector<E> {
 	}
 
 	/** @return All of this reflector's method interpreters */
-	public BetterSortedSet<MethodInterpreter<E, ?>> getMethods() {
+	public BetterMap<MethodSignature, MethodInterpreter<E, ?>> getMethods() {
 		return theMethods;
 	}
 
@@ -2486,7 +2501,7 @@ public class EntityReflector<E> {
 		if (!method.getDeclaringClass().isAssignableFrom(theRawType))
 			throw new IllegalArgumentException("Method " + method + " cannot be applied to " + theType);
 		MethodSignature sig = new MethodSignature(method);
-		return theMethods.searchValue(m -> -m.compare(sig), BetterSortedList.SortedSearchFilter.OnlyMatch);
+		return theMethods.get(sig);
 	}
 
 	/**

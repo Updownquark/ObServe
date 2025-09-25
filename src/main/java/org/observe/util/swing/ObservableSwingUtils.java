@@ -51,6 +51,7 @@ import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
+import javax.swing.JViewport;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
 import javax.swing.ToolTipManager;
@@ -1345,6 +1346,34 @@ public class ObservableSwingUtils {
 			retArray[i] = ret.get(i);
 		}
 		return retArray;
+	}
+
+	/**
+	 * Adjusts the viewport of all scroll pane ancestors of the given component to make the given rectangle within the component visible.
+	 * This differs from {@link JComponent#scrollRectToVisible(Rectangle)} in that the JComponent method only affects the most immediate
+	 * scroll pane ancestor. This method is effective for components within scroll panes within scroll panes at any depth.
+	 *
+	 * @param component The component to scroll
+	 * @param viz The rectangle within the component to make visible
+	 */
+	public static void scrollRectToVisible(Component component, Rectangle viz) {
+		boolean isScrolled = false;
+		int origX=viz.x;
+		int origY=viz.y;
+		while (component != null) {
+			if (component instanceof JViewport) {
+				((JViewport) component).scrollRectToVisible(viz);
+				isScrolled = false;
+			} else if (!isScrolled && component instanceof JComponent) {
+				((JComponent) component).scrollRectToVisible(viz);
+				isScrolled = true;
+			}
+			viz.x+=component.getX();
+			viz.y+=component.getY();
+			component = component.getParent();
+		}
+		viz.x=origX;
+		viz.y = origY;
 	}
 
 	/**

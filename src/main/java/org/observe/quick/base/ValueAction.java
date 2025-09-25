@@ -476,6 +476,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			instance = Single.class)
 		public static class Def<A extends Single<?>> extends ValueAction.Def.Abstract<A> {
 			private String theValueName;
+			private boolean allowForEmpty;
 			private boolean allowForMultiple;
 			private ModelComponentId theValueVariable;
 
@@ -487,7 +488,13 @@ public interface ValueAction<T> extends QuickStyledElement {
 				super(parent, type);
 			}
 
-			/** @return Whether this action may be selected for multiple values, to be executed against each in sequence */
+			/** @return Whether this action may be executed when no value is selected */
+			@QonfigAttributeGetter("allow-for-empty")
+			public boolean allowForEmpty() {
+				return allowForEmpty;
+			}
+
+			/** @return Whether this action may be executed for multiple values, to be executed against each in sequence */
 			@QonfigAttributeGetter("allow-for-multiple")
 			public boolean allowForMultiple() {
 				return allowForMultiple;
@@ -506,11 +513,12 @@ public interface ValueAction<T> extends QuickStyledElement {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
+				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theValueVariable = elModels.getElementValueModelId(theValueName);
-				elModels.satisfyElementValueType(theValueVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
+				elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theValueVariable, ModelTypes.Value,
+					Interpreted::getValueType);
 			}
 
 			@Override
@@ -548,6 +556,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 
 		private ModelComponentId theValueVariable;
 		private SettableValue<SettableValue<T>> theActionValue;
+		private boolean allowForEmpty;
 		private boolean allowForMultiple;
 
 		/** @param id The element ID for this action */
@@ -555,7 +564,12 @@ public interface ValueAction<T> extends QuickStyledElement {
 			super(id);
 		}
 
-		/** @return Whether this action may be selected for multiple values, to be executed against each in sequence */
+		/** @return Whether this action may be executed when no value is selected */
+		public boolean allowForEmpty() {
+			return allowForEmpty;
+		}
+
+		/** @return Whether this action may be executed for multiple values, to be executed against each in sequence */
 		public boolean allowForMultiple() {
 			return allowForMultiple;
 		}
@@ -571,6 +585,7 @@ public interface ValueAction<T> extends QuickStyledElement {
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueVariable = myInterpreted.getDefinition().getValueVariable();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
+			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
 			theActionValue = SettableValue.<SettableValue<T>> build().build();
 		}
 
@@ -644,8 +659,8 @@ public interface ValueAction<T> extends QuickStyledElement {
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theValuesVariable = elModels.getElementValueModelId(theValuesName);
-				elModels.satisfyElementValueType(theValuesVariable, ModelTypes.Collection,
-					(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getValueType()));
+				elModels.<Interpreted<?, ?>, ObservableCollection<?>> satisfyElementSingleValueType(theValuesVariable,
+					ModelTypes.Collection, Interpreted::getValueType);
 			}
 
 			@Override

@@ -76,6 +76,7 @@ public abstract class QuickOsgiComponent {
 	private DependencyService<?> theDS;
 	private URL theQuickAppFile;
 	private QuickApp theQuickApp;
+	private boolean isPrintingDocument;
 	private final Map<BetterFile, Long> theRefreshFiles;
 
 	private final Set<Class<?>> theWaitingServices;
@@ -113,6 +114,12 @@ public abstract class QuickOsgiComponent {
 	@Configure("app")
 	protected void forAppFile(URL appFile) {
 		theQuickAppFile = appFile;
+	}
+
+	/** @param print Whether to print the Quick document to {@link System#out} after parsing it */
+	@Configure(value = "print-document", optional = true)
+	protected void printDocument(boolean print) {
+		isPrintingDocument = print;
 	}
 
 	/** @return The dependency service loading this component */
@@ -199,8 +206,14 @@ public abstract class QuickOsgiComponent {
 				return;
 			}
 
+			Appendable printDocument;
+			if (isPrintingDocument || "true".equalsIgnoreCase(System.getProperty("osgi.quick.printAllDocs")))
+				printDocument = System.out;
+			else
+				printDocument = null;
+
 			try {
-				theQuickApp = QuickApp.parseApp(theQuickAppFile, new URL[] { quickAppToolkitUrl }, Collections.emptyList(), null);
+				theQuickApp = QuickApp.parseApp(theQuickAppFile, new URL[] { quickAppToolkitUrl }, Collections.emptyList(), printDocument);
 			} catch (TextParseException | IllegalStateException | IOException | QonfigParseException e) {
 				if (e instanceof QonfigParseException && theRefreshFiles != null) {
 					try {
@@ -258,26 +271,32 @@ public abstract class QuickOsgiComponent {
 				int lastSlash = quickFileDir.lastIndexOf('/');
 				if (lastSlash >= 0) { // Nothing to import if it's in the root
 					quickFileDir = quickFileDir.substring(0, lastSlash);
-					for (URL clRoot : ((URLClassLoader) theClassLoader).getURLs()) {
-						String path = clRoot.toString();
-						String relLoc = null;
-						if (quickFileDir.startsWith(path))
-							relLoc = quickFileDir.substring(path.length());
-						else if (path.startsWith("file:///")) {
-							path = path.substring("file://".length());
+					if (quickFileDir.startsWith("jar:")) {
+						int jarSep = quickFileDir.lastIndexOf("!/");
+						if (jarSep >= 0)
+							classView.withWildcardImport(quickFileDir.substring(jarSep + 2).replace('/', '.'));
+					} else {
+						for (URL clRoot : ((URLClassLoader) theClassLoader).getURLs()) {
+							String path = clRoot.toString();
+							String relLoc = null;
 							if (quickFileDir.startsWith(path))
 								relLoc = quickFileDir.substring(path.length());
-							else {
-								path = path.substring(1);
+							else if (path.startsWith("file:///")) {
+								path = path.substring("file://".length());
 								if (quickFileDir.startsWith(path))
 									relLoc = quickFileDir.substring(path.length());
+								else {
+									path = path.substring(1);
+									if (quickFileDir.startsWith(path))
+										relLoc = quickFileDir.substring(path.length());
+								}
 							}
-						}
-						if (relLoc != null && !relLoc.isEmpty()) {
-							classView.withWildcardImport(relLoc//
-								.substring(1) // Take off the file separator
-								.replace("/", "."));
-							break;
+							if (relLoc != null && !relLoc.isEmpty()) {
+								classView.withWildcardImport(relLoc//
+									.substring(1) // Take off the file separator
+									.replace('/', '.'));
+								break;
+							}
 						}
 					}
 				}

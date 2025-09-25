@@ -148,7 +148,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 
@@ -253,8 +253,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			theDerivedState = getAttributeExpression("derived-state", session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theInternalStateValue = elModels.getElementValueModelId("internalState");
-			elModels.satisfyElementValueType(theInternalStateValue, ModelTypes.Value,
-				(interp, env) -> ((Interpreted<?>) interp).getOrCreateInternalState().getType());
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theInternalStateValue, ModelTypes.Value,
+				interp -> interp.getOrCreateInternalState().getType());
 		}
 
 		@Override
@@ -307,7 +307,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 
@@ -459,7 +459,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 

@@ -117,8 +117,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			theTextStyle = syncChild(TextStyleElement.Def.class, theTextStyle, session, "text-style");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theNodeValue = elModels.getElementValueModelId("node");
-			elModels.satisfyElementValueType(theNodeValue, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theNodeValue, ModelTypes.Value,
+				Interpreted::getValueType);
 		}
 
 		@Override

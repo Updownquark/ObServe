@@ -747,6 +747,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public Transformation.ReversibleTransformation<S, T> getTransformation() {
+			return (Transformation.ReversibleTransformation<S, T>) super.getTransformation();
+		}
+
+		@Override
 		public TransformedSettableValue<S, T> alias(String alias) {
 			super.alias(alias);
 			return this;
@@ -769,12 +774,14 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(e -> e != null, () -> null, //
-				transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
-					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
-					return state.getValue1().isEnabled(state.getValue2());
-				}, "enabled", "enabled"))), //
-				getSource().isEnabled());
+			ObservableValue<String> txEnabled = transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
+				return state.getValue1().isEnabled(state.getValue2());
+			}, "enabled", "enabled")));
+			if (getTransformation().getReverse().requiresSourceModification()) {
+				return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, txEnabled, getSource().isEnabled());
+			} else
+				return txEnabled;
 		}
 
 		@Override
@@ -1472,7 +1479,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return null;
+			// The creator of this value can use disableWith() to control this
+			return SettableValue.ALWAYS_ENABLED;
 		}
 	}
 

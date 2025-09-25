@@ -441,7 +441,7 @@ public class JavaExpressoParser implements ExpressoParser {
 			}
 		case "ATTRIBUTE_REFERENCE":
 			text = expression.getText();
-			return new AttributeReferenceExpression(text.substring(1, text.length() - 1));
+			return new AttributeReferenceExpression(text.substring(2, text.length() - 1));
 		case "NULL_LITERAL":
 		case "'null'": // That's weird, but ok
 			return literalExpression(expression, null);

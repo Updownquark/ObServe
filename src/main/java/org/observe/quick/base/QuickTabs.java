@@ -440,8 +440,8 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				theValues = getAttributeExpression("values", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theTabIdVariable = elModels.getElementValueModelId("tabId");
-				elModels.satisfyElementValueType(theTabIdVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getTabIdType()));
+				elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theTabIdVariable, ModelTypes.Value,
+					Interpreted::getTabIdType);
 
 				theRenderer = syncChild(QuickWidget.Def.class, theRenderer, session, "renderer");
 			}

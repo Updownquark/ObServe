@@ -38,6 +38,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Colors;
@@ -211,50 +212,41 @@ public class MultiRangeSlider extends ConformingPanel {
 			public Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved) {
 				boolean moveUp = newValue.getValue() > element.get().getValue();
 				Range adj = CollectionElement.get(slider.getRanges().getAdjacentElement(element.getElementId(), moveUp));
-				if (moveUp) {
-					if (adj == null) {
-						if (!isEnforcingSliderRange || newValue.getMax() <= slider.getSliderRange().get().getMax())
-							return newValue;
-						switch (moved) {
-						case max:
-							return Range.forMinMax(element.get().getMin(), slider.getSliderRange().get().getMax());
-						default:
-							return Range.forValueExtent(slider.getSliderRange().get().getMax() - element.get().getExtent() / 2,
-								element.get().getExtent());
-						}
-					} else if (isEnforcingAdjacent) {
-						if (newValue.getMax() <= adj.getMin())
-							return newValue;
-						switch (moved) {
-						case max:
-							return Range.forMinMax(element.get().getMin(), adj.getMin());
-						default:
-							return Range.forValueExtent(adj.getMin() - element.get().getExtent() / 2, element.get().getExtent());
-						}
-					} else
+
+				double bound;
+				if (adj != null) {
+					if (isEnforcingAdjacent)
+						bound = moveUp ? adj.getMin() : adj.getMax();
+					else
 						return newValue;
 				} else {
-					if (adj == null) {
-						if (!isEnforcingSliderRange || newValue.getMin() >= slider.getSliderRange().get().getMin())
-							return newValue;
-						switch (moved) {
-						case min:
-							return Range.forMinMax(slider.getSliderRange().get().getMin(), element.get().getMax());
-						default:
-							return Range.forValueExtent(slider.getSliderRange().get().getMin() + element.get().getExtent() / 2,
-								element.get().getExtent());
-						}
-					} else if (isEnforcingAdjacent) {
-						if (newValue.getMin() >= adj.getMax())
-							return newValue;
-						switch (moved) {
-						case min:
-							return Range.forMinMax(adj.getMax(), element.get().getMax());
-						default:
-							return Range.forValueExtent(adj.getMax() + element.get().getExtent() / 2, element.get().getExtent());
-						}
-					} else
+					if (isEnforcingSliderRange)
+						bound = moveUp ? slider.getSliderRange().get().getMax() : slider.getSliderRange().get().getMin();
+					else
 						return newValue;
+				}
+				if (moveUp) {
+					if (newValue.getMax() <= bound)
+						return newValue;
+					switch (moved) {
+					case min:
+						return Range.forMinMax(newValue.getMin(), bound);
+					case max:
+						return Range.forMinMax(element.get().getMin(), bound);
+					default:
+						return Range.forMinMax(bound - newValue.getExtent(), bound);
+					}
+				} else {
+					if (newValue.getMin() >= bound)
+						return newValue;
+					switch (moved) {
+					case min:
+						return Range.forMinMax(bound, element.get().getMax());
+					case max:
+						return Range.forMinMax(bound, newValue.getMax());
+					default:
+						return Range.forMinMax(bound, bound + newValue.getExtent());
+					}
 				}
 			}
 		}
@@ -671,7 +663,7 @@ public class MultiRangeSlider extends ConformingPanel {
 				if (g instanceof Graphics2D)
 					((Graphics2D) g).setStroke(new BasicStroke(theLineThickness));
 				g.setColor(getBackground());
-				g.fillRect(0, 0, getWidth(), getHeight());
+				// g.fillRect(0, 0, getWidth(), getHeight());
 				g.setFont(getFont());
 				double min = theSlider.getSliderRange().get().getMin();
 				float max = (float) theSlider.getSliderRange().get().getMax();
@@ -1329,7 +1321,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			try (Transaction t = theRanges.lock(true, null)) {
 				for (CollectionElement<Range> range : theRanges.elements()) {
 					Range newRange = theValidator.validate(this, range, range.get(), RangePoint.mid);
-					if (!newRange.equals(range.get()))
+					if (newRange!=null && !newRange.equals(range.get()))
 						theRanges.mutableElement(range.getElementId()).set(newRange);
 				}
 			}
@@ -1564,35 +1556,68 @@ public class MultiRangeSlider extends ConformingPanel {
 	 * @return True if the modification was rejected in a way that indicates the attempt should be reattempted
 	 */
 	protected boolean tryMoveFocus(CollectionElement<Range> range, Range newRange, Object cause) {
+		String name = getName();
+		boolean debug = PanelPopulation.isDebugging(name, "mrschg");
+		if (debug)
+			System.out.print("Try move " + range.get() + " to " + newRange + " ");
+		String msg;
 		if (isAdjustingBoundsForValue && theSliderRange instanceof SettableValue) {
 			if (newRange.getMin() < theSliderRange.get().getMin()) {
 				if (newRange.getMax() > theSliderRange.get().getMax()) {
-					if (((SettableValue<Range>) theSliderRange).isAcceptable(newRange) == null)
+					msg = ((SettableValue<Range>) theSliderRange).isAcceptable(newRange);
+					if (msg == null)
 						((SettableValue<Range>) theSliderRange).set(newRange, cause);
+					else if (debug)
+						System.out.println("Rejected range change: " + msg);
 				} else {
 					Range newBounds = Range.forMinMax(newRange.getMin(), theSliderRange.get().getMax());
-					if (((SettableValue<Range>) theSliderRange).isAcceptable(newBounds) == null)
+					msg = ((SettableValue<Range>) theSliderRange).isAcceptable(newBounds);
+					if (msg == null)
 						((SettableValue<Range>) theSliderRange).set(newBounds, cause);
+					else if (debug)
+						System.out.println("Rejected range change: " + msg);
 				}
 			} else if (newRange.getMax() > theSliderRange.get().getMax()) {
 				Range newBounds = Range.forMinMax(theSliderRange.get().getMin(), newRange.getMax());
-				if (((SettableValue<Range>) theSliderRange).isAcceptable(newBounds) == null)
+				msg = ((SettableValue<Range>) theSliderRange).isAcceptable(newBounds);
+				if (msg == null)
 					((SettableValue<Range>) theSliderRange).set(newBounds, cause);
+				else if (debug)
+					System.out.println("Rejected range change: " + msg);
 			}
 		}
 		newRange = theValidator.validate(MultiRangeSlider.this, range, newRange, theFocusedRangePoint);
-		if (newRange == null)
+		if (newRange == null) {
+			if (debug)
+				System.out.println("Change rejected by validator");
 			return false; // Rejected by the validator
+		}
 		MutableCollectionElement<Range> mutableEl = theRanges.mutableElement(theFocusedRange);
-		if (mutableEl.isEnabled() != null)
-			return true; // Disabled--may try again later
-		String msg = mutableEl.isAcceptable(newRange);
+		msg = mutableEl.isEnabled();
 		if (msg != null) {
+			if (debug) {
+				System.out.println("Disabled: " + msg);
+				BreakpointHere.breakpoint();
+				mutableEl.isEnabled();
+			}
+			return true; // Disabled--may try again later
+		}
+		msg = mutableEl.isAcceptable(newRange);
+		if (msg != null) {
+			if (debug)
+				System.out.println("Element change rejected: " + msg);
 			setToolTipText(msg);
 			ObservableSwingUtils.setTooltipVisible(MultiRangeSlider.this, true);
 			return false; // Rejected by the data
 		}
+		if (debug)
+			System.out.println("Change accepted");
 		mutableEl.set(newRange);
+		return false;
+	}
+
+	@Override
+	public boolean isOpaque() {
 		return false;
 	}
 
@@ -1617,7 +1642,13 @@ public class MultiRangeSlider extends ConformingPanel {
 			ranges[index++] = theRanges.getElement(theFocusedRange);
 		if (theHoveredRange != null && theHoveredRange.isPresent())
 			ranges[index++] = theRanges.getElement(theHoveredRange);
+		String name = getName();
+		boolean debug = PanelPopulation.isDebugging(name, "mrspaint");
+		if (debug)
+			System.out.println(name + " range=" + min + ", " + sliderRange.getMax());
 		for (CollectionElement<Range> range : ranges) {
+			if (debug)
+				System.out.println(name + ": " + range.get());
 			index = theRanges.getElementsBefore(range.getElementId());
 			RangePoint hovered = range.getElementId().equals(theHoveredRange) ? theHoveredRangePoint : null;
 			RangePoint focused = range.getElementId().equals(theFocusedRange) ? theFocusedRangePoint : null;
@@ -1675,9 +1706,27 @@ public class MultiRangeSlider extends ConformingPanel {
 	 * @param until The observable to release all of the slider's resources and listeners
 	 * @return The new slider
 	 */
-	public static MultiRangeSlider multi(boolean vertical, ObservableValue<Range> sliderRange, ObservableCollection<Range> ranges,
+	public static MultiRangeSlider multiRange(boolean vertical, ObservableValue<Range> sliderRange, ObservableCollection<Range> ranges,
 		Observable<?> until) {
 		return new MultiRangeSlider(vertical, sliderRange, ranges, until);
+	}
+
+	/**
+	 * Creates a slider for a collection of values
+	 *
+	 * @param vertical Whether the slider should be rendered vertically or horizontally
+	 * @param sliderRange The total range for the slider
+	 * @param values The values to render
+	 * @param until The observable to release all of the slider's resources and listeners
+	 * @return The new slider
+	 */
+	public static MultiRangeSlider multiValue(boolean vertical, ObservableValue<Range> sliderRange, ObservableCollection<Double> values,
+		Observable<?> until) {
+		return new MultiRangeSlider(vertical, sliderRange, values.flow()//
+			.<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
+				.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
+				.replaceSource(r -> r.getValue(), null)//
+				).collectPassive(), until);
 	}
 
 	/**
@@ -1693,7 +1742,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		Observable<?> until) {
 		ObservableCollection<Range> ranges = ObservableCollection.of(range).flow().flattenValues(v -> v)//
 			.collectActive(until);
-		return multi(vertical, sliderRange, ranges, until);
+		return multiRange(vertical, sliderRange, ranges, until);
 	}
 
 	/**
@@ -1875,12 +1924,12 @@ public class MultiRangeSlider extends ConformingPanel {
 		frame.setLocationRelativeTo(null);
 		JPanel panel = new JPanel(new JustifiedBoxLayout(false).mainJustified().crossCenter());
 		ObservableCollection<Range> vRanges = ObservableCollection.<Range> build().build();
-		MultiRangeSlider vSlider = multi(true, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), vRanges, Observable.empty())//
+		MultiRangeSlider vSlider = multiRange(true, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), vRanges, Observable.empty())//
 			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			;
 		panel.add(vSlider);
 		ObservableCollection<Range> hRanges = ObservableCollection.<Range> build().build();
-		MultiRangeSlider hSlider = multi(false, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), hRanges, Observable.empty())//
+		MultiRangeSlider hSlider = multiRange(false, ObservableValue.of(Range.forMinMax(-100.0, 100.0)), hRanges, Observable.empty())//
 			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			.setMaxUpdateInterval(Duration.ofMillis(250))//
 			;

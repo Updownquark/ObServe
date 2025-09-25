@@ -353,8 +353,8 @@ public class ObservableValueTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = getAttributeExpression("test", session);
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theSourceVariable, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override
@@ -657,7 +657,7 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public Transformation<S, T> getTransformation() {
+			public ReversibleTransformation<S, T> getTransformation() {
 				return super.getTransformation();
 			}
 		}

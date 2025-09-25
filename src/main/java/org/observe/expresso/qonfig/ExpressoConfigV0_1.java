@@ -53,6 +53,7 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
@@ -588,8 +589,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		// ObservableConfig formats
 		interpreter.createWith(TextConfigFormat.TEXT_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
 			ExElement.creator(TextConfigFormat::new));
-		interpreter.createWith(EntityConfigFormat.ENTITY_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
+		interpreter.createWith(EntityConfigFormat.ENTITY_CONFIG_FORMAT, EntityConfigFormat.class,
 			ExElement.creator(EntityConfigFormat::new));
+		interpreter.createWith(EntitySubFormat.ENTITY_SUB_FORMAT, EntitySubFormat.class, ExAddOn.creator(EntitySubFormat::new));
 		interpreter.createWith(EntityConfigField.ENTITY_CONFIG_FIELD, EntityConfigField.class, ExAddOn.creator(EntityConfigField::new));
 	}
 
@@ -683,7 +685,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					syncChildren(getDefinition().getArchiveMethods(), theArchiveMethods,
 						def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>) def
 						.interpret(env),
-						i -> i.updateValue(env));
+						i -> i.updateValue());
 				}
 			}
 
@@ -2393,8 +2395,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			theValueAs = elModels.getElementValueModelId(valueAs);
 			if (theTextAs != null)
 				elModels.satisfyElementValueType(theTextAs, ModelTypes.Value.STRING);
-			elModels.satisfyElementValueType(theValueAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<T>) interp).interpretValueType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theValueAs, ModelTypes.Value,
+				Interpreted::interpretValueType);
 			theCanParse = getAttributeExpression("can-parse", session);
 			theParse = getAttributeExpression("parse", session);
 			thePrint = getAttributeExpression("print", session);
@@ -2656,8 +2658,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theFilterValueVariable = elModels.getElementValueModelId(session.getAttributeText("filter-value-name"));
-				elModels.satisfyElementValueType(theFilterValueVariable, ModelTypes.Value,
-					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getValueType()));
+				elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theFilterValueVariable, ModelTypes.Value,
+					Interpreted::getValueType);
 				theTest = getAttributeExpression("test", session);
 			}
 
@@ -3214,10 +3216,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		private CompiledExpression theFormatSet;
 		private final Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> theFields;
+		private final List<EntityConfigFormat> theSubFormats;
 
 		public EntityConfigFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Value);
 			theFields = new LinkedHashMap<>();
+			theSubFormats = new ArrayList<>();
 		}
 
 		@QonfigAttributeGetter("format-set")
@@ -3228,6 +3232,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@QonfigChildGetter("field")
 		public Map<String, ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<? extends SettableValue<ObservableConfigFormat<?>>>>> getFields() {
 			return Collections.unmodifiableMap(theFields);
+		}
+
+		@QonfigChildGetter("sub-format")
+		public List<EntityConfigFormat> getSubFormats() {
+			return Collections.unmodifiableList(theSubFormats);
 		}
 
 		@Override
@@ -3248,6 +3257,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					theFields.put(fieldName, field);
 			}
+			syncChildren(EntityConfigFormat.class, theSubFormats, session.forChildren("sub-format"));
 		}
 
 		@Override
@@ -3261,10 +3271,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormatSet>> theFormatSet;
 			private final Map<String, ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>>> theFields;
+			private final List<Interpreted<? extends E>> theSubFormats;
 
 			Interpreted(EntityConfigFormat definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theFields = new LinkedHashMap<>();
+				theSubFormats = new ArrayList<>();
 			}
 
 			@Override
@@ -3293,6 +3305,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 				return new ArrayList<InterpretedValueSynth<?, ?>>(theFields.values());
+			}
+
+			public List<Interpreted<? extends E>> getSubFormats() {
+				return Collections.unmodifiableList(theSubFormats);
 			}
 
 			@Override
@@ -3331,15 +3347,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						InterpretedExpressoEnv mEnv = getExpressoEnv(i.getDefinition().getDocument());
 						String fieldName = i.getDefinition().getAddOn(EntityConfigField.class).getFieldName();
 						mEnv.putLocal(ExTyped.VALUE_TYPE_KEY, reflector.getFields().get(fieldName).getType());
-						i.updateValue(mEnv);
+						i.updateValue();
 					});
 				theFields.clear();
 				for (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<E>>, ModelValueElement<SettableValue<ObservableConfigFormat<E>>>> field : fields)
 					theFields.put(field.getDefinition().getAddOn(EntityConfigField.class).getFieldName(), field);
+				syncChildren(getDefinition().getSubFormats(), theSubFormats, //
+					def -> (EntityConfigFormat.Interpreted<? extends E>) def.interpretValue(this), i -> i.updateValue());
 			}
 
 			@Override
-			public ModelValueElement<SettableValue<ObservableConfigFormat<E>>> create() throws ModelInstantiationException {
+			public Instantiator<E> create() throws ModelInstantiationException {
 				return new Instantiator<>(this);
 			}
 		}
@@ -3349,6 +3367,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			private final ModelValueInstantiator<SettableValue<ObservableConfigFormatSet>> theFormatSet;
 			private final Map<String, String> theFieldConfigNames;
 			private final Map<String, ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>>> theFields;
+			private final List<Instantiator<? extends E>> theSubFormats;
+			private final String theSubTypeName;
 
 			Instantiator(EntityConfigFormat.Interpreted<E> interpreted) throws ModelInstantiationException {
 				super(interpreted);
@@ -3363,6 +3383,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						theFieldConfigNames.put(field.getKey(), configName);
 					theFields.put(field.getKey(), field.getValue().instantiate());
 				}
+				theSubFormats = new ArrayList<>();
+				for (EntityConfigFormat.Interpreted<? extends E> subFormat : interpreted.getSubFormats())
+					theSubFormats.add(subFormat.create());
+				theSubTypeName = interpreted.getDefinition().getAddOnValue(EntitySubFormat.class, EntitySubFormat::getSubTypeName);
 			}
 
 			@Override
@@ -3371,11 +3395,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					theFormatSet.instantiate();
 				for (ModelValueInstantiator<? extends SettableValue<? extends ObservableConfigFormat<?>>> field : theFields.values())
 					field.instantiate();
+				for (Instantiator<? extends E> subFormat : theSubFormats)
+					subFormat.instantiate();
 			}
 
 			@Override
 			public SettableValue<ObservableConfigFormat<E>> evaluate(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
+				return SettableValue.of(create(models), "Unmodifiable");
+			}
+
+			ObservableConfigFormat.EntityConfigFormat<E> create(ModelSetInstance models) throws ModelInstantiationException {
 				instantiate(models);
 				ObservableConfigFormatSet formatSet;
 				if (theFormatSet != null)
@@ -3390,7 +3420,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						builder.withFieldChildName(field.getKey(), configName);
 					builder.withFieldFormat(field.getKey(), field.getValue().get(models).get());
 				}
-				return SettableValue.of(builder.build(), "Unmodifiable");
+				for (Instantiator<? extends E> subFormat : theSubFormats)
+					subFormat.configureSubFormat(builder, models);
+				return builder.build();
+			}
+
+			void configureSubFormat(ObservableConfigFormat.EntityFormatBuilder<? super E> superFormat, ModelSetInstance models)
+				throws ModelInstantiationException {
+				String subTypeName = theSubTypeName != null ? theSubTypeName//
+					: StringUtils.parseByCase(TypeTokens.getRawType(theEntityType).getSimpleName(), true).toKebabCase();
+				ObservableConfigFormat.EntityConfigFormat<E> format = create(models);
+				superFormat.withSubType(theEntityType, subF -> subF.withFormat(format).build(subTypeName));
 			}
 
 			@Override
@@ -3399,6 +3439,34 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				// Meh
 				return get(newModels);
 			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = CONFIG, qonfigType = EntitySubFormat.ENTITY_SUB_FORMAT)
+	static class EntitySubFormat extends ExAddOn.Def.Abstract<ExElement, ExAddOn.Void<ExElement>> {
+		public static final String ENTITY_SUB_FORMAT = "entity-sub-format";
+
+		private String theSubTypeName;
+
+		public EntitySubFormat(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
+			super(type, element);
+		}
+
+		@QonfigAttributeGetter("sub-type-name")
+		public String getSubTypeName() {
+			return theSubTypeName;
+		}
+
+		@Override
+		public void update(ExpressoQIS session, Def<? extends ExElement> element) throws QonfigInterpretationException {
+			super.update(session, element);
+			theSubTypeName = session.getAttributeText("sub-type-name");
+		}
+
+		@Override
+		public <E2 extends ExElement> ExAddOn.Interpreted<? super E2, ? extends Void<ExElement>> interpret(
+			ExElement.Interpreted<E2> element) {
+			return null;
 		}
 	}
 

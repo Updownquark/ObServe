@@ -115,9 +115,9 @@ public class ConformingPanel extends JPanel {
 
 	@Override
 	protected void paintComponent(Graphics g) {
-		if (theShading != null)
+		super.paintComponent(g);
+		if (theShading != null) {
 			theShading.shade((Graphics2D) g, getSize(), getBackground());
-		else
-			super.paintComponent(g);
+		}
 	}
 }

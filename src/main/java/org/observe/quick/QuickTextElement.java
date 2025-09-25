@@ -40,6 +40,9 @@ public interface QuickTextElement extends QuickStyledElement {
 		QuickTextStyle.Interpreted getStyle();
 	}
 
+	@Override
+	QuickTextStyle getStyle();
+
 	/** Style for a text element */
 	public interface QuickTextStyle extends QuickInstanceStyle {
 		/** Definition of a text element style */

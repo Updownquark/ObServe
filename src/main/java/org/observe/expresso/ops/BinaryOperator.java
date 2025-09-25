@@ -692,6 +692,11 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
+		public boolean requiresSourceModification() {
+			return true;
+		}
+
+		@Override
 		public ReverseQueryResult<Object> reverse(Object newValue, TransformationValues<Object, Object> transformValues, boolean add,
 			boolean test) {
 			Object rgt = transformValues.get(theRight);

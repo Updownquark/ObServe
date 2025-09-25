@@ -50,6 +50,8 @@ import org.qommons.collect.MutableCollectionElement;
  * @param <T> The type of values in the tree
  */
 public abstract class ObservableTreeModel<T> implements TreeModel {
+	private static final int DEBUG = 0;
+
 	private final ObservableValue<? extends T> theRoot;
 	private TreeNode theRootNode;
 
@@ -157,6 +159,11 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		theRootNode.set(newRoot);
 		TreeModelEvent event = new TreeModelEvent(this, new Object[] { theRootNode }, null, null);
 
+		if (DEBUG > 0) {
+			System.out.println("Root changed: " + newRoot);
+			if (DEBUG > 1)
+				BreakpointHere.breakpoint();
+		}
 		for (TreeModelListener listener : theListeners) {
 			try {
 				listener.treeStructureChanged(event);
@@ -518,6 +525,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				theChildren.changes().takeUntil(unsubscribe).act(event -> { // theChildren is already safe
 					if (unsubscribed[0])
 						return;
+					if (DEBUG > 0)
+						System.out.println("Child change for " + getValuePath() + ":\n\t" + event);
 					int[] indexes = event.getIndexes();
 					switch (event.type) {
 					case add:
@@ -627,6 +636,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				Transaction t2 = Transactable.lock(children, false, null)) {
 				unsubscribe.onNext(null);
 				if (theChildren != null) {
+					if (DEBUG > 0)
+						System.out.println("Children changed for " + getValuePath());
 					int[] indexes = new int[theChildNodes.size()];
 					TreeNode[] nodes = new ObservableTreeModel.TreeNode[indexes.length];
 					for (int i = 0; i < indexes.length; i++) {

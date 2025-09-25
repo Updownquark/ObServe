@@ -140,7 +140,7 @@ public interface VariableType {
 				clazz = TypeTokens.getRawType(env.getClassView().parseType(theTypeName));
 			} catch (ParseException e) {
 				throw new ExpressoInterpretationException(e.getMessage(), //
-					theContent.getPosition(e.getErrorOffset()), theContent.length() - e.getErrorOffset());
+					theContent.getPosition(e.getErrorOffset()), theContent.length() - e.getErrorOffset(), e);
 			}
 			return TypeTokens.get().of(clazz);
 		}

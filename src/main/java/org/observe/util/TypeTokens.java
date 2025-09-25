@@ -2779,7 +2779,9 @@ public class TypeTokens implements TypeParser {
 			try {
 				return Class.forName(typeName);
 			} catch (ClassNotFoundException e) {
-				throw new ParseException("No such class found: " + typeName, offset);
+				ParseException pe = new ParseException("No such class found: " + typeName, offset);
+				pe.initCause(e);
+				throw pe;
 			}
 		}
 	}

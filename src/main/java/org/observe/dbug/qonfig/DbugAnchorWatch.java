@@ -123,8 +123,7 @@ public class DbugAnchorWatch<A> extends ExElement.Abstract {
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theAs = elModels.getElementValueModelId(session.getAttributeText("as"));
-			elModels.satisfyElementValueType(theAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getAnchorType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theAs, ModelTypes.Value, Interpreted::getAnchorType);
 
 			syncChildren(DbugAction.Def.class, theActions, session.forChildren("action"));
 			syncChildren(DbugEventWatch.Def.class, theEvents, session.forChildren("event"));

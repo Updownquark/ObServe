@@ -305,8 +305,8 @@ public class NameExpression implements ObservableExpression, Named {
 				imv, nameIndex, type, expressionOffset, reporting, divisions, env, exHandler);
 		} else
 			throw new ExpressoInterpretationException(
-				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType, reporting.getPosition(),
-				theNames.get(nameIndex + 1).length());
+				"Cannot evaluate field '" + theNames.get(nameIndex) + "' against model of type " + mvType, reporting.getPosition(),
+				theNames.get(nameIndex).length());
 	}
 
 	private <M, MV extends M, F, EX extends Throwable> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,

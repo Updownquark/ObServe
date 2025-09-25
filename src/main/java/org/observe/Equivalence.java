@@ -3,8 +3,10 @@ package org.observe;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -93,7 +95,7 @@ public interface Equivalence<E> {
 	}
 
 	/** The default {@link Object#equals(Object)} implementation of equivalence. Used by most java collections. */
-	Equivalence<Object> DEFAULT=new Equivalence<Object>() {
+	Equivalence<Object> DEFAULT = new Equivalence<Object>() {
 		@Override
 		public boolean elementEquals(Object element, Object value) {
 			return Objects.equals(element, value);
@@ -119,6 +121,76 @@ public interface Equivalence<E> {
 			return "Default equivalence";
 		}
 	};
+
+	/**
+	 * Equivalence with custom hash code and equality implementations
+	 *
+	 * @param <T> The type for the equivalence
+	 */
+	public class HashedEquivalence<T> implements Equivalence<T> {
+		private final Class<T> theType;
+		private final BiPredicate<? super T, ? super T> theEquals;
+		private final ToIntFunction<? super T> theHashCode;
+		private final BiPredicate<Object, Object> theObjectEquals;
+		private final ToIntFunction<Object> theObjectHash;
+
+		/**
+		 * @param type The type for the equivalence
+		 * @param equals The equality implementation
+		 * @param hashCode The hash code implementation
+		 */
+		public HashedEquivalence(Class<T> type, BiPredicate<? super T, ? super T> equals, ToIntFunction<? super T> hashCode) {
+			theType = type;
+			theEquals = equals;
+			theHashCode = hashCode;
+			theObjectEquals = LambdaUtils.printableBiPredicate((o1, o2) -> {
+				if (o1 == null)
+					return o2 == null;
+				else if (theType.isInstance(o1)) {
+					if (theType.isInstance(o2))
+						return theEquals.test((T) o1, (T) o2);
+					else
+						return false;
+				} else if (theType.isInstance(o2))
+					return false;
+				else
+					return o1.equals(o2);
+			}, theEquals::toString, theEquals);
+			theObjectHash = o -> {
+				if (o == null)
+					return 0;
+				else if (theType.isInstance(o))
+					return theHashCode.applyAsInt((T) o);
+				else
+					return o.hashCode();
+			};
+		}
+
+		@Override
+		public boolean elementEquals(Object element, Object value) {
+			return Objects.equals(element, value);
+		}
+
+		@Override
+		public <E2 extends T> BetterSet<E2> createSet() {
+			return BetterHashSet.build().withEquivalence(theObjectHash, theObjectEquals).build();
+		}
+
+		@Override
+		public <E2 extends T, V> BetterMap<E2, V> createMap() {
+			return BetterHashMap.build().withEquivalence(theObjectHash, theObjectEquals).build();
+		}
+
+		@Override
+		public <E2 extends T> E2 getSetMember(E2 instance) {
+			return instance;
+		}
+
+		@Override
+		public String toString() {
+			return "Hashed equivalence: " + theEquals;
+		}
+	}
 
 	/** The <code>==</code> implementation of equivalence. Objects are compared by identity. */
 	Equivalence<Object> ID = new Equivalence<Object>() {
@@ -164,8 +236,8 @@ public interface Equivalence<E> {
 		SortedEquivalence<E> reverse();
 
 		@Override
-		default <E2 extends E, T> SortedEquivalence<T> map(Predicate<? super T> filter,
-			Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
+		default <E2 extends E, T> SortedEquivalence<T> map(Predicate<? super T> filter, Function<? super E2, ? extends T> map,
+			Function<? super T, ? extends E2> reverse) {
 			return new MappedComparatorEquivalence<>(this, filter, map, reverse);
 		}
 	}
@@ -206,7 +278,6 @@ public interface Equivalence<E> {
 		public Equivalence<? super E> getParentEquivalence() {
 			return theParentEquivalence;
 		}
-
 
 		@Override
 		public boolean isNullable() {
@@ -332,8 +403,7 @@ public interface Equivalence<E> {
 			if (!(o instanceof MappedEquivalence))
 				return false;
 			MappedEquivalence<?, ?, ?> equiv = (MappedEquivalence<?, ?, ?>) o;
-			return equiv.theWrapped.equals(theWrapped) && Objects.equals(equiv.theFilter, theFilter)
-				&& equiv.theReverse.equals(theReverse);
+			return equiv.theWrapped.equals(theWrapped) && Objects.equals(equiv.theFilter, theFilter) && equiv.theReverse.equals(theReverse);
 		}
 
 		@Override
@@ -352,8 +422,8 @@ public interface Equivalence<E> {
 	class MappedComparatorEquivalence<E, E2 extends E, T> extends MappedEquivalence<E, E2, T> implements SortedEquivalence<T> {
 		private final Comparator<T> theSorting;
 
-		MappedComparatorEquivalence(SortedEquivalence<E> wrapped, Predicate<? super T> filter,
-			Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
+		MappedComparatorEquivalence(SortedEquivalence<E> wrapped, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
+			Function<? super T, ? extends E2> reverse) {
 			super(wrapped, filter, map, reverse);
 			theSorting = LambdaUtils.printableComparator((t1, t2) -> {
 				E2 e1 = reverse.apply(t1);
@@ -692,8 +762,7 @@ public interface Equivalence<E> {
 		private final Function<? super E2, ? extends T> theMap;
 		private final Function<? super T, ? extends E2> theReverse;
 
-		public MappedMap(BetterMap<E, V> wrapped, Function<? super E2, ? extends T> map,
-			Function<? super T, ? extends E2> reverse) {
+		public MappedMap(BetterMap<E, V> wrapped, Function<? super E2, ? extends T> map, Function<? super T, ? extends E2> reverse) {
 			theWrapped = wrapped;
 			theMap = map;
 			theReverse = reverse;

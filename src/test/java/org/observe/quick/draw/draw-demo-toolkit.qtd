@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Quick-Draw-Demo" version="0.1" xmlns:quick="Quick-Draw v0.1">
+	<elements>
+		<promise-def name="demo-shape-collection" extends="external-reference">
+			<attr-mod name="external-reference.ref" specify="forbidden" default="demo-shape-collection.qml" />
+			<attr-mod name="external-reference.promised-inheritance" specify="forbidden" default="shape-publisher" />
+			<attribute name="shapes" type="expression" />
+			<attribute name="selected" type="expression" />
+			<attribute name="always-visible" type="expression" default="false" />
+		</promise-def>
+	</elements>
+</qonfig-def>

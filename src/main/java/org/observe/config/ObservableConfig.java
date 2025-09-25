@@ -430,11 +430,11 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		}
 
 		/**
-		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormat heterogenous format}
+		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormatImpl heterogenous format}
 		 * @return This builder
 		 */
 		public ObservableConfigValueBuilder<T> withHeterogenousFormat(
-			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<T>, ObservableConfigFormat.HeterogeneousFormat<T>> format) {
+			Function<ObservableConfigFormat.HeterogeneousFormatImpl.Builder<T>, ObservableConfigFormat.HeterogeneousFormatImpl<T>> format) {
 			theFormat = format.apply(ObservableConfigFormat.heterogeneous(theType));
 			return this;
 		}
@@ -733,11 +733,11 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		}
 
 		/**
-		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormat heterogenous format} for the map key
+		 * @param format Builds a {@link ObservableConfigFormat.HeterogeneousFormatImpl heterogenous format} for the map key
 		 * @return This builder
 		 */
 		public ObservableConfigMapBuilder<K, V> withHeterogenousFormat(
-			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<K>, ObservableConfigFormat.HeterogeneousFormat<K>> format) {
+			Function<ObservableConfigFormat.HeterogeneousFormatImpl.Builder<K>, ObservableConfigFormat.HeterogeneousFormatImpl<K>> format) {
 			theKeyFormat = checkFormat(format.apply(ObservableConfigFormat.heterogeneous(theKeyType)));
 			return this;
 		}
@@ -745,9 +745,9 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		private <K2 extends K> ObservableConfigFormat<K2> checkFormat(ObservableConfigFormat<K2> format) {
 			if (format == null || format instanceof Impl.SimpleConfigFormat)
 				return format;
-			else if (format instanceof ObservableConfigFormat.HeterogeneousFormat) {
-				for (ObservableConfigFormat.HeterogeneousFormat.SubFormat<? extends K> subFormat//
-					: ((ObservableConfigFormat.HeterogeneousFormat<K>) format).getSubFormats()) {
+			else if (format instanceof ObservableConfigFormat.HeterogeneousFormatImpl) {
+				for (ObservableConfigFormat.HeterogeneousFormatImpl.SubFormat<? extends K> subFormat//
+					: ((ObservableConfigFormat.HeterogeneousFormatImpl<K>) format).getSubFormats()) {
 					checkFormat(subFormat.getFormat());
 				}
 			} else

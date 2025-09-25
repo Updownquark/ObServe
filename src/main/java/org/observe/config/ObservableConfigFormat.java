@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.awt.Color;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +39,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Causable.AbstractCausable;
 import org.qommons.CausalLock;
+import org.qommons.Colors;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
@@ -80,6 +82,19 @@ public interface ObservableConfigFormat<E> {
 	/** Persists {@link Instant}s */
 	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.flexibleDate("ddMMMyyyy", TimeZone.getDefault()),
 		() -> null);
+	/** Persists {@link Color}s */
+	public static ObservableConfigFormat<Color> COLOR = ofQommonFormat(new Format<Color>() {
+		@Override
+		public void append(StringBuilder text, Color value) {
+			if (value != null)
+				text.append(Colors.toHTMLA(value));
+		}
+
+		@Override
+		public Color parse(CharSequence text) throws ParseException {
+			return Colors.parseColor(text.toString());
+		}
+	}, () -> null);
 
 	/** An accessor for a config element at a particular location in the hierarchy, even if such an element does not currently exist */
 	interface ConfigGetter {
@@ -546,11 +561,24 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	/**
+	 * A format that supports config-backed values of different types with different persistence mechanisms for each type
+	 *
+	 * @param <E> The super-type of values supported by this format
+	 */
+	public interface HeterogeneousConfigFormat<E> extends ObservableConfigFormat<E> {
+		/**
+		 * @param config The config to check
+		 * @return Whether this format recognizes the configuration as a persisted sub-type
+		 */
+		boolean isRecognized(ObservableConfig config);
+	}
+
+	/**
 	 * Persists/parses entity structures from config. This format will work for types administrable by {@link EntityReflector}.
 	 *
 	 * @param <E> The type of the entity
 	 */
-	public interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
+	public interface EntityConfigFormat<E> extends HeterogeneousConfigFormat<E> {
 		/**
 		 * The key by which the config element may be retrieved from a config-backed entity
 		 *
@@ -1132,14 +1160,14 @@ public interface ObservableConfigFormat<E> {
 	}
 
 	/**
-	 * Builds a {@link HeterogeneousFormat}
+	 * Builds a {@link HeterogeneousFormatImpl}
 	 *
 	 * @param <T> The parent type
 	 * @param type The parent type of all values that the format should handle
 	 * @return The builder for the format
 	 */
-	static <T> HeterogeneousFormat.Builder<T> heterogeneous(TypeToken<T> type) {
-		return HeterogeneousFormat.build(type);
+	static <T> HeterogeneousFormatImpl.Builder<T> heterogeneous(TypeToken<T> type) {
+		return HeterogeneousFormatImpl.build(type);
 	}
 
 	/**
@@ -1147,7 +1175,7 @@ public interface ObservableConfigFormat<E> {
 	 *
 	 * @param <T> The parent type of all values that this format can handle
 	 */
-	public class HeterogeneousFormat<T> implements ObservableConfigFormat<T> {
+	public class HeterogeneousFormatImpl<T> implements HeterogeneousConfigFormat<T> {
 		/**
 		 * @param <T> The parent type
 		 * @param type The parent type of all values that the format should handle
@@ -1158,7 +1186,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		/**
-		 * A builder for a {@link HeterogeneousFormat}
+		 * A builder for a {@link HeterogeneousFormatImpl}
 		 *
 		 * @param <T> The parent type of all values that the format should handle
 		 */
@@ -1185,13 +1213,13 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			/** @return The heterogeneous format */
-			public HeterogeneousFormat<T> build() {
-				return new HeterogeneousFormat<>(QommonsUtils.unmodifiableCopy(theSubFormats));
+			public HeterogeneousFormatImpl<T> build() {
+				return new HeterogeneousFormatImpl<>(QommonsUtils.unmodifiableCopy(theSubFormats));
 			}
 		}
 
 		/**
-		 * Configures a sub-format in a builder for a {@link HeterogeneousFormat}
+		 * Configures a sub-format in a builder for a {@link HeterogeneousFormatImpl}
 		 *
 		 * @param <T> The sub-type that the format should handle
 		 */
@@ -1234,7 +1262,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		/**
-		 * A sub-format in a {@link HeterogeneousFormat}
+		 * A sub-format in a {@link HeterogeneousFormatImpl}
 		 *
 		 * @param <T> The sub-type that this sub-format is for
 		 */
@@ -1297,7 +1325,7 @@ public interface ObservableConfigFormat<E> {
 
 		private final List<SubFormat<? extends T>> theSubFormats;
 
-		HeterogeneousFormat(List<SubFormat<? extends T>> subFormats) {
+		HeterogeneousFormatImpl(List<SubFormat<? extends T>> subFormats) {
 			theSubFormats = subFormats;
 		}
 
@@ -1322,6 +1350,11 @@ public interface ObservableConfigFormat<E> {
 		/** @return All sub-formats in this format */
 		public List<SubFormat<? extends T>> getSubFormats() {
 			return theSubFormats;
+		}
+
+		@Override
+		public boolean isRecognized(ObservableConfig config) {
+			return formatFor(config) != null;
 		}
 
 		@Override
@@ -1840,7 +1873,7 @@ public interface ObservableConfigFormat<E> {
 			}
 		}
 
-		abstract static class AbstractComponentFormat<E> implements ObservableConfigFormat<E> {
+		abstract static class AbstractComponentFormat<E> implements HeterogeneousConfigFormat<E> {
 			class FormatEvent extends AbstractCausable {
 				final E entity;
 				final int field;
@@ -1951,6 +1984,11 @@ public interface ObservableConfigFormat<E> {
 					if (subFormat.configFilter.matches(config))
 						return subFormat;
 				return null;
+			}
+
+			@Override
+			public boolean isRecognized(ObservableConfig config) {
+				return formatFor(config) != null;
 			}
 
 			@Override

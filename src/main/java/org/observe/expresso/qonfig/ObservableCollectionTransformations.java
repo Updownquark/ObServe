@@ -587,8 +587,8 @@ public class ObservableCollectionTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = getAttributeExpression("test", session);
-			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceVariable, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override
@@ -1012,8 +1012,8 @@ public class ObservableCollectionTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceName = elModels.getElementValueModelId(sourceAs);
 			theRefresh = getAttributeExpression("on", session);
-			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceName, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override
@@ -1057,8 +1057,7 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public Operation.Instantiator<CV, CV> instantiate() throws ModelInstantiationException {
-				return new Instantiator<>(instantiateLocalModels(), getDefinition().getSourceVariable(),
-					theRefresh.instantiate());
+				return new Instantiator<>(instantiateLocalModels(), getDefinition().getSourceVariable(), theRefresh.instantiate());
 			}
 
 			@Override
@@ -2152,10 +2151,10 @@ public class ObservableCollectionTransformations {
 			theSourceAs = withElModel.getElementValueModelId(sourceAs);
 			String crossAs = session.getAttributeText("crossed-as");
 			theCrossAs = withElModel.getElementValueModelId(crossAs);
-			withElModel.satisfyElementValueType(theSourceAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((CrossCollectionTransform.Interpreted<?, ?, ?, ?, ?>) interp).getSourceType()));
-			withElModel.satisfyElementValueType(theCrossAs, ModelTypes.Value, (interp, env) -> ModelTypes.Value
-				.forType(((CrossCollectionTransform.Interpreted<?, ?, ?, ?, ?>) interp).getWith().getType().getType(0)));
+			withElModel.<Interpreted<?, ?, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceAs, ModelTypes.Value,
+				Interpreted::getSourceType);
+			withElModel.<Interpreted<?, ?, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theCrossAs, ModelTypes.Value,
+				interp -> interp.getWith().getType().getType(0));
 			theWith = getAttributeExpression("with", session);
 			theValue = getValueExpression(session);
 
@@ -2624,10 +2623,10 @@ public class ObservableCollectionTransformations {
 			theSourceAs = withElModel.getElementValueModelId(sourceAs);
 			String tempAs = session.getAttributeText("temp-as");
 			theTempAs = withElModel.getElementValueModelId(tempAs);
-			withElModel.satisfyElementValueType(theSourceAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((ReducedCollectionTransform.Interpreted<?, ?, ?, ?>) interp).getSourceType()));
-			withElModel.satisfyElementValueType(theTempAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((ReducedCollectionTransform.Interpreted<?, ?, ?, ?>) interp).getValueType()));
+			withElModel.<Interpreted<?, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceAs, ModelTypes.Value,
+				Interpreted::getSourceType);
+			withElModel.<Interpreted<?, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theTempAs, ModelTypes.Value,
+				Interpreted::getValueType);
 			theSeed = getAttributeExpression("seed", session);
 			theValue = getValueExpression(session);
 		}
@@ -2729,6 +2728,11 @@ public class ObservableCollectionTransformations {
 				ExFlexibleElementModelAddOn.satisfyElementValue(theTempAs, models, tempAs);
 				SettableValue<T> value = theValue.get(models);
 				ObservableValue<T> reduced;
+				/*
+				 * I was trying to be clever here.  If the value was reversible, I'd use the efficient version of reduce.
+				 * I tested this with addition and it seemed to work.
+				 * But this is invalid if the operation doesn't preserve enough information.
+				 * E.g. for an OR operation among booleans, this fails on modification.
 				if (value.isEnabled() == null) {
 					reduced = ((ObservableCollection<S>) source).reduce(seed.get(), (temp, newValue) -> {
 						tempAs.set(temp, null);
@@ -2739,13 +2743,13 @@ public class ObservableCollectionTransformations {
 						value.set(temp, null);
 						return tempAs.get();
 					});
-				} else {
-					reduced = ((ObservableCollection<S>) source).reduce(seed.get(), (temp, newValue) -> {
-						tempAs.set(temp, null);
-						sourceAs.set(newValue, null);
-						return value.get();
-					});
-				}
+				} else {*/
+				reduced = ((ObservableCollection<S>) source).reduce(seed.get(), (temp, newValue) -> {
+					tempAs.set(temp, null);
+					sourceAs.set(newValue, null);
+					return value.get();
+				});
+				// }
 				return SettableValue.asSettable(reduced, __ -> "Reduced values are not modifiable");
 			}
 
@@ -2909,8 +2913,8 @@ public class ObservableCollectionTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceAs = elModels.getElementValueModelId(sourceAs);
 			theKey = getAttributeExpression("key", session);
-			elModels.<Interpreted<C, ?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<C, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceAs, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override

@@ -206,8 +206,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theNodeMultiSelection = getAttributeExpression("node-multi-selection", session);
 			theExpandAll = getAttributeExpression("expand-all", session);
 			theCollapseAll = getAttributeExpression("collapse-all", session);
-			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theActiveValueVariable, ModelTypes.Value,
+				Interpreted::getPathType);
 			isRootVisible = session.getAttribute("root-visible", boolean.class);
 
 			syncChildren(ExElement.Def.class, theActionsAndOptions, session.forChildren("action", "option"));

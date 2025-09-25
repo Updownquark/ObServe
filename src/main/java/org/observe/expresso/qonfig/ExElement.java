@@ -1,6 +1,18 @@
 package org.observe.expresso.qonfig;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -39,8 +51,22 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MappedList;
-import org.qommons.config.*;
+import org.qommons.config.AbstractQIS;
+import org.qommons.config.PartialQonfigElement;
+import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElementDef;
+import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigMetadata;
+import org.qommons.config.QonfigPromiseDef;
+import org.qommons.config.QonfigToolkit;
+import org.qommons.config.QonfigValueDef;
+import org.qommons.config.QonfigValueType;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
@@ -2018,18 +2044,6 @@ public interface ExElement extends Identifiable {
 				.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()), this);
 		}
 
-		/**
-		 * A utility for instantiating a (potentially null) expression
-		 *
-		 * @param <MV> The type of the model value to create
-		 * @param expression The expression to instantiate
-		 * @return The instantiated expression, or null if the expression is null
-		 * @throws ModelInstantiationException If the expression throws an exception upon instantiation
-		 */
-		protected <MV> ModelValueInstantiator<MV> instantiate(InterpretedValueSynth<?, MV> expression) throws ModelInstantiationException {
-			return expression == null ? null : expression.instantiate();
-		}
-
 		@Override
 		public void instantiated() throws ModelInstantiationException {
 			for (ExAddOn<?> addOn : theAddOnSequence)
@@ -2096,19 +2110,6 @@ public interface ExElement extends Identifiable {
 			for (ExAddOn<?> addOn : theAddOnSequence)
 				theUpdatingModels = myModels = addOn.instantiate(myModels);
 			return myModels;
-		}
-
-		/**
-		 * A utility for evaluating a (potentially null) model instantiator
-		 *
-		 * @param <MV> The type of the model value to create
-		 * @param instantiator The instantiator to get the model value for
-		 * @param models The model instance set to get the value from
-		 * @return The model value, or null if the instantiator was null
-		 * @throws ModelInstantiationException If the instantiator throws it
-		 */
-		protected <MV> MV get(ModelValueInstantiator<MV> instantiator, ModelSetInstance models) throws ModelInstantiationException {
-			return instantiator == null ? null : instantiator.get(models);
 		}
 
 		@Override
@@ -2220,6 +2221,31 @@ public interface ExElement extends Identifiable {
 			// Alias not supported for this constant
 			return this;
 		}
+	}
+
+	/**
+	 * A utility for instantiating a (potentially null) expression
+	 *
+	 * @param <MV> The type of the model value to create
+	 * @param expression The expression to instantiate
+	 * @return The instantiated expression, or null if the expression is null
+	 * @throws ModelInstantiationException If the expression throws an exception upon instantiation
+	 */
+	public static <MV> ModelValueInstantiator<MV> instantiate(InterpretedValueSynth<?, MV> expression) throws ModelInstantiationException {
+		return expression == null ? null : expression.instantiate();
+	}
+
+	/**
+	 * A utility for evaluating a (potentially null) model instantiator
+	 *
+	 * @param <MV> The type of the model value to create
+	 * @param instantiator The instantiator to get the model value for
+	 * @param models The model instance set to get the value from
+	 * @return The model value, or null if the instantiator was null
+	 * @throws ModelInstantiationException If the instantiator throws it
+	 */
+	public static <MV> MV get(ModelValueInstantiator<MV> instantiator, ModelSetInstance models) throws ModelInstantiationException {
+		return instantiator == null ? null : instantiator.get(models);
 	}
 
 	/**

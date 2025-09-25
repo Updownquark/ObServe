@@ -70,6 +70,7 @@
 				This should be a number between -1 and 1 where -1 represents full shadow, 1 represents fully lit, and 0 represents no shading.?>
 			<attribute name="lit" type="expression" />
 		</element-def>
+		<?DOC A shader that doesn't care about the light source and paints the background of each pixel in a custom way?>
 		<element-def name="custom-painting" extends="abst-custom-shading">
 			<?DOC The color for the current pixel?>
 			<attribute name="color" type="expression" />
@@ -115,15 +116,23 @@
 			(variable name controllable by the "active-value-name" attribute) to the button's action?>
 		<element-def name="combo-button" extends="button" inherits="rendering,multi-value-renderable">
 			<?DOC The renderer to control the appearance of each value representing an action?>
-			<label role="default-renderer" value="{active-value-name}" />
+			<label role="default-renderer" value="${active-value-name}" />
 			<?DOC A list of values representing the actions that the user may perform?>
 			<attribute name="values" type="expression" />
 		</element-def>
 
 		<?DOC A slider with a variable number of handles (thumbs) and highly customizable rendering?>
-		<element-def name="multi-slider" extends="widget">
+		<element-def name="abstract-multi-slider" extends="widget" inherits="multi-value-renderable">
+			<element-model>
+				<?DOC The index of the slider handle being rendered?>
+				<value name-attribute="active-index-as" type="int" priority="10" />
+			</element-model>
+			<?DOC The name of the variable in which the index of the currently active handle value will be stored?>
+			<attribute name="active-index-as" type="identifier" default="handleIndex" />
 			<?DOC The values for each handle of the slider?>
 			<attribute name="values" type="expression" />
+			<?DOC An optional renderer to color and otherwise style the slider's handles?>
+			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
 			<?DOC Whether the slider shall be horizontal or vertical?>
 			<attribute name="orientation" type="orientation" default="horizontal" />
 			<?DOC Whether to prevent the user from re-ordering values such that they are out-of-order?>
@@ -132,28 +141,9 @@
 			<attribute name="min" type="expression" />
 			<?DOC The maximum value for the slider's right or top?>
 			<attribute name="max" type="expression" />
-			<?DOC An optional renderer to color and otherwise style the slider's handles?>
-			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
 			<?DOC Optional renderers to color and style the slider's bar.<br>
 				Each renderer may specify a "max-value", so multiple renderers with different numerical domains can affect the slider's appearance throughout its range.?>
 			<child-def name="bg-renderer" type="slider-bg-renderer" min="0" max="inf" />
-		</element-def>
-		<?DOC Specifies the color, thickness, and tooltip for the handles in a &lt;multi-slider>?>
-		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
-			<styles>
-				<?DOC The thickness of the outline around the slider handle?>
-				<style-attribute name="line-thickness" type="int" trickle-down="false" />
-				<?DOC The color of the outline around the slider handle?>
-				<style-attribute name="line-color" type="java.awt.Color" trickle-down="false" />
-			</styles>
-			<element-model>
-				<?DOC The value of the slider handle being rendered?>
-				<value name="handleValue" type="double" priority="10" />
-				<?DOC The index of the slider handle being rendered?>
-				<value name="handleIndex" type="int" priority="10" />
-			</element-model>
-			<?DOC The tooltip to display for the slider handle being rendered?>
-			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
 		<?DOC Specifies the color and thickness for the slider line in a &lt;multi-slider>?>
 		<element-def name="slider-bg-renderer" inherits="with-background">
@@ -164,20 +154,42 @@
 			<?DOC The maximum value of this renderer's domain?>
 			<attribute name="max-value" type="expression" specify="optional" />
 		</element-def>
+		<?DOC Specifies the color, thickness, and tooltip for the handles in a &lt;multi-slider>?>
+		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
+			<styles>
+				<?DOC The thickness of the outline around the slider handle?>
+				<style-attribute name="line-thickness" type="int" trickle-down="false" />
+				<?DOC The color of the outline around the slider handle?>
+				<style-attribute name="line-color" type="java.awt.Color" trickle-down="false" />
+			</styles>
+			<?DOC The tooltip to display for the slider handle being rendered?>
+			<attribute name="tooltip" type="expression" specify="optional" />
+		</element-def>
+
+		<element-def name="multi-slider" extends="abstract-multi-slider" />
+
+		<element-def name="multi-range-slider" extends="abstract-multi-slider">
+			<?DOC The minimum value for each range?>
+			<attribute name="range-min" type="expression" />
+			<?DOC The maximum value for each range?>
+			<attribute name="range-max" type="expression" />
+			<?DOC Whether the source values should be updated whenever the range min/max values change?>
+			<attribute name="requires-source-modification" type="boolean" default="true" />
+		</element-def>
 
 		<element-def name="settings-menu" extends="field-panel" inherits="iconized" />
 
-		<?DOC A tiled pane takes a list of values and renders each with a renderer.<br>
+		<?DOC A virtual multi pane takes a list of values and renders each with a renderer.<br>
 			This is similar to a table with a single column, except that this widget allows more customizable layouts,
 			complex rendering, and intuitive interaction.?>
-		<element-def name="tiled-pane" extends="widget" inherits="multi-value-renderable,rendering">
+		<element-def name="virtual-multi-pane" extends="widget" inherits="multi-value-renderable,rendering">
 			<element-model>
 				<?DOC The row index of the value currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name="rowIndex" type="int" priority="2" />
 			</element-model>
 			<?DOC The values to be represented as components in this panel?>
 			<attribute name="values" type="expression" specify="required" />
-			<?DOC The layout that the tiled panel will use to arrange its contents?>
+			<?DOC The layout that the multi pane will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 			<?DOC If it is known that all possible values will be rendered to the same dimensions,
 				setting this to true can improve performance significantly for large collections?>
@@ -219,7 +231,7 @@
 			<attribute name="available-value-name" type="identifier" default="availableValue" />
 			<?DOC Converts a value from the available collection to a value that can be added to the included collection.<br>
 				If not specified, the included collection must be able to accept values from the available collection.?>
-			<attribute name="include" type="expression" default="{available-value-name}" />
+			<attribute name="include" type="expression" default="${available-value-name}" />
 			<!--
 			Might do this sometime, but decided not to for now
 			<?DOC An optional action to perform on each item that is included by the user.<br>
@@ -239,28 +251,6 @@
 			<child-def name="exclude-button" type="button" min="0" inherits="value-selector-button-config" />
 			<?DOC Optional configuration for the exclude-all button?>
 			<child-def name="exclude-all-button" type="button" min="0" inherits="value-selector-button-config" />
-		</element-def>
-
-		<element-def name="bar-chart" extends="widget" inherits="multi-value-renderable">
-			<element-model>
-				<?DOC The index of the bar currently in use (e.g. being rendered, hovered, etc.)?>
-				<value name="valueIndex" type="int" priority="2" />
-			</element-model>
-			<styles>
-				<?DOC The color of the interior of each bar?>
-				<style-attribute name="bar-color" type="java.awt.Color" trickle-down="false" />
-				<?DOC The thickness of the outline around the bar?>
-				<style-attribute name="outline-thickness" type="int" trickle-down="false" />
-				<?DOC The color of the outline around the bar?>
-				<style-attribute name="outline-color" type="java.awt.Color" trickle-down="false" />
-			</styles>
-			<attribute name="values" type="expression" />
-			<attribute name="max" type="expression" />
-			<attribute name="bar-length" type="expression" />
-			<?DOC The orientation in which the bars will be layed out--not the orientation of the bars themselves?>
-			<attribute name="orientation" type="orientation" default="horizontal" />
-			<attribute name="padding" type="expression" specify="optional" />
-			<attribute name="title" type="expression" specify="optional" />
 		</element-def>
 	</elements>
 

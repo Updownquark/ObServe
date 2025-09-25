@@ -100,8 +100,8 @@ public class QuickComboButton<T> extends QuickButton implements MultiValueRender
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theActiveValueVariable = elModels.getElementValueModelId(session.getAttributeText("active-value-name"));
-			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theActiveValueVariable, ModelTypes.Value,
+				Interpreted::getValueType);
 
 			List<ExpressoQIS> renderers = session.forChildren("renderer");
 			if (renderers.isEmpty())

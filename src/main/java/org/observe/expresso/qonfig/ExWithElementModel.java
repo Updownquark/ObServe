@@ -12,6 +12,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
@@ -23,9 +24,13 @@ import org.qommons.Identifiable;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.Transaction;
 import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigElement.AttributeValue;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
-import org.qommons.ex.ExBiFunction;
+import org.qommons.ex.ExFunction;
+import org.qommons.io.LocatedFilePosition;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * An add-on which, when inherited by a Qonfig element-def or add-on, allows the definition of the element or add-on to specify model values
@@ -85,12 +90,16 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		private ObservableModelSet.Builder handleDynamicValue(ElementModelValue.Identity dv, ObservableModelSet.Builder builder,
 			ExpressoQIS session, ExtModelValueElement.Def<?> spec) throws QonfigInterpretationException {
 			String name;
+			LocatedFilePosition namePosition;
 			if (dv.getNameAttribute() == null) {
 				name = dv.getName();
+				namePosition = dv.getDeclaration().getPositionInFile();
 			} else {
 				name = session.getElement().getAttributeText(dv.getNameAttribute());
 				if (name == null) // If name attribute is not specified, value shall not be declared
 					return builder;
+				AttributeValue attr = session.getElement().getAttributes().get(dv.getNameAttribute().getDeclared());
+				namePosition = LocatedFilePosition.of(attr.fileLocation, attr.getNamePosition().getPosition(0));
 			}
 			ElementModelValue<?> prev = getElementValues().get(name);
 			if (prev != null) {
@@ -101,7 +110,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			String doc = session.getInterpretingDocument();
 			CompiledExpression sourceAttrX;
 			try {
-				if(dv.getValue()!=null)
+				if (dv.getValue() != null)
 					sourceAttrX = new CompiledExpression(dv.getValue().getExpression(), dv.getValue().getElement(),
 						dv.getValue().getFilePosition(), () -> getElement().getExpressoEnv(doc));
 				else if (dv.isSourceValue())
@@ -125,7 +134,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 				value = new PlaceholderElementValue<>(dv, name, spec);
 			if (builder == null)
 				builder = createBuilder(session, doc);
-			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, spec.getElement().getPositionInFile());
+			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, namePosition);
 			value.setModelId(modelNode.getIdentity());
 			if (dv.getNameAttribute() != null) {
 				CompiledExpressoEnv env = getElement().getExpressoEnv(doc);
@@ -156,15 +165,33 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 
 		@Override
 		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId, ModelType<M> modelType,
-			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
-				throws QonfigInterpretationException {
+			ExFunction<I, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type) throws QonfigInterpretationException {
 			super.satisfyElementValueType(elementValueId, modelType, type);
+		}
+
+		/**
+		 * Satisfies the type of an injected model value. The model value passed to
+		 * {@link #addElementValue(String, CompiledModelValue, org.observe.expresso.ObservableModelSet.Builder, LocatedFilePosition)
+		 * addElementValue()} may not have the information it needs to ascertain its type. This method provides implementations a means for
+		 * determining type with the interpreted element available.
+		 *
+		 * @param <I> The type of the interpreted element
+		 * @param <M> The model type of the model value
+		 * @param elementValueId The model ID of the model value to satisfy the type of
+		 * @param modelType The model type of the model value
+		 * @param type A function to evaluate the value type for the model value given the interpreted element
+		 * @throws QonfigInterpretationException If no such element was injected from this add-on, or the injected value was not
+		 *         dynamically-typed
+		 */
+		public <I extends ExElement.Interpreted<?>, M> void satisfyElementSingleValueType(ModelComponentId elementValueId,
+			ModelType.SingleTyped<M> modelType, ExFunction<I, TypeToken<?>, ExpressoInterpretationException> type)
+				throws QonfigInterpretationException {
+			this.<I, M> satisfyElementValueType(elementValueId, modelType, interp -> modelType.forType(type.apply(interp)));
 		}
 
 		@Override
 		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
-			ModelInstanceType<M, ?> type)
-				throws QonfigInterpretationException {
+			ModelInstanceType<M, ?> type) throws QonfigInterpretationException {
 			super.satisfyElementValueType(elementValueId, type);
 		}
 

@@ -311,6 +311,15 @@
 			<?DOC The typed character that this listener will be notified for.  If not specified, this listener will be notified for any character.?>
 			<attribute name="char" type="string" specify="optional" />
 		</element-def>
+		<?DOC Allows access to the size of a component?>
+		<element-def name="on-size-change" extends="event-listener">
+			<element-model>
+				<?DOC The width of the widget?>
+				<value name="width" type="int" />
+				<?DOC The height of the widget?>
+				<value name="height" type="int" />
+			</element-model>
+		</element-def>
 
 		<?DOC A &lt;widget> that may contain other &lt;widget>s to be displayed on top of itself?>
 		<element-def name="container" extends="widget" abstract="true">

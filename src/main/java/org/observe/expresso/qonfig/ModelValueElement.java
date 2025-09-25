@@ -18,6 +18,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
+import org.qommons.BreakpointHere;
 import org.qommons.Transaction;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -417,10 +418,9 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 		/**
 		 * Initializes or updates this value
 		 *
-		 * @param env The expresso environment to use to interpret expressions
 		 * @throws ExpressoInterpretationException If this value cannot be interpreted
 		 */
-		void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		void updateValue() throws ExpressoInterpretationException;
 
 		/**
 		 * @return The instantiator for this value
@@ -469,7 +469,7 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 
@@ -510,12 +510,15 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			ExElement.Interpreted<?> parent = INTERPRETING_PARENTS.getParent(getParentElement());
 			if (parent == null) {
+				// This often happens because some add on definition has not declared a dependency on ExModelAugmentation.Def.
+				BreakpointHere.breakpoint();
 				INTERPRETING_PARENTS.getParent(getParentElement()); // Debugging
-				throw new ExpressoInterpretationException("InternalError: Correct model not installed in environment",
+				throw new ExpressoInterpretationException(
+					"InternalError: Correct model not installed in environment: " + getParentElement(),
 					reporting().getFileLocation());
 			}
 			InterpretedSynth<M, ?, ? extends E> interpreted = interpretValue(parent);
-			interpreted.updateValue(env);
+			interpreted.updateValue();
 			return interpreted;
 		}
 
@@ -529,7 +532,7 @@ public interface ModelValueElement<MV> extends ExElement, ModelValueInstantiator
 	}
 
 	/**
-	 * Interpretation of a {@link ModelValueElement}. Moste {@link ModelValueElement} interpretations will implement this. Fulfills both
+	 * Interpretation of a {@link ModelValueElement}. Most {@link ModelValueElement} interpretations will implement this. Fulfills both
 	 * {@link ExElement.Interpreted ExElement.Interpreted} and {@link org.observe.expresso.ObservableModelSet.InterpretedValueSynth
 	 * ObservableModelSet.InterpretedValueSynth} roles.
 	 *

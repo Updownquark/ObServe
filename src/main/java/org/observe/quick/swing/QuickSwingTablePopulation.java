@@ -1302,6 +1302,11 @@ class QuickSwingTablePopulation {
 			}
 		}
 
+		@Override
+		public void doAdd(int offset, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			unsupported("Indexed add");
+		}
+
 		void withGenericEditor(ComponentEditor<?, ?> field) {
 			SettableValue<C> editValue = theEditor.getTableColumn().getEditorValue();
 			ObservableValue<String> fieldTooltip = field.getTooltipContents();
@@ -1954,7 +1959,7 @@ class QuickSwingTablePopulation {
 						ctx.getActionValue().set(reverse.apply(v), null);
 					action.getAction().act(null);
 				}, () -> action.getAction().toString(), null), ta -> {
-					ta.allowForEmpty(false);
+					ta.allowForEmpty(action.allowForEmpty());
 					ta.allowForMultiple(action.allowForMultiple());
 					ta.displayAsButton(action.isButton());
 					ta.displayAsPopup(action.isPopup());
@@ -2037,7 +2042,7 @@ class QuickSwingTablePopulation {
 							try (Transaction t = ctx.getActionValues().lock(true, null)) {
 								CollectionUtils.synchronize(ctx.getActionValues(), values, (av, v) -> Objects.equals(av, reverse.apply(v)))//
 								.simple(reverse)//
-									.commonUses(true, true)//
+								.commonUses(true, true)//
 								.rightOrder()//
 								.adjust();
 							}

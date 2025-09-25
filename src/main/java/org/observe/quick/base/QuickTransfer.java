@@ -418,14 +418,14 @@ public class QuickTransfer {
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				if (transferValueAs != null) {
 					theTransferValueAs = elModels.getElementValueModelId(transferValueAs);
-					elModels.satisfyElementValueType(theTransferValueAs, ModelTypes.Value,
-						(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getDataType()));
+					elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theTransferValueAs, ModelTypes.Value,
+						Interpreted::getDataType);
 				} else
 					theTransferValueAs = null;
 				if (transferValuesAs != null) {
 					theTransferValuesAs = elModels.getElementValueModelId(transferValuesAs);
-					elModels.satisfyElementValueType(theTransferValuesAs, ModelTypes.Collection,
-						(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getDataType()));
+					elModels.<Interpreted<?, ?>, ObservableCollection<?>> satisfyElementSingleValueType(theTransferValuesAs,
+						ModelTypes.Collection, Interpreted::getDataType);
 				} else
 					theTransferValuesAs = null;
 

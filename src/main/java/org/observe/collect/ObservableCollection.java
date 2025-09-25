@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -361,6 +363,12 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		return ObservableValue.of(this::size, this::getStamp, simpleChanges(), () -> Identifiable.wrap(getIdentity(), "size"));
 	}
 
+	/** @return An observable value for when this collection is empty */
+	default ObservableValue<Boolean> observeEmpty() {
+		// Can probably do this better with something custom later
+		return observeSize().map(LambdaUtils.printableFn(sz -> sz == 0, "==0", "==0"));
+	}
+
 	/**
 	 * @return An observable that fires a change event whenever any elements in it are added, removed or changed. These changes are batched
 	 *         by transaction when possible.
@@ -376,6 +384,72 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	@Override
 	default Observable<Causable> simpleChanges() {
 		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
+			class SimpleChangesSubscription implements Causable.TerminalAction, Consumer<ObservableCollectionEvent<?>>, Subscription {
+				private final Observer<? super Causable> theObserver;
+				boolean isSubscribed = true;
+				boolean hasRemoved;
+				/** Values in this are true (added) or false (changed) */
+				final Map<ElementId, Boolean> elementChanges = new LinkedHashMap<>();
+				final Causable.CausableKey key = Causable.key(this);
+
+				SimpleChangesSubscription(Observer<? super Causable> observer) {
+					theObserver = observer;
+				}
+
+				@Override
+				public void accept(ObservableCollectionEvent<?> evt) {
+					if (!isSubscribed)
+						return;
+					if (!hasRemoved) {
+						elementChanges.compute(evt.getElementId(), (__, added) -> {
+							switch (evt.getType()) {
+							case remove:
+								if (added == Boolean.TRUE)
+									return null;// Removed what was added--no net change
+								else {
+									hasRemoved = true;
+									return added;
+								}
+							case add:
+								return Boolean.TRUE;
+							default:
+								return added != null ? added : Boolean.FALSE;
+							}
+						});
+						if (hasRemoved)
+							elementChanges.clear();
+						evt.getRootCausable().onFinish(key);
+					}
+				}
+
+				@Override
+				public void finished(Causable cause, Map<Object, Object> values) {
+					if (hasRemoved) {
+						hasRemoved = false;
+						fire(cause);
+					} else if (!elementChanges.isEmpty()) {
+						elementChanges.clear();
+						fire(cause);
+					}
+				}
+
+				private void fire(Causable cause) {
+					if (!isSubscribed)
+						return;
+					isFiring = true;
+					try {
+						theObserver.onNext(cause);
+					} finally {
+						isFiring = false;
+					}
+				}
+
+				@Override
+				public void unsubscribe() {
+					isSubscribed = false;
+				}
+			}
+
 			private boolean isFiring;
 
 			@Override
@@ -385,22 +459,9 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			public Subscription subscribe(Observer<? super Causable> observer) {
-				boolean[] subscribed = { true };
-				Causable.CausableKey key = Causable.key((root, values) -> {
-					if (!subscribed[0])
-						return;
-					isFiring = true;
-					try {
-						observer.onNext(root);
-					} finally {
-						isFiring = false;
-					}
-				});
-
-				Subscription sub = ObservableCollection.this.onChange(evt -> {
-					evt.getRootCausable().onFinish(key);
-				});
-				return Subscription.forAll(() -> subscribed[0] = false, sub);
+				SimpleChangesSubscription sub = new SimpleChangesSubscription(observer);
+				Subscription onChangeSub = ObservableCollection.this.onChange(sub);
+				return Subscription.forAll(sub, onChangeSub);
 			}
 
 			@Override
@@ -448,7 +509,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	/** @return An observable value of the first or last element in the collection */
 	default ObservableFinderBuilder<E> observeTerminal() {
-		return new ObservableFinderBuilder<>(this, __ -> true);
+		return new ObservableFinderBuilder<>(this, LambdaUtils.TRUE);
 	}
 
 	/**
@@ -742,6 +803,15 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @return A collection containing all elements of the given collections
 	 */
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(ObservableCollection<? extends E>... colls) {
+		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
+	}
+
+	/**
+	 * @param <E> The super type of element in the collections
+	 * @param colls The collections to flatten
+	 * @return A collection containing all elements of the given collections
+	 */
+	static <E> CollectionDataFlow<?, ?, E> flattenCollections(Collection<? extends ObservableCollection<? extends E>> colls) {
 		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
 

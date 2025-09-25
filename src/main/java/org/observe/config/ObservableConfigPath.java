@@ -193,7 +193,7 @@ public class ObservableConfigPath {
 		 */
 		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi, boolean multiDepth) {
 			theName = name;
-			theAttributes = attributes;
+			theAttributes = attributes == null ? Collections.emptyMap() : attributes;
 			isMulti = multi || multiDepth;
 			isMultiDepth = multiDepth;
 		}

@@ -60,8 +60,8 @@ public class QuickShapeCollection<T> extends ExElement.Abstract implements Quick
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theValueName = elModels.getElementValueModelId(valueNameAttr);
 			theValueIndex = elModels.getElementValueModelId("shapeIndex");
-			elModels.satisfyElementValueType(theValueName, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getShapeType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theValueName, ModelTypes.Value,
+				Interpreted::getShapeType);
 		}
 
 		@Override
@@ -124,7 +124,7 @@ public class QuickShapeCollection<T> extends ExElement.Abstract implements Quick
 		super(id);
 		theValues = SettableValue.create();
 		theActiveValue = SettableValue.create();
-		theActiveValueIndex = SettableValue.create();
+		theActiveValueIndex = SettableValue.create(0);
 	}
 
 	public ObservableCollection<T> getValues() {

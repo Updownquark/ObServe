@@ -1,6 +1,7 @@
 package org.observe.config;
 
 import java.util.Set;
+import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.config.ObservableConfigFormat.EntityConfigCreator;
@@ -64,6 +65,30 @@ public abstract class SimpleValueCreator<E, E2 extends E> implements SyncValueCr
 	@Override
 	public Set<Integer> getRequiredFields() {
 		return theCreator.getRequiredFields();
+	}
+
+	@Override
+	public SimpleValueCreator<E, E2> between(ElementId after, ElementId before, boolean towardBeginning) {
+		SyncValueCreator.super.between(after, before, towardBeginning);
+		return this;
+	}
+
+	@Override
+	public SimpleValueCreator<E, E2> with(String fieldName, Object value) throws IllegalArgumentException {
+		SyncValueCreator.super.with(fieldName, value);
+		return this;
+	}
+
+	@Override
+	public <F> SimpleValueCreator<E, E2> with(Function<? super E2, F> fieldGetter, F value) throws IllegalArgumentException {
+		SyncValueCreator.super.with(fieldGetter, value);
+		return this;
+	}
+
+	@Override
+	public SimpleValueCreator<E, E2> copy(E template) {
+		SyncValueCreator.super.copy(template);
+		return this;
 	}
 
 	@Override

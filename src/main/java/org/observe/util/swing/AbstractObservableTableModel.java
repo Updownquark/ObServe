@@ -543,8 +543,10 @@ public abstract class AbstractObservableTableModel<R> {
 			Supplier<R> rowValue;
 			if (modelValue instanceof ObservableTreeModel.TreeNode) {
 				rowValue = () -> (R) ((ObservableTreeModel<?>.TreeNode) modelValue).getValuePath();
-			} else
+			} else if (modelValue != null)
 				rowValue = LambdaUtils.constantSupplier(modelValue, modelValue::toString, modelValue);
+			else
+				rowValue = LambdaUtils.alwaysNull();
 			if (value instanceof ObservableTreeModel.TreeNode)
 				value = ((ObservableTreeModel<?>.TreeNode) value).get();
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowValue, (C) value, //
@@ -668,6 +670,8 @@ public abstract class AbstractObservableTableModel<R> {
 					setToolTip(editTT != null ? editTT : category.getTooltip(cell), false);
 				} else if (category != null) // Column header
 					setToolTip(category.getHeaderTooltip(), true);
+				else
+					setToolTip(null, false);
 			}
 
 			MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {

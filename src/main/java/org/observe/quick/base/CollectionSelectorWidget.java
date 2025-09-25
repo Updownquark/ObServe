@@ -84,8 +84,8 @@ public abstract class CollectionSelectorWidget<T> extends QuickValueWidget.Abstr
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theActiveValueVariable = elModels.getElementValueModelId(session.getAttributeText("active-value-name"));
 			theSelectedVariable = elModels.getElementValueModelId("selected");
-			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theActiveValueVariable, ModelTypes.Value,
+				Interpreted::getValueType);
 		}
 
 		@Override

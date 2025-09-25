@@ -139,7 +139,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 
@@ -578,7 +578,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 				syncChildren(getDefinition().getChildren(), theChildren,
 					def -> (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<A>, ?>) def.interpretValue(this),
-					v -> v.updateValue(getExpressoEnv(v.getDocument())));
+					v -> v.updateValue());
 			}
 
 			@Override

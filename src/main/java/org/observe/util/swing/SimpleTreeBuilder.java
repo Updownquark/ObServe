@@ -277,7 +277,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 
 	@Override
 	public String getItemName() {
-		return theItemName;
+		if (theItemName == null)
+			return "item";
+		else
+			return theItemName;
 	}
 
 	@Override

@@ -298,7 +298,8 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
 		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, true, getUntil());
-		actionMod.accept(ta);
+		if (actionMod != null)
+			actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
 	}
@@ -1253,9 +1254,9 @@ extends SimpleComponentEditor<T, P> implements AbstractTableBuilder<R, T, P>, Co
 				forAllVisibleData(model, row -> {
 					Object cellValue = column.getCategoryValue(row);
 					boolean cellSelected = getEditor().isCellSelected(row.getRowIndex(), columnIndex);
-					ModelCell<R, Object> cell = new ModelCell.RowWrapper<>(row, cellValue, columnIndex, false, cellSelected);
-					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
-						cell, CellRenderContext.DEFAULT);
+					// Get the renderer from the table because e.g. in a tree table this won't be the same as the observable cell renderer
+					Component render = getEditor().getCellRenderer(row.getRowIndex(), columnIndex)
+						.getTableCellRendererComponent(getEditor(), cellValue, cellSelected, cellSelected, row.getRowIndex(), columnIndex);
 					int min = render.getMinimumSize().width;
 					int pref = render.getPreferredSize().width;
 					int max = render.getMaximumSize().width;

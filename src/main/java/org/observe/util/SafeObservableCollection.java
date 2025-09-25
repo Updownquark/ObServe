@@ -399,8 +399,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				return true;
 		}
 		isFlushing = true;
+		Transaction synthLock = theSyntheticCollection.tryLock(true, null);
 		boolean flushed = false;
-		try (Transaction t = theSyntheticCollection.lock(true, null)) {
+		try {
+			if(synthLock==null)
+				return true;
 			// First, the removals
 			Map<ElementId, CollectionElementMove> moves = BetterMap.empty();
 			if (!theRemovedElements.isEmpty()) {
@@ -478,6 +481,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			isFlushing = false;
 			theFlushLock.set(false);
 			sourceLock.close();
+			if(synthLock!=null)
+				synthLock.close();
 		}
 		return flushed;
 	}

@@ -35,14 +35,14 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the values in the collection
  */
-public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValueRenderable<T> {
+public class QuickVirtualMultiPane<T> extends QuickWidget.Abstract implements MultiValueRenderable<T> {
 	/** The XML name of this element */
-	public static final String TILED_PANE = "tiled-pane";
+	public static final String VIRTUAL_MULTI_PANE = "virtual-multi-pane";
 
-	/** {@link QuickTiledPane} definition */
+	/** {@link QuickVirtualMultiPane} definition */
 	@ExMultiElementTraceable({
 		@ExElementTraceable(toolkit = QuickXInterpretation.X,
-			qonfigType = TILED_PANE,
+			qonfigType = VIRTUAL_MULTI_PANE,
 			interpretation = Interpreted.class,
 			instance = QuickComboBox.class),
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
@@ -50,7 +50,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		interpretation = Interpreted.class,
 		instance = QuickComboBox.class)//
 	})
-	public static class Def extends QuickWidget.Def.Abstract<QuickTiledPane<?>> implements MultiValueRenderable.Def<QuickTiledPane<?>> {
+	public static class Def extends QuickWidget.Def.Abstract<QuickVirtualMultiPane<?>> implements MultiValueRenderable.Def<QuickVirtualMultiPane<?>> {
 		private ModelComponentId theActiveValueVariable;
 		private ModelComponentId theSelectedVariable;
 		private ModelComponentId theValueIndexVariable;
@@ -67,7 +67,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 
 		/** @return The values, each of which to represent as a separate content widget */
-		@QonfigAttributeGetter(asType = TILED_PANE, value = "values")
+		@QonfigAttributeGetter(asType = VIRTUAL_MULTI_PANE, value = "values")
 		public CompiledExpression getValues() {
 			return theValues;
 		}
@@ -87,20 +87,20 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return theValueIndexVariable;
 		}
 
-		/** @return The layout for the content of this tiled pane */
-		@QonfigAttributeGetter(asType = TILED_PANE, value = "layout")
+		/** @return The layout for the content of this multi pane */
+		@QonfigAttributeGetter(asType = VIRTUAL_MULTI_PANE, value = "layout")
 		public QuickLayout.Def<?> getLayout() {
 			return getAddOn(QuickLayout.Def.class);
 		}
 
-		/** @return The renderer to render each value of this tiled pane */
+		/** @return The renderer to render each value of this multi pane */
 		@QonfigChildGetter(asType = "rendering", value = "renderer")
 		public QuickWidget.Def<?> getRenderer() {
 			return theRenderer;
 		}
 
 		/** @return Whether all values render to the same size */
-		@QonfigAttributeGetter(asType = TILED_PANE, value = "constant-size")
+		@QonfigAttributeGetter(asType = VIRTUAL_MULTI_PANE, value = "constant-size")
 		public boolean isConstantSizing() {
 			return isConstantSizing;
 		}
@@ -114,8 +114,8 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theValueIndexVariable = elModels.getElementValueModelId("rowIndex");
 			theValues = getAttributeExpression("values", session);
-			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getValueType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theActiveValueVariable, ModelTypes.Value,
+				Interpreted::getValueType);
 
 			List<ExpressoQIS> renderer = session.forChildren("renderer");
 			if (renderer.isEmpty())
@@ -127,18 +127,18 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 
 		@Override
-		public QuickWidget.Interpreted<? extends QuickTiledPane<?>> interpret(ExElement.Interpreted<?> parent) {
+		public QuickWidget.Interpreted<? extends QuickVirtualMultiPane<?>> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
 	/**
-	 * {@link QuickTiledPane} interpretation
+	 * {@link QuickVirtualMultiPane} interpretation
 	 *
 	 * @param <T> The type of the values in the collection
 	 */
-	public static class Interpreted<T> extends QuickWidget.Interpreted.Abstract<QuickTiledPane<T>>
-	implements MultiValueRenderable.Interpreted<T, QuickTiledPane<T>> {
+	public static class Interpreted<T> extends QuickWidget.Interpreted.Abstract<QuickVirtualMultiPane<T>>
+	implements MultiValueRenderable.Interpreted<T, QuickVirtualMultiPane<T>> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 		private QuickWidget.Interpreted<?> theRenderer;
 
@@ -146,7 +146,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget
 		 */
-		protected Interpreted(QuickTiledPane.Def definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(QuickVirtualMultiPane.Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -171,12 +171,12 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 			return theValues;
 		}
 
-		/** @return The layout for the content of this tiled pane */
+		/** @return The layout for the content of this multi pane */
 		public QuickLayout.Interpreted<?> getLayout() {
 			return getAddOn(QuickLayout.Interpreted.class);
 		}
 
-		/** @return The renderer to render each value of this tiled pane */
+		/** @return The renderer to render each value of this multi pane */
 		public QuickWidget.Interpreted<?> getRenderer() {
 			return theRenderer;
 		}
@@ -189,8 +189,8 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		}
 
 		@Override
-		public QuickTiledPane<T> create() {
-			return new QuickTiledPane<>(getIdentity());
+		public QuickVirtualMultiPane<T> create() {
+			return new QuickVirtualMultiPane<>(getIdentity());
 		}
 	}
 
@@ -207,7 +207,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	private boolean isConstantSizing;
 
 	/** @param id The element ID for this widget */
-	protected QuickTiledPane(Object id) {
+	protected QuickVirtualMultiPane(Object id) {
 		super(id);
 		theValues = SettableValue.create();
 		theActiveValue = SettableValue.create();
@@ -246,12 +246,12 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 		return theValueIndex;
 	}
 
-	/** @return The layout for the content of this tiled pane */
+	/** @return The layout for the content of this multi pane */
 	public QuickLayout getLayout() {
 		return getAddOn(QuickLayout.class);
 	}
 
-	/** @return The renderer to render each value of this tiled pane */
+	/** @return The renderer to render each value of this multi pane */
 	public QuickWidget getRenderer() {
 		return theRenderer;
 	}
@@ -265,7 +265,7 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) throws ModelInstantiationException {
 		super.doUpdate(interpreted);
 
-		QuickTiledPane.Interpreted<T> myInterpreted = (QuickTiledPane.Interpreted<T>) interpreted;
+		QuickVirtualMultiPane.Interpreted<T> myInterpreted = (QuickVirtualMultiPane.Interpreted<T>) interpreted;
 		theValuesInstantiator = myInterpreted.getValues().instantiate();
 		theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 		theValueIndexVariable = myInterpreted.getDefinition().getValueIndexVariable();
@@ -308,8 +308,8 @@ public class QuickTiledPane<T> extends QuickWidget.Abstract implements MultiValu
 	}
 
 	@Override
-	public QuickTiledPane<T> copy(ExElement parent) {
-		QuickTiledPane<T> copy = (QuickTiledPane<T>) super.copy(parent);
+	public QuickVirtualMultiPane<T> copy(ExElement parent) {
+		QuickVirtualMultiPane<T> copy = (QuickVirtualMultiPane<T>) super.copy(parent);
 
 		copy.theValues = SettableValue.create();
 		copy.theActiveValue = SettableValue.create();

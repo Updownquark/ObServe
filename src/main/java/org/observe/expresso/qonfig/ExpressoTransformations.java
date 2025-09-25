@@ -27,7 +27,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -473,7 +472,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 				try {
 					theSource = interpret(getDefinition().getSource(),
@@ -1259,9 +1258,9 @@ public class ExpressoTransformations {
 
 			for (CombineWith<?> combine : theCombinedValues)
 				withElModel.satisfyElementValueType(combine.getValueVariable(), ModelTypes.Value, //
-					(interp, env) -> interp.interpret(combine.getElementValue(), ModelTypes.Value.any()).getType());
+					interp -> interp.interpret(combine.getElementValue(), ModelTypes.Value.any()).getType());
 			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceAs, ModelTypes.Value, //
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+				interp -> ModelTypes.Value.forType(interp.getSourceType()));
 			if (thePreviousResultAs != null) {
 				if (refersToSource(theMap.getExpression(), thePreviousResultAs.getName())) {
 					VariableType type = getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
@@ -1272,7 +1271,7 @@ public class ExpressoTransformations {
 					}
 				}
 				withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(thePreviousResultAs,
-					ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getOrEvalTargetType()));
+					ModelTypes.Value, interp -> ModelTypes.Value.forType(interp.getOrEvalTargetType()));
 			}
 
 		}
@@ -1903,7 +1902,7 @@ public class ExpressoTransformations {
 			qonfigType = "map-reverse",
 			interpretation = AbstractMapReverse.Interpreted.class),
 		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
-		qonfigType = "modify-source",
+		qonfigType = "abst-map-reverse",
 		interpretation = AbstractMapReverse.Interpreted.class) })
 	public static abstract class AbstractMapReverse<E extends ExElement> extends ExElement.Def.Abstract<E>
 	implements CompiledMapReverse<E> {
@@ -1948,25 +1947,25 @@ public class ExpressoTransformations {
 		}
 
 		/** @return Whether and when the reverse operation is enabled */
-		@QonfigAttributeGetter(asType = "modify-source", value = "enabled")
+		@QonfigAttributeGetter(asType = "abst-map-reverse", value = "enabled")
 		public CompiledExpression getEnabled() {
 			return theEnabled;
 		}
 
 		/** @return Whether the reverse operation is enabled for a given target value */
-		@QonfigAttributeGetter(asType = "modify-source", value = "accept")
+		@QonfigAttributeGetter(asType = "abst-map-reverse", value = "accept")
 		public CompiledExpression getAccept() {
 			return theAccept;
 		}
 
 		/** @return Whether this reverse operation can add values to a collection */
-		@QonfigAttributeGetter(asType = "modify-source", value = "add")
+		@QonfigAttributeGetter(asType = "abst-map-reverse", value = "add")
 		public CompiledExpression getAdd() {
 			return theAdd;
 		}
 
 		/** @return Whether this reverse operation can add a particular value to a collection */
-		@QonfigAttributeGetter(asType = "modify-source", value = "add-accept")
+		@QonfigAttributeGetter(asType = "abst-map-reverse", value = "add-accept")
 		public CompiledExpression getAddAccept() {
 			return theAddAccept;
 		}
@@ -2011,8 +2010,8 @@ public class ExpressoTransformations {
 			}
 			isStateful = stateful;
 
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, E>, SettableValue<?>> satisfyElementValueType(theTargetVariable,
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getTargetType()));
+			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, E>, SettableValue<?>> satisfyElementSingleValueType(theTargetVariable,
+				ModelTypes.Value, Interpreted::getTargetType);
 		}
 
 		/**
@@ -2503,12 +2502,27 @@ public class ExpressoTransformations {
 		qonfigType = "modify-source",
 		interpretation = SourceModifyingReverse.Interpreted.class)
 	public static class SourceModifyingReverse<E extends ExElement> extends AbstractMapReverse<E> {
+		private boolean isSourceModifying;
+
 		/**
 		 * @param parent The &lt;map-to> parent for this map-reverse
 		 * @param qonfigType The Qonfig type of this add-on
 		 */
 		public SourceModifyingReverse(CompiledTransformation<?, ?, ?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
+		}
+
+		/** @return Whether this reverse operation requires propagation of the updated value to the source */
+		@QonfigAttributeGetter("requires-source-modification")
+		public boolean requiresSourceModification() {
+			return isSourceModifying;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+
+			isSourceModifying = session.getAttribute("requires-source-modification", boolean.class);
 		}
 
 		@Override
@@ -2552,7 +2566,7 @@ public class ExpressoTransformations {
 				return new Instantiator<>(instantiateLocalModels(), getDefinition().getTargetVariable(), //
 					getEnabled() == null ? null : getEnabled().instantiate(), getAccept() == null ? null : getAccept().instantiate(), //
 						getAdd() == null ? null : getAdd().instantiate(), getAddAccept() == null ? null : getAddAccept().instantiate(),
-							getDefinition().isStateful(), getReverse().instantiate());
+							getDefinition().isStateful(), getReverse().instantiate(), getDefinition().requiresSourceModification());
 			}
 		}
 
@@ -2563,11 +2577,14 @@ public class ExpressoTransformations {
 		 * @param <T> The target type of the transformation
 		 */
 		public static class Instantiator<S, T> extends AbstractMapReverse.Instantiator<S, T> {
+			private boolean isSourceModifying;
+
 			Instantiator(DocumentMap<ModelInstantiator> localModel, ModelComponentId targetVariable,
 				ModelValueInstantiator<SettableValue<String>> enabled, ModelValueInstantiator<SettableValue<String>> accept,
 				ModelValueInstantiator<SettableValue<S>> add, ModelValueInstantiator<SettableValue<String>> addAccept, boolean stateful,
-				ModelValueInstantiator<ObservableAction> reverse) {
+				ModelValueInstantiator<ObservableAction> reverse, boolean sourceModifying) {
 				super(localModel, targetVariable, enabled, accept, add, addAccept, stateful, reverse);
+				isSourceModifying = sourceModifying;
 			}
 
 			@Override
@@ -2591,7 +2608,7 @@ public class ExpressoTransformations {
 					reversedEvld.act(null);
 				};
 				return new Transformation.SourceModifyingReverse<>(reverseFn, parameters.enabledFn, parameters.acceptFn, parameters.addFn,
-					parameters.addAcceptFn);
+					parameters.addAcceptFn, isSourceModifying);
 			}
 		}
 	}
@@ -2631,9 +2648,8 @@ public class ExpressoTransformations {
 			if (sourceAs != null) {
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theSourceAsVariable = elModels.getElementValueModelId(sourceAs);
-				elModels.satisfyElementValueType(theSourceAsVariable, ModelTypes.Value, (interp, env) -> {
-					return ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getSourceValueType());
-				});
+				elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceAsVariable, ModelTypes.Value,
+					Interpreted::getSourceValueType);
 			} else
 				theSourceAsVariable = null;
 		}

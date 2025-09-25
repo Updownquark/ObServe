@@ -32,7 +32,6 @@ import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableValueSet;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -467,9 +466,8 @@ public class ExpressoQonfigValues {
 			String targetAsName = session.getAttributeText("target-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theTargetAs = elModels.getElementValueModelId(targetAsName);
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theTargetAs, ModelTypes.Value, (interp, env) -> {
-				return ModelTypes.Value.forType(interp.getOrEvalSourceType(env));
-			});
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theTargetAs, ModelTypes.Value,
+				Interpreted::getOrEvalSourceType);
 			syncChildren(ModelValueElement.CompiledSynth.class, thePostActions, session.forChildren("post-action"));
 		}
 
@@ -531,24 +529,21 @@ public class ExpressoQonfigValues {
 			}
 
 			/**
-			 * @param env The expresso environment to use to interpret the expression
 			 * @return The type of this value
 			 * @throws ExpressoInterpretationException If the value type could not be determined
 			 */
-			protected TypeToken<T> getOrEvalSourceType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			protected TypeToken<T> getOrEvalSourceType() throws ExpressoInterpretationException {
 				return (TypeToken<T>) theSource.getType().getType(0);
 			}
 
 			@Override
 			protected void doUpdate() throws ExpressoInterpretationException {
-				InterpretedExpressoEnv env = getDefaultEnv();
-				theSource = getDefinition().getSource().interpret(ModelTypes.Value.anyAsV(), env);
+				theSource = interpret(getDefinition().getSource(), ModelTypes.Value.anyAsV());
 
 				super.doUpdate();
 
-				env = getDefaultEnv();
-				getOrEvalSourceType(env);
-				theSave = getDefinition().getSave().interpret(ModelTypes.Action.instance(), env);
+				getOrEvalSourceType();
+				theSave = interpret(getDefinition().getSave(), ModelTypes.Action.instance());
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					syncChildren(getDefinition().getPostActions(), thePostActions, //
 						d -> (Action.Interpreted) d.interpret(getDefaultEnv()),
@@ -2429,9 +2424,8 @@ public class ExpressoQonfigValues {
 			theAction = getValueExpression(session);
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theEventVariable = elModels.getElementValueModelId("event");
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theEventVariable, ModelTypes.Value, (interp, env) -> {
-				return ModelTypes.Value.forType(interp.getOrEvalEventType());
-			});
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theEventVariable, ModelTypes.Value,
+				Interpreted::getOrEvalEventType);
 		}
 
 		@Override
@@ -2496,7 +2490,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			public void updateValue() throws ExpressoInterpretationException {
 				update();
 			}
 
@@ -3208,7 +3202,7 @@ public class ExpressoQonfigValues {
 					ModelTypes.Action.instance());
 				try (Transaction t = ModelValueElement.INTERPRETING_PARENTS.installParent(this)) {
 					this.syncChildren(getDefinition().getBody(), theBody,
-						def -> def.interpretValue(this), b -> b.updateValue(getExpressoEnv(b.getDocument())));
+						def -> def.interpretValue(this), b -> b.updateValue());
 				}
 			}
 

@@ -256,6 +256,22 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	}
 
 	/**
+	 * @param <V> The super-type of all observables to or
+	 * @param obs The observables to combine
+	 * @return An observable that pushes a value each time any of the given observables pushes a value
+	 */
+	public static <V> Observable<V> or(List<? extends Observable<? extends V>> obs) {
+		switch (obs.size()) {
+		case 0:
+			return empty();
+		case 1:
+			return (Observable<V>) obs.get(0);
+		default:
+			return new OrObservable<>(obs);
+		}
+	}
+
+	/**
 	 * @param obs The observable to watch
 	 * @return An observable that fires when the source's root causable finishes.
 	 * @see Causable#getRootCausable()
@@ -1801,6 +1817,23 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 					changeSources.put(id, cs.getValue());
 			}
 			return changeSources;
+		}
+
+		public boolean containsAny(CoreChangeSources other) {
+			if (other == null || other == EMPTY)
+				return false;
+			if (theChangeSources.size() <= other.theChangeSources.size()) {
+				for (Object cs : theChangeSources.keySet()) {
+					if (other.theChangeSources.containsKey(cs))
+						return true;
+				}
+			} else {
+				for (Object cs : other.theChangeSources.keySet()) {
+					if (theChangeSources.containsKey(cs))
+						return true;
+				}
+			}
+			return false;
 		}
 
 		@Override

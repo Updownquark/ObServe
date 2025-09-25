@@ -16,6 +16,9 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 	/** The XML name of this element */
 	public static final String MULTI_VALUE_RENDERABLE = "multi-value-renderable";
 
+	/** The name of the attribute for the name of the variable by which the active value will be available to expressions */
+	public static final String ACTIVE_VALUE_NAME = "active-value-name";
+
 	/**
 	 * {@link MultiValueRenderable} definition
 	 *
@@ -30,7 +33,7 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		 * @return The model ID of the variable by which the active value (the one being rendered or acted upon) will be available to
 		 *         expressions
 		 */
-		@QonfigAttributeGetter("active-value-name")
+		@QonfigAttributeGetter(ACTIVE_VALUE_NAME)
 		ModelComponentId getActiveValueVariable();
 	}
 

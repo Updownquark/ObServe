@@ -14,6 +14,8 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
@@ -67,6 +69,7 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickKeyListener;
 import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickRenderer;
+import org.observe.quick.QuickSizeListener;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWindow;
@@ -577,6 +580,62 @@ public class QuickCoreSwing implements QuickInterpretation {
 						keyCode.set(code, evt);
 						if (ql.testFilter() && ql.getAction().isEnabled().get() == null)
 							ql.getAction().act(evt);
+					}
+				});
+			};
+		});
+		tx.with(QuickSizeListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+			return (component, ql) -> {
+				QuickSizeListener sl = (QuickSizeListener) ql;
+				component.addComponentListener(new ComponentListener() {
+					{
+						setSize(null);
+					}
+
+					private void setSize(Object cause) {
+						int oldW = sl.getWidth().get();
+						int oldH = sl.getHeight().get();
+						int newW = component.getWidth();
+						int newH = component.getHeight();
+						Transaction lock;
+						if (oldW == newW) {
+							if (oldH == newH)
+								return;
+							else
+								lock = sl.getHeight().lock(true, cause);
+						} else if (oldH == newH)
+							lock = sl.getWidth().lock(true, cause);
+						else
+							lock = Transaction.and(//
+								sl.getWidth().lock(true, cause), //
+								sl.getHeight().lock(true, cause));
+						try {
+							if (oldW != newW)
+								sl.getWidth().set(newW);
+							if (oldH != newH)
+								sl.getHeight().set(newH);
+							if (cause != null && ql.testFilter() && ql.getAction().isEnabled().get() == null)
+								ql.getAction().act(cause);
+						} finally {
+							lock.close();
+						}
+					}
+
+					@Override
+					public void componentResized(ComponentEvent e) {
+						setSize(e);
+					}
+
+					@Override
+					public void componentMoved(ComponentEvent e) {
+					}
+
+					@Override
+					public void componentShown(ComponentEvent e) {
+					}
+
+					@Override
+					public void componentHidden(ComponentEvent e) {
 					}
 				});
 			};

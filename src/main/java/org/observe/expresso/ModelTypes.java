@@ -65,6 +65,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -584,9 +585,13 @@ public class ModelTypes {
 					 * E.g. a method which accepts a SettableValue<Double> instead of just a double
 					 * so it can observe changes in the model value instead of just the current value. */
 					ModelTypeData<?> convertModel = ALL_TYPES.get(TypeTokens.getRawType(dest.getType(0)), TypeMatch.SUPER_TYPE);
-					String location = env.reporting().getFileLocation() == null ? ""
-						: (env.reporting().getPosition().toShortString() + ": ");
-					String uModMsg = location + source + "->" + dest + " wrapping is not reversible";
+					Function<Object, String> uModMsg;
+					if (env.reporting().getFileLocation() == null) {
+						uModMsg = __ -> source + "->" + dest + " wrapping is not reversible";
+					} else {
+						LocatedFilePosition position = env.reporting().getPosition();
+						uModMsg = __ -> position.toShortString() + ": " + source + "->" + dest + " wrapping is not reversible";
+					}
 					if (convertModel != null) {
 						ModelInstanceType<?, ?> destModelType = convertModel.getConvertedType(dest.getType(0));
 						ModelInstanceConverter<?, ?> valueConverter = source.convert(destModelType, env);
@@ -610,9 +615,9 @@ public class ModelTypes {
 									return SettableValue.asSettable(//
 										ObservableValue.of(LambdaUtils.constantSupplier(converted, toString, id),
 											((CausableChanging) converted).simpleChanges()),
-										__ -> uModMsg);
+										uModMsg);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of(converted), __ -> uModMsg);
+									return SettableValue.asSettable(ObservableValue.of(converted), uModMsg);
 								}
 							}
 
@@ -647,9 +652,9 @@ public class ModelTypes {
 									container = SettableValue.asSettable(//
 										ObservableValue.of(LambdaUtils.constantSupplier(sourceV, toString, id),
 											((CausableChanging) sourceV).simpleChanges()),
-										__ -> uModMsg);
+										uModMsg);
 								} else {
-									return SettableValue.asSettable(ObservableValue.of(sourceV), __ -> uModMsg);
+									return SettableValue.asSettable(ObservableValue.of(sourceV), uModMsg);
 								}
 								return valueConverter.convert(container);
 							}

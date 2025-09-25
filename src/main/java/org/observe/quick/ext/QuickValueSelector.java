@@ -176,12 +176,12 @@ public class QuickValueSelector<A, I> extends QuickWidget.Abstract {
 				theExcludeAllConfig.reporting()
 				.warn("<button> sub-type is not respected here. This handle is only used for configuration.");
 
-			elModels.satisfyElementValueType(theAvailableValueName, ModelTypes.Value, //
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getAvailableValueType()));
-			elModels.satisfyElementValueType(theAvailableRowsName, ModelTypes.Collection, //
-				(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getAvailableValueType()));
-			elModels.satisfyElementValueType(theIncludedRowsName, ModelTypes.Collection, //
-				(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getIncludedValueType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theAvailableValueName, ModelTypes.Value, //
+				Interpreted::getAvailableValueType);
+			elModels.<Interpreted<?, ?>, ObservableCollection<?>> satisfyElementSingleValueType(theAvailableRowsName, ModelTypes.Collection, //
+				Interpreted::getAvailableValueType);
+			elModels.<Interpreted<?, ?>, ObservableCollection<?>> satisfyElementSingleValueType(theIncludedRowsName, ModelTypes.Collection, //
+				Interpreted::getIncludedValueType);
 		}
 
 		@Override

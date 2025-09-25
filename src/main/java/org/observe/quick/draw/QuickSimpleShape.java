@@ -14,19 +14,18 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.Positionable;
 import org.observe.quick.QuickSize;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
+public interface QuickSimpleShape extends QuickBorderedShape {
 	public static final String SIMPLE_SHAPE = "simple-shape";
 
 	@ExElementTraceable(toolkit = QuickDrawInterpretation.DRAW,
 		qonfigType = SIMPLE_SHAPE,
 		interpretation = Interpreted.class,
 		instance = QuickSimpleShape.class)
-	public interface Def<E extends QuickSimpleShape> extends QuickBorderedShape.Def<E>, QuickRotated.Def<E> {
+	public interface Def<E extends QuickSimpleShape> extends QuickBorderedShape.Def<E> {
 		@QonfigAttributeGetter("width")
 		CompiledExpression getWidth();
 
@@ -38,7 +37,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 
 		public abstract class Abstract<E extends QuickSimpleShape> extends QuickBorderedShape.Def.Abstract<E>
 		implements QuickSimpleShape.Def<E> {
-			private CompiledExpression theRotation;
 			private CompiledExpression theWidth;
 			private CompiledExpression theHeight;
 			/**
@@ -47,11 +45,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
-			}
-
-			@Override
-			public CompiledExpression getRotation() {
-				return theRotation;
 			}
 
 			@Override
@@ -67,7 +60,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theRotation = getAttributeExpression("rotation", session);
 				theWidth = getAttributeExpression("width", session);
 				theHeight = getAttributeExpression("height", session);
 
@@ -108,7 +100,7 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 		}
 	}
 
-	public interface Interpreted<E extends QuickSimpleShape> extends QuickBorderedShape.Interpreted<E>, QuickRotated.Interpreted<E> {
+	public interface Interpreted<E extends QuickSimpleShape> extends QuickBorderedShape.Interpreted<E> {
 		@Override
 		QuickSimpleShape.Def<? super E> getDefinition();
 
@@ -121,7 +113,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 
 		public abstract class Abstract<E extends QuickSimpleShape> extends QuickBorderedShape.Interpreted.Abstract<E>
 		implements QuickSimpleShape.Interpreted<E> {
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> theRotation;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theWidth;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theHeight;
 
@@ -132,11 +123,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 			@Override
 			public QuickSimpleShape.Def<? super E> getDefinition() {
 				return (QuickSimpleShape.Def<? super E>) super.getDefinition();
-			}
-
-			@Override
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Float>> getRotation() {
-				return theRotation;
 			}
 
 			@Override
@@ -152,7 +138,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 			@Override
 			protected void doUpdate() throws ExpressoInterpretationException {
 				super.doUpdate();
-				theRotation = interpret(getDefinition().getRotation(), ModelTypes.Value.forType(Float.class));
 				theWidth = interpret(getDefinition().getWidth(), ModelTypes.Value.forType(QuickSize.class));
 				theHeight = interpret(getDefinition().getHeight(), ModelTypes.Value.forType(QuickSize.class));
 			}
@@ -167,24 +152,16 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 	public QuickSimpleShape copy(ExElement parent);
 
 	public abstract class Abstract extends QuickShape.Abstract implements QuickSimpleShape {
-		private ModelValueInstantiator<SettableValue<Float>> theRotationInstantiator;
 		private ModelValueInstantiator<SettableValue<QuickSize>> theWidthInstantiator;
 		private ModelValueInstantiator<SettableValue<QuickSize>> theHeightInstantiator;
 
-		private SettableValue<SettableValue<Float>> theRotation;
 		private SettableValue<SettableValue<QuickSize>> theWidth;
 		private SettableValue<SettableValue<QuickSize>> theHeight;
 
 		protected Abstract(Object id) {
 			super(id);
-			theRotation = SettableValue.create();
 			theWidth = SettableValue.create();
 			theHeight = SettableValue.create();
-		}
-
-		@Override
-		public SettableValue<Float> getRotation() {
-			return SettableValue.flatten(theRotation, LambdaUtils.constantSupplier(0.0f));
 		}
 
 		@Override
@@ -207,18 +184,16 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 			super.doUpdate(interpreted);
 
 			QuickSimpleShape.Interpreted<?> myInterpreted = (QuickSimpleShape.Interpreted<?>) interpreted;
-			theRotationInstantiator = instantiate(myInterpreted.getRotation());
-			theWidthInstantiator = instantiate(myInterpreted.getWidth());
-			theHeightInstantiator = instantiate(myInterpreted.getHeight());
+			theWidthInstantiator = ExElement.instantiate(myInterpreted.getWidth());
+			theHeightInstantiator = ExElement.instantiate(myInterpreted.getHeight());
 		}
 
 		@Override
 		protected ModelSetInstance doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			myModels = super.doInstantiate(myModels);
 
-			theRotation.set(get(theRotationInstantiator, myModels));
-			theWidth.set(get(theWidthInstantiator, myModels));
-			theHeight.set(get(theHeightInstantiator, myModels));
+			theWidth.set(ExElement.get(theWidthInstantiator, myModels));
+			theHeight.set(ExElement.get(theHeightInstantiator, myModels));
 
 			return myModels;
 		}
@@ -227,7 +202,6 @@ public interface QuickSimpleShape extends QuickBorderedShape, QuickRotated {
 		public QuickSimpleShape.Abstract copy(ExElement parent) {
 			QuickSimpleShape.Abstract copy = (QuickSimpleShape.Abstract) super.copy(parent);
 
-			copy.theRotation = SettableValue.create();
 			copy.theWidth = SettableValue.create();
 			copy.theHeight = SettableValue.create();
 

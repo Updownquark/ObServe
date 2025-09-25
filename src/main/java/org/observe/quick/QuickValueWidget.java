@@ -98,8 +98,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				theDisabled = getAttributeExpression("disable-with", session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theValueVariable = elModels.getElementValueModelId(valueName);
-				elModels.satisfyElementValueType(theValueVariable, ModelTypes.Value,
-					(interp, env) -> ((Interpreted<?, ?>) interp).getOrInitValue().getType());
+				elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theValueVariable, ModelTypes.Value,
+					interp -> interp.getOrInitValue().getType());
 			}
 		}
 	}

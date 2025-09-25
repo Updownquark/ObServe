@@ -47,7 +47,7 @@ public class AttributeReferenceExpression implements ObservableExpression {
 
 	@Override
 	public int getExpressionLength() {
-		return theAttributeName.length() + 2;
+		return theAttributeName.length() + 3;
 	}
 
 	@Override
@@ -61,7 +61,7 @@ public class AttributeReferenceExpression implements ObservableExpression {
 		ModelComponentId modelValueName = env.getAttribute(theAttributeName);
 		if (modelValueName == null)
 			throw new ExpressoCompilationException("'" + theAttributeName + "' is not an available attribute name",
-				env.reporting().at(1).getPosition(), theAttributeName.length());
+				env.reporting().at(2).getPosition(), theAttributeName.length());
 		return env.getModels().getComponent(modelValueName).getModelType(env);
 	}
 

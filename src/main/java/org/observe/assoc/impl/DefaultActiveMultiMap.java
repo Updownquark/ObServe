@@ -462,6 +462,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 					oldSourceIter.remove();
 				}
 			}
+			// System.out.println("Key " + getKey() + " maps to " + newSources);
 			// Register this key for new source elements
 			for (ElementId source : newSources) {
 				MapEntryHandle<ElementId, Set<KeyEntry>> sourceEntry = theKeysBySourceElement.getOrPutEntry(source, __ -> new HashSet<>(),
@@ -616,7 +617,9 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 			// Initialize and insert into all keys the new value belongs to
 			SortedSet<KeyEntry> newKeys = new TreeSet<>(KeyEntry::compareBySource);
-			for (ElementId source : getValueManager().getSourceElements(theValueElement, getSourceCollection())) {
+			BetterList<ElementId> sourceEls = getValueManager().getSourceElements(theValueElement, getSourceCollection());
+			// System.out.println("Value " + get() + " maps to " + sourceEls);
+			for (ElementId source : sourceEls) {
 				if (source.isPresent()) {
 					Set<KeyEntry> sourceKeys = theKeysBySourceElement.get(source);
 					if (sourceKeys != null)
@@ -1597,8 +1600,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public CollectionElement<V> getAdjacentElement(ElementId elementId, boolean next) {
 			try (Transaction t = lock(false, null)) {
-				KeyEntry entry = getCurrentEntry(true);
-				return entry.getValues().getAdjacentElement(elementId, next);
+				KeyEntry entry = getCurrentEntry(false);
+				return entry == null ? null : entry.getValues().getAdjacentElement(elementId, next);
 			}
 		}
 

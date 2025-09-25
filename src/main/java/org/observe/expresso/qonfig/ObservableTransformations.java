@@ -496,8 +496,8 @@ public class ObservableTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theMap = getAttributeExpression("map", session);
-			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementSingleValueType(theSourceVariable, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override
@@ -674,8 +674,8 @@ public class ObservableTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = getAttributeExpression("test", session);
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementSingleValueType(theSourceVariable, ModelTypes.Value,
+				Interpreted::getSourceType);
 		}
 
 		@Override

@@ -65,6 +65,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	Observable<ObservableValueEvent<T>> noInitChanges();
 
+	/**
+	 * @return An observable value identical to this one, but which will not propagate {@link ObservableValueEvent#isUpdate() update} events
+	 */
+	default ObservableValue<T> noUpdates() {
+		return new NoUpdatesValue<>(this);
+	}
+
 	@Override
 	default Observable<? extends Causable> simpleChanges() {
 		return noInitChanges();
@@ -452,6 +459,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		return new SafeObservableValue<>(this, threading);
 	}
 
+	/** @return A value the same as this, but which caches its value for performance */
+	default ObservableValue<T> cached() {
+		return new CachedObservableValue<>(this);
+	}
+
 	/**
 	 * @param <X> The compile-time type of the value to wrap
 	 * @param value The value to wrap
@@ -546,6 +558,22 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	}
 
 	/**
+	 * @param values Any number of observable booleans (a null value is equivalent to FALSE)
+	 * @return An observable value that is the AND operation of all the given values
+	 */
+	public static ObservableValue<Boolean> AND(ObservableValue<? extends Boolean>... values) {
+		return firstValue(LambdaUtils.BOOLEAN_PREDICATE.negate(), LambdaUtils.constantSupplier(true), values);
+	}
+
+	/**
+	 * @param values Any number of observable booleans (a null value is equivalent to FALSE)
+	 * @return An observable value that is the OR operation of all the given values
+	 */
+	public static ObservableValue<Boolean> OR(ObservableValue<? extends Boolean>... values) {
+		return firstValue(LambdaUtils.BOOLEAN_PREDICATE, LambdaUtils.constantSupplier(false), values);
+	}
+
+	/**
 	 * Assembles an observable value, with changes occurring on the basis of changes to a set of components
 	 *
 	 * @param <T> The type of the value to produce
@@ -627,6 +655,38 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		public String toString() {
 			return getIdentity().toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#noUpdates()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	public class NoUpdatesValue<T> extends WrappingObservableValue<T, T> {
+		/** @param wrapped The value to wrap */
+		public NoUpdatesValue(ObservableValue<T> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getWrapped().isEventing();
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return getWrapped().noInitChanges().filter(evt -> !evt.isUpdate());
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return getWrapped().getIdentity();
 		}
 	}
 
@@ -1011,6 +1071,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 			}
 			return new Changes();
+		}
+
+		@Override
+		public ObservableValue<T> cached() {
+			if (theTransformation.isCached())
+				return this;
+			else
+				return ObservableValue.super.cached();
 		}
 	}
 
@@ -1766,6 +1834,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public ObservableValue<T> cached() {
+			return this;
+		}
+
+		@Override
 		public String toString() {
 			return "" + theValue;
 		}
@@ -1942,18 +2015,18 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return new SyntheticObservableChanges();
 		}
 
-		/** @return A value the same as this, but which caches its synthetically-generated value for performance */
+		@Override
 		public ObservableValue<T> cached() {
-			return new CachedObservableValue<>(this);
+			return new CachedSyntheticObservableValue<>(this);
 		}
 
-		static class CachedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
+		static class CachedSyntheticObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 			private final SyntheticObservable<T> theValue;
 			private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
 			private volatile T theCachedValue;
 			private volatile long theCachedStamp;
 
-			public CachedObservableValue(SyntheticObservable<T> value) {
+			public CachedSyntheticObservableValue(SyntheticObservable<T> value) {
 				theValue = value;
 				theListeners = ListenerList.build()//
 					.withInUse(new ListenerList.InUseListener() {
@@ -1985,7 +2058,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public CachedObservableValue<T> alias(String alias) {
+			public CachedSyntheticObservableValue<T> alias(String alias) {
 				super.alias(alias);
 				return this;
 			}
@@ -2015,7 +2088,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 					@Override
 					protected Object createIdentity() {
-						return Identifiable.wrap(CachedObservableValue.this.getIdentity(), "noInitChanges");
+						return Identifiable.wrap(CachedSyntheticObservableValue.this.getIdentity(), "noInitChanges");
 					}
 
 					@Override
@@ -2030,7 +2103,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 					@Override
 					public long getStamp() {
-						return CachedObservableValue.this.getStamp();
+						return CachedSyntheticObservableValue.this.getStamp();
 					}
 
 					@Override
@@ -2180,7 +2253,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return "flat(" + theValue + ")";
 		}
 
-		private class FlattenedValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+		private class FlattenedValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>>, CausableChanging {
 			private final boolean withInitialEvent;
 
 			public FlattenedValueChanges(boolean withInitialEvent) {
@@ -2344,6 +2417,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				else
 					return theValue.noInitChanges().getChangeSources();
 			}
+
+			@Override
+			public Observable<? extends Causable> simpleChanges() {
+				return this;
+			}
 		}
 	}
 
@@ -2359,6 +2437,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		protected FirstObservableValue(ObservableValue<? extends T>[] values, Predicate<? super T> test,
 			Supplier<? extends T> def) {
+			for (int i = 0; i < values.length; i++) {
+				if (values[i] == null)
+					throw new IllegalArgumentException("Null value at " + i);
+			}
 			theValues = values;
 			theTest = test;
 			theDefault = def;
@@ -2863,5 +2945,152 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		 * @return A subscription to remove the listener
 		 */
 		protected abstract Subscription subscribe(BiConsumer<T, Object> listener);
+	}
+
+	/**
+	 * A wrapping observable value that caches the wrapped value
+	 *
+	 * @param <T> The type of the value
+	 */
+	static class CachedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
+		private final ObservableValue<T> theValue;
+		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
+		private volatile T theCachedValue;
+		private volatile long theCachedStamp;
+
+		public CachedObservableValue(ObservableValue<T> value) {
+			theValue = value;
+			theListeners = ListenerList.build()//
+				.withInUse(new ListenerList.InUseListener() {
+					private Subscription theChangesSub;
+
+					@Override
+					public void inUseChanged(boolean inUse) {
+						if (!inUse) {
+							theChangesSub.unsubscribe();
+							theChangesSub = null;
+							return;
+						}
+						try (Transaction t = theValue.lock()) {
+							get(); // Update for initial value
+							theChangesSub = theValue.noInitChanges().act(evt -> theListeners.forEach(//
+								l -> l.onNext(evt)));
+						}
+					}
+				}).build();
+			theCachedStamp = -1;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return theValue.getIdentity();
+		}
+
+		@Override
+		public CachedObservableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public long getStamp() {
+			return theValue.getStamp();
+		}
+
+		@Override
+		public T get() {
+			long newStamp = theValue.getStamp();
+			if (theCachedStamp == -1 || theCachedStamp != newStamp) {
+				theCachedValue = theValue.get();
+				theCachedStamp = newStamp;
+			}
+			return theCachedValue;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			class CachedSyntheticChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				public boolean isEventing() {
+					return theListeners.isFiring();
+				}
+
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(CachedObservableValue.this.getIdentity(), "noInitChanges");
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return theValue.getCoreId();
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return theValue.getThreadConstraint();
+				}
+
+				@Override
+				public long getStamp() {
+					return CachedObservableValue.this.getStamp();
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					return theListeners.add(observer, true)::run;
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theValue.noInitChanges().isSafe();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theValue.lock();
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theValue.tryLock();
+				}
+
+				@Override
+				public CoreChangeSources getChangeSources() {
+					return theValue.noInitChanges().getChangeSources();
+				}
+			}
+			return new CachedSyntheticChanges();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theValue.isEventing();
+		}
+
+		@Override
+		public ObservableValue<T> cached() {
+			return this;
+		}
+
+		@Override
+		public int hashCode() {
+			return theValue.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (obj instanceof CachedObservableValue)
+				return theValue.equals(((CachedObservableValue<?>) obj).theValue);
+			else
+				return theValue.equals(obj);
+		}
+
+		@Override
+		public String toString() {
+			return theValue.toString();
+		}
 	}
 }

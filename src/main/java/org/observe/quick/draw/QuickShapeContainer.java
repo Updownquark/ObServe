@@ -11,7 +11,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
-import org.observe.expresso.qonfig.ExWithElementModel;
+import org.observe.expresso.qonfig.ExModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.config.QonfigAddOn;
@@ -39,7 +39,7 @@ public class QuickShapeContainer extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public Set<? extends Class<? extends ExAddOn.Def<?, ?>>> getDependencies() {
-			return Collections.singleton(ExWithElementModel.Def.class);
+			return Collections.singleton((Class<? extends ExAddOn.Def<?, ?>>) ExModelAugmentation.Def.class);
 		}
 
 		@Override

@@ -128,6 +128,7 @@ import org.observe.util.swing.ModelCell;
 import org.observe.util.swing.ObservableColorEditor;
 import org.observe.util.swing.ObservableFileButton;
 import org.observe.util.swing.ObservableStyledDocument;
+import org.observe.util.swing.ObservableSwingUtils;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
@@ -826,6 +827,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				panel.addStyledTextArea(null, docInst, tf -> {
 					modifier.accept(tf);
 					tf.modifyEditor(tf2 -> {
+						hookUpSelection(tf2, quick);
 						MouseAdapter mouse = theDocument.mouseListener(quick.getTextDocument(), docInst, tf2, tf.getUntil());
 						tf2.addMouseListener(mouse);
 						tf2.addMouseMotionListener(mouse);
@@ -836,6 +838,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				panel.addTextArea(null, quick.getValue(), format, tf -> {
 					modifier.accept(tf);
 					tf.modifyEditor(tf2 -> {
+						hookUpSelection(tf2, quick);
 						try {
 							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
 								tf2.getErrorState(), tf2.getWarningState()));
@@ -849,6 +852,48 @@ public class QuickBaseSwing implements QuickInterpretation {
 					});
 				});
 			}
+		}
+
+		private void hookUpSelection(ObservableTextArea<T> textArea, QuickTextArea<T> quick) {
+			boolean[] selectionCallbackLock = new boolean[1];
+			Observable.onRootFinish(Observable.or(quick.getSelectionAnchor().changes().filter(__ -> !selectionCallbackLock[0]),
+				quick.getSelectionLead().noInitChanges().filter(__ -> !selectionCallbackLock[0]))).act(__ -> {
+					int anchor = quick.getSelectionAnchor().get();
+					int lead = quick.getSelectionLead().get();
+					textArea.setSelectionStart(anchor);
+					textArea.setSelectionEnd(lead);
+
+					Rectangle selectionBounds = null;
+					try {
+						selectionBounds = textArea.modelToView(anchor);
+					} catch (BadLocationException e) {
+					}
+					if (anchor != lead) {
+						try {
+							Rectangle leadBounds = textArea.modelToView(lead);
+							if (leadBounds != null) {
+								if (selectionBounds != null)
+									selectionBounds = selectionBounds.union(leadBounds);
+								else
+									selectionBounds = leadBounds;
+							}
+						} catch (BadLocationException e) {
+						}
+					}
+					if (selectionBounds != null)
+						ObservableSwingUtils.scrollRectToVisible(textArea, selectionBounds);
+				});
+			textArea.getCaret().addChangeListener(__ -> {
+				if (selectionCallbackLock[0])
+					return;
+				selectionCallbackLock[0] = true;
+				try {
+					quick.getSelectionAnchor().set(textArea.getSelectionStart());
+					quick.getSelectionLead().set(textArea.getSelectionEnd());
+				} finally {
+					selectionCallbackLock[0] = false;
+				}
+			});
 		}
 	}
 
@@ -2281,11 +2326,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 					dialog.isModal() ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
 				if (PanelPopulation.isDebugging(((Component) preInit).getName(), "general-dialog"))
 					BreakpointHere.breakpoint();
+				jDialog.getContentPane().setLayout(new JustifiedBoxLayout(true).mainJustified().crossJustified());
 				jDialog.setAlwaysOnTop(dialog.isAlwaysOnTop());
 				PanelPopulation.WindowBuilder<JDialog, ?> swingDialog = WindowPopulation.populateDialog(jDialog, until, false);
-				if (preInit instanceof Container)
+				if (preInit instanceof Container) {
+					((Container) preInit).setLayout(new JustifiedBoxLayout(true).mainJustified().crossJustified());
 					jDialog.setContentPane((Container) preInit);
-				else
+				} else
 					jDialog.getContentPane().add((Component) preInit);
 				swingDialog.withTitle(title);
 				swingDialog.disposeOnClose(false);

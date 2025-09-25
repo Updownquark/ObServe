@@ -41,7 +41,8 @@ import org.qommons.collect.ElementId;
  * of this container, and all the rest are synthetically rendered, making it more efficient for large collections.
  * </p>
  * <p>
- * This is designed to support the &lt;tiled-pane> widget in the Quick-X toolkit. Outside of that use case there are a few things to know:
+ * This is designed to support the &lt;virtual-multi-pane> widget in the Quick-X toolkit. Outside of that use case there are a few things to
+ * know:
  * <ul>
  * <li>The {@link #setRendering(ObservableCellRenderer, ObservableCellRenderer, ObservableCellRenderer) setRendering} method must be called
  * with 3 independent renderers.</li>
@@ -54,7 +55,7 @@ import org.qommons.collect.ElementId;
  *
  * @param <T> The type of the values in the collection
  */
-public class TiledPane<T> extends JComponent implements Scrollable {
+public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 	private final ObservableCollection<T> theValues;
 	private ObservableCellRenderer<? super T, ? super T> theRenderer;
 	private boolean isConstantSizing;
@@ -75,9 +76,9 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 
 	/**
 	 * @param values The values to render
-	 * @param until The observable that will cause this tiled pane to unsubscribe from the collection
+	 * @param until The observable that will cause this multi pane to unsubscribe from the collection
 	 */
-	public TiledPane(ObservableCollection<T> values, Observable<?> until) {
+	public VirtualMultiPane(ObservableCollection<T> values, Observable<?> until) {
 		theValues = values.safe(ThreadConstraint.EDT, until);
 		super.setLayout(new JustifiedBoxLayout(true));
 		theValueBounds = new ArrayList<>();
@@ -289,7 +290,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 						theFocus.replace(true, adj, theValues.getElementsBefore(adj.getElementId()), false);
 						// Now cycle in to the renderer.
 						cycleIntoFocus(forward);
-					} else { // No more values, tab away from this tiled pane
+					} else { // No more values, tab away from this multi pane
 						cycleAway(forward);
 						theFocus.replace(true, null, -1, false);
 					}
@@ -357,9 +358,9 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	 * @param painter The renderer to paint all the values in the collection that are not being interacted with by the user
 	 * @param renderer2 A renderer to render and handle input for an element in the collection that the user is interacting with
 	 * @param renderer3 A second renderer to render and handle input for an element in the collection that the user is interacting with
-	 * @return This tiled pane
+	 * @return This multi pane
 	 */
-	public TiledPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> painter,
+	public VirtualMultiPane<T> setRendering(ObservableCellRenderer<? super T, ? super T> painter,
 		ObservableCellRenderer<? super T, ? super T> renderer2, ObservableCellRenderer<? super T, ? super T> renderer3) {
 		theRenderer = painter;
 		theHover = new RenderChild("hover", renderer2, thePreFocus, theMidFocus);
@@ -370,9 +371,9 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	/**
 	 * @param constantSizing True if it is known that all values in this tile pane's collection will always be rendered to the same
 	 *        dimensions. Setting this to true can cause significant performance improvements for large collections.
-	 * @return This tiled pane
+	 * @return This multi pane
 	 */
-	public TiledPane<T> setConstantSizing(boolean constantSizing) {
+	public VirtualMultiPane<T> setConstantSizing(boolean constantSizing) {
 		isConstantSizing = constantSizing;
 		return this;
 	}
@@ -386,7 +387,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	public void setLayout(LayoutManager mgr) {
 		if (!(mgr instanceof AbstractLayout))
 			throw new IllegalArgumentException(
-				TiledPane.class.getSimpleName() + " requires an instance of " + AbstractLayout.class.getName());
+				VirtualMultiPane.class.getSimpleName() + " requires an instance of " + AbstractLayout.class.getName());
 		super.setLayout(mgr);
 	}
 
@@ -532,7 +533,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	@Override
 	protected void paintChildren(Graphics g) {
 		Rectangle clip = g.getClipBounds();
-		TiledPanelRenderMC<T> cell = new TiledPanelRenderMC<>();
+		VMPanelRenderMC<T> cell = new VMPanelRenderMC<>();
 		// Painting is done in reverse order, to give lower-index widgets higher visibility
 		int row = theValues.size();
 		for (CollectionElement<T> value : theValues.elements().reverse()) {
@@ -596,7 +597,7 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 				ModelCell<T, T> cell = new ModelCell.Default<>(LambdaUtils.constantSupplier(v, v::toString, null), v, index, 0, focus,
 					focus, !focus, !focus, false, true)//
 					.setEnabled(theValues.mutableElement(newValue.getElementId()).isEnabled());
-				Component newRender = renderer.getCellRendererComponent(TiledPane.this, cell, CellRenderContext.DEFAULT);
+				Component newRender = renderer.getCellRendererComponent(VirtualMultiPane.this, cell, CellRenderContext.DEFAULT);
 				if (component != newRender) {
 					repaint = true;
 					if (component != null)
@@ -643,12 +644,12 @@ public class TiledPane<T> extends JComponent implements Scrollable {
 	static class SimpleFocusComponent extends Component {
 	}
 
-	static class TiledPanelRenderMC<T> implements ModelCell<T, T> {
+	static class VMPanelRenderMC<T> implements ModelCell<T, T> {
 		private T theValue;
 		private int theRow;
 		private String isEnabled;
 
-		TiledPanelRenderMC<T> set(T value, int row) {
+		VMPanelRenderMC<T> set(T value, int row) {
 			theValue = value;
 			theRow = row;
 			return this;

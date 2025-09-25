@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.List;
 
 import org.qommons.Causable;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.ElementId;
 
 /**
  * Represents a set of changes to a collection with a common {@link CollectionChangeType type}.
@@ -24,6 +26,25 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 		public final E oldValue;
 		/** The index of the element in the collection */
 		public final int index;
+		/**
+		 * <p>
+		 * The element's ID.
+		 * </p>
+		 * <p>
+		 * <b>WARNING:</b>
+		 * </p>
+		 * <p>
+		 * Because {@link CollectionChangeEvent}s are batched, their firing is usually delayed from the actual operation. This means that
+		 * the collection may have changed in undefined ways since the changes that caused an event. In particular, it means that this
+		 * element may have been removed and any changes may have happened since then.
+		 * </p>
+		 * <p>
+		 * The {@link BetterCollection} contract states that removed element IDs may be used immediately after their removal, but not after
+		 * the collection has changed again. Therefore it is <b>NOT SAFE</b> to use this ID without first checking that it is still
+		 * {@link ElementId#isPresent() present} in the collection.
+		 * </p>
+		 */
+		public final ElementId id;
 		/** The movement operation this change is a part of */
 		public final CollectionElementMove movement;
 
@@ -31,14 +52,16 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 		 * @param value The new value of the element
 		 * @param oldValue The old value of the element, if the event is of type {@link CollectionChangeType#set}
 		 * @param index The index of the element in the collection
+		 * @param id The ID of the element
 		 * @param movement The movement operation this change is a part of
 		 */
-		public ElementChange(E value, E oldValue, int index, CollectionElementMove movement) {
+		public ElementChange(E value, E oldValue, int index, ElementId id, CollectionElementMove movement) {
 			if (index < 0)
 				throw new IndexOutOfBoundsException("" + index);
 			this.newValue = value;
 			this.oldValue = oldValue;
 			this.index = index;
+			this.id = id;
 			this.movement = movement;
 		}
 

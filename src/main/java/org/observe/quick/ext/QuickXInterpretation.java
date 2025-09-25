@@ -84,13 +84,15 @@ public class QuickXInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickTreeTable.TREE_TABLE, QuickTreeTable.Def.class, ExElement.creator(QuickTreeTable.Def::new));
 		interpreter.createWith(QuickComboButton.COMBO_BUTTON, QuickComboButton.Def.class, ExElement.creator(QuickComboButton.Def::new));
 		interpreter.createWith(QuickMultiSlider.MULTI_SLIDER, QuickMultiSlider.Def.class, ExElement.creator(QuickMultiSlider.Def::new));
-		interpreter.createWith(QuickMultiSlider.SLIDER_HANDLE_RENDERER, QuickMultiSlider.SliderHandleRenderer.Def.class,
-			ExElement.creator(QuickMultiSlider.SliderHandleRenderer.Def::new));
-		interpreter.createWith(QuickMultiSlider.SLIDER_BG_RENDERER, QuickMultiSlider.SliderBgRenderer.Def.class,
-			ExElement.creator(QuickMultiSlider.SliderBgRenderer.Def::new));
+		interpreter.createWith(QuickMultiRangeSlider.MULTI_RANGE_SLIDER, QuickMultiRangeSlider.Def.class,
+			ExElement.creator(QuickMultiRangeSlider.Def::new));
+		interpreter.createWith(QuickAbstractMultiSlider.SLIDER_HANDLE_RENDERER, QuickMultiSlider.SliderHandleRenderer.Def.class,
+			ExElement.creator(QuickAbstractMultiSlider.SliderHandleRenderer.Def::new));
+		interpreter.createWith(QuickAbstractMultiSlider.SLIDER_BG_RENDERER, QuickAbstractMultiSlider.SliderBgRenderer.Def.class,
+			ExElement.creator(QuickAbstractMultiSlider.SliderBgRenderer.Def::new));
 
 		interpreter.createWith(QuickSettingsMenu.SETTINGS_MENU, QuickSettingsMenu.Def.class, ExElement.creator(QuickSettingsMenu.Def::new));
-		interpreter.createWith(QuickTiledPane.TILED_PANE, QuickTiledPane.Def.class, ExElement.creator(QuickTiledPane.Def::new));
+		interpreter.createWith(QuickVirtualMultiPane.VIRTUAL_MULTI_PANE, QuickVirtualMultiPane.Def.class, ExElement.creator(QuickVirtualMultiPane.Def::new));
 		interpreter.createWith(QuickSuperTable.SUPER_TABLE, QuickSuperTable.Def.class, ExElement.creator(QuickSuperTable.Def::new));
 		interpreter.createWith(QuickSuperTable.WITH_ROW_DRAGGING, QuickSuperTable.WithRowDragging.Def.class,
 			ExElement.creator(QuickSuperTable.WithRowDragging.Def::new));
@@ -98,8 +100,6 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickSuperTable.AdaptiveHeight.Def::new));
 		interpreter.createWith(QuickValueSelector.VALUE_SELECTOR, QuickValueSelector.Def.class,
 			ExElement.creator(QuickValueSelector.Def::new));
-
-		interpreter.createWith(QuickBarChart.BAR_CHART, QuickBarChart.Def.class, ExElement.creator(QuickBarChart.Def::new));
 
 		return interpreter;
 	}

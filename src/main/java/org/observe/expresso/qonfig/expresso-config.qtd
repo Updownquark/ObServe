@@ -44,6 +44,10 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<?DOC The name of the property to store the field under in the &lt;config>'s persistence?>
 			<attribute name="config-name" type="string" specify="optional" />
 		</add-on>
+		<add-on name="entity-sub-format" requires="entity-config-format">
+			<?DOC The element name to use for entities of this sub-type?>
+			<attribute name="sub-type-name" type="string" specify="optional" />
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -301,7 +305,8 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<?DOC A reference to a format set containing default formats to use for various types (implementation-specific)?>
 			<attribute name="format-set" type="expression" specify="optional" />
 			<?DOC Custom formats for fields of the entity?>
-			<child-def name="field" type="config-format" inherits="entity-config-field" max="inf" />
+			<child-def name="field" type="config-format" inherits="entity-config-field" min="0" max="inf" />
+			<child-def name="sub-format" type="entity-config-format" inherits="entity-sub-format" min="0" max="inf" />
 		</element-def>
 	</elements>
 

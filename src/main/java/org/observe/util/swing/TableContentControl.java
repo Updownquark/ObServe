@@ -641,7 +641,7 @@ public interface TableContentControl {
 
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence toSearch) {
-			if (category != null && !category.searchGeneral())
+			if ((category != null && !category.searchGeneral()) || toSearch == null)
 				return null;
 			SortedMatchSet matches = null;
 			int[] match = findMatch(theMatcher, toSearch, 0);
@@ -672,11 +672,13 @@ public interface TableContentControl {
 		 * @return The start/end position of the first match found, or null if not matches were found
 		 */
 		public static int[] findMatch(String matcher, CharSequence toSearch, int start) {
-			while (start + matcher.length() <= toSearch.length()) {
-				int end = matches(matcher, toSearch, start);
-				if (end > 0)
-					return new int[] { start, end };
-				start++;
+			if (toSearch != null) {
+				while (start + matcher.length() <= toSearch.length()) {
+					int end = matches(matcher, toSearch, start);
+					if (end > 0)
+						return new int[] { start, end };
+					start++;
+				}
 			}
 			return null;
 		}

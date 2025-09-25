@@ -105,11 +105,11 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-					for (String doc : exS.getExpressoEnvs().keySet()) {
-						CompiledExpressoEnv env = exS.getExpressoEnv(doc);
-						env = env.withNonStructuredParser(Image.class, new ImageParser());
-						exS.setExpressoEnv(doc, env);
-					}
+				for (String doc : exS.getExpressoEnvs().keySet()) {
+					CompiledExpressoEnv env = exS.getExpressoEnv(doc);
+					env = env.withNonStructuredParser(Image.class, new ImageParser());
+					exS.setExpressoEnv(doc, env);
+				}
 				return null;
 			}
 
@@ -124,13 +124,13 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-					for (String doc : exS.getExpressoEnvs().keySet()) {
-						CompiledExpressoEnv env = exS.getExpressoEnv(doc);
-						env = env//
-							.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
-							.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()));
-						exS.setExpressoEnv(doc, env);
-					}
+				for (String doc : exS.getExpressoEnvs().keySet()) {
+					CompiledExpressoEnv env = exS.getExpressoEnv(doc);
+					env = env//
+						.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
+						.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()));
+					exS.setExpressoEnv(doc, env);
+				}
 				return null;
 			}
 
@@ -188,6 +188,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickKeyListener.QuickKeyCodeListener.KEY_RELEASED_LISTENER, QuickKeyListener.QuickKeyCodeListener.Def.class,
 			session -> new QuickKeyListener.QuickKeyCodeListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
 				session.getFocusType(), false));
+		interpreter.createWith(QuickSizeListener.SIZE_LISTENER, QuickSizeListener.Def.class, ExElement.creator(QuickSizeListener.Def::new));
 
 		interpreter.createWith("renderer", QuickRenderer.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickRenderer.Def(ao, (QuickWidget.Def<?>) p)));

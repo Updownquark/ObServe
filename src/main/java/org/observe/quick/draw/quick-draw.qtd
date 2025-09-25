@@ -43,7 +43,7 @@
 			<attribute name="width" type="expression" specify="optional" />
 			<attribute name="height" type="expression" specify="optional" />
 		</add-on>
-		<add-on name="point-shape" requires="point" inherits="shape" />
+		<add-on name="root-text" requires="text" inherits="v-positionable,h-positionable,rotated" />
 	</add-ons>
 	
 	<elements>
@@ -77,38 +77,50 @@
 			<attribute name="vertex-x" type="expression" />
 			<attribute name="vertex-y" type="expression" />
 		</element-def>
-		<element-def name="text" inherits="shape,with-text,v-positionable,h-positionable,rotated">
-			<value type="expression" />
+		<element-def name="text" inherits="shape,with-text">
+			<value type="expression" specify="optional" />
+			<child-def name="sub-text" type="text" min="0" max="inf" />
 		</element-def>
-		<element-def name="point" inherits="v-positionable,h-positionable" />
-		<?DOC A line with a constant number of points.  Each of the points may change locations, but the number is constant.?>
+		<element-def name="point">
+			<attribute name="x" type="expression" />
+			<attribute name="y" type="expression" />
+		</element-def>
+		<?DOC A line segment or set of line segments between a constant number of points.
+			The coordinates of each of the points may change, but the number is constant.
+			All segments of the line have the same thickness, opacity, and color.?>
 		<element-def name="line" inherits="linear-shape">
-			<child-def name="points" type="point" min="2" />
+			<child-def name="point" type="point" min="2" />
 		</element-def>
-		<?DOC A line with a variable number of points?>
-		<element-def name="variable-line" inherits="linear-shape">
+		<?DOC A line segment or set of line segments between a variable number of points.
+			The segments may be styled individually, and each segment's styling may vary along its length.?>
+		<element-def name="flex-line" inherits="linear-shape">
 			<element-model>
 				<?DOC The value for the current point?>
 				<value name-attribute="active-point-as" priority="100" />
 				<?DOC The index of the value representing the point currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name-attribute="point-index-as" type="int" priority="2" />
 				<?DOC The value for the point after the current point in the points list?>
-				<value name-attribute="next-point-as" priority="100" />
+				<value name-attribute="next-point-as" type="{active-point-as}" priority="100" />
 				<?DOC The distance between <code>point</code> and <code>nextPoint</code>?>
-				<value name-attribute="point-distance-as" type="float" priority="2" />
+				<value name-attribute="point-distance-as" type="double" priority="2" />
 				<?DOC The distance between <code>point</code> and the 2D point currently in use
 					(e.g. the point where the color is being determined or where the mouse is positioned)
-					along the line to <code>nextPoint</code> divided by the <code>pointDistance</code>?>
-				<value name-attribute="linear-p-as" type="float" priority="2" />
+					along the line to <code>nextPoint</code>, divided by the <code>pointDistance</code>?>
+				<value name-attribute="linear-p-as" type="double" priority="2" />
 			</element-model>
+			<attribute name="points" type="expression" />
 			<attribute name="active-point-as" type="identifier" />
 			<attribute name="point-index-as" type="identifier" specify="optional" />
+			<attribute name="point-x" type="expression" />
+			<attribute name="point-y" type="expression" />
 			<attribute name="next-point-as" type="identifier" specify="optional" />
 			<attribute name="point-distance-as" type="identifier" specify="optional" />
 			<attribute name="linear-p-as" type="identifier" specify="optional" />
-			<attribute name="points" type="expression" />
-			<attribute name="point-x" type="expression" />
-			<attribute name="point-y" type="expression" />
+			<?DOC In the case that this line's style varies by the linear-p-as value,
+				this attribute controls how many divisions will be evaluated and rendered for each line segment.
+				This attribute is the distance of the segments that the style will be evaluated for.
+				If this attribute is not specified, the segment division is implementation-dependent.?>
+			<attribute name="style-variance-distance" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="arc" inherits="linear-shape,rotated">
 			<child-def name="center" type="point" />
@@ -117,28 +129,54 @@
 			<attribute name="start-angle" type="expression" />
 			<attribute name="end-angle" type="expression" />
 		</element-def>
+		<?DOC For a parameter whose value steps between 0 and 1, this is the curve connecting the points from x and y expressions applied
+			to the parameter at each step?>
 		<element-def name="parameteric-curve" inherits="linear-shape">
 			<element-model>
 				<value name-attribute="parameter-as" priority="100" />
-				<value name-attribute="point-as" priority="100" />
 			</element-model>
 			<attribute name="parameter-as" type="identifier" />
-			<attribute name="point" type="expression" specify="optional" />
-			<attribute name="point-as" type="identifier" specify="optional" />
+			<attribute name="steps" type="expression" default="1000" />
 			<attribute name="x" type="expression" />
 			<attribute name="y" type="expression" />
 		</element-def>
+		<?DOC For a parameter whose value steps between 0 and 1, this is the shape connecting the points from 2 sets of x and y expressions
+			applied to the parameter at each step?>
+		<element-def name="parameteric-shape" inherits="bordered-shape">
+			<element-model>
+				<value name-attribute="parameter-as" priority="100" />
+			</element-model>
+			<attribute name="parameter-as" type="identifier" />
+			<attribute name="steps" type="expression" default="1000" />
+			<attribute name="x0" type="expression" />
+			<attribute name="y0" type="expression" />
+			<attribute name="x1" type="expression" />
+			<attribute name="y1" type="expression" />
+		</element-def>
 		<element-def name="image" inherits="simple-shape,iconized" />
-		<element-def name="shape-view" inherits="shape-publisher,shape-container,rotated">
-			<attribute name="translate-x" type="expression" default="0" />
-			<attribute name="translate-y" type="expression" default="0" />
-			<attribute name="zoom" type="expression" default="1" />
+		<element-def name="shape-view" inherits="shape-publisher,shape-container">
+			<child-def name="transform" type="transform-op" max="inf" />
+		</element-def>
+		<element-def name="transform-op" abstract="true" />
+		<element-def name="translate" extends="transform-op">
+			<attribute name="x" type="expression" />
+			<attribute name="y" type="expression" />
+		</element-def>
+		<element-def name="scale" extends="transform-op">
+			<attribute name="x" type="expression" />
+			<attribute name="y" type="expression" />
+		</element-def>
+		<element-def name="rotate" extends="transform-op">
+			<attribute name="anchor-x" type="expression" />
+			<attribute name="anchor-y" type="expression" />
+			<?DOC The amount of rotation for the transformation, clockwise in radians?>
+			<attribute name="radians" type="expression" />
 		</element-def>
 	</elements>
 
 	<auto-inheritance>
-		<auto-inherit inherits="point-shape">
-			<target element="point" role="shape-container.shape" />
+		<auto-inherit inherits="root-text">
+			<target element="text" role="shape-container.shape" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

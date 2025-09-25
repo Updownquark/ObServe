@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.awt.Color;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -150,6 +151,8 @@ public class ObservableConfigFormatSet {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DURATION;
 		else if (raw == Instant.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DATE;
+		else if (raw == Color.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.COLOR;
 		else if (raw.equals(ObservableCollection.class)) {
 			String childName = StringUtils.singularize(configName);
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);

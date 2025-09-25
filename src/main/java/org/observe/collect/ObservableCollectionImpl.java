@@ -1,6 +1,16 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -29,12 +39,38 @@ import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollection
 import org.observe.dbug.DbugAnchor;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.WeakListening;
-import org.qommons.*;
+import org.qommons.ArrayUtils;
+import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
+import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
+import org.qommons.ConcurrentHashSet;
+import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.IdentityKey;
+import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.collect.*;
+import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
+import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.ValueHolder;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterCollections;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.tree.BetterTreeSet;
@@ -500,9 +536,9 @@ public final class ObservableCollectionImpl {
 				if (stamp == theLastMatchStamp
 					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
 					return theLastMatch;
+				theLastMatchStamp = stamp;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
 				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-				theLastMatchStamp = stamp;
 				if (element.get() != null)
 					return theLastMatch = element.get().getElementId();
 				else {
@@ -519,9 +555,9 @@ public final class ObservableCollectionImpl {
 				if (stamp == theLastMatchStamp
 					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
 					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
+				theLastMatchStamp = stamp;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
 				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-				theLastMatchStamp = stamp;
 				if (element.get() != null) {
 					theLastMatch = element.get().getElementId();
 					return element.get().get();
@@ -695,6 +731,7 @@ public final class ObservableCollectionImpl {
 											replacement = null;
 											isRefreshNeeded = true;
 											theLastMatch = null;
+											theLastMatchStamp = -1;
 										}
 									}
 								}
@@ -708,10 +745,12 @@ public final class ObservableCollectionImpl {
 								} else if (isChanging) {
 									// If the collection is also changing, just do the refresh after all the other changes
 									theLastMatch = null;
+									theLastMatchStamp = -1;
 									isRefreshNeeded = true;
 								} else if (cause instanceof Causable) {
 									isRefreshNeeded = true;
 									theLastMatch = null;
+									theLastMatchStamp = -1;
 									((Causable) cause).getRootCausable().onFinish(theRefreshCauseKey);
 								} else {
 									doRefresh(cause);
@@ -3481,7 +3520,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			if (sourceCollection == this)
+			if (sourceCollection == this || sourceCollection.getIdentity().equals(getIdentity()))
 				return BetterList.of(current.getSourceElements(strip(current, localElement), current).stream()
 					.map(el -> new FlattenedElementId(current, el)));
 			else
@@ -3599,8 +3638,9 @@ public final class ObservableCollectionImpl {
 										if (clearAndAdd) {
 											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
 											int index = 0;
-											for (E v : collection)
-												elements.add(new CollectionChangeEvent.ElementChange<>(v, v, index++, null));
+											for (CollectionElement<? extends E> el : collection.elements())
+												elements.add(new CollectionChangeEvent.ElementChange<>(el.get(), el.get(), index++,
+													new FlattenedElementId(collection, el.getElementId()), null));
 											CollectionChangeEvent<E> clearEvt = new CollectionChangeEvent<>(CollectionChangeType.remove, //
 												elements, collEvt);
 											debug(s -> s.append("clear: ").append(clearEvt));
@@ -3626,8 +3666,9 @@ public final class ObservableCollectionImpl {
 										if (!collection.isEmpty()) {
 											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
 											int index = 0;
-											for (E v : collection)
-												elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++, null));
+											for (CollectionElement<? extends E> el : collection.elements())
+												elements.add(new CollectionChangeEvent.ElementChange<>(el.get(), null, index++,
+													new FlattenedElementId(collection, el.getElementId()), null));
 											CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
 												elements, collEvt);
 											debug(s -> s.append("populate: ").append(populateEvt));
@@ -3738,9 +3779,8 @@ public final class ObservableCollectionImpl {
 		public Observable<Causable> simpleChanges() {
 			// We can be more efficient here. Listen to the changes observable of the content collection,
 			// as well as logical changes to the container.
-			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable
-				.map(LambdaUtils.<ObservableCollection<?>, Observable<Causable>> printableFn(
-					coll -> coll != null ? coll.simpleChanges() : Observable.<Causable> empty(), "simpleChanges", "simpleChanges"));
+			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable.map(LambdaUtils.printableFn(
+				coll -> coll != null ? coll.simpleChanges() : Observable.<Causable> empty(), "simpleChanges", "simpleChanges"));
 			return Observable.onRootFinish(Observable.or(theCollectionObservable.noInitChanges(), //
 				new ObservableValue.FlattenedValueObservable<Causable>(toFlattenChanges) {
 				@Override
@@ -3931,16 +3971,19 @@ public final class ObservableCollectionImpl {
 				}
 
 				void unsubscribe(boolean removeAll) {
+					// Repeated null checks here to mitigate this being called from multiple threads
 					if (collection != null && collectionSub != null) {
 						collectionObserver.isActive = false;
 						if (removeAll) {
 							// The collection in the value is not changing--we just don't want it to while we're working
 							try (Transaction t = collection.lock(false, null)) {
-								collectionSub.unsubscribe();
+								if (collectionSub != null)
+									collectionSub.unsubscribe();
 								collectionSub = null;
-								collectionObserver.remove(QommonsUtils.peekFirst(collection.getCurrentCauses()));
+								if (collection != null)
+									collectionObserver.remove(QommonsUtils.peekFirst(collection.getCurrentCauses()));
 							}
-						} else { // Don't need to lock
+						} else if (collectionSub != null) { // Don't need to lock
 							collectionSub.unsubscribe();
 							collectionSub = null;
 						}

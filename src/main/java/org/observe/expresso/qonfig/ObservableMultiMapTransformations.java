@@ -14,7 +14,6 @@ import org.observe.collect.ObservableSet;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -633,8 +632,8 @@ public class ObservableMultiMapTransformations {
 			}
 
 			@Override
-			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				throw new ExpressoInterpretationException(MAP_TRANSFORM + " cannot be used as a model value", env.reporting().getPosition(),
+			public void updateValue() throws ExpressoInterpretationException {
+				throw new ExpressoInterpretationException(MAP_TRANSFORM + " cannot be used as a model value", reporting().getPosition(),
 					0);
 			}
 
@@ -909,10 +908,10 @@ public class ObservableMultiMapTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theKeyAs = elModels.getElementValueModelId(keyAs);
 			theValuesAs = elModels.getElementValueModelId(valuesAs);
-			elModels.<Interpreted<M, ?, ?, ?, ?>, SettableValue<?>> satisfyElementValueType(theKeyAs, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType().getType(0)));
-			elModels.<Interpreted<M, ?, ?, ?, ?>, ObservableCollection<?>> satisfyElementValueType(theValuesAs, ModelTypes.Collection,
-				(interp, env) -> ModelTypes.Collection.forType(interp.getSourceType().getType(1)));
+			elModels.<Interpreted<M, ?, ?, ?, ?>, SettableValue<?>> satisfyElementSingleValueType(theKeyAs, ModelTypes.Value,
+				interp -> interp.getSourceType().getType(0));
+			elModels.<Interpreted<M, ?, ?, ?, ?>, ObservableCollection<?>> satisfyElementSingleValueType(theValuesAs, ModelTypes.Collection,
+				interp -> interp.getSourceType().getType(1));
 		}
 
 		@Override

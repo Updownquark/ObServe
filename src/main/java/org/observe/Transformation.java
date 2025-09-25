@@ -457,6 +457,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		String isEnabled(TransformationValues<S, T> transformValues);
 
 		/**
+		 * @return Whether this transform reverse relies on the propagation of modified values to the source. If this is false, the
+		 *         implication is that this reverse is able to perform modifications on top of the source value without modifying it or
+		 *         notifying the source at all.
+		 */
+		boolean requiresSourceModification();
+
+		/**
 		 * @param newValue The new target value
 		 * @param transformValues The source, argument, and current result values available to the transformation
 		 * @param add Whether the operation is an addition (as opposed to a set operation)
@@ -655,7 +662,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				Function<SourceModifyingReverse<S, T>, SourceModifyingReverse<S, T>> configure) {
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(modifier,
 				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
-				null, null);
+				null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
 			return withReverse(srr);
@@ -932,6 +939,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
+		public boolean requiresSourceModification() {
+			return true;
+		}
+
+		@Override
 		public ReverseQueryResult<S> reverse(T newValue, TransformationValues<S, T> transformValues, boolean add, boolean test) {
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse;
 			if (!add) {
@@ -1142,6 +1154,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		private final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAcceptability;
 		private final TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> theCreator;
 		private final BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> theAddAcceptability;
+		private final boolean isSourceModifying;
 
 		/**
 		 * @param modifier Modifies the source value with the target value
@@ -1150,17 +1163,20 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @param create A function to create new source values for values added to the result structure. The third argument is whether the
 		 *        value will actually be passed to the source structure (as opposed to just a test operation)
 		 * @param addAcceptability A function to approve or reject new result values for addition to the result structure
+		 * @param sourceModifying Whether the reverse operation requires updates to be propagated to the source value
 		 */
 		public SourceModifyingReverse(BiConsumer<? super T, ? super TransformationValues<? extends S, ? extends T>> modifier,
 			Function<? super TransformationValues<? extends S, ? extends T>, String> enabled,
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> acceptability,
 			TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> create,
-			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> addAcceptability) {
+			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, String> addAcceptability,
+			boolean sourceModifying) {
 			theModifier = modifier;
 			theEnabled = enabled;
 			theAcceptability = acceptability;
 			theCreator = create;
 			theAddAcceptability = addAcceptability;
+			isSourceModifying = sourceModifying;
 		}
 
 		@Override
@@ -1177,7 +1193,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					return msg;
 				};
 			}
-			return new SourceModifyingReverse<>(theModifier, newEnabled, theAcceptability, theCreator, theAddAcceptability);
+			return new SourceModifyingReverse<>(theModifier, newEnabled, theAcceptability, theCreator, theAddAcceptability,
+				isSourceModifying);
 		}
 
 		@Override
@@ -1232,13 +1249,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					};
 				}
 			}
-			return new SourceModifyingReverse<>(theModifier, theEnabled, newAcceptance, theCreator, newAddAcceptance);
+			return new SourceModifyingReverse<>(theModifier, theEnabled, newAcceptance, theCreator, newAddAcceptance, isSourceModifying);
 		}
 
 		@Override
 		public SourceModifyingReverse<S, T> createWith(
 			TriFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator) {
-			return new SourceModifyingReverse<>(theModifier, theEnabled, theAcceptability, creator, theAddAcceptability);
+			return new SourceModifyingReverse<>(theModifier, theEnabled, theAcceptability, creator, theAddAcceptability, isSourceModifying);
 		}
 
 		@Override
@@ -1256,7 +1273,16 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					return msg;
 				};
 			}
-			return new SourceModifyingReverse<>(theModifier, theEnabled, theAcceptability, theCreator, newAcceptance);
+			return new SourceModifyingReverse<>(theModifier, theEnabled, theAcceptability, theCreator, newAcceptance, isSourceModifying);
+		}
+
+		/**
+		 * @param sourceModifying Whether the reverse operation requires updates to be propagated to the source value
+		 * @return The new source modification reverse
+		 */
+		public SourceModifyingReverse<S, T> withSourceModification(boolean sourceModifying) {
+			return new SourceModifyingReverse<>(theModifier, theEnabled, theAcceptability, theCreator, theAddAcceptability,
+				sourceModifying);
 		}
 
 		@Override
@@ -1270,6 +1296,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				return null;
 			else
 				return theEnabled.apply(transformValues);
+		}
+
+		@Override
+		public boolean requiresSourceModification() {
+			return isSourceModifying;
 		}
 
 		@Override
@@ -1552,7 +1583,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				}, modifier::toString, modifier);
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(modifier2,
 				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
-				null, null);
+				null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
 			return withReverse(srr);
@@ -1692,7 +1723,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			}, modifier::toString, modifier);
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(reverse2, //
 				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), //
-				null, null, null);
+				null, null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
 			return withReverse(srr);
