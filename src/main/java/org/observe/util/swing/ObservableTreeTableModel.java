@@ -25,7 +25,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
@@ -33,6 +32,7 @@ import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableListElement;
 
 /**
  * An observable model to supply a tree table with data
@@ -126,7 +126,7 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 		BetterList<T> path=((ObservableTreeModel<T>.TreeNode) treeValue).getValuePath();
 		CategoryRenderStrategy<BetterList<T>, Object> column = (CategoryRenderStrategy<BetterList<T>, Object>) getColumnModel()
 			.getElementAt(columnIndex);
-		MutableCollectionElement<BetterList<T>> element = new MutableCollectionElement<BetterList<T>>() {
+		MutableListElement<BetterList<T>> element = new MutableListElement<BetterList<T>>() {
 			@Override
 			public ElementId getElementId() {
 				throw new UnsupportedOperationException();
@@ -138,8 +138,18 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 			}
 
 			@Override
-			public BetterCollection<BetterList<T>> getCollection() {
-				throw new UnsupportedOperationException();
+			public int getElementsBefore() {
+				return 0;
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return 0;
+			}
+
+			@Override
+			public MutableListElement<BetterList<T>> getAdjacent(boolean next) {
+				return null;
 			}
 
 			@Override

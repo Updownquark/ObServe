@@ -39,6 +39,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils.AdjustmentOrder;
 import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
 
@@ -113,13 +114,13 @@ public class ObservableSortedSetImpl {
 					public void accept(ObservableCollectionEvent<? extends E> evt) {
 						int inRange = isInRange(evt.getNewValue());
 						int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
-						CollectionElement<ElementId> presentEl;
+						ListElement<ElementId> presentEl;
 						if (inRange != 0) {
 							switch (evt.getType()) {
 							case set:
 								if (oldInRange == 0) {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
-									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									int index = presentEl.getElementsBefore();
 									thePresentElements.mutableElement(presentEl.getElementId()).remove();
 									fire(evt, CollectionChangeType.remove, null, index, evt.getOldValue(), evt.getOldValue());
 								}
@@ -130,23 +131,23 @@ public class ObservableSortedSetImpl {
 							switch (evt.getType()) {
 							case add:
 								presentEl = thePresentElements.addElement(evt.getElementId(), false);
-								int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								int index = presentEl.getElementsBefore();
 								fire(evt, evt.getType(), evt.getMovement(), index, null, evt.getNewValue());
 								break;
 							case remove:
 								presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
-								index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								index = presentEl.getElementsBefore();
 								thePresentElements.mutableElement(presentEl.getElementId()).remove();
 								fire(evt, evt.getType(), evt.getMovement(), index, evt.getOldValue(), evt.getNewValue());
 								break;
 							case set:
 								if (oldInRange != 0) {
 									presentEl = thePresentElements.addElement(evt.getElementId(), false);
-									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									index = presentEl.getElementsBefore();
 									fire(evt, CollectionChangeType.add, null, index, null, evt.getNewValue());
 								} else {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
-									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									index = presentEl.getElementsBefore();
 									fire(evt, CollectionChangeType.set, null, index, evt.getOldValue(), evt.getNewValue());
 								}
 							}
@@ -225,8 +226,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
-			return CollectionElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
+		public ListElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
+			return ListElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
 		}
 
 		@Override
@@ -675,10 +676,10 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
+		public ListElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
 			if (isReversed())
 				filter = filter.opposite();
-			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
+			ListElement<E> srcEl = getSource().search(mappedSearch(search), filter);
 			return srcEl == null ? null : elementFor(srcEl, null);
 		}
 	}
@@ -729,8 +730,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
-			CollectionElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()), filter);
+		public ListElement<T> search(Comparable<? super T> search, BetterSortedList.SortedSearchFilter filter) {
+			ListElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()), filter);
 			return presentEl == null ? null : elementFor(presentEl.get());
 		}
 	}
@@ -794,7 +795,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
+		public ListElement<E> search(Comparable<? super E> search, BetterSortedList.SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return null;
@@ -802,7 +803,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);

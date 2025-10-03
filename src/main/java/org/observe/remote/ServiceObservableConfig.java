@@ -2,18 +2,7 @@ package org.observe.remote;
 
 import java.security.SignatureException;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -30,10 +19,9 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.DequeList;
-import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeSet;
@@ -180,13 +168,13 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 				if (lastKnown == null)
 					changes.addAll(change.getValue());
 				else {
-					CollectionElement<ObservableServiceChange> later = change.getValue().search(change2 -> lastKnown.compareTo(change2),
+					ListElement<ObservableServiceChange> later = change.getValue().search(change2 -> lastKnown.compareTo(change2),
 						SortedSearchFilter.Greater);
 					if (later != null && lastKnown.compareTo(later.get()) == 0)
-						later = change.getValue().getAdjacentElement(later.getElementId(), true);
+						later = later.getAdjacent(true);
 					while (later != null) {
 						changes.add(later.get());
-						later = change.getValue().getAdjacentElement(later.getElementId(), true);
+						later = later.getAdjacent(true);
 					}
 				}
 			}
@@ -401,7 +389,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 	}
 
 	@Override
-	protected void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
+	protected void initialize(DefaultObservableConfig parent, ListElement<ObservableConfig> parentContentRef) {
 		super.initialize(parent, parentContentRef);
 		if (parent == null) {
 			theAddress = new ByteAddress(new byte[0]);
@@ -409,8 +397,8 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 			theAddress = theRootData.theCreateAddress;
 			theRootData.theCreateAddress = null;
 		} else {
-			CollectionElement<ObservableConfig> prev = parent.getContent().getAdjacentElement(parentContentRef, false);
-			CollectionElement<ObservableConfig> next = parent.getContent().getAdjacentElement(parentContentRef, true);
+			ListElement<ObservableConfig> prev = parentContentRef.getAdjacent(false);
+			ListElement<ObservableConfig> next = parentContentRef.getAdjacent(true);
 			theAddress = ByteAddress.between(//
 				prev == null ? null : ((ServiceObservableConfig) prev.get()).getAddress(), //
 					next == null ? null : ((ServiceObservableConfig) next.get()).getAddress());

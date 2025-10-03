@@ -238,9 +238,9 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 	@Override
 	protected void validate(CollectionLinkElement<T, T> element, boolean transactionEnd) {
 		if (element.isPresent()) {
-			CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getAdjacentElement(element.getElementAddress(), false);
+			CollectionElement<CollectionLinkElement<T, T>> adj = getElements().getElement(element.getElementAddress()).getAdjacent(false);
 			while (adj != null && !adj.get().isPresent())
-				adj = getElements().getAdjacentElement(adj.getElementId(), false);
+				adj = adj.getAdjacent(false);
 			if (adj != null) {
 				int comp = adj.get().getFirstSource().getElementAddress().compareTo(//
 					element.getFirstSource().getElementAddress());

@@ -46,8 +46,8 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
+import org.qommons.collect.MutableListElement;
 import org.qommons.io.Format;
 import org.qommons.io.Qonsole;
 import org.qommons.threading.QommonsTimer;
@@ -87,10 +87,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 * @param <X> The type of the included value
 	 */
 	public static class SelectableValue<T, X> implements Comparable<SelectableValue<T, X>> {
-		CollectionElement<T> sourceElement;
-		MutableCollectionElement<SelectableValue<T, X>> selectableElement;
-		ElementId displayedAddress;
-		ElementId includedAddress;
+		ListElement<T> sourceElement;
+		MutableListElement<SelectableValue<T, X>> selectableElement;
+		ListElement<SelectableValue<T, X>> displayedElement;
+		ListElement<SelectableValue<T, X>> includedAddress;
 		X theDestValue;
 
 		boolean included;
@@ -100,7 +100,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		 * @param sourceElement The source element for the value
 		 * @param included Whether the value is in the included set
 		 */
-		public SelectableValue(CollectionElement<T> sourceElement, boolean included) {
+		public SelectableValue(ListElement<T> sourceElement, boolean included) {
 			this.sourceElement = sourceElement;
 			this.included = included;
 		}
@@ -455,10 +455,10 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			case add:
 				// if (!evt.getNewValue().included)
 				// evt.getNewValue().selected = false;
-				evt.getNewValue().displayedAddress = evt.getElementId();
+				evt.getNewValue().displayedElement = theDisplayedValues.getElement(evt.getElementId());
 				break;
 			case remove:
-				evt.getNewValue().displayedAddress = null;
+				evt.getNewValue().displayedElement = null;
 				// if (!evt.getNewValue().isIncluded())
 				// evt.getNewValue().selected = false;
 				break;
@@ -469,7 +469,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		subs.add(theIncludedValues.subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
-				evt.getNewValue().includedAddress = evt.getElementId();
+				evt.getNewValue().includedAddress = theIncludedValues.getElement(evt.getElementId());
 				break;
 			case remove:
 				evt.getNewValue().includedAddress = null;
@@ -510,7 +510,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 					if (sv.selected == theDestTable.getSelectionModel().isSelectedIndex(i))
 						continue;
 					sv.selected = !sv.selected;
-					int displayedIndex = theDisplayedValues.getElementsBefore(sv.displayedAddress);
+					int displayedIndex = sv.displayedElement.getElementsBefore();
 					if (sv.selected)
 						theSourceTable.getSelectionModel().addSelectionInterval(displayedIndex, displayedIndex);
 					else
@@ -536,12 +536,12 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		try {
 			SelectableValue<T, X> sv = theDisplayedValues.get(min);
 			for (int i = min; i <= max && sv != null; //
-				i++, sv = CollectionElement.get(theDisplayedValues.getAdjacentElement(sv.displayedAddress, true))) {
+				i++, sv = CollectionElement.get(sv.displayedElement.getAdjacent(true))) {
 				if (sv.selected == theSourceTable.getSelectionModel().isSelectedIndex(i))
 					continue; // No change here
 				sv.selected = !sv.selected;
 				if (sv.isIncluded()) {
-					int includedIndex = theIncludedValues.getElementsBefore(sv.includedAddress);
+					int includedIndex = sv.includedAddress.getElementsBefore();
 					if (sv.selected)
 						theDestTable.getSelectionModel().addSelectionInterval(includedIndex, includedIndex);
 					else

@@ -29,6 +29,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.ValueStoredCollection;
@@ -1014,7 +1015,7 @@ public class ObservableCollectionActiveManagers {
 
 		@Override
 		public boolean isConsistent(DerivedCollectionElement<T> element) {
-			return theValues.isConsistent(((SortedElement) element).theValueElement);
+			return theValues.isConsistent(((SortedElement) element).theValueElement.getElementId());
 		}
 
 		@Override
@@ -1025,7 +1026,7 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public <X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener) {
 			return theValues.repair(//
-				((SortedElement) element).theValueElement, new SMRepairListener<>(listener));
+				((SortedElement) element).theValueElement.getElementId(), new SMRepairListener<>(listener));
 		}
 
 		@Override
@@ -1166,14 +1167,14 @@ public class ObservableCollectionActiveManagers {
 		class SortedElement implements DerivedCollectionElement<T> {
 			final DerivedCollectionElement<T> theParentEl;
 			private T theValue;
-			private ElementId theValueElement;
+			private ListElement<SortedElement> theValueElement;
 			private CollectionElementListener<T> theListener;
 
 			SortedElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
 				theValue = parentEl.get();
 				if (!synthetic) {
-					theValueElement = theValues.addElement(this, false).getElementId();
+					theValueElement = theValues.addElement(this, false);
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
@@ -1190,21 +1191,21 @@ public class ObservableCollectionActiveManagers {
 								// We don't need to fire events in response to the sorting changes,
 								// because the actively derived collection will also detect the mis-ordered state
 								// and will use the sorting to figure out where everything goes.
-								theValues.repair(theValueElement, //
+								theValues.repair(theValueElement.getElementId(), //
 									new ValueStoredCollection.RepairListener<SortedElement, Void>() {
 									@Override
-									public Void removed(CollectionElement<SortedManager<E, T>.SortedElement> element) {
+										public Void removed(CollectionElement<SortedElement> element) {
 										return null;
 									}
 
 									@Override
-									public void disposed(SortedManager<E, T>.SortedElement element, Void data) {
+										public void disposed(SortedElement element, Void data) {
 										throw new IllegalStateException();
 									}
 
 									@Override
-									public void transferred(CollectionElement<SortedManager<E, T>.SortedElement> element, Void data) {
-										element.get().theValueElement = element.getElementId();
+										public void transferred(CollectionElement<SortedElement> element, Void data) {
+											element.get().theValueElement = (ListElement<SortedElement>) element;
 									}
 								});
 								/* Update: Regarding the older comment below, the add/remove combo instead of update was done
@@ -1246,7 +1247,7 @@ public class ObservableCollectionActiveManagers {
 
 						@Override
 						public void removed(T value, Object... causes) {
-							theValues.mutableElement(theValueElement).remove();
+							theValues.mutableElement(theValueElement.getElementId()).remove();
 							ObservableCollectionActiveManagers.removed(theListener, theValue, causes);
 						}
 					});
@@ -1258,8 +1259,8 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
-				SortedElement left = CollectionElement.get(theValues.getAdjacentElement(theValueElement, false));
-				SortedElement right = CollectionElement.get(theValues.getAdjacentElement(theValueElement, true));
+				SortedElement left = CollectionElement.get(theValueElement.getAdjacent(false));
+				SortedElement right = CollectionElement.get(theValueElement.getAdjacent(true));
 				return (left == null || compareWithValue(newValue, left) >= 0)//
 					&& (right == null || compareWithValue(newValue, right) <= 0);
 			}

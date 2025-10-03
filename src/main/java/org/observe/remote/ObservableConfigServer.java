@@ -174,7 +174,7 @@ public class ObservableConfigServer {
 						SortedSearchFilter.Greater);
 					while (later != null) {
 						changes.add(later.get());
-						later = roleChange.getValue().getAdjacentElement(later.getElementId(), true);
+						later = later.getAdjacent(true);
 					}
 				}
 			}

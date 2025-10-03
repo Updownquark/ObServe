@@ -59,7 +59,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 		theSourceElements = BetterTreeSet.<CollectionLinkElement<?, S>> buildTreeSet(CollectionLinkElement::compareTo).build();
 
 		theErrors = new LinkedList<>();
-		theLastKnownIndex = theCollectionLink.getElements().getElementsBefore(elementAddress);
+		theLastKnownIndex = theCollectionLink.getElements().getElement(elementAddress).getElementsBefore();
 		wasAdded = true;
 		theCollectionValue = getActualCollectionValue();
 
@@ -189,7 +189,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	/** @return The index of this element in the link's elements */
 	public int getIndex() {
 		if (theElementAddress.isPresent())
-			return theCollectionLink.getElements().getElementsBefore(theElementAddress);
+			return theCollectionLink.getElements().getElement(theElementAddress).getElementsBefore();
 		else
 			return theLastKnownIndex;
 	}
@@ -356,7 +356,7 @@ public class CollectionLinkElement<S, T> implements Comparable<CollectionLinkEle
 	 */
 	public void validate(StringBuilder error) {
 		ObservableCollection<T> collection = theCollectionLink.getCollection();
-		int index = theCollectionLink.getElements().getElementsBefore(theElementAddress);
+		int index = theCollectionLink.getElements().getElement(theElementAddress).getElementsBefore();
 		if (isAddExpected > 0) {
 			if (!wasAdded) {
 				if (isAddExpected == 1)

@@ -116,9 +116,9 @@ public class SortedLinkHelper<T> {
 		if (derivedOp.getType() != CollectionOpType.set)
 			return true;
 		CollectionLinkElement<T, T> element = (CollectionLinkElement<T, T>) derivedOp.getElement();
-		CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
+		CollectionElement<CollectionLinkElement<T, T>> adj = elements.getElement(element.getElementAddress()).getAdjacent(false);
 		while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
-			adj = elements.getAdjacentElement(adj.getElementId(), false);
+			adj = adj.getAdjacent(false);
 		if (adj != null) {
 			int comp = theCompare.compare(derivedOp.getValue(), adj.get().getValue());
 			if (comp < 0 || (comp == 0 && isUsingFirstSource
@@ -127,9 +127,9 @@ public class SortedLinkHelper<T> {
 				return false;
 			}
 		}
-		adj = elements.getAdjacentElement(element.getElementAddress(), true);
+		adj = elements.getElement(element.getElementAddress()).getAdjacent(true);
 		while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
-			adj = elements.getAdjacentElement(adj.getElementId(), true);
+			adj = adj.getAdjacent(true);
 		if (adj != null) {
 			int comp = theCompare.compare(derivedOp.getValue(), adj.get().getValue());
 			if (comp > 0 || (comp == 0 && isUsingFirstSource
@@ -156,9 +156,9 @@ public class SortedLinkHelper<T> {
 		boolean expectMove;
 		int comp = theCompare.compare(sourceOp.getValue(), sourceOp.getOldValue());
 		if (comp < 0) {
-			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
+			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getElement(element.getElementAddress()).getAdjacent(false);
 			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
-				adj = elements.getAdjacentElement(adj.getElementId(), false);
+				adj = adj.getAdjacent(false);
 			if (adj == null)
 				expectMove = false;
 			else {
@@ -175,9 +175,9 @@ public class SortedLinkHelper<T> {
 		} else if (comp == 0) {
 			expectMove = false;
 		} else {
-			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), true);
+			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getElement(element.getElementAddress()).getAdjacent(true);
 			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
-				adj = elements.getAdjacentElement(adj.getElementId(), true);
+				adj = adj.getAdjacent(true);
 			if (adj == null)
 				expectMove = false;
 			else {
@@ -205,9 +205,9 @@ public class SortedLinkHelper<T> {
 				element.error("Null value");
 				return;
 			}
-			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getAdjacentElement(element.getElementAddress(), false);
+			CollectionElement<CollectionLinkElement<T, T>> adj = elements.getElement(element.getElementAddress()).getAdjacent(false);
 			while (adj != null && (adj.get().isRemoveExpected() || adj.get().wasAdded()))
-				adj = elements.getAdjacentElement(adj.getElementId(), false);
+				adj = adj.getAdjacent(false);
 			if (adj != null) {
 				int comp = theCompare.compare(adj.get().getValue(), element.getValue());
 				if (comp > 0) {

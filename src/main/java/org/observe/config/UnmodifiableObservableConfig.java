@@ -15,8 +15,9 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 
 /** An implementation of {@link ObservableConfig} that reflects all the values of another, but cannot be modified */
 public class UnmodifiableObservableConfig extends AbstractObservableConfig {
@@ -89,7 +90,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	public ElementId getParentChildRef() {
+	public ListElement<ObservableConfig> getParentChildRef() {
 		return theWrapped.getParentChildRef();
 	}
 
@@ -205,49 +206,34 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			return theBacking.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return theBacking.getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
+		public ListElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
 			if (!(value instanceof UnmodifiableObservableConfig))
 				return null;
-			CollectionElement<ObservableConfig> el = theBacking.getElement(((UnmodifiableObservableConfig) value).theWrapped, first);
+			ListElement<ObservableConfig> el = theBacking.getElement(((UnmodifiableObservableConfig) value).theWrapped, first);
 			return el == null ? null : new WrappedElement(el);
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(ElementId id) {
+		public ListElement<ObservableConfig> getElement(ElementId id) {
 			return new WrappedElement(theBacking.getElement(id));
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getTerminalElement(boolean first) {
-			CollectionElement<ObservableConfig> el = theBacking.getTerminalElement(first);
+		public ListElement<ObservableConfig> getTerminalElement(boolean first) {
+			ListElement<ObservableConfig> el = theBacking.getTerminalElement(first);
 			return el == null ? null : new WrappedElement(el);
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getAdjacentElement(ElementId elementId, boolean next) {
-			CollectionElement<ObservableConfig> el = theBacking.getAdjacentElement(elementId, next);
-			return el == null ? null : new WrappedElement(el);
-		}
-
-		@Override
-		public MutableCollectionElement<ObservableConfig> mutableElement(ElementId id) {
+		public MutableListElement<ObservableConfig> mutableElement(ElementId id) {
 			return new WrappedElement(theBacking.getElement(id));
 		}
 
 		@Override
 		public BetterList<CollectionElement<ObservableConfig>> getElementsBySource(ElementId sourceEl,
 			BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(theBacking.getElementsBySource(sourceEl, sourceCollection), WrappedElement::new);
+			return QommonsUtils.map2(theBacking.getElementsBySource(sourceEl, sourceCollection),
+				el -> new WrappedElement((ListElement<ObservableConfig>) el));
 		}
 
 		@Override
@@ -268,7 +254,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
+		public ListElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -283,7 +269,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
+		public ListElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
 			Runnable afterRemove) throws UnsupportedOperationException, IllegalArgumentException {
 			if (after != null && after.compareTo(valueEl) > 0)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -338,7 +324,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<ObservableConfig> getElement(int index) throws IndexOutOfBoundsException {
 			return new WrappedElement(theBacking.getElement(index));
 		}
 
@@ -348,10 +334,10 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
-		private class WrappedElement implements MutableCollectionElement<ObservableConfig> {
-			private final CollectionElement<ObservableConfig> theBackingElement;
+		private class WrappedElement implements MutableListElement<ObservableConfig> {
+			private final ListElement<ObservableConfig> theBackingElement;
 
-			WrappedElement(CollectionElement<ObservableConfig> backing) {
+			WrappedElement(ListElement<ObservableConfig> backing) {
 				theBackingElement = backing;
 			}
 
@@ -366,8 +352,19 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 			}
 
 			@Override
-			public BetterCollection<ObservableConfig> getCollection() {
-				return UnmodifiableChildList.this;
+			public int getElementsBefore() {
+				return theBackingElement.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theBackingElement.getElementsAfter();
+			}
+
+			@Override
+			public MutableListElement<ObservableConfig> getAdjacent(boolean next) {
+				ListElement<ObservableConfig> adj = theBackingElement.getAdjacent(next);
+				return adj == null ? null : new WrappedElement(adj);
 			}
 
 			@Override

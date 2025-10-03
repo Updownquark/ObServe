@@ -35,8 +35,7 @@ import org.observe.collect.ObservableCollection;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ReentrantNotificationException;
 
 /**
@@ -333,7 +332,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		Consumer<String> checkEnabled, Supplier<String> debug) {
 		List<Subscription> subs = new LinkedList<>();
 		boolean[] callbackLock = new boolean[1];
-		ElementId[] currentSelectedElement = new ElementId[1];
+		ListElement<? extends T>[] currentSelectedElement = new ListElement[1];
 		Object[] currentSelected = new Object[1];
 		boolean[] isDebug = new boolean[1];
 		subs.add(acceptSelected.apply((item, idx, cause) -> {
@@ -355,13 +354,13 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 									callbackLock[0] = false;
 								}
 							});
-						else if (currentSelectedElement[0].isPresent())
-							EventQueue.invokeLater(() -> setSelected.test(availableValues.getElementsBefore(currentSelectedElement[0])));
+						else if (currentSelectedElement[0].getElementId().isPresent())
+							EventQueue.invokeLater(() -> setSelected.test(currentSelectedElement[0].getElementsBefore()));
 						return false;
 					}
 					if (isDebug[0])
 						System.out.println("User-selected item " + item);
-					currentSelectedElement[0] = availableValues.getElement(idx).getElementId();
+					currentSelectedElement[0] = availableValues.getElement(idx);
 					currentSelected[0] = item;
 					selected.set(item, cause);
 				} finally {
@@ -389,11 +388,11 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			String enabled = selected.isEnabled().get();
 			callbackLock[0] = true;
 			try (Transaction avT = availableValues.lock(false, null)) {
-				CollectionElement<? extends T> found = ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true);
+				ListElement<? extends T> found = ((ObservableCollection<T>) availableValues).getElement(evt.getNewValue(), true);
 				if (found != null) {
-					currentSelectedElement[0] = found.getElementId();
+					currentSelectedElement[0] = found;
 					currentSelected[0] = found.get();
-					int index = availableValues.getElementsBefore(currentSelectedElement[0]);
+					int index = currentSelectedElement[0].getElementsBefore();
 					if (isDebug[0])
 						System.out.println("Combo value " + evt.getNewValue() + " found at " + index);
 					if (!setSelected.test(index))

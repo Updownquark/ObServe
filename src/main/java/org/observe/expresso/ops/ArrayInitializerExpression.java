@@ -45,8 +45,9 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 
@@ -281,10 +282,10 @@ public class ArrayInitializerExpression implements ObservableExpression {
 	}
 
 	static class Instance<T> extends AbstractIdentifiable implements ObservableCollection<T> {
-		class Element implements CollectionElement<T> {
-			protected final CollectionElement<SettableValue<T>> theValueElement;
+		class Element implements ListElement<T> {
+			protected final ListElement<SettableValue<T>> theValueElement;
 
-			Element(CollectionElement<SettableValue<T>> valueElement) {
+			Element(ListElement<SettableValue<T>> valueElement) {
 				theValueElement = valueElement;
 			}
 
@@ -303,6 +304,22 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			}
 
 			@Override
+			public ListElement<T> getAdjacent(boolean next) {
+				ListElement<SettableValue<T>> adj = theValueElement.getAdjacent(next);
+				return adj == null ? null : new Element(adj);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theValueElement.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theValueElement.getElementsAfter();
+			}
+
+			@Override
 			public boolean equals(Object obj) {
 				return obj instanceof CollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
 			}
@@ -313,14 +330,15 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			}
 		}
 
-		class MutableElement extends Element implements MutableCollectionElement<T> {
-			MutableElement(CollectionElement<SettableValue<T>> valueElement) {
+		class MutableElement extends Element implements MutableListElement<T> {
+			MutableElement(ListElement<SettableValue<T>> valueElement) {
 				super(valueElement);
 			}
 
 			@Override
-			public BetterCollection<T> getCollection() {
-				return Instance.this;
+			public MutableListElement<T> getAdjacent(boolean next) {
+				ListElement<SettableValue<T>> adj = theValueElement.getAdjacent(next);
+				return adj == null ? null : new MutableElement(adj);
 			}
 
 			@Override
@@ -349,7 +367,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			}
 		}
 
-		public Element element(CollectionElement<SettableValue<T>> valueElement) {
+		public Element element(ListElement<SettableValue<T>> valueElement) {
 			return valueElement == null ? null : new Element(valueElement);
 		}
 
@@ -364,7 +382,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<T> getElement(int index) throws IndexOutOfBoundsException {
 			return element(theValues.getElement(index));
 		}
 
@@ -374,18 +392,8 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			return theValues.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return theValues.getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
-			for (CollectionElement<SettableValue<T>> valueEl : theValues.elements()) {
+		public ListElement<T> getElement(T value, boolean first) {
+			for (ListElement<SettableValue<T>> valueEl : theValues.elements()) {
 				if (Objects.equals(valueEl.get().get(), value))
 					return element(valueEl);
 			}
@@ -393,22 +401,17 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(ElementId id) {
+		public ListElement<T> getElement(ElementId id) {
 			return element(theValues.getElement(id));
 		}
 
 		@Override
-		public CollectionElement<T> getTerminalElement(boolean first) {
+		public ListElement<T> getTerminalElement(boolean first) {
 			return element(theValues.getTerminalElement(first));
 		}
 
 		@Override
-		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			return element(theValues.getAdjacentElement(elementId, next));
-		}
-
-		@Override
-		public MutableCollectionElement<T> mutableElement(ElementId id) {
+		public MutableListElement<T> mutableElement(ElementId id) {
 			return new MutableElement(theValues.getElement(id));
 		}
 
@@ -416,7 +419,8 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this)
 				return BetterList.of(getElement(sourceEl));
-			return BetterList.of(theValues.getElementsBySource(sourceEl, sourceCollection).stream().map(this::element));
+			return BetterList.of(
+				theValues.getElementsBySource(sourceEl, sourceCollection).stream().map(el -> element((ListElement<SettableValue<T>>) el)));
 		}
 
 		@Override
@@ -437,7 +441,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -450,7 +454,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 		}
 
 		@Override
-		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			if ((after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
 				return getElement(valueEl);

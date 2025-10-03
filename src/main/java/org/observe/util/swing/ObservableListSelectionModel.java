@@ -25,11 +25,11 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterBitSet;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 
 /**
  * <p>
@@ -322,13 +322,14 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	}
 
 	private int getAddIndex(E newValue, ElementId after, ElementId before, boolean first) {
-		int minAddIndex = after == null ? -1 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
-		int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
+		int minAddIndex = after == null ? -1 : value.indexOfNthSetBit(getWrapped().getElement(after).getElementsBefore());
+		int maxAddIndex = before == null ? theListModel.getSize()
+			: value.indexOfNthSetBit(getWrapped().getElement(before).getElementsBefore());
 		try (Transaction t = theListModel.getWrapped().lock(false, null)) {
-			CollectionElement<E> listEl = theListModel.getWrapped().subList(minAddIndex + 1, maxAddIndex).getElement(newValue, first);
+			ListElement<E> listEl = theListModel.getWrapped().subList(minAddIndex + 1, maxAddIndex).getElement(newValue, first);
 			if (listEl == null)
 				return -1;
-			int index = theListModel.getWrapped().getElementsBefore(listEl.getElementId());
+			int index = listEl.getElementsBefore();
 			if (listEl.get() == theListModel.getElementAt(index))
 				return index;
 		}
@@ -337,7 +338,8 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			for (int i = value.nextClearBit(minAddIndex + 1); i < maxAddIndex; i = value.nextClearBit(i + 1)) {
 				if (i > 0 && value.get(i - 1))
 					after = CollectionElement
-					.getElementId(after == null ? getWrapped().getTerminalElement(true) : getWrapped().getAdjacentElement(after, true));
+						.getElementId(
+							after == null ? getWrapped().getTerminalElement(true) : getWrapped().getElement(after).getAdjacent(true));
 				E modelValue = theListModel.getElementAt(i);
 				if (getWrapped().equivalence().elementEquals(modelValue, newValue))
 					return i;
@@ -346,7 +348,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			for (int i = value.previousClearBit(maxAddIndex - 1); i > minAddIndex; i = value.previousClearBit(i - 1)) {
 				if (value.get(i + 1))
 					before = CollectionElement.getElementId(
-						before == null ? getWrapped().getTerminalElement(false) : getWrapped().getAdjacentElement(before, false));
+						before == null ? getWrapped().getTerminalElement(false) : getWrapped().getElement(before).getAdjacent(false));
 				E modelValue = theListModel.getElementAt(i);
 				if (getWrapped().equivalence().elementEquals(modelValue, newValue))
 					return i;
@@ -356,7 +358,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E newValue, ElementId after, ElementId before, boolean first)
+	public ListElement<E> addElement(E newValue, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
 			int index = getAddIndex(newValue, after, before, first);
@@ -379,7 +381,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	}
 
 	@Override
-	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		// Only support the trivial case
 		if (after != null && valueEl.compareTo(after) < 0)
@@ -396,11 +398,11 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	}
 
 	@Override
-	public MutableCollectionElement<E> mutableElement(ElementId id) {
-		class MutableSelectionElement implements MutableCollectionElement<E> {
-			private final MutableCollectionElement<E> theWrapped;
+	public MutableListElement<E> mutableElement(ElementId id) {
+		class MutableSelectionElement implements MutableListElement<E> {
+			private final MutableListElement<E> theWrapped;
 
-			MutableSelectionElement(MutableCollectionElement<E> wrapped) {
+			MutableSelectionElement(MutableListElement<E> wrapped) {
 				theWrapped = wrapped;
 			}
 
@@ -415,8 +417,19 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			}
 
 			@Override
-			public BetterCollection<E> getCollection() {
-				return ObservableListSelectionModel.this;
+			public int getElementsBefore() {
+				return theWrapped.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theWrapped.getElementsAfter();
+			}
+
+			@Override
+			public MutableListElement<E> getAdjacent(boolean next) {
+				MutableListElement<E> adj = theWrapped.getAdjacent(next);
+				return adj == null ? null : new MutableSelectionElement(adj);
 			}
 
 			@Override
@@ -446,7 +459,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				int modelIndex = value.indexOfNthSetBit(ObservableListSelectionModel.this.getWrapped().getElementsBefore(getElementId()));
+				int modelIndex = value.indexOfNthSetBit(theWrapped.getElementsBefore());
 				removeSelectionInterval(modelIndex, modelIndex);
 			}
 
@@ -724,7 +737,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	}
 
 	private void changeSelection(int clearMin, int clearMax, int setMin, int setMax, boolean clearFirst) {
-		ElementId lastSelected = null;
+		ListElement<E> lastSelected = null;
 		boolean lastSelectedAccurate = false;
 		Causable cause = null;
 		Transaction t = null;
@@ -746,34 +759,35 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 					if (!value.get(i)) {
 						if (!lastSelectedAccurate) {
 							int selIndex = value.countBitsSetBetween(0, i);
-							lastSelected = selIndex == 0 ? null : getWrapped().getElement(selIndex - 1).getElementId();
+							lastSelected = selIndex == 0 ? null : getWrapped().getElement(selIndex - 1);
 							lastSelectedAccurate = true;
 						}
 						if (t == null) {
 							cause = Causable.simpleCause();
 							t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
 						}
-						lastSelected = getWrapped().addElement(theListModel.getElementAt(i), lastSelected, null, true).getElementId();
+						lastSelected = getWrapped().addElement(theListModel.getElementAt(i), CollectionElement.getElementId(lastSelected),
+							null, true);
 						set(i);
 					}
 				} else if (lastSelectedAccurate && value.get(i)) {
 					if (lastSelected != null)
-						lastSelected = getWrapped().getAdjacentElement(lastSelected, true).getElementId();
+						lastSelected = lastSelected.getAdjacent(true);
 					else
-						lastSelected = getWrapped().getTerminalElement(true).getElementId();
+						lastSelected = getWrapped().getTerminalElement(true);
 				}
 				if (shouldClear && value.get(i)) {
 					if (!lastSelectedAccurate) {
 						int selIndex = value.countBitsSetBetween(0, i);
-						lastSelected = getWrapped().getElement(selIndex).getElementId();
+						lastSelected = getWrapped().getElement(selIndex);
 						lastSelectedAccurate = true;
 					}
-					ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
+					ListElement<E> prevSelected = lastSelected.getAdjacent(false);
 					if (t == null) {
 						cause = Causable.simpleCause();
 						t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
 					}
-					getWrapped().mutableElement(lastSelected).remove();
+					getWrapped().mutableElement(lastSelected.getElementId()).remove();
 					lastSelected = prevSelected;
 					clear(i);
 				}

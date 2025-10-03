@@ -106,7 +106,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
@@ -685,7 +685,7 @@ class PanelPopulationImpl {
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			return new SimpleMultiSliderEditor<>(parent, fieldName, //
 				MultiRangeSlider.multiRange(false, sliderBounds, values.flow()//
-				.<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
+					.<MultiRangeSlider.Range> transform(tx -> tx.cache(false)//
 						.map(v -> MultiRangeSlider.Range.forValueExtent(v, 0))//
 						.replaceSource(r -> r.getValue(), null)//
 						).collectPassive(), //
@@ -1010,7 +1010,7 @@ class PanelPopulationImpl {
 	static class SimpleTabPaneEditor<P extends SimpleTabPaneEditor<P>> extends SimpleComponentEditor<JTabbedPane, P>
 	implements TabPaneEditor<JTabbedPane, P> {
 		static class Tab {
-			final CollectionElement<Object> id;
+			final ListElement<Object> id;
 			final SimpleTabEditor<?> tab;
 			Component component;
 			SimpleObservable<Void> tabEnd;
@@ -1022,7 +1022,7 @@ class PanelPopulationImpl {
 			Observable<?> until;
 			Consumer<Object> onRemove;
 
-			Tab(CollectionElement<Object> id, SimpleTabEditor<?> tab) {
+			Tab(ListElement<Object> id, SimpleTabEditor<?> tab) {
 				this.id = id;
 				this.tab = tab;
 			}
@@ -1084,7 +1084,7 @@ class PanelPopulationImpl {
 				System.out.println("Adding tab " + tabID + "@" + tabIndex);
 			SimpleTabEditor<?> t = new SimpleTabEditor<>(this, tabID, tabComponent);
 			tabModifier.accept(t);
-			CollectionElement<Object> tabOrder = theTabOrder.addElement(tabIndex, tabID);
+			ListElement<Object> tabOrder = theTabOrder.addElement(tabIndex, tabID);
 			Tab tab = new Tab(tabOrder, t);
 			tab.onRemove = t.onRemove;
 			Tab oldTab = theTabs.put(tabID, tab);
@@ -1175,7 +1175,7 @@ class PanelPopulationImpl {
 
 		private int getTabIndex(Tab tab) {
 			if (tab.id.getElementId().isPresent())
-				return theTabOrder.getElementsBefore(tab.id.getElementId());
+				return tab.id.getElementsBefore();
 			else
 				return -1;
 		}

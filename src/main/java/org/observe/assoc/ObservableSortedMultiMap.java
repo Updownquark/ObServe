@@ -24,8 +24,10 @@ import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMultiMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.OrderedMapEntry;
+import org.qommons.collect.OrderedMultiEntry;
 
 /**
  * A sorted {@link ObservableMultiMap}
@@ -50,6 +52,24 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		CollectionElement<K> keyEl = keySet().search(search, filter);
 		return keyEl == null ? null : getEntryById(keyEl.getElementId());
 	}
+
+	@Override
+	default OrderedMultiEntry<K, V> getEntry(K key) {
+		return BetterSortedMultiMap.super.getEntry(key);
+	}
+
+	@Override
+	default OrderedMultiEntry<K, V> getTerminalEntry(boolean first) {
+		return BetterSortedMultiMap.super.getTerminalEntry(first);
+	}
+
+	@Override
+	default OrderedMultiEntry<K, V> getAdjacentEntry(ElementId entryId, boolean next) {
+		return BetterSortedMultiMap.super.getAdjacentEntry(entryId, next);
+	}
+
+	@Override
+	OrderedMultiEntry<K, V> getEntryById(ElementId keyId);
 
 	@Override
 	default ObservableSortedMultiMap<K, V> reverse() {
@@ -210,6 +230,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			public BetterCollection<V> getValues() {
 				return BetterCollection.empty();
 			}
+
+			@Override
+			public MultiEntryHandle<K, V> getAdjacent(boolean next) {
+				return null;
+			}
 		}
 
 		private final Equivalence.SortedEquivalence<? super MultiEntryHandle<K, V>> theEquivalence;
@@ -242,7 +267,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public CollectionElement<MultiEntryHandle<K, V>> search(Comparable<? super MultiEntryHandle<K, V>> search,
+		public ListElement<MultiEntryHandle<K, V>> search(Comparable<? super MultiEntryHandle<K, V>> search,
 			SortedSearchFilter filter) {
 			TempEntry temp = new TempEntry();
 			CollectionElement<K> keyEl = getMap().keySet().search(key -> {
@@ -278,6 +303,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			public BetterCollection<V> getValues() {
 				throw new IllegalStateException("This method may not be called from a search");
 			}
+
+			@Override
+			public MultiEntryHandle<K, V> getAdjacent(boolean next) {
+				return null;
+			}
 		}
 	}
 
@@ -304,26 +334,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
+		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<Map.Entry<K, V>> keyEntry = entrySet().search(search, filter);
 			if (keyEntry == null)
 				return null;
-			return new MapEntryHandle<K, V>() {
-				@Override
-				public ElementId getElementId() {
-					return keyEntry.getElementId();
-				}
-
-				@Override
-				public K getKey() {
-					return keyEntry.get().getKey();
-				}
-
-				@Override
-				public V get() {
-					return keyEntry.get().getValue();
-				}
-			};
+			return entryFor(getSource().getEntryById(keyEntry.getElementId()));
 		}
 	}
 
@@ -358,8 +373,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public MapEntryHandle<K, X> searchEntries(Comparable<? super Map.Entry<K, X>> search, SortedSearchFilter filter) {
-			return (MapEntryHandle<K, X>) entrySet().searchValue(search, filter);
+		public OrderedMapEntry<K, X> searchEntries(Comparable<? super Map.Entry<K, X>> search, SortedSearchFilter filter) {
+			return (OrderedMapEntry<K, X>) entrySet().searchValue(search, filter);
 		}
 	}
 
@@ -536,8 +551,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
 			return getWrapped().onChange(evt -> {
-				int keyIndex = keySet().getElementsBefore(evt.getKeyElement());
-				int valueIndex = get(evt.getKey()).getElementsBefore(evt.getElementId());
+				int keyIndex = keySet().getElement(evt.getKeyElement()).getElementsBefore();
+				int valueIndex = get(evt.getKey()).getElement(evt.getElementId()).getElementsBefore();
 				ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent.Default<>(evt.getKeyElement(), evt.getElementId(),
 					keyIndex, valueIndex, evt.getType(), evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt,
 					evt.getMovement());

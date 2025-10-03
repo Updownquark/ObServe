@@ -57,6 +57,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils.AdjustmentOrder;
 import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OptimisticContext;
@@ -95,8 +96,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
-			return CollectionElement
+		public ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+			return ListElement
 				.reverse(getWrapped().getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, preAdd, postAdd));
 		}
 
@@ -1058,7 +1059,7 @@ public class ObservableSetImpl {
 					theDebug.act("add:new").param("value", theValue).exec();
 					theActiveElement = parentEl;
 					theAccepter.accept(this, causes);
-				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
+				} else if (isAlwaysUsingFirst && node.getAdjacent(false) == null) {
 					theDebug.act("add:repChange").param("value", theValue).exec();
 					// The new element takes precedence over the current one
 					T oldValue = theValue;
@@ -1430,13 +1431,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
 				FilterMapResult<T, E> reversed = getFlow().reverse(value, true, false);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, after, before, first, preAdd, postAdd);
+				ListElement<E> srcEl = getSource().getOrAdd(reversed.result, after, before, first, preAdd, postAdd);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -1491,7 +1492,7 @@ public class ObservableSetImpl {
 
 			@Override
 			public X removed(CollectionElement<E> element) {
-				return theWrapped.removed(elementFor(element, theMap));
+				return theWrapped.removed(elementFor((ListElement<E>) element, theMap));
 			}
 
 			@Override
@@ -1501,7 +1502,7 @@ public class ObservableSetImpl {
 
 			@Override
 			public void transferred(CollectionElement<E> element, X data) {
-				theWrapped.transferred(elementFor(element, theMap), data);
+				theWrapped.transferred(elementFor((ListElement<E>) element, theMap), data);
 			}
 		}
 	}
@@ -1537,21 +1538,29 @@ public class ObservableSetImpl {
 		protected void updateHolder(T oldValue, DerivedElementHolder<T> element) {
 			T newValue = element.get();
 			if (!equivalence().elementEquals(oldValue, newValue)) {
-				theElementsByValue.remove(oldValue);
+				if (null == theElementsByValue.remove(oldValue)) {
+					System.err.println("Failed to remove " + oldValue);
+					theElementsByValue.remove(oldValue);
+				}
 				theElementsByValue.put(newValue, element);
 			}
 			super.updateHolder(oldValue, element);
 		}
 
 		@Override
-		protected void removeHolder(DerivedElementHolder<T> element) {
-			theElementsByValue.remove(element.get());
-			super.removeHolder(element);
+		protected void removeHolder(T oldValue, DerivedElementHolder<T> element) {
+			if (null == theElementsByValue.remove(oldValue)) {
+				System.err.println("Failed to remove " + oldValue);
+				theElementsByValue.remove(oldValue);
+			}
+			super.removeHolder(oldValue, element);
 		}
 
 		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
+		public ListElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
+				if(theElementsByValue==null)
+					return null;
 				DerivedElementHolder<T> element = theElementsByValue.get(value);
 				return element == null ? null : elementFor(element);
 			}
@@ -1569,10 +1578,10 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
 			try (Transaction t = lock(true, null)) {
-				CollectionElement<T> element = getElement(value, first);
+				ListElement<T> element = getElement(value, first);
 				if (element == null) {
 					if (preAdd != null && canAdd(value) == null)
 						preAdd.run();
@@ -1634,7 +1643,7 @@ public class ObservableSetImpl {
 				ElementId id = el.getElementId();
 				if (theIndex.computeIfAbsent(el.get(), v -> id) != id)
 					values.mutableElement(el.getElementId()).remove();
-				el = getAdjacentElement(el.getElementId(), true);
+				el = el.getAdjacent(true);
 			}
 		}
 
@@ -1645,7 +1654,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			ElementId el = theIndex.get(value);
 			if (el != null)
 				return getElement(el);
@@ -1695,10 +1704,10 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// *Possibly* could figure out how to do this more efficiently, but for the moment this will work
 			try (Transaction t = lock(true, null)) {
-				CollectionElement<E> element = getElement(value, first);
+				ListElement<E> element = getElement(value, first);
 				if (element == null) {
 					if (preAdd != null && canAdd(value) == null)
 						preAdd.run();
@@ -1817,7 +1826,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+		public ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			refresh();
 			return getWrapped().getOrAdd(value, after, before, first, preAdd, postAdd);
 		}

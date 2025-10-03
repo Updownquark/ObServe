@@ -35,14 +35,15 @@ import org.qommons.IdentityKey;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableListElement;
 
 /**
  * A swing tree model well suited to visualizing observable structures
@@ -236,13 +237,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	 * @param child The child to get the mutable element for
 	 * @return The mutable collection element of the given child in its parent's children collection
 	 */
-	public MutableCollectionElement<T> getElementOfChild(T child) {
+	public MutableListElement<T> getElementOfChild(T child) {
 		TreeNode childNode = getNode(child, false);
 		if (childNode == null)
 			return null;
 		ElementId element = childNode.getParent().getChildren().getElement(//
 			childNode.getParent().getChildNodes().indexOf(childNode)).getElementId();
-		return (MutableCollectionElement<T>) childNode.getParent().getChildren().mutableElement(element);
+		return (MutableListElement<T>) childNode.getParent().getChildren().mutableElement(element);
 	}
 
 	public TreePath getTreePath(List<? extends T> valuePath, Equivalence<? super T> equivalence) {
@@ -382,7 +383,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			BetterList<T> valuePath = getValuePath();
 			MutableCollectionElement<BetterList<T>> element;
 			if (getParent() == null) {
-				element = new MutableCollectionElement<BetterList<T>>() {
+				element = new MutableListElement<BetterList<T>>() {
 					@Override
 					public ElementId getElementId() {
 						return null;
@@ -394,8 +395,18 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					}
 
 					@Override
-					public BetterCollection<BetterList<T>> getCollection() {
-						return BetterList.<BetterList<T>> of(valuePath);
+					public int getElementsBefore() {
+						return 0;
+					}
+
+					@Override
+					public int getElementsAfter() {
+						return 0;
+					}
+
+					@Override
+					public MutableListElement<BetterList<T>> getAdjacent(boolean next) {
+						return null;
 					}
 
 					@Override
@@ -429,49 +440,73 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					}
 				};
 			} else {
-				CollectionElement<? extends T> el = getParent().getChildren().getElement(getParent().getChildNodes().indexOf(this));
-				MutableCollectionElement<? extends T> backing = getParent().getChildren().mutableElement(el.getElementId());
-				element = new MutableCollectionElement<BetterList<T>>() {
+				class TreeNodeElement implements MutableListElement<BetterList<T>> {
+					private final BetterList<T> theValuePath;
+					private final MutableListElement<? extends T> theBacking;
+
+					TreeNodeElement(BetterList<T> valuePath2, MutableListElement<? extends T> backing) {
+						theValuePath = valuePath2;
+						theBacking = backing;
+					}
+
 					@Override
 					public ElementId getElementId() {
-						return backing.getElementId();
+						return theBacking.getElementId();
 					}
 
 					@Override
 					public BetterList<T> get() {
-						return valuePath;
+						return theValuePath;
 					}
 
 					@Override
-					public BetterCollection<BetterList<T>> getCollection() {
-						return (BetterCollection<BetterList<T>>) backing.getCollection();
+					public MutableListElement<BetterList<T>> getAdjacent(boolean next) {
+						MutableListElement<? extends T> adj = theBacking.getAdjacent(next);
+						if (adj == null)
+							return null;
+						T[] adjValuePath = (T[]) theValuePath.toArray();
+						adjValuePath[adjValuePath.length - 1] = adj.get();
+						return new TreeNodeElement(BetterList.of(adjValuePath), adj);
+					}
+
+					@Override
+					public int getElementsBefore() {
+						return theBacking.getElementsBefore();
+					}
+
+					@Override
+					public int getElementsAfter() {
+						return theBacking.getElementsAfter();
 					}
 
 					@Override
 					public String isEnabled() {
-						return backing.isEnabled();
+						return theBacking.isEnabled();
 					}
 
 					@Override
 					public String isAcceptable(BetterList<T> value) {
-						return ((MutableCollectionElement<T>) backing).isAcceptable(value.getLast());
+						return ((MutableCollectionElement<T>) theBacking).isAcceptable(value.getLast());
 					}
 
 					@Override
 					public void set(BetterList<T> value) throws UnsupportedOperationException, IllegalArgumentException {
-						((MutableCollectionElement<T>) backing).set(value.getLast());
+						((MutableCollectionElement<T>) theBacking).set(value.getLast());
 					}
 
 					@Override
 					public String canRemove() {
-						return backing.canRemove();
+						return theBacking.canRemove();
 					}
 
 					@Override
 					public void remove() throws UnsupportedOperationException {
-						backing.remove();
+						theBacking.remove();
 					}
-				};
+				}
+				CollectionElement<? extends T> el = getParent().getChildren().getElement(getParent().getChildNodes().indexOf(this));
+				MutableListElement<? extends T> backing = getParent().getChildren().mutableElement(el.getElementId());
+				return new TreeNodeElement(valuePath, backing);
 			}
 			return element;
 		}
@@ -1053,8 +1088,8 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					return;
 				callbackLock[0] = true;
 				try {
-					for (CollectionElement<BetterList<T>> selected : multiSelection.elements()) {
-						if (eventApplies(e, selected.get(), equivalence, () -> multiSelection.getElementsBefore(selected.getElementId())))
+					for (ListElement<BetterList<T>> selected : multiSelection.elements()) {
+						if (eventApplies(e, selected.get(), equivalence, () -> selected.getElementsBefore()))
 							multiSelection.mutableElement(selected.getElementId()).set(selected.get());
 					}
 				} finally {

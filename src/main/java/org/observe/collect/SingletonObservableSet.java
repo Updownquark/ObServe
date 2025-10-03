@@ -17,8 +17,9 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 
 /**
  * An {@link ObservableSet} whose size is always 1 and whose only element is backed by a {@link SettableValue}
@@ -28,8 +29,8 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 public class SingletonObservableSet<T> extends AbstractIdentifiable implements ObservableSet<T> {
 	private final SettableValue<T> theValue;
 	private final ElementId theId;
-	private final CollectionElement<T> theElement;
-	private final MutableCollectionElement<T> theMutableElement;
+	private final ListElement<T> theElement;
+	private final MutableListElement<T> theMutableElement;
 
 	/**
 	 * @param value The value for the set's element
@@ -139,7 +140,7 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	}
 
 	@Override
-	public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
+	public ListElement<T> getElement(int index) throws IndexOutOfBoundsException {
 		if (index == 0)
 			return theElement;
 		throw new IndexOutOfBoundsException(index + " of 1");
@@ -151,45 +152,26 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	}
 
 	@Override
-	public int getElementsBefore(ElementId id) {
-		if (theId == id)
-			return 0;
-		throw new NoSuchElementException();
-	}
-
-	@Override
-	public int getElementsAfter(ElementId id) {
-		if (theId == id)
-			return 0;
-		throw new NoSuchElementException();
-	}
-
-	@Override
-	public CollectionElement<T> getElement(T value, boolean first) {
+	public ListElement<T> getElement(T value, boolean first) {
 		if (equivalence().elementEquals(theValue.get(), value))
 			return theElement;
 		return null;
 	}
 
 	@Override
-	public CollectionElement<T> getElement(ElementId id) {
+	public ListElement<T> getElement(ElementId id) {
 		if (id == theId)
 			return theElement;
 		throw new NoSuchElementException();
 	}
 
 	@Override
-	public CollectionElement<T> getTerminalElement(boolean first) {
+	public ListElement<T> getTerminalElement(boolean first) {
 		return theElement;
 	}
 
 	@Override
-	public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-		return null;
-	}
-
-	@Override
-	public MutableCollectionElement<T> mutableElement(ElementId id) {
+	public MutableListElement<T> mutableElement(ElementId id) {
 		if (id == theId)
 			return theMutableElement;
 		throw new NoSuchElementException();
@@ -232,7 +214,7 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	}
 
 	@Override
-	public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+	public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		if (equivalence().elementEquals(theValue.get(), value))
 			return null;
@@ -245,13 +227,13 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	}
 
 	@Override
-	public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+	public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		return theElement;
 	}
 
 	@Override
-	public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+	public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 		if (equivalence().elementEquals(theValue.get(), value))
 			return theElement;
 		throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -303,7 +285,7 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 		return new SingletonObservableSet<>(theValue.safe(threading));
 	}
 
-	class ValueElement implements CollectionElement<T> {
+	class ValueElement implements ListElement<T> {
 		@Override
 		public ElementId getElementId() {
 			return theId;
@@ -315,15 +297,30 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 		}
 
 		@Override
+		public ListElement<T> getAdjacent(boolean next) {
+			return null;
+		}
+
+		@Override
+		public int getElementsBefore() {
+			return 0;
+		}
+
+		@Override
+		public int getElementsAfter() {
+			return 0;
+		}
+
+		@Override
 		public String toString() {
 			return theId.toString();
 		}
 	}
 
-	class MutableValueElement extends ValueElement implements MutableCollectionElement<T> {
+	class MutableValueElement extends ValueElement implements MutableListElement<T> {
 		@Override
-		public BetterCollection<T> getCollection() {
-			return SingletonObservableSet.this;
+		public MutableListElement<T> getAdjacent(boolean next) {
+			return null;
 		}
 
 		@Override

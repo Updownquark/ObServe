@@ -18,8 +18,10 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableListElement;
 import org.qommons.collect.ValueStoredCollection;
 
 /**
@@ -62,8 +64,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
 		theLock = list;
-		theChanges = new LightWeightObservable<ObservableCollectionEvent<E>>(
-			ListenerList.build()//
+		theChanges = new LightWeightObservable<ObservableCollectionEvent<E>>(ListenerList.build()//
 			.reentrancyError(() -> ObservableCollection.REENTRANT_EVENT_ERROR + ": " + getIdentity().toString())//
 			.forEachSafe(!theLock.getThreadConstraint().isDedicated())//
 			.build()) {
@@ -154,42 +155,27 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
-	public int getElementsBefore(ElementId id) {
-		return theValues.getElementsBefore(id);
-	}
-
-	@Override
-	public int getElementsAfter(ElementId id) {
-		return theValues.getElementsAfter(id);
-	}
-
-	@Override
-	public CollectionElement<E> getElement(int index) {
+	public ListElement<E> getElement(int index) {
 		return theValues.getElement(index);
 	}
 
 	@Override
-	public CollectionElement<E> getElement(E value, boolean first) {
+	public ListElement<E> getElement(E value, boolean first) {
 		return theValues.getElement(value, first);
 	}
 
 	@Override
-	public CollectionElement<E> getElement(ElementId id) {
+	public ListElement<E> getElement(ElementId id) {
 		return theValues.getElement(id);
 	}
 
 	@Override
-	public CollectionElement<E> getTerminalElement(boolean first) {
+	public ListElement<E> getTerminalElement(boolean first) {
 		return theValues.getTerminalElement(first);
 	}
 
 	@Override
-	public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-		return theValues.getAdjacentElement(elementId, next);
-	}
-
-	@Override
-	public MutableCollectionElement<E> mutableElement(ElementId id) {
+	public MutableListElement<E> mutableElement(ElementId id) {
 		return mutableElementFor(theValues.mutableElement(id));
 	}
 
@@ -224,15 +210,15 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+	public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
-			CollectionElement<E> el = theValues.addElement(value, after, before, first);
+			ListElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
 				return null;
 			if (theChanges.isAnyoneListening()) {
 				ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
-					theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
+					el.getElementsBefore(), CollectionChangeType.add, //
 					null, value, theLock.getUnfinishedCauses());
 				fire(event);
 			} else
@@ -247,17 +233,18 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
-	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
-			CollectionElement<E> el;
-			E value = theValues.getElement(valueEl).get();
+			ListElement<E> el;
 			CollectionElementMove move = new CollectionElementMove();
+			ListElement<E> targetEl = theValues.getElement(valueEl);
+			E value = targetEl.get();
 			try (Transaction moveT = lock(true, move)) {
 				el = theValues.move(valueEl, after, before, first, () -> {
 					if (theChanges.isAnyoneListening()) {
 						ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(valueEl,
-							theValues.getElementsBefore(valueEl), CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
+							targetEl.getElementsBefore(), CollectionChangeType.remove, value, value, theLock.getUnfinishedCauses());
 						fire(event);
 					} else
 						theChanges.incrementStamp();
@@ -269,8 +256,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 					return getElement(valueEl);
 				if (theChanges.isAnyoneListening()) {
 					ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
-						theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value,
-						theLock.getUnfinishedCauses());
+						el.getElementsBefore(), CollectionChangeType.add, null, value, theLock.getUnfinishedCauses());
 					fire(event);
 				} else
 					theChanges.incrementStamp();
@@ -294,7 +280,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 				MutableCollectionElement<E> mutable = mutableElement(el.getElementId());
 				if (mutable.canRemove() == null)
 					mutable.remove();
-				el = getAdjacentElement(el.getElementId(), true);
+				el = el.getAdjacent(true);
 			}
 		}
 	}
@@ -316,111 +302,130 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 		}
 	}
 
-	private MutableCollectionElement<E> mutableElementFor(MutableCollectionElement<E> valueEl) {
-		return new MutableCollectionElement<E>() {
-			@Override
-			public BetterCollection<E> getCollection() {
-				return DefaultObservableCollection.this;
-			}
+	private MutableListElement<E> mutableElementFor(MutableListElement<E> valueEl) {
+		return new WrappedMutableElement(valueEl);
+	}
 
-			@Override
-			public ElementId getElementId() {
-				return valueEl.getElementId();
-			}
+	class WrappedMutableElement implements MutableListElement<E> {
+		private final MutableListElement<E> theWrapped;
 
-			@Override
-			public E get() {
-				return valueEl.get();
-			}
+		WrappedMutableElement(MutableListElement<E> valueEl) {
+			theWrapped = valueEl;
+		}
 
-			@Override
-			public String isEnabled() {
-				return valueEl.isEnabled();
-			}
+		@Override
+		public ElementId getElementId() {
+			return theWrapped.getElementId();
+		}
 
-			@Override
-			public String isAcceptable(E value) {
-				return valueEl.isAcceptable(value);
-			}
+		@Override
+		public E get() {
+			return theWrapped.get();
+		}
 
-			@Override
-			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
-				E old = get();
-				if (value == old && theValues instanceof ValueStoredCollection) {
-					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
-					// Correct the storage structure
-					boolean[] thisMoved = new boolean[1];
-					RepairOperation op = new RepairOperation(theLock.getUnfinishedCauses());
-					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
-						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
-							new ValueStoredCollection.RepairListener<E, CollectionElementMove>() {
-							@Override
-							public CollectionElementMove removed(CollectionElement<E> element) {
-								if (element.getElementId().equals(valueEl.getElementId()))
-									thisMoved[0] = true;
-								CollectionElementMove move = new CollectionElementMove();
-								if (theChanges.isAnyoneListening()) {
-									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
-										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
-										element.get(), op, move));
-								} else
-									theChanges.incrementStamp();
-								return move;
-							}
+		@Override
+		public int getElementsBefore() {
+			return theWrapped.getElementsBefore();
+		}
 
-							@Override
-							public void disposed(E oldValue, CollectionElementMove data) {
-								data.moveFinished();
-							}
+		@Override
+		public int getElementsAfter() {
+			return theWrapped.getElementsAfter();
+		}
 
-							@Override
-							public void transferred(CollectionElement<E> element, CollectionElementMove data) {
-								data.moved();
-								if (theChanges.isAnyoneListening()) {
-									fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
-										theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null,
-										element.get(), op, data));
-								} else
-									theChanges.incrementStamp();
-							}
-						});
-					}
-					if (thisMoved[0])
-						return;
+		@Override
+		public MutableListElement<E> getAdjacent(boolean next) {
+			MutableListElement<E> adj = theWrapped.getAdjacent(next);
+			return adj == null ? null : new WrappedMutableElement(adj);
+		}
+
+		@Override
+		public String isEnabled() {
+			return theWrapped.isEnabled();
+		}
+
+		@Override
+		public String isAcceptable(E value) {
+			return theWrapped.isAcceptable(value);
+		}
+
+		@Override
+		public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+			E old = get();
+			if (value == old && theValues instanceof ValueStoredCollection) {
+				// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
+				// Correct the storage structure
+				boolean[] thisMoved = new boolean[1];
+				RepairOperation op = new RepairOperation(theLock.getUnfinishedCauses());
+				try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
+					((ValueStoredCollection<E>) theValues).repair(theWrapped.getElementId(),
+						new ValueStoredCollection.RepairListener<E, CollectionElementMove>() {
+						@Override
+						public CollectionElementMove removed(CollectionElement<E> element) {
+							if (element.getElementId().equals(theWrapped.getElementId()))
+								thisMoved[0] = true;
+							CollectionElementMove move = new CollectionElementMove();
+							if (theChanges.isAnyoneListening()) {
+								fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
+									((ListElement<E>) element).getElementsBefore(), CollectionChangeType.remove, element.get(),
+									element.get(), op, move));
+							} else
+								theChanges.incrementStamp();
+							return move;
+						}
+
+						@Override
+						public void disposed(E oldValue, CollectionElementMove data) {
+							data.moveFinished();
+						}
+
+						@Override
+						public void transferred(CollectionElement<E> element, CollectionElementMove data) {
+							data.moved();
+							if (theChanges.isAnyoneListening()) {
+								fire(ObservableCollectionEvent.createCollectionEvent(element.getElementId(),
+									((ListElement<E>) element).getElementsBefore(), CollectionChangeType.add, null, element.get(), op,
+									data));
+							} else
+								theChanges.incrementStamp();
+						}
+					});
 				}
-				if (value == old && theChanges.isEventing())
-					return; // Don't throw errors on recursive updates
-				valueEl.set(value);
+				if (thisMoved[0])
+					return;
+			}
+			if (value == old && theChanges.isEventing())
+				return; // Don't throw errors on recursive updates
+			theWrapped.set(value);
+			if (theChanges.isAnyoneListening()) {
+				fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(), CollectionChangeType.set, old,
+					value, theLock.getUnfinishedCauses()));
+			} else
+				theChanges.incrementStamp();
+		}
+
+		@Override
+		public String canRemove() {
+			return theWrapped.canRemove();
+		}
+
+		@Override
+		public void remove() throws UnsupportedOperationException {
+			try (Transaction t = lock(true, null)) {
+				E old = get();
+				theWrapped.remove();
 				if (theChanges.isAnyoneListening()) {
-					fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
-						CollectionChangeType.set, old, value, theLock.getUnfinishedCauses()));
+					fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(), CollectionChangeType.remove,
+						old, old, theLock.getUnfinishedCauses()));
 				} else
 					theChanges.incrementStamp();
 			}
+		}
 
-			@Override
-			public String canRemove() {
-				return valueEl.canRemove();
-			}
-
-			@Override
-			public void remove() throws UnsupportedOperationException {
-				try (Transaction t = lock(true, null)) {
-					E old = get();
-					valueEl.remove();
-					if (theChanges.isAnyoneListening()) {
-						fire(ObservableCollectionEvent.createCollectionEvent(getElementId(), getElementsBefore(getElementId()),
-							CollectionChangeType.remove, old, old, theLock.getUnfinishedCauses()));
-					} else
-						theChanges.incrementStamp();
-				}
-			}
-
-			@Override
-			public String toString() {
-				return valueEl.toString();
-			}
-		};
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/** A Causable representing a {@link ValueStoredCollection} repair operation */

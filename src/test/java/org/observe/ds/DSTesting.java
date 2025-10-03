@@ -179,33 +179,33 @@ public class DSTesting {
 						if (helper.isReproducing())
 							print(dds);
 						helper.createAction()//
-							.or(1, () -> { // Toggle availability
-								if (components.isEmpty())
-									return;
-								ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-								boolean available = !comp.isAvailable().get();
-								if (helper.isReproducing())
-									System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
-								comp.setAvailable(available);
-								Assert.assertEquals(available, comp.isAvailable().get());
-							}).or(0.01, () -> {// Remove component
-								if (components.isEmpty())
-									return;
-								ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
-								if (helper.isReproducing())
-									System.out.println("Removing " + comp.getName());
-								comp.remove();
-								Assert.assertFalse(dds.getComponents().contains(comp));
-								components.remove(comp);
-							}).or(0.01, () -> {// Add component
-								String name = "" + (char) ('A' + componentIndex[0]);
-								if (helper.isReproducing())
-									System.out.println("Adding " + name);
-								components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper,
-									initialized, path));
-								componentIndex[0]++;
-							})//
-							.execute("op");
+						.or(1, () -> { // Toggle availability
+							if (components.isEmpty())
+								return;
+							ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+							boolean available = !comp.isAvailable().get();
+							if (helper.isReproducing())
+								System.out.println("Changing " + comp.getName() + " to " + (available ? "" : "un") + "available");
+							comp.setAvailable(available);
+							Assert.assertEquals(available, comp.isAvailable().get());
+						}).or(0.01, () -> {// Remove component
+							if (components.isEmpty())
+								return;
+							ComponentController<String> comp = components.get(helper.getInt(0, components.size()));
+							if (helper.isReproducing())
+								System.out.println("Removing " + comp.getName());
+							comp.remove();
+							Assert.assertFalse(dds.getComponents().contains(comp));
+							components.remove(comp);
+						}).or(0.01, () -> {// Add component
+							String name = "" + (char) ('A' + componentIndex[0]);
+							if (helper.isReproducing())
+								System.out.println("Adding " + name);
+							components.add(configureComponent(dds.inject(name, __ -> name), components.size(), services, helper,
+								initialized, path));
+							componentIndex[0]++;
+						})//
+						.execute("op");
 						checkState(dds, true, path);
 					}
 				} catch (AssertionError e) {
@@ -353,8 +353,7 @@ public class DSTesting {
 				ElementId el = path.getOrAdd(dep, null, null, false, null, () -> added[0] = true).getElementId();
 				if (!added[0]) {
 					// In a cycle, but is it dynamic?
-					for (CollectionElement<Dependency<String, ?>> dep2 = path.getElement(el); dep2 != null; dep2 = path
-						.getAdjacentElement(dep2.getElementId(), true)) {
+					for (CollectionElement<Dependency<String, ?>> dep2 = path.getElement(el); dep2 != null; dep2 = dep2.getAdjacent(true)) {
 						if (dep2.get().isDynamic())
 							return true;
 					}

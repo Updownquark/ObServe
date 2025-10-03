@@ -346,11 +346,11 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 					int index = helper.getInt(0, bucket.getCollection().size());
 					CollectionElement<V> element = bucket.getCollection().getElement(index);
 					while (element != null && bucket.getCollection().mutableElement(element.getElementId()).canRemove() != null)
-						element = bucket.getCollection().getAdjacentElement(element.getElementId(), true);
+						element = element.getAdjacent(true);
 					if (element == null) {
 						element = bucket.getCollection().getElement(index);
 						do {
-							element = bucket.getCollection().getAdjacentElement(element.getElementId(), false);
+							element = element.getAdjacent(false);
 						} while (element != null && bucket.getCollection().mutableElement(element.getElementId()).canRemove() != null);
 					}
 					if (element != null) {
@@ -434,7 +434,7 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 				isAfter = false;
 			else
 				isBefore = false;
-			source = CollectionElement.get(getSourceLink().getElements().getAdjacentElement(source.getElementAddress(), first));
+			source = CollectionElement.get(getSourceLink().getElements().getElement(source.getElementAddress()).getAdjacent(first));
 		}
 		if (acceptedBucket != null) {
 			if (execute)
@@ -535,7 +535,7 @@ public class FlatMapCollectionLink<S, V, T> extends AbstractFlatMappedCollection
 				isAfter = false;
 			else
 				isBefore = false;
-			source = CollectionElement.get(getSourceLink().getElements().getAdjacentElement(source.getElementAddress(), first));
+			source = CollectionElement.get(getSourceLink().getElements().getElement(source.getElementAddress()).getAdjacent(first));
 		}
 		if (firstReject == null)
 			firstReject = StdMsg.UNSUPPORTED_OPERATION;

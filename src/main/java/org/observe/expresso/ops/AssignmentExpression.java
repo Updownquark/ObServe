@@ -33,6 +33,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
+import org.qommons.collect.ListElement;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
@@ -380,28 +381,29 @@ public class AssignmentExpression implements ObservableExpression {
 				String[] message = new String[1];
 				try (Transaction targetT = Transactable.lock(target, false, null); //
 					Transaction sourceT = Transactable.lock(source, false, null)) {
-					CollectionUtils.synchronize(betterTarget.elements(), source, (el, s) -> Objects.equals(el.get(), s))//
-					.adjust(new CollectionUtils.CollectionSynchronizer<CollectionElement<T>, T>() {
+					CollectionUtils
+					.synchronize((BetterList<ListElement<T>>) betterTarget.elements(), source, (el, s) -> Objects.equals(el.get(), s))//
+					.adjust(new CollectionUtils.CollectionSynchronizer<ListElement<T>, T>() {
 						@Override
-						public boolean getOrder(ElementSyncInput<CollectionElement<T>, T> element) {
+						public boolean getOrder(ElementSyncInput<ListElement<T>, T> element) {
 							return true;
 						}
 
 						@Override
-						public ElementSyncAction leftOnly(ElementSyncInput<CollectionElement<T>, T> element) {
+						public ElementSyncAction leftOnly(ElementSyncInput<ListElement<T>, T> element) {
 							if (message[0] == null)
 								message[0] = betterTarget.mutableElement(element.getLeftValue().getElementId()).canRemove();
 							return element.preserve();
 						}
 
 						@Override
-						public ElementSyncAction rightOnly(ElementSyncInput<CollectionElement<T>, T> element) {
+						public ElementSyncAction rightOnly(ElementSyncInput<ListElement<T>, T> element) {
 							if (message[0] == null) {
 								if (ordered) {
 									CollectionElement<T> after = element.getTargetIndex() == betterTarget.size() ? null
 										: betterTarget.getElement(element.getTargetIndex());
 									CollectionElement<T> before = after == null ? betterTarget.getTerminalElement(false)
-										: betterTarget.getAdjacentElement(after.getElementId(), false);
+											: after.getAdjacent(false);
 									message[0] = betterTarget.canAdd(element.getRightValue(), CollectionElement.getElementId(after),
 										CollectionElement.getElementId(before));
 								} else
@@ -411,7 +413,7 @@ public class AssignmentExpression implements ObservableExpression {
 						}
 
 						@Override
-						public ElementSyncAction common(ElementSyncInput<CollectionElement<T>, T> element) {
+						public ElementSyncAction common(ElementSyncInput<ListElement<T>, T> element) {
 							if (element.getLeftValue().get() == element.getRightValue())
 								return element.preserve();
 							else if (message[0] == null)

@@ -145,7 +145,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 					while (el != null) {
 						if (c.contains(el.get()))
 							return true;
-						el = getAdjacentElement(el.getElementId(), true);
+						el = el.getAdjacent(true);
 					}
 					return false;
 				} else {
@@ -158,7 +158,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 							// Certain typed of mapped collections (e.g. double-typed collections combined with another double value)
 							// may contain values which cannot actually be added to its equivalence.
 						}
-						el = getAdjacentElement(el.getElementId(), true);
+						el = el.getAdjacent(true);
 					}
 				}
 			}
@@ -288,19 +288,19 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		try (Transaction t = lock(true, null)) {
 			if (fromIndex == size())
 				return;
-			ElementId[] next = new ElementId[] { getElement(fromIndex).getElementId() };
-			ElementId[] end = new ElementId[] { toIndex < size() ? getElement(toIndex).getElementId() : null };
+			CollectionElement<E>[] next = new CollectionElement[] { getElement(fromIndex) };
+			CollectionElement<E>[] end = new CollectionElement[] { toIndex < size() ? getElement(toIndex) : null };
 			try (Subscription sub = onChange(evt -> {
 				if (evt.getType() == CollectionChangeType.remove) {
 					if (evt.getElementId().equals(next[0]))
-						next[0] = CollectionElement.getElementId(getAdjacentElement(next[0], true));
+						next[0] = next[0].getAdjacent(true);
 					if (evt.getElementId().equals(end[0]))
-						end[0] = CollectionElement.getElementId(getAdjacentElement(end[0], true));
+						end[0] = end[0].getAdjacent(true);
 				}
 			})) {
 				while (next[0] != null && (end[0] == null || next[0].compareTo(end[0]) < 0)) {
-					MutableCollectionElement<E> mutableEl = mutableElement(next[0]);
-					next[0] = CollectionElement.getElementId(getAdjacentElement(next[0], true));
+					MutableCollectionElement<E> mutableEl = mutableElement(next[0].getElementId());
+					next[0] = next[0].getAdjacent(true);
 					if (mutableEl.canRemove() == null)
 						mutableEl.remove();
 				}
@@ -318,7 +318,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 				return ret.toArray(a);
 			} else {
 				CollectionElement<E> el = getTerminalElement(true);
-				for (int index = 0; el != null; index++, el = getAdjacentElement(el.getElementId(), true))
+				for (int index = 0; el != null; index++, el = el.getAdjacent(true))
 					a[index] = (T) el.get();
 				return a;
 			}

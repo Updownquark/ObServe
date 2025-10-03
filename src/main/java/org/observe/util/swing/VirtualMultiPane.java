@@ -34,6 +34,7 @@ import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 
 /**
  * <p>
@@ -94,9 +95,9 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 			case add:
 				theValueBounds.add(evt.getIndex(), null);
 				if (theHover.value != null && theHover.value.getElementId().compareTo(evt.getElementId()) > 0)
-					theHover.replace(false, theHover.value, theValues.getElementsBefore(theHover.value.getElementId()), true);
+					theHover.replace(false, theHover.value, theHover.value.getElementsBefore(), true);
 				if (theFocus.value != null && theFocus.value.getElementId().compareTo(evt.getElementId()) > 0)
-					theFocus.replace(true, theFocus.value, theValues.getElementsBefore(theFocus.value.getElementId()), true);
+					theFocus.replace(true, theFocus.value, theFocus.value.getElementsBefore(), true);
 				break;
 			case remove:
 				theValueBounds.remove(evt.getIndex());
@@ -247,7 +248,7 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 				if (index < theValueBounds.size()) {
 					if (isBreakOnHover)
 						BreakpointHere.breakpoint();
-					CollectionElement<T> moused = theValues.getElement(index);
+					ListElement<T> moused = theValues.getElement(index);
 					if (theFocus.valueEquals(moused.getElementId()))
 						theHover.replace(false, null, -1, false);
 					else
@@ -285,9 +286,9 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 					&& SwingUtilities.isDescendingFrom(e.getOppositeComponent(), theFocus.component)) {
 					// Tabbing from the focused component. Focus on the adjacent value.
 					boolean forward = e.getComponent() == theFocus.postFocus;
-					CollectionElement<T> adj = theValues.getAdjacentElement(theFocus.value.getElementId(), forward);
+					ListElement<T> adj = theFocus.value.getAdjacent(forward);
 					if (adj != null) {
-						theFocus.replace(true, adj, theValues.getElementsBefore(adj.getElementId()), false);
+						theFocus.replace(true, adj, adj.getElementsBefore(), false);
 						// Now cycle in to the renderer.
 						cycleIntoFocus(forward);
 					} else { // No more values, tab away from this multi pane
@@ -472,9 +473,9 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 				children.add(layoutChild);
 		} else {
 			int focusRow = (theFocus.value == null || theFocus.component == null || !theFocus.value.getElementId().isPresent()) ? -1
-				: theValues.getElementsBefore(theFocus.value.getElementId());
+				: theFocus.value.getElementsBefore();
 			int hoverRow = (theHover.value == null || theHover.component == null || !theHover.value.getElementId().isPresent()) ? -1
-				: theValues.getElementsBefore(theHover.value.getElementId());
+				: theHover.value.getElementsBefore();
 			int row = 0;
 			for (T value : theValues) {
 				Component renderer;
@@ -506,7 +507,7 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 			if (!theHover.value.getElementId().isPresent()) {
 				theHover.replace(false, null, -1, false);
 			} else {
-				int hoverIndex = theValues.getElementsBefore(theHover.value.getElementId());
+				int hoverIndex = theHover.value.getElementsBefore();
 				theHover.component.setBounds(theValueBounds.get(hoverIndex));
 			}
 		}
@@ -515,7 +516,7 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 			if (!theFocus.value.getElementId().isPresent()) {
 				theFocus.replace(true, null, -1, false);
 			} else {
-				int focusIndex = theValues.getElementsBefore(theFocus.value.getElementId());
+				int focusIndex = theFocus.value.getElementsBefore();
 				theFocus.component.setBounds(theValueBounds.get(focusIndex));
 			}
 		}
@@ -564,7 +565,7 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 		final ObservableCellRenderer<? super T, ? super T> renderer;
 		final Component preFocus;
 		final Component postFocus;
-		CollectionElement<T> value;
+		ListElement<T> value;
 		Component component;
 
 		RenderChild(String name, ObservableCellRenderer<? super T, ? super T> renderer, Component preFocus, Component postFocus) {
@@ -578,7 +579,7 @@ public class VirtualMultiPane<T> extends JComponent implements Scrollable {
 			return value != null && value.getElementId().equals(id);
 		}
 
-		void replace(boolean focus, CollectionElement<T> newValue, int index, boolean refresh) {
+		void replace(boolean focus, ListElement<T> newValue, int index, boolean refresh) {
 			boolean repaint = false;
 			if (newValue == null) {
 				if (value == null)

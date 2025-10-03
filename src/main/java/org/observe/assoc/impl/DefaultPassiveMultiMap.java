@@ -31,9 +31,9 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.OrderedMultiEntry;
 
 /**
  * Default passive {@link ObservableMultiMap} implementation
@@ -116,27 +116,50 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	 * @param srcEntry The entry from the source map to wrap
 	 * @return An entry for this map, backed by the given source entry
 	 */
-	protected MultiEntryHandle<K, V> entryFor(MultiEntryHandle<K0, V0> srcEntry) {
-		return srcEntry == null ? null : new MultiEntryHandle<K, V>() {
+	protected OrderedMultiEntry<K, V> entryFor(OrderedMultiEntry<K0, V0> srcEntry) {
+		class TransformedEntry implements OrderedMultiEntry<K, V> {
+			private OrderedMultiEntry<K0, V0> theSourceEntry;
+
+			TransformedEntry(OrderedMultiEntry<K0, V0> sourceEntry) {
+				theSourceEntry = sourceEntry;
+			}
+
 			@Override
 			public ElementId getElementId() {
-				return srcEntry.getElementId();
+				return theSourceEntry.getElementId();
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theSourceEntry.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theSourceEntry.getElementsAfter();
+			}
+
+			@Override
+			public OrderedMultiEntry<K, V> getAdjacent(boolean next) {
+				OrderedMultiEntry<K0, V0> adj = theSourceEntry.getAdjacent(next);
+				return adj == null ? null : new TransformedEntry(adj);
 			}
 
 			@Override
 			public K getKey() {
-				return theKeyManager.map().get().apply(srcEntry.getKey());
+				return theKeyManager.map().get().apply(theSourceEntry.getKey());
 			}
 
 			@Override
 			public BetterCollection<V> getValues() {
-				return new MappedValueCollection(getKey(), srcEntry.getValues());
+				return new MappedValueCollection(getKey(), theSourceEntry.getValues());
 			}
-		};
+		}
+		return new TransformedEntry(srcEntry);
 	}
 
 	@Override
-	public MultiEntryHandle<K, V> getEntryById(ElementId keyId) {
+	public OrderedMultiEntry<K, V> getEntryById(ElementId keyId) {
 		return entryFor(theSourceMap.getEntryById(keyId));
 	}
 
@@ -156,7 +179,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 	}
 
 	@Override
-	public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
+	public OrderedMultiEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
 		ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
 		try(Transaction t=lock(true, null)){
 			CollectionElement<K> keyEl=keySet().getElement(key, true);
@@ -334,12 +357,6 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 		}
 
 		@Override
-		public CollectionElement<V> getAdjacentElement(ElementId elementId, boolean next) {
-			boolean reverse = theValueManager.isReversed();
-			return elementFor(theSourceValues.getAdjacentElement(reverse ? elementId.reverse() : elementId, next ^ reverse));
-		}
-
-		@Override
 		public MutableCollectionElement<V> mutableElement(ElementId id) {
 			return mutableElementFor(theSourceValues.mutableElement(theKeyManager.isReversed() ? id.reverse() : id));
 		}
@@ -431,6 +448,12 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			}
 
 			@Override
+			public CollectionElement<V> getAdjacent(boolean next) {
+				CollectionElement<V0> adj = sourceEl.getAdjacent(next);
+				return adj == null ? null : new ValueElement(adj);
+			}
+
+			@Override
 			public ElementId getElementId() {
 				return sourceEl.getElementId();
 			}
@@ -452,8 +475,9 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 			}
 
 			@Override
-			public BetterCollection<V> getCollection() {
-				return MappedValueCollection.this;
+			public MutableCollectionElement<V> getAdjacent(boolean next) {
+				MutableCollectionElement<V0> adj = getSourceEl().getAdjacent(next);
+				return adj == null ? null : new MutableValueElement(adj);
 			}
 
 			@Override

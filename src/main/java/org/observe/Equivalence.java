@@ -533,72 +533,86 @@ public interface Equivalence<E> {
 		}
 
 		private CollectionElement<T2> handleFor(CollectionElement<? extends E> el) {
-			return new CollectionElement<T2>() {
+			class Element implements CollectionElement<T2> {
+				private final CollectionElement<? extends E> theWrappedEl;
+
+				Element(CollectionElement<? extends E> wrappedEl) {
+					theWrappedEl = wrappedEl;
+				}
 				@Override
 				public ElementId getElementId() {
-					return el.getElementId();
+					return theWrappedEl.getElementId();
 				}
 
 				@Override
 				public T2 get() {
-					return (T2) theMap.apply((E2) el.get());
+					return (T2) theMap.apply((E2) theWrappedEl.get());
 				}
-			};
+
+				@Override
+				public CollectionElement<T2> getAdjacent(boolean next) {
+					CollectionElement<? extends E> adj = theWrappedEl.getAdjacent(next);
+					return adj == null ? null : new Element(adj);
+				}
+			}
+			return el == null ? null : new Element(el);
 		}
 
 		private MutableCollectionElement<T2> mutableHandleFor(MutableCollectionElement<? extends E> el) {
-			return new MutableCollectionElement<T2>() {
-				@Override
-				public BetterCollection<T2> getCollection() {
-					return MappedSet.this;
+			class MutableElement implements MutableCollectionElement<T2> {
+				private final MutableCollectionElement<? extends E> theWrappedEl;
+
+				MutableElement(MutableCollectionElement<? extends E> wrappedEl) {
+					theWrappedEl = wrappedEl;
 				}
 
 				@Override
 				public ElementId getElementId() {
-					return el.getElementId();
+					return theWrappedEl.getElementId();
 				}
 
 				@Override
 				public T2 get() {
-					return (T2) theMap.apply((E2) el.get());
+					return (T2) theMap.apply((E2) theWrappedEl.get());
+				}
+
+				@Override
+				public MutableCollectionElement<T2> getAdjacent(boolean next) {
+					MutableCollectionElement<? extends E> adj = theWrappedEl.getAdjacent(next);
+					return adj == null ? null : new MutableElement(adj);
 				}
 
 				@Override
 				public String isEnabled() {
-					return el.isEnabled();
+					return theWrappedEl.isEnabled();
 				}
 
 				@Override
 				public String isAcceptable(T2 value) {
-					return ((MutableCollectionElement<E>) el).isAcceptable(theReverse.apply(value));
+					return ((MutableCollectionElement<E>) theWrappedEl).isAcceptable(theReverse.apply(value));
 				}
 
 				@Override
 				public void set(T2 value) throws UnsupportedOperationException, IllegalArgumentException {
-					((MutableCollectionElement<E>) el).set(theReverse.apply(value));
+					((MutableCollectionElement<E>) theWrappedEl).set(theReverse.apply(value));
 				}
 
 				@Override
 				public String canRemove() {
-					return el.canRemove();
+					return theWrappedEl.canRemove();
 				}
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					el.remove();
+					theWrappedEl.remove();
 				}
-			};
+			}
+			return new MutableElement(el);
 		}
 
 		@Override
 		public CollectionElement<T2> getTerminalElement(boolean first) {
 			CollectionElement<E> wrapEl = theWrapped.getTerminalElement(first);
-			return wrapEl == null ? null : handleFor(wrapEl);
-		}
-
-		@Override
-		public CollectionElement<T2> getAdjacentElement(ElementId elementId, boolean next) {
-			CollectionElement<E> wrapEl = theWrapped.getAdjacentElement(elementId, next);
 			return wrapEl == null ? null : handleFor(wrapEl);
 		}
 
@@ -795,71 +809,92 @@ public interface Equivalence<E> {
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {
-			return new MapEntryHandle<T2, V>() {
+			class Entry implements MapEntryHandle<T2, V> {
+				private final MapEntryHandle<E, V> theEntry;
+
+				Entry(MapEntryHandle<E, V> entry2) {
+					theEntry = entry2;
+				}
+
 				@Override
 				public ElementId getElementId() {
-					return entry.getElementId();
+					return theEntry.getElementId();
 				}
 
 				@Override
 				public V get() {
-					return entry.get();
+					return theEntry.get();
 				}
 
 				@Override
 				public T2 getKey() {
-					return (T2) theMap.apply((E2) entry.getKey());
+					return (T2) theMap.apply((E2) theEntry.getKey());
 				}
-			};
+
+				@Override
+				public MapEntryHandle<T2, V> getAdjacent(boolean next) {
+					MapEntryHandle<E, V> adj = theEntry.getAdjacent(next);
+					return adj == null ? null : new Entry(adj);
+				}
+			}
+			return entry == null ? null : new Entry(entry);
 		}
 
 		private MutableMapEntryHandle<T2, V> mutableHandleFor(MutableMapEntryHandle<E, V> entry) {
-			return new MutableMapEntryHandle<T2, V>() {
-				@Override
-				public BetterCollection<V> getCollection() {
-					return MappedMap.this.values();
+			class MutableEntry implements MutableMapEntryHandle<T2, V> {
+				private final MutableMapEntryHandle<E, V> theEntry;
+
+				MutableEntry(MutableMapEntryHandle<E, V> entry2) {
+					theEntry = entry2;
 				}
 
 				@Override
 				public ElementId getElementId() {
-					return entry.getElementId();
+					return theEntry.getElementId();
 				}
 
 				@Override
 				public V get() {
-					return entry.get();
+					return theEntry.get();
 				}
 
 				@Override
 				public T2 getKey() {
-					return (T2) theMap.apply((E2) entry.getKey());
+					return (T2) theMap.apply((E2) theEntry.getKey());
+				}
+
+				@Override
+				public MutableMapEntryHandle<T2, V> getAdjacent(boolean next) {
+					MutableMapEntryHandle<E, V> adj = theEntry.getAdjacent(next);
+					return adj == null ? null : new MutableEntry(adj);
 				}
 
 				@Override
 				public String isEnabled() {
-					return entry.isEnabled();
+					return theEntry.isEnabled();
 				}
 
 				@Override
 				public String isAcceptable(V value) {
-					return entry.isAcceptable(value);
+					return theEntry.isAcceptable(value);
 				}
 
 				@Override
 				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-					entry.set(value);
+					theEntry.set(value);
 				}
 
 				@Override
 				public String canRemove() {
-					return entry.canRemove();
+					return theEntry.canRemove();
 				}
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					entry.remove();
+					theEntry.remove();
 				}
-			};
+			}
+			return new MutableEntry(entry);
 		}
 
 		@Override

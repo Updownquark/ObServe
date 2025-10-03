@@ -28,10 +28,10 @@ import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -92,7 +92,7 @@ public class ObservableCollectionPassiveManagers {
 		 * @param map The mapping function to apply to the element's value
 		 * @return The element for the derived collection
 		 */
-		MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map);
+		MutableListElement<T> map(MutableListElement<E> element, Function<? super E, ? extends T> map);
 
 		/**
 		 * Maps the old and new source values for an event from the source collection to this manager's value type
@@ -245,7 +245,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public MutableCollectionElement<E> map(MutableCollectionElement<E> mapped, Function<? super E, ? extends E> map) {
+		public MutableListElement<E> map(MutableListElement<E> mapped, Function<? super E, ? extends E> map) {
 			return mapped;
 		}
 
@@ -373,7 +373,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+		public MutableListElement<T> map(MutableListElement<E> element, Function<? super E, ? extends T> map) {
 			return theParent.map(element, map); // Don't reverse here--the passive collection takes care of it
 		}
 
@@ -501,7 +501,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public MutableCollectionElement<T> map(MutableCollectionElement<E> mapped, Function<? super E, ? extends T> map) {
+		public MutableListElement<T> map(MutableListElement<E> mapped, Function<? super E, ? extends T> map) {
 			return theParent.map(mapped, map);
 		}
 
@@ -611,18 +611,24 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public TransformedElement map(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
+		public TransformedElement map(MutableListElement<E> source, Function<? super E, ? extends T> map) {
 			return new TransformedElement(source, map);
 		}
 
-		protected class TransformedElement extends AbstractTransformedElement implements MutableCollectionElement<T> {
-			private final MutableCollectionElement<I> theParentEl;
+		protected class TransformedElement extends AbstractTransformedElement implements MutableListElement<T> {
+			private final MutableListElement<I> theParentEl;
 			private final TransformedMap theTransformedMap;
 
-			protected TransformedElement(MutableCollectionElement<E> sourceEl, Function<? super E, ? extends T> map) {
+			protected TransformedElement(MutableListElement<E> sourceEl, Function<? super E, ? extends T> map) {
 				super(() -> ((MapWithParent<E, I, T>) map).getParentMap().apply(sourceEl.get()));
 				theTransformedMap = (TransformedMap) map;
 				theParentEl = getParent().map(sourceEl, theTransformedMap.getParentMap());
+			}
+
+			private TransformedElement(MutableListElement<I> parentEl, TransformedMap map) {
+				super(parentEl);
+				theTransformedMap = map;
+				theParentEl = parentEl;
 			}
 
 			protected MutableCollectionElement<I> getParentEl() {
@@ -640,8 +646,19 @@ public class ObservableCollectionPassiveManagers {
 			}
 
 			@Override
-			public BetterCollection<T> getCollection() {
-				return null;
+			public int getElementsBefore() {
+				return theParentEl.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theParentEl.getElementsAfter();
+			}
+
+			@Override
+			public MutableListElement<T> getAdjacent(boolean next) {
+				MutableListElement<I> adj = theParentEl.getAdjacent(next);
+				return adj == null ? null : new TransformedElement(adj, theTransformedMap);
 			}
 
 			@Override
@@ -811,7 +828,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+		public MutableListElement<T> map(MutableListElement<E> element, Function<? super E, ? extends T> map) {
 			return theParent.map(element, map);
 		}
 
@@ -950,7 +967,7 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+		public MutableListElement<T> map(MutableListElement<E> element, Function<? super E, ? extends T> map) {
 			return new ModFilteredElement(element, map);
 		}
 
@@ -969,16 +986,15 @@ public class ObservableCollectionPassiveManagers {
 			theParent.setValue(elements.stream().map(el -> ((ModFilteredElement) el).theParentMapped).collect(Collectors.toList()), value);
 		}
 
-		private class ModFilteredElement implements MutableCollectionElement<T> {
-			private final MutableCollectionElement<T> theParentMapped;
+		private class ModFilteredElement implements MutableListElement<T> {
+			private final MutableListElement<T> theParentMapped;
 
-			ModFilteredElement(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+			ModFilteredElement(MutableListElement<E> element, Function<? super E, ? extends T> map) {
 				theParentMapped = theParent.map(element, map);
 			}
 
-			@Override
-			public BetterCollection<T> getCollection() {
-				return null;
+			private ModFilteredElement(MutableListElement<T> parentMapped) {
+				theParentMapped = parentMapped;
 			}
 
 			@Override
@@ -989,6 +1005,22 @@ public class ObservableCollectionPassiveManagers {
 			@Override
 			public T get() {
 				return theParentMapped.get();
+			}
+
+			@Override
+			public MutableListElement<T> getAdjacent(boolean next) {
+				MutableListElement<T> adj = theParentMapped.getAdjacent(next);
+				return adj == null ? null : new ModFilteredElement(adj);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theParentMapped.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theParentMapped.getElementsAfter();
 			}
 
 			@Override

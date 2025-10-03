@@ -44,10 +44,10 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
 import org.qommons.BreakpointHere;
 import org.qommons.LambdaUtils;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableListElement;
 import org.qommons.io.Format;
 
 public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEditor {
@@ -695,26 +695,44 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				TreePath path = ((JXTreeTable) table).getPathForRow(row);
 				BetterList<?> betterPath = ObservableTreeModel.betterPath(path);
 				modelValue = (M) betterPath;
-				MutableCollectionElement<?> treeNodeElement = obsModel.getTreeModel().getElementOfChild((M) path.getLastPathComponent());
-				MutableCollectionElement<M> modelElement = new MutableCollectionElement<M>() {
+				MutableListElement<?> treeNodeElement = obsModel.getTreeModel().getElementOfChild((M) path.getLastPathComponent());
+				class CellEditorElement implements MutableListElement<M> {
+					private final M theModelValue;
+					private final MutableListElement<?> theTreeElement;
+
+					CellEditorElement(M modelValue2, MutableListElement<?> treeElement) {
+						theModelValue = modelValue2;
+						theTreeElement = treeElement;
+					}
+
 					@Override
 					public ElementId getElementId() {
-						return treeNodeElement.getElementId();
+						return theTreeElement.getElementId();
 					}
 
 					@Override
 					public M get() {
-						return modelValue;
+						return theModelValue;
 					}
 
 					@Override
-					public BetterCollection<M> getCollection() {
-						return (BetterCollection<M>) treeNodeElement.getCollection();
+					public int getElementsBefore() {
+						return theTreeElement.getElementsBefore();
+					}
+
+					@Override
+					public int getElementsAfter() {
+						return theTreeElement.getElementsAfter();
+					}
+
+					@Override
+					public MutableListElement<M> getAdjacent(boolean next) {
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 					}
 
 					@Override
 					public String isEnabled() {
-						return treeNodeElement.isEnabled();
+						return theTreeElement.isEnabled();
 					}
 
 					@Override
@@ -728,7 +746,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 							if (elPath.get(i) != betterPath.get(i))
 								return StdMsg.ILLEGAL_ELEMENT;
 						}
-						return ((MutableCollectionElement<Object>) treeNodeElement).isAcceptable(elPath.getLast());
+						return ((MutableCollectionElement<Object>) theTreeElement).isAcceptable(elPath.getLast());
 					}
 
 					@Override
@@ -742,19 +760,20 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 							if (elPath.get(i) != betterPath.get(i))
 								throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 						}
-						((MutableCollectionElement<Object>) treeNodeElement).set(elPath.getLast());
+						((MutableCollectionElement<Object>) theTreeElement).set(elPath.getLast());
 					}
 
 					@Override
 					public String canRemove() {
-						return treeNodeElement.canRemove();
+						return theTreeElement.canRemove();
 					}
 
 					@Override
 					public void remove() throws UnsupportedOperationException {
-						treeNodeElement.remove();
+						theTreeElement.remove();
 					}
-				};
+				}
+				MutableListElement<M> modelElement = new CellEditorElement(modelValue, treeNodeElement);
 				valueFilter = v -> {
 					if (v == null || TypeTokens.get().wrap(category.getType()).isInstance(v))
 						return category.getMutator().isAcceptable(modelElement, v);

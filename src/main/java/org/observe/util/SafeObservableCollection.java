@@ -34,8 +34,9 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
 import org.qommons.debug.Debug;
@@ -66,7 +67,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 */
 	protected static class ElementRef<E> {
 		final ElementId sourceId;
-		ElementId synthId;
+		MutableListElement<ElementRef<E>> synthEl;
 		// ElementRef<E> thePreviousPresentElement;
 		// ElementRef<E> theNextPresentElement;
 		boolean isChanged;
@@ -86,21 +87,21 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		/**
 		 * @param sourceId The element ID in the source
 		 * @param value The value
-		 * @param synthId The element ID in the synthetic (safe) collection
+		 * @param synthEl The element in the synthetic (safe) collection
 		 */
-		protected ElementRef(ElementId sourceId, E value, ElementId synthId) {
+		protected ElementRef(ElementId sourceId, E value, MutableListElement<ElementRef<E>> synthEl) {
 			this.sourceId = sourceId;
 			this.value = value;
-			this.synthId = synthId;
+			this.synthEl = synthEl;
 		}
 
-		/** @return The element ID of this element in the safe collection */
-		public ElementId getSynthId() {
-			return synthId;
+		/** @return The element of this element in the safe collection */
+		public MutableListElement<ElementRef<E>> getSynthEl() {
+			return synthEl;
 		}
 
-		void setSynthId(ElementId synthId) {
-			this.synthId = synthId;
+		void setSynthId(MutableListElement<ElementRef<E>> synthId) {
+			this.synthEl = synthId;
 		}
 
 		/** @return The value of the element */
@@ -315,13 +316,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					break;
 				case remove:
 					ElementRef<E> ref = theElementsBySource.remove(evt.getElementId());
-					theSyntheticCollection.mutableElement(ref.synthId).remove();
+					ref.synthEl.remove();
 					break;
 				case set:
 					ref = theElementsBySource.get(evt.getElementId());
 					if (!evt.isUpdate())
-						ref = new ElementRef<>(evt.getElementId(), evt.getNewValue(), ref.synthId);
-					theSyntheticCollection.mutableElement(ref.synthId).set(ref);
+						ref = new ElementRef<>(evt.getElementId(), evt.getNewValue(), ref.synthEl);
+					ref.synthEl.set(ref);
 					break;
 				}
 				theStamp = theCollection.getStamp();
@@ -429,10 +430,10 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					if (moved != null) {
 						moves.put(moved, move);
 						try (Transaction t2 = theSyntheticCollection.lock(true, move)) {
-							theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
+							removedEl.getSynthEl().remove();
 						}
 					} else
-						theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
+						removedEl.getSynthEl().remove();
 				}
 				theRemovedElements.clear();
 			}
@@ -446,8 +447,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					changedEl.isChanged = false;
 					// Make a whole new element because the passively-derived collection would otherwise
 					// report the new value for both the old and new values in the fired event
-					theSyntheticCollection.mutableElement(changedEl.getSynthId()).set(//
-						new ElementRef<>(changedEl.sourceId, theCollection.getElement(changedEl.sourceId).get(), changedEl.synthId));
+					changedEl.getSynthEl().set(//
+						new ElementRef<>(changedEl.sourceId, theCollection.getElement(changedEl.sourceId).get(), changedEl.synthEl));
 				}
 				theChangedElements.clear();
 			}
@@ -465,13 +466,13 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 							if (before == null)
 								theSyntheticCollection.addElement(newEl, false);
 							else
-								theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
+								theSyntheticCollection.addElement(newEl, null, before.get().getSynthEl().getElementId(), false);
 						}
 					} else {
 						if (before == null)
 							theSyntheticCollection.addElement(newEl, false);
 						else
-							theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
+							theSyntheticCollection.addElement(newEl, null, before.get().getSynthEl().getElementId(), false);
 					}
 				}
 				theAddedElements.clear();
@@ -518,7 +519,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	protected void initialize(ElementRef<E> element, ElementId synthId) {
 		// This is only called when no removed elements are present
 		theElementsBySource.put(element.sourceId, element);
-		element.setSynthId(synthId);
+		element.setSynthId(theSyntheticCollection.mutableElement(synthId));
 	}
 
 	/**
@@ -595,7 +596,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		try (Transaction t = lock(false, null)) {
 			BetterList<? extends CollectionElement<? extends E>> els = theCollection.getElementsBySource(el, sourceCollection);
 			return BetterList
-				.of(els.stream().map(srcEl -> findRef(srcEl.getElementId())).filter(ref -> ref != null).map(ElementRef::getSynthId));
+				.of(els.stream().map(srcEl -> findRef(srcEl.getElementId())).filter(ref -> ref != null)
+					.map(ref -> ref.getSynthEl().getElementId()));
 		}
 	}
 
@@ -611,64 +613,83 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public MutableCollectionElement<E> mutableElement(ElementId id) {
+	public MutableListElement<E> mutableElement(ElementId id) {
+		class MutableElement implements MutableListElement<E> {
+			private final ListElement<ElementRef<E>> theSynthEl;
+			private final MutableListElement<E> theSourceEl;
+
+			MutableElement(ElementRef<E> ref) {
+				theSynthEl = ref.getSynthEl();
+				theSourceEl = ref.sourceId.isPresent() ? theCollection.mutableElement(ref.sourceId) : null;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return id;
+			}
+
+			@Override
+			public E get() {
+				return theSynthEl.get().getValue();
+			}
+
+			@Override
+			public MutableListElement<E> getAdjacent(boolean next) {
+				ListElement<ElementRef<E>> adj = theSynthEl.getAdjacent(next);
+				return adj == null ? null : new MutableElement(adj.get());
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theSourceEl.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theSourceEl.getElementsAfter();
+			}
+
+			@Override
+			public String isEnabled() {
+				if (theSourceEl == null || !theSourceEl.getElementId().isPresent())
+					return StdMsg.ELEMENT_REMOVED;
+				return theSourceEl.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(E value) {
+				if (theSourceEl == null || !theSourceEl.getElementId().isPresent())
+					return StdMsg.ELEMENT_REMOVED;
+				return theSourceEl.isAcceptable(value);
+			}
+
+			@Override
+			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+				try (Transaction t2 = lock(true, null)) {
+					if (theSourceEl == null || !theSourceEl.getElementId().isPresent())
+						throw new UnsupportedOperationException(StdMsg.ELEMENT_REMOVED);
+					theSourceEl.set(value);
+					doFlush();
+				}
+			}
+
+			@Override
+			public String canRemove() {
+				return theSourceEl == null ? null : theSourceEl.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				try (Transaction t2 = lock(true, null)) {
+					if (theSourceEl != null && theSourceEl.getElementId().isPresent())
+						theSourceEl.remove();
+					doFlush();
+				}
+			}
+		}
 		try (Transaction t = lock(false, null)) {
 			ElementRef<E> ref = theSyntheticBacking.getElement(id).get();
-			MutableCollectionElement<E> srcEl = ref.sourceId.isPresent() ? theCollection.mutableElement(ref.sourceId) : null;
-			return new MutableCollectionElement<E>() {
-				@Override
-				public ElementId getElementId() {
-					return id;
-				}
-
-				@Override
-				public E get() {
-					return ref.getValue();
-				}
-
-				@Override
-				public BetterCollection<E> getCollection() {
-					return SafeObservableCollection.this;
-				}
-
-				@Override
-				public String isEnabled() {
-					if (srcEl == null || !srcEl.getElementId().isPresent())
-						return StdMsg.ELEMENT_REMOVED;
-					return srcEl.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(E value) {
-					if (srcEl == null || !srcEl.getElementId().isPresent())
-						return StdMsg.ELEMENT_REMOVED;
-					return srcEl.isAcceptable(value);
-				}
-
-				@Override
-				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
-					try (Transaction t2 = lock(true, null)) {
-						if (srcEl == null || !srcEl.getElementId().isPresent())
-							throw new UnsupportedOperationException(StdMsg.ELEMENT_REMOVED);
-						srcEl.set(value);
-						doFlush();
-					}
-				}
-
-				@Override
-				public String canRemove() {
-					return srcEl == null ? null : srcEl.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					try (Transaction t2 = lock(true, null)) {
-						if (srcEl != null && srcEl.getElementId().isPresent())
-							srcEl.remove();
-						doFlush();
-					}
-				}
-			};
+			return new MutableElement(ref);
 		}
 	}
 
@@ -686,7 +707,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+	public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
@@ -701,7 +722,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			doFlush();
 			ElementRef<E> ref = theSyntheticBacking
 				.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
-			return getElement(ref.synthId);
+			return getElement(ref.synthEl.getElementId());
 		}
 	}
 
@@ -722,7 +743,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
 			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
@@ -738,7 +759,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			doFlush();
 			ElementRef<E> ref = theSyntheticBacking
 				.search(r -> srcEl.getElementId().compareTo(r.sourceId), BetterSortedList.SortedSearchFilter.OnlyMatch).get();
-			return getElement(ref.synthId);
+			return getElement(ref.synthEl.getElementId());
 		}
 	}
 

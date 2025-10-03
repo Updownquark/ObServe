@@ -87,6 +87,7 @@ import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.io.ErrorReporting;
@@ -394,7 +395,7 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public Component renderRange(CollectionElement<Range> range, RangePoint hovered, RangePoint focused) {
+			public Component renderRange(ListElement<Range> range, RangePoint hovered, RangePoint focused) {
 				setContext(range, hovered != null, focused != null);
 
 				Integer thick = theQuickRenderer.getStyle().getLineThickness().get();
@@ -405,7 +406,7 @@ public class QuickXSwing implements QuickInterpretation {
 				return super.renderRange(range, hovered, focused);
 			}
 
-			private void setContext(CollectionElement<Range> range, boolean hovered, boolean focused) {
+			private void setContext(ListElement<Range> range, boolean hovered, boolean focused) {
 				BetterList<ElementId> equivIds = theRanges.getSourceElements(range.getElementId(), theValues);
 				if (equivIds.isEmpty()) {
 					System.out.println("No equivalent value found for range " + range.get());
@@ -417,16 +418,16 @@ public class QuickXSwing implements QuickInterpretation {
 					theRanges.getSourceElements(range.getElementId(), theValues);
 				}
 
-				CollectionElement<T> valueEl = theValues.getElement(equivIds.getFirst());
+				ListElement<T> valueEl = theValues.getElement(equivIds.getFirst());
 				theHandleContext.getHandleValue().set(valueEl.get(), null);
-				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(valueEl.getElementId()), null);
+				theHandleContext.getHandleIndex().set(valueEl.getElementsBefore(), null);
 				theBackgroundContext.isHovered().set(hovered, null);
 				theBackgroundContext.isFocused().set(focused, null);
 				// TODO Pressed, right-pressed
 			}
 
 			@Override
-			public String getTooltip(CollectionElement<Range> range, RangePoint point) {
+			public String getTooltip(ListElement<Range> range, RangePoint point) {
 				if (theQuickRenderer.getTooltip() != null) {
 					setContext(range, getHovered() != null, getFocused() != null);
 					return theQuickRenderer.getTooltip().get();
@@ -445,7 +446,7 @@ public class QuickXSwing implements QuickInterpretation {
 			}
 
 			@Override
-			public Cursor getCursor(CollectionElement<Range> range, RangePoint point, boolean focused) {
+			public Cursor getCursor(ListElement<Range> range, RangePoint point, boolean focused) {
 				Cursor cursor = theCursor.get();
 				if (cursor != null)
 					return cursor;

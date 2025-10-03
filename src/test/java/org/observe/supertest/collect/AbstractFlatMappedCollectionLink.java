@@ -32,9 +32,9 @@ public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableC
 			return;
 		CollectionLinkElement<?, S> source = element.getFirstSource();
 		CollectionLinkElement<S, T> adj = CollectionElement
-			.get(getElements().getAdjacentElement(element.getElementAddress(), false));
+			.get(getElements().getElement(element.getElementAddress()).getAdjacent(false));
 		while (adj != null && !adj.isPresent())
-			adj = CollectionElement.get(getElements().getAdjacentElement(adj.getElementAddress(), false));
+			adj = CollectionElement.get(getElements().getElement(adj.getElementAddress()).getAdjacent(false));
 		if (adj != null) {
 			CollectionLinkElement<?, S> adjSource = adj.getFirstSource();
 			int comp = adjSource.getCollectionAddress().compareTo(source.getCollectionAddress());
@@ -44,9 +44,9 @@ public abstract class AbstractFlatMappedCollectionLink<S, T> extends ObservableC
 				element.error("Bad ordering");
 		}
 
-		adj = CollectionElement.get(getElements().getAdjacentElement(element.getElementAddress(), true));
+		adj = CollectionElement.get(getElements().getElement(element.getElementAddress()).getAdjacent(true));
 		while (adj != null && !adj.isPresent())
-			adj = CollectionElement.get(getElements().getAdjacentElement(adj.getElementAddress(), true));
+			adj = CollectionElement.get(getElements().getElement(adj.getElementAddress()).getAdjacent(true));
 		if (adj != null) {
 			CollectionLinkElement<?, S> adjSource = adj.getFirstSource();
 			int comp = adjSource.getCollectionAddress().compareTo(source.getCollectionAddress());

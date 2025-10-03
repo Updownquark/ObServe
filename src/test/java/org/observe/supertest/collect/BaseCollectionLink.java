@@ -94,8 +94,8 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 		while (el != null) {
 			linkEl.expectAdded(el.get());
 
-			el = getCollection().getAdjacentElement(el.getElementId(), true);
-			linkEl = CollectionElement.get(getElements().getAdjacentElement(linkEl.getElementAddress(), true));
+			el = el.getAdjacent(true);
+			linkEl = CollectionElement.get(getElements().getElement(linkEl.getElementAddress()).getAdjacent(true));
 		}
 		super.initialize(helper);
 	}
@@ -157,9 +157,9 @@ public class BaseCollectionLink<T> extends ObservableCollectionLink<T, T> {
 				source.getValue()),
 			rejection, execute);
 		while (after != null && (after == source || !after.isPresent() || after.wasAdded()))
-			after = CollectionElement.get(getElements().getAdjacentElement(after.getElementAddress(), false));
+			after = CollectionElement.get(getElements().getElement(after.getElementAddress()).getAdjacent(false));
 		while (before != null && (before == source || !before.isPresent() || before.wasAdded()))
-			before = CollectionElement.get(getElements().getAdjacentElement(before.getElementAddress(), true));
+			before = CollectionElement.get(getElements().getElement(before.getElementAddress()).getAdjacent(true));
 		return expectAdd(//
 			source.getValue(), after, before, first, rejection, execute);
 	}

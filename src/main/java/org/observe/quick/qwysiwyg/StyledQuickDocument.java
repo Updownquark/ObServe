@@ -12,7 +12,6 @@ import org.observe.expresso.qonfig.ExElement;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
 import org.qommons.io.FilePosition;
 import org.qommons.io.LocatedFilePosition;
 
@@ -98,7 +97,7 @@ public class StyledQuickDocument {
 
 	public class DocumentComponent {
 		public final DocumentComponent parent;
-		ElementId parentChild;
+		CollectionElement<DocumentComponent> parentChild;
 		public final FilePosition start;
 		private FilePosition end;
 		boolean bold;
@@ -122,7 +121,7 @@ public class StyledQuickDocument {
 			children = ObservableCollection.<DocumentComponent> build().build();
 			children.onChange(evt -> {
 				if (evt.getType() == CollectionChangeType.add)
-					evt.getNewValue().parentChild = evt.getElementId();
+					evt.getNewValue().parentChild = children.getElement(evt.getElementId());
 			});
 			end = null;
 		}
@@ -152,7 +151,7 @@ public class StyledQuickDocument {
 			if (parent == null)
 				domainEnd = theDocumentContent.length();
 			else {
-				DocumentComponent nextSib = CollectionElement.get(parent.children.getAdjacentElement(parentChild, true));
+				DocumentComponent nextSib = CollectionElement.get(parentChild.getAdjacent(true));
 				if (nextSib != null)
 					domainEnd = nextSib.start.getPosition();
 				else if (parent.end != null)
@@ -173,7 +172,7 @@ public class StyledQuickDocument {
 
 		void update() {
 			if (parentChild != null)
-				parent.children.mutableElement(parentChild).set(this);
+				parent.children.mutableElement(parentChild.getElementId()).set(this);
 		}
 
 		DocumentComponent addChild(FilePosition childStart) {

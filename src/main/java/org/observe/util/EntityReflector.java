@@ -604,14 +604,18 @@ public class EntityReflector<E> {
 		}
 	}
 
-	static class MethodSignature implements Named, Comparable<MethodSignature> {
+	public static class MethodSignature implements Named, Comparable<MethodSignature> {
 		final String name;
 		final Class<?>[] parameters;
 		private final int hashCode;
 
-		MethodSignature(Method method) {
-			this.name = method.getName();
-			this.parameters = method.getParameterTypes();
+		public MethodSignature(Method method) {
+			this(method.getName(), method.getParameterTypes());
+		}
+
+		public MethodSignature(String methodName, Class<?>[] params) {
+			this.name = methodName;
+			this.parameters = params;
 			int hash = name.hashCode();
 			for (Class<?> pt : parameters)
 				hash = 31 * hash + pt.hashCode();
@@ -2104,7 +2108,7 @@ public class EntityReflector<E> {
 			Method getter = fieldGetters.get(fieldName);
 			fields.put(i, new ReflectedField<>(this, fields.keySet().get(i), i, idFields.contains(i), getter));
 			fields.get(i).getGetter()
-				.setElement(methods.putEntry(fields.get(i).getGetter(), fields.get(i).getGetter(), false).getElementId());
+			.setElement(methods.putEntry(fields.get(i).getGetter(), fields.get(i).getGetter(), false).getElementId());
 		}
 		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 
@@ -2206,6 +2210,9 @@ public class EntityReflector<E> {
 				} else {
 					MethodInterpreter<Object, ?> objectMethod = OBJECT_METHODS.get(m);
 					if (objectMethod != null) {
+						if (methods.containsKey(signature)) {
+							continue; // Overridden
+						}
 						method = new ObjectMethodWrapper<>(this, objectMethod);
 					} else if (m.getDeclaringClass() == Object.class) {
 						continue; // e.g. private void Object.registerNatives()
@@ -2333,7 +2340,7 @@ public class EntityReflector<E> {
 				} catch (NoSuchMethodException e) {
 					throw new IllegalStateException(e);
 				}
-				overrideMethod.setElement(methods.putEntry(signature, overrideMethod, false).getElementId());
+				overrideMethod.setElement(methods.putEntry(override.value().signature, overrideMethod, false).getElementId());
 			}
 		}
 		if (clazz == Object.class) {} else if (theSupers.isEmpty()) {
@@ -2387,7 +2394,7 @@ public class EntityReflector<E> {
 		BetterMap<MethodSignature, MethodInterpreter<E, ?>> methods,
 		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
 		for (MapEntryHandle<MethodSignature, MethodInterpreter<S, ?>> superMethod = superR.getMethods().getTerminalEntry(
-			true); superMethod != null; superMethod = superR.getMethods().getAdjacentEntry(superMethod.getElementId(), true)) {
+			true); superMethod != null; superMethod = superMethod.getAdjacent(true)) {
 			MethodInterpreter<E, ?> subMethod = methods.get(superMethod.getKey());
 			if (subMethod == null) {
 				if (superMethod.get() instanceof FieldGetter) {
@@ -2889,3 +2896,4 @@ public class EntityReflector<E> {
 		}
 	}
 }
+

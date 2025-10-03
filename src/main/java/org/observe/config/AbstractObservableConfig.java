@@ -16,7 +16,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
-import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 
 /** An abstract {@link ObservableConfig} class that takes care of some common implementation */
 public abstract class AbstractObservableConfig implements ObservableConfig {
@@ -107,7 +107,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 		try (Transaction t = lock(true, null)) {
 			if (child.getParent() != this)
 				throw new NoSuchElementException("Config is not a child of this config");
-			if (!child.getParentChildRef().isPresent())
+			if (!child.getParentChildRef().getElementId().isPresent())
 				throw new NoSuchElementException("Config has already been removed");
 
 			CollectionElementMove move = new CollectionElementMove();
@@ -145,7 +145,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 		List<AbstractObservableConfig> children = new ArrayList<>(getContent().size());
 		children.addAll((BetterList<AbstractObservableConfig>) (BetterList<?>) getContent());
 		CollectionUtils.synchronize(children, source.getContent(), (o1, o2) -> o1.getName().equals(o2.getName()))//
-			.adjust(new CollectionUtils.CollectionSynchronizer<AbstractObservableConfig, ObservableConfig>() {
+		.adjust(new CollectionUtils.CollectionSynchronizer<AbstractObservableConfig, ObservableConfig>() {
 			@Override
 			public boolean getOrder(ElementSyncInput<AbstractObservableConfig, ObservableConfig> element) {
 				return false;
@@ -181,8 +181,8 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 
 	private void _remove(CollectionElementMove move) {
 		try (Transaction t = lock(true, null)) {
-			ElementId pcr = getParentChildRef();
-			if (pcr == null || !pcr.isPresent())
+			ListElement<ObservableConfig> pcr = getParentChildRef();
+			if (pcr == null || !pcr.getElementId().isPresent())
 				return;
 			doRemove(move);
 		}

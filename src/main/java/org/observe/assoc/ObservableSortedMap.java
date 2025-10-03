@@ -27,9 +27,11 @@ import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.MutableOrderedMapEntry;
+import org.qommons.collect.OrderedMapEntry;
 import org.qommons.collect.SimpleMapEntry;
 
 /**
@@ -54,6 +56,21 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 	@Override
 	ObservableSortedMap<K, V> alias(String alias);
+
+	@Override
+	default OrderedMapEntry<K, V> putEntry(K key, V value, boolean first) {
+		return BetterSortedMap.super.putEntry(key, value, first);
+	}
+
+	@Override
+	default OrderedMapEntry<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+		return ObservableMap.super.putEntry(key, value, after, before, first);
+	}
+
+	@Override
+	default OrderedMapEntry<K, V> getTerminalEntry(boolean first) {
+		return BetterSortedMap.super.getTerminalEntry(first);
+	}
 
 	@Override
 	default ObservableSortedMap<K, V> descendingMap() {
@@ -253,7 +270,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public CollectionElement<Map.Entry<K, V>> search(Comparable<? super Map.Entry<K, V>> search,
+		public ListElement<Map.Entry<K, V>> search(Comparable<? super Map.Entry<K, V>> search,
 			BetterSortedList.SortedSearchFilter filter) {
 			MapEntryHandle<K, V> entry = getMap().searchEntries(search, filter);
 			return entry == null ? null : getElement(entry.getElementId());
@@ -261,11 +278,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public int indexFor(Comparable<? super Map.Entry<K, V>> search) {
-			CollectionElement<Map.Entry<K, V>> entry = search(search, BetterSortedList.SortedSearchFilter.PreferLess);
+			ListElement<Map.Entry<K, V>> entry = search(search, BetterSortedList.SortedSearchFilter.PreferLess);
 			if (entry == null)
 				return -1;
 			int comp = search.compareTo(entry.get());
-			int entryIdx = getMap().keySet().getElementsBefore(entry.getElementId());
+			int entryIdx = entry.getElementsBefore();
 			if (comp == 0)
 				return entryIdx;
 			else if (comp < 0)
@@ -335,45 +352,45 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
+		public OrderedMapEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
 			boolean first, Runnable preAdd, Runnable postAdd) {
-			return MapEntryHandle.reverse(
+			return OrderedMapEntry.reverse(
 				theWrapped.getOrPutEntry(key, value, ElementId.reverse(beforeKey), ElementId.reverse(afterKey), !first, preAdd, postAdd));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
-			return MapEntryHandle.reverse(theWrapped.searchEntries(v -> -search.compareTo(v), filter.opposite()));
+		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
+			return OrderedMapEntry.reverse(theWrapped.searchEntries(v -> -search.compareTo(v), filter.opposite()));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
-			return MapEntryHandle.reverse(theWrapped.putEntry(key, value, !first));
+		public OrderedMapEntry<K, V> putEntry(K key, V value, boolean first) {
+			return OrderedMapEntry.reverse(theWrapped.putEntry(key, value, !first));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			return MapEntryHandle.reverse(theWrapped.putEntry(key, value, ElementId.reverse(before), ElementId.reverse(after), !first));
+		public OrderedMapEntry<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			return OrderedMapEntry.reverse(theWrapped.putEntry(key, value, ElementId.reverse(before), ElementId.reverse(after), !first));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntry(K key) {
-			return MapEntryHandle.reverse(theWrapped.getEntry(key));
+		public OrderedMapEntry<K, V> getEntry(K key) {
+			return OrderedMapEntry.reverse(theWrapped.getEntry(key));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
-			return MapEntryHandle.reverse(theWrapped.getEntryById(entryId.reverse()));
+		public OrderedMapEntry<K, V> getEntryById(ElementId entryId) {
+			return OrderedMapEntry.reverse(theWrapped.getEntryById(entryId.reverse()));
 		}
 
 		@Override
-		public MapEntryHandle<K, V> search(Comparable<? super K> search, BetterSortedList.SortedSearchFilter filter) {
-			return MapEntryHandle.reverse(theWrapped.search(v -> -search.compareTo(v), filter.opposite()));
+		public OrderedMapEntry<K, V> search(Comparable<? super K> search, BetterSortedList.SortedSearchFilter filter) {
+			return OrderedMapEntry.reverse(theWrapped.search(v -> -search.compareTo(v), filter.opposite()));
 		}
 
 		@Override
-		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
-			return MutableMapEntryHandle.reverse(theWrapped.mutableEntry(entryId.reverse()));
+		public MutableOrderedMapEntry<K, V> mutableEntry(ElementId entryId) {
+			return MutableOrderedMapEntry.reverse(theWrapped.mutableEntry(entryId.reverse()));
 		}
 
 		@Override
@@ -481,7 +498,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getSource().onChange(evt -> {
-				int index = keySet().getElementsBefore(evt.getElementId());
+				int index = keySet().getElement(evt.getElementId()).getElementsBefore();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId(), index, evt.getType(),
 					evt.getOldKey(),
 					evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
@@ -490,7 +507,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				}
 			});
 		}
-	};
+	}
 
 	/**
 	 * A simple, unconstrained {@link ObservableSortedMap} implementation
@@ -525,7 +542,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Map.Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
+		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Map.Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
 			CollectionElement<Map.Entry<K, V>> entry = entrySet().search(search, filter);
 			return entry == null ? null : getEntryById(entry.getElementId());
 		}
@@ -559,13 +576,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
 			return getWrapped().searchEntries(search, filter);
-		}
-
-		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 	}
 
@@ -608,28 +620,28 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
 			return null;
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntry(K key) {
+		public OrderedMapEntry<K, V> getEntry(K key) {
 			return null;
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+		public OrderedMapEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
 			boolean first, Runnable preAdd, Runnable postAdd) {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+		public OrderedMapEntry<K, V> getEntryById(ElementId entryId) {
 			throw new NoSuchElementException("No such entry: " + entryId);
 		}
 
 		@Override
-		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+		public MutableOrderedMapEntry<K, V> mutableEntry(ElementId entryId) {
 			throw new NoSuchElementException("No such entry: " + entryId);
 		}
 
@@ -658,10 +670,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			return theKeySet;
 		}
 
-		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
 
 		@Override
 		public int hashCode() {

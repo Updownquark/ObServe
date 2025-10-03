@@ -1063,9 +1063,9 @@ public class CollectionDerivedValues {
 					Assert.assertTrue(set.isEmpty());
 				else if (compare == 0 && onExact >= 0) {// onExact>0 means that the search treats equal values as greater
 				} else if (compare >= 0)
-					Assert.assertNull(set.getAdjacentElement(result.getElementId(), false));
+					Assert.assertNull(result.getAdjacent(false));
 				else {
-					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), true);
+					CollectionElement<T> adj = result.getAdjacent(true);
 					if (adj != null) {
 						int adjComp = set.comparator().compare(adj.get(), theValue);
 						if (adjComp < 0 || (adjComp == 0 && onExact == 0))
@@ -1078,9 +1078,9 @@ public class CollectionDerivedValues {
 					Assert.assertTrue(set.isEmpty());
 				else if (compare == 0 && onExact <= 0) { // onExact<0 means that the search treats equal values as less
 				} else if (compare < 0)
-					Assert.assertNull(set.getAdjacentElement(result.getElementId(), true));
+					Assert.assertNull(result.getAdjacent(true));
 				else {
-					CollectionElement<T> adj = set.getAdjacentElement(result.getElementId(), false);
+					CollectionElement<T> adj = result.getAdjacent(false);
 					if (adj != null) {
 						int adjComp = set.comparator().compare(adj.get(), theValue);
 						if (adjComp > 0 || (adjComp == 0 && onExact == 0))

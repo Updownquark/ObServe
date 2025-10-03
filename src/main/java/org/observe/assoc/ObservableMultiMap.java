@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -50,14 +51,18 @@ import org.qommons.collect.CollectionBuilder;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.MutableListElement;
+import org.qommons.collect.MutableMultiMapHandle;
+import org.qommons.collect.MutableOrderedMapEntry;
+import org.qommons.collect.OrderedMapEntry;
+import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.tree.BetterTreeSet;
@@ -186,6 +191,31 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		return watch(key);
 	}
 
+	@Override
+	OrderedMultiEntry<K, V> getEntryById(ElementId keyId);
+
+	@Override
+	default OrderedMultiEntry<K, V> getTerminalEntry(boolean first) {
+		return (OrderedMultiEntry<K, V>) BetterMultiMap.super.getTerminalEntry(first);
+	}
+
+	@Override
+	default OrderedMultiEntry<K, V> getAdjacentEntry(ElementId entryId, boolean next) {
+		return getEntryById(entryId).getAdjacent(next);
+	}
+
+	@Override
+	default OrderedMultiEntry<K, V> getEntry(K key) {
+		try (Transaction t = lock(false, null)) {
+			CollectionElement<K> keyElement = keySet().getElement(key, true);
+			return keyElement == null ? null : getEntryById(keyElement.getElementId());
+		}
+	}
+
+	@Override
+	OrderedMultiEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
+		ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd);
+
 	/**
 	 * @param action The action to perform on changes to this map
 	 * @return The collection subscription to terminate listening
@@ -220,10 +250,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						try (Transaction mt = mapEvent.use()) {
 							action.accept(mapEvent);
 						}
-						value = entry.get().getValues().getAdjacentElement(value.getElementId(), valueForward);
+						value = value.getAdjacent(valueForward);
 						valueIndex += valueForward ? 1 : -1;
 					}
-					entry = entrySet.getAdjacentElement(entry.getElementId(), keyForward);
+					entry = entry.getAdjacent(keyForward);
 					keyIndex += keyForward ? 1 : -1;
 				}
 			}
@@ -249,10 +279,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 								try (Transaction mt = mapEvent.use()) {
 									action.accept(mapEvent);
 								}
-								entry = entrySet.getAdjacentElement(entry.getElementId(), !valueForward);
+								entry = entry.getAdjacent(!valueForward);
 								valueIndex += !valueForward ? 1 : -1;
 							}
-							entry = entrySet.getAdjacentElement(entry.getElementId(), !keyForward);
+							entry = entry.getAdjacent(!keyForward);
 							keyIndex += !keyForward ? 1 : -1;
 						}
 					}
@@ -295,18 +325,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 				Transaction moveT = evt.getMovement() != null ? values.lock(true, evt.getMovement()) : Transaction.NONE) {
 				switch (evt.getType()) {
 				case add:
-					CollectionElement<BiTuple<ElementId, ElementId>> el = elements
+					ListElement<BiTuple<ElementId, ElementId>> el = elements
 					.addElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), false);
-					values.add(elements.getElementsBefore(el.getElementId()), evt.getNewValue());
+					values.add(el.getElementsBefore(), evt.getNewValue());
 					break;
 				case remove:
 					el = elements.getElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), true);
-					values.remove(elements.getElementsBefore(el.getElementId()));
+					values.remove(el.getElementsBefore());
 					elements.mutableElement(el.getElementId()).remove();
 					break;
 				case set:
 					el = elements.getElement(new BiTuple<>(evt.getKeyElement(), evt.getElementId()), true);
-					values.set(elements.getElementsBefore(el.getElementId()), evt.getNewValue());
+					values.set(el.getElementsBefore(), evt.getNewValue());
 					break;
 				}
 			}
@@ -552,24 +582,62 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			return getMap().keySet().getElementsBefore(id);
+		public ListElement<MultiEntryHandle<K, V>> getTerminalElement(boolean first) {
+			return (ListElement<MultiEntryHandle<K, V>>) super.getTerminalElement(first);
 		}
 
 		@Override
-		public int getElementsAfter(ElementId id) {
-			return getMap().keySet().getElementsAfter(id);
+		public ListElement<MultiEntryHandle<K, V>> getElement(MultiEntryHandle<K, V> value, boolean first) {
+			return (ListElement<MultiEntryHandle<K, V>>) super.getElement(value, first);
 		}
 
 		@Override
-		public CollectionElement<MultiEntryHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<MultiEntryHandle<K, V>> getElement(ElementId id) {
+			return (ListElement<MultiEntryHandle<K, V>>) super.getElement(id);
+		}
+
+		@Override
+		public ListElement<MultiEntryHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
 			return entryFor(getMap().getEntryById(getMap().keySet().getElement(index).getElementId()));
+		}
+
+		@Override
+		public ListElement<MultiEntryHandle<K, V>> addElement(MultiEntryHandle<K, V> value, ElementId after, ElementId before,
+			boolean first) throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<MultiEntryHandle<K, V>>) super.addElement(value, after, before, first);
+		}
+
+		@Override
+		public ListElement<MultiEntryHandle<K, V>> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
+			Runnable afterRemove) throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<MultiEntryHandle<K, V>>) super.move(valueEl, after, before, first, afterRemove);
+		}
+
+		@Override
+		public ListElement<MultiEntryHandle<K, V>> getOrAdd(MultiEntryHandle<K, V> value, ElementId after, ElementId before, boolean first,
+			Runnable preAdd, Runnable postAdd) {
+			return (ListElement<MultiEntryHandle<K, V>>) super.getOrAdd(value, after, before, first, preAdd, postAdd);
 		}
 
 		@Override
 		public void setValue(Collection<ElementId> elements, MultiEntryHandle<K, V> value) {
 			if (!elements.isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public MutableListElement<MultiEntryHandle<K, V>> mutableElement(ElementId id) {
+			return (MutableListElement<MultiEntryHandle<K, V>>) super.mutableElement(id);
+		}
+
+		@Override
+		protected ListElement<MultiEntryHandle<K, V>> entryFor(MultiEntryHandle<K, V> entry) {
+			return new OrderedEntrySetElement((OrderedMultiEntry<K, V>) entry);
+		}
+
+		@Override
+		protected MutableListElement<MultiEntryHandle<K, V>> mutableEntryFor(MultiEntryHandle<K, V> entry) {
+			return new MutableOrderedEntrySetElement((OrderedMultiEntry<K, V>) entry);
 		}
 
 		@Override
@@ -617,8 +685,67 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			}
 
 			@Override
+			public MultiEntryHandle<K, V> getAdjacent(boolean next) {
+				return null;
+			}
+
+			@Override
 			public BetterCollection<V> getValues() {
 				return BetterList.empty();
+			}
+		}
+
+		class OrderedEntrySetElement extends EntrySetElement implements ListElement<MultiEntryHandle<K, V>> {
+			OrderedEntrySetElement(OrderedMultiEntry<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			protected OrderedMultiEntry<K, V> getEntry() {
+				return (OrderedMultiEntry<K, V>) super.getEntry();
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getEntry().getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getEntry().getElementsAfter();
+			}
+
+			@Override
+			public ListElement<MultiEntryHandle<K, V>> getAdjacent(boolean next) {
+				OrderedMultiEntry<K, V> adj = getEntry().getAdjacent(next);
+				return adj == null ? null : new OrderedEntrySetElement(adj);
+			}
+		}
+
+		class MutableOrderedEntrySetElement extends MutableEntrySetElement implements MutableListElement<MultiEntryHandle<K, V>> {
+			MutableOrderedEntrySetElement(OrderedMultiEntry<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			protected OrderedMultiEntry<K, V> getEntry() {
+				return (OrderedMultiEntry<K, V>) super.getEntry();
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getEntry().getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getEntry().getElementsAfter();
+			}
+
+			@Override
+			public MutableListElement<MultiEntryHandle<K, V>> getAdjacent(boolean next) {
+				OrderedMultiEntry<K, V> adj = getEntry().getAdjacent(next);
+				return adj == null ? null : new MutableOrderedEntrySetElement(adj);
 			}
 		}
 	}
@@ -630,7 +757,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 * @param <V> The value type of the map
 	 */
 	class ObservableMultiMapValues<K, V> extends BetterMultiMapValueCollection<K, V> implements BetterList<V> {
-		// I thought about making this observable, but there's not way to make indexing constant time, and that's required for the events
+		// I thought about making this observable, but there's not way to make indexing better than linear time,
+		// and that's required for the events
 		public ObservableMultiMapValues(ObservableMultiMap<K, V> map) {
 			super(map);
 		}
@@ -651,39 +779,22 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			int count = 0;
-			MultiEntryHandle<K, V> entry;
-			if (id.isPresent()) {
-				entry = getMap().getEntryById(((MapValueId) id).getKeyId());
-				count = ((BetterList<V>) entry.getValues()).getElementsBefore(((MapValueId) id).getValueId());
-			}
-			entry = getMap().getAdjacentEntry(((MapValueId) id).getKeyId(), false);
-			while (entry != null) {
-				count += entry.getValues().size();
-				entry = getMap().getAdjacentEntry(entry.getElementId(), false);
-			}
-			return count;
+		public ListElement<V> getElement(V value, boolean first) {
+			return (ListElement<V>) super.getElement(value, first);
 		}
 
 		@Override
-		public int getElementsAfter(ElementId id) {
-			int count = 0;
-			MultiEntryHandle<K, V> entry;
-			if (id.isPresent()) {
-				entry = getMap().getEntryById(((MapValueId) id).getKeyId());
-				count = ((BetterList<V>) entry.getValues()).getElementsAfter(((MapValueId) id).getValueId());
-			}
-			entry = getMap().getAdjacentEntry(((MapValueId) id).getKeyId(), true);
-			while (entry != null) {
-				count += entry.getValues().size();
-				entry = getMap().getAdjacentEntry(entry.getElementId(), true);
-			}
-			return count;
+		public ListElement<V> getElement(ElementId id) {
+			return (ListElement<V>) super.getElement(id);
 		}
 
 		@Override
-		public CollectionElement<V> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<V> getTerminalElement(boolean first) {
+			return (ListElement<V>) super.getTerminalElement(first);
+		}
+
+		@Override
+		public ListElement<V> getElement(int index) throws IndexOutOfBoundsException {
 			int remaining = index;
 			for (MultiEntryHandle<K, V> entry : getMap().entrySet()) {
 				int valueSize = entry.getValues().size();
@@ -692,6 +803,137 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 				remaining -= valueSize;
 			}
 			throw new IndexOutOfBoundsException(index + " of " + (index - remaining));
+		}
+
+		@Override
+		public ListElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<V>) super.addElement(value, after, before, first);
+		}
+
+		@Override
+		public ListElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<V>) super.move(valueEl, after, before, first, afterRemove);
+		}
+
+		@Override
+		protected ListElement<V> entryFor(ElementId keyId, CollectionElement<V> valueEl) {
+			return valueEl == null ? null : new OrderedValueElement(getMap().getEntryById(keyId), (ListElement<V>) valueEl);
+		}
+
+		@Override
+		public MutableListElement<V> mutableElement(ElementId id) {
+			if (!(id instanceof BetterMultiMapValueCollection.MapValueId))
+				throw new NoSuchElementException();
+			MapValueId mvi = (MapValueId) id;
+			OrderedMultiEntry<K, V> entry = getMap().getEntryById(mvi.getKeyId());
+			return new MutableOrderedValueElement(entry, (MutableListElement<V>) entry.getValues().mutableElement(mvi.getValueId()));
+		}
+
+		class OrderedValueElement extends ValueElement implements ListElement<V> {
+			private final OrderedMultiEntry<K, V> theEntry;
+			private final ListElement<V> theValueElement;
+
+			OrderedValueElement(OrderedMultiEntry<K, V> entry, ListElement<V> valueEl) {
+				this(getMap().getEntryById(entry.getElementId(), valueEl.getElementId()), entry, valueEl);
+			}
+
+			OrderedValueElement(MultiEntryValueHandle<K, V> kvEntry, OrderedMultiEntry<K, V> entry, ListElement<V> valueEl) {
+				super(kvEntry);
+				theEntry = entry;
+				theValueElement = valueEl;
+			}
+
+			OrderedMultiEntry<K, V> getEntry() {
+				return theEntry;
+			}
+
+			ListElement<V> getValueElement() {
+				return theValueElement;
+			}
+
+			@Override
+			public int getElementsBefore() {
+				int count = theValueElement.getElementsBefore();
+				for (OrderedMultiEntry<K, V> adjEntry = theEntry.getAdjacent(false); adjEntry != null; adjEntry = adjEntry
+					.getAdjacent(false))
+					count += adjEntry.getValues().size();
+				return count;
+			}
+
+			@Override
+			public int getElementsAfter() {
+				int count = theValueElement.getElementsAfter();
+				for (OrderedMultiEntry<K, V> adjEntry = theEntry.getAdjacent(true); adjEntry != null; adjEntry = adjEntry.getAdjacent(true))
+					count += adjEntry.getValues().size();
+				return count;
+			}
+
+			@Override
+			public ListElement<V> getAdjacent(boolean next) {
+				ListElement<V> adj = theValueElement.getAdjacent(next);
+				OrderedMultiEntry<K, V> adjEntry = theEntry;
+				while (adj == null && adjEntry != null) {
+					adjEntry = adjEntry.getAdjacent(next);
+					adj = adjEntry == null ? null : (ListElement<V>) adjEntry.getValues().getTerminalElement(next);
+				}
+				return adj == null ? null : new OrderedValueElement(adjEntry, adj);
+			}
+		}
+
+		class MutableOrderedValueElement extends OrderedValueElement implements MutableListElement<V> {
+			MutableOrderedValueElement(OrderedMultiEntry<K, V> entry, MutableListElement<V> valueEl) {
+				super(getMap().mutableElement(entry.getElementId(), valueEl.getElementId()), entry, valueEl);
+			}
+
+			@Override
+			MutableListElement<V> getValueElement() {
+				return (MutableListElement<V>) super.getValueElement();
+			}
+
+			@Override
+			protected MutableMultiMapHandle<K, V> getMapEntry() {
+				return (MutableMultiMapHandle<K, V>) super.getMapEntry();
+			}
+
+			@Override
+			public MutableListElement<V> getAdjacent(boolean next) {
+				ListElement<V> adj = getValueElement().getAdjacent(next);
+				OrderedMultiEntry<K, V> adjEntry = getEntry();
+				while (adj == null && adjEntry != null) {
+					adjEntry = adjEntry.getAdjacent(next);
+					adj = (ListElement<V>) adjEntry.getValues().getTerminalElement(next);
+				}
+				if (adj != null && !(adj instanceof MutableListElement))
+					adj = (ListElement<V>) adjEntry.getValues().mutableElement(adj.getElementId());
+				return adj == null ? null : new MutableOrderedValueElement(adjEntry, (MutableListElement<V>) adj);
+			}
+
+			@Override
+			public String isEnabled() {
+				return getMapEntry().isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(V value) {
+				return getMapEntry().isAcceptable(value);
+			}
+
+			@Override
+			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+				getMapEntry().set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return getMapEntry().canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				getMapEntry().remove();
+			}
 		}
 	}
 
@@ -744,45 +986,22 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			MultiEntryValueHandle<K, V> handle = getElement(id).get();
-			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
-			int before = getElements(entry.getValues(), handle.getElementId(), true);
-			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), false);
-			while (keyEl != null) {
-				before += getMap().getEntryById(keyEl.getElementId()).getValues().size();
-				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), false);
-			}
-			return before;
+		public ListElement<MultiEntryValueHandle<K, V>> getElement(MultiEntryValueHandle<K, V> value, boolean first) {
+			return (ListElement<MultiEntryValueHandle<K, V>>) super.getElement(value, first);
 		}
 
 		@Override
-		public int getElementsAfter(ElementId id) {
-			MultiEntryValueHandle<K, V> handle = getElement(id).get();
-			MultiEntryHandle<K, V> entry = getMap().getEntryById(handle.getKeyId());
-			int after = getElements(entry.getValues(), handle.getElementId(), false);
-			CollectionElement<K> keyEl = getMap().keySet().getAdjacentElement(entry.getElementId(), true);
-			while (keyEl != null) {
-				after += getMap().getEntryById(keyEl.getElementId()).getValues().size();
-				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), true);
-			}
-			return after;
-		}
-
-		private int getElements(BetterCollection<?> c, ElementId id, boolean before) {
-			if (c instanceof BetterList)
-				return ((BetterList<?>) c).getElementsBefore(id);
-			CollectionElement<?> el = c.getAdjacentElement(id, !before);
-			int elements = 0;
-			while (el != null) {
-				elements++;
-				el = c.getAdjacentElement(el.getElementId(), !before);
-			}
-			return elements;
+		public ListElement<MultiEntryValueHandle<K, V>> getElement(ElementId id) {
+			return (ListElement<MultiEntryValueHandle<K, V>>) super.getElement(id);
 		}
 
 		@Override
-		public CollectionElement<MultiEntryValueHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<MultiEntryValueHandle<K, V>> getTerminalElement(boolean first) {
+			return (ListElement<MultiEntryValueHandle<K, V>>) super.getTerminalElement(first);
+		}
+
+		@Override
+		public ListElement<MultiEntryValueHandle<K, V>> getElement(int index) throws IndexOutOfBoundsException {
 			CollectionElement<K> keyEl = getMap().keySet().getTerminalElement(true);
 			int size = 0;
 			while (keyEl != null) {
@@ -792,7 +1011,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					return entryFor(getMap().getEntryById(keyEl.getElementId(), getElement(entry.getValues(), index - size)));
 
 				size += entrySize;
-				keyEl = getMap().keySet().getAdjacentElement(keyEl.getElementId(), true);
+				keyEl = keyEl.getAdjacent(true);
 			}
 			throw new IndexOutOfBoundsException(index + " of " + size);
 		}
@@ -801,15 +1020,15 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			if (c instanceof BetterList)
 				return ((BetterList<?>) c).getElement(index).getElementId();
 			if (index <= c.size() / 2) {
-				ElementId id = c.getTerminalElement(true).getElementId();
+				CollectionElement<?> id = c.getTerminalElement(true);
 				for (int i = 0; i < index; i++)
-					id = c.getAdjacentElement(id, true).getElementId();
-				return id;
+					id = id.getAdjacent(true);
+				return id.getElementId();
 			} else {
-				ElementId id = c.getTerminalElement(false).getElementId();
+				CollectionElement<?> id = c.getTerminalElement(false);
 				for (int i = c.size() - 1; i > index; i--)
-					id = c.getAdjacentElement(id, false).getElementId();
-				return id;
+					id = id.getAdjacent(false);
+				return id.getElementId();
 			}
 		}
 
@@ -822,6 +1041,33 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
+		public ListElement<MultiEntryValueHandle<K, V>> addElement(MultiEntryValueHandle<K, V> value, ElementId after, ElementId before,
+			boolean first) throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<MultiEntryValueHandle<K, V>>) super.addElement(value, after, before, first);
+		}
+
+		@Override
+		public ListElement<MultiEntryValueHandle<K, V>> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
+			Runnable afterRemove) throws UnsupportedOperationException, IllegalArgumentException {
+			return (ListElement<MultiEntryValueHandle<K, V>>) super.move(valueEl, after, before, first, afterRemove);
+		}
+
+		@Override
+		public MutableListElement<MultiEntryValueHandle<K, V>> mutableElement(ElementId id) {
+			return (MutableListElement<MultiEntryValueHandle<K, V>>) super.mutableElement(id);
+		}
+
+		@Override
+		protected ListElement<MultiEntryValueHandle<K, V>> entryFor(MultiEntryValueHandle<K, V> entry) {
+			return entry == null ? null : new ValueListElement(entry);
+		}
+
+		@Override
+		protected MutableListElement<MultiEntryValueHandle<K, V>> mutableEntryFor(MultiEntryValueHandle<K, V> entry) {
+			return new MutableValueListElement(entry);
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends MultiEntryValueHandle<K, V>>> observer) {
 			return getMap().onChange(mapEvt -> {
 				MultiEntryValueHandle<K, V> entry;
@@ -831,10 +1077,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					return;
 				else
 					entry = new SyntheticEntry(mapEvt.getKeyElement(), mapEvt.getKey(), mapEvt.getElementId(), mapEvt.getOldValue());
-				ElementId id = entryFor(entry).getElementId();
+				ListElement<MultiEntryValueHandle<K, V>> id = entryFor(entry);
 
 				ObservableCollectionEvent<MultiEntryValueHandle<K, V>> collEvt = ObservableCollectionEvent.createCollectionEvent(//
-					id, getElementsBefore(id), mapEvt.getType(), //
+					id.getElementId(), id.getElementsBefore(), mapEvt.getType(), //
 					mapEvt.getType() == CollectionChangeType.add ? null : entry, entry, mapEvt, mapEvt.getMovement());
 				try (Transaction evtT = collEvt.use()) {
 					observer.accept(collEvt);
@@ -873,6 +1119,75 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			@Override
 			public V get() {
 				return theValue;
+			}
+
+			@Override
+			public MultiEntryValueHandle<K, V> getAdjacent(boolean next) {
+				return null;
+			}
+		}
+
+		class ValueListElement extends ValueHandleElement implements ListElement<MultiEntryValueHandle<K, V>> {
+			protected ValueListElement(MultiEntryValueHandle<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getElementCount(getEntry(), true);
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getElementCount(getEntry(), false);
+			}
+
+			@Override
+			public ListElement<MultiEntryValueHandle<K, V>> getAdjacent(boolean next) {
+				return (ListElement<MultiEntryValueHandle<K, V>>) super.getAdjacent(next);
+			}
+		}
+
+		int getElementCount(MultiEntryValueHandle<K, V> entry, boolean before) {
+			MultiEntryHandle<K, V> mapEntry = getMap().getEntryById(entry.getKeyId());
+			int count;
+			CollectionElement<V> valueEl = mapEntry.getValues().getElement(entry.getElementId());
+			if (valueEl instanceof ListElement)
+				count = before ? ((ListElement<?>) valueEl).getElementsBefore() : ((ListElement<?>) valueEl).getElementsAfter();
+			else {
+				count = 0;
+				valueEl = valueEl.getAdjacent(!before);
+				while (valueEl != null) {
+					count++;
+					valueEl = valueEl.getAdjacent(!before);
+				}
+			}
+			MultiEntryHandle<K, V> keyEl = mapEntry.getAdjacent(!before);
+			while (keyEl != null) {
+				count += keyEl.getValues().size();
+				keyEl.getAdjacent(false);
+			}
+			return count;
+		}
+
+		class MutableValueListElement extends MutableValueHandleElement implements MutableListElement<MultiEntryValueHandle<K, V>> {
+			protected MutableValueListElement(MultiEntryValueHandle<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getElementCount(getEntry(), true);
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getElementCount(getEntry(), false);
+			}
+
+			@Override
+			public MutableListElement<MultiEntryValueHandle<K, V>> getAdjacent(boolean next) {
+				return (MutableListElement<MultiEntryValueHandle<K, V>>) super.getAdjacent(next);
 			}
 		}
 	}
@@ -915,6 +1230,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
+		public OrderedMultiEntry<K, V> getEntryById(ElementId keyId) {
+			return OrderedMultiEntry.reverse(getSource().getEntryById(keyId));
+		}
+
+		@Override
 		public ObservableSet<K> keySet() {
 			return getSource().keySet().reverse();
 		}
@@ -937,6 +1257,13 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		@Override
 		public ObservableCollection<V> get(K key) {
 			return getSource().get(key).reverse();
+		}
+
+		@Override
+		public OrderedMultiEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
+			ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
+			return OrderedMultiEntry.reverse(
+				getSource().getOrPutEntry(key, value, ElementId.reverse(beforeKey), ElementId.reverse(afterKey), !first, preAdd, postAdd));
 		}
 
 		@Override
@@ -1020,6 +1347,42 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
+		public OrderedMapEntry<K, V> getEntry(K key) {
+			return (OrderedMapEntry<K, V>) super.getEntry(key);
+		}
+
+		@Override
+		public OrderedMapEntry<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			return (OrderedMapEntry<K, V>) super.putEntry(key, value, after, before, first);
+		}
+
+		@Override
+		public OrderedMapEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			return (OrderedMapEntry<K, V>) super.getOrPutEntry(key, value, afterKey, beforeKey, first, preAdd, postAdd);
+		}
+
+		@Override
+		public OrderedMapEntry<K, V> getEntryById(ElementId entryId) {
+			return (OrderedMapEntry<K, V>) super.getEntryById(entryId);
+		}
+
+		@Override
+		public MutableOrderedMapEntry<K, V> mutableEntry(ElementId entryId) {
+			return (MutableOrderedMapEntry<K, V>) super.mutableEntry(entryId);
+		}
+
+		@Override
+		protected OrderedMapEntry<K, V> entryFor(MultiEntryHandle<K, V> outerHandle) {
+			return outerHandle == null ? null : new OrderedSingleEntry((OrderedMultiEntry<K, V>) outerHandle);
+		}
+
+		@Override
+		protected MutableOrderedMapEntry<K, V> mutableEntryFor(MultiEntryHandle<K, V> outerHandle) {
+			return outerHandle == null ? null : new MutableOrderedSingleEntry((OrderedMultiEntry<K, V>) outerHandle);
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getSource().onChange(multiMapEvt -> {
 				int valueIndex = multiMapEvt.getIndex();
@@ -1059,6 +1422,58 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		public String toString() {
 			return entrySet().toString();
 		}
+
+		protected class OrderedSingleEntry extends SingleEntry implements OrderedMapEntry<K, V> {
+			protected OrderedSingleEntry(OrderedMultiEntry<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			protected OrderedMultiEntry<K, V> getEntry() {
+				return (OrderedMultiEntry<K, V>) super.getEntry();
+			}
+
+			@Override
+			public OrderedMapEntry<K, V> getAdjacent(boolean next) {
+				return entryFor(getEntry().getAdjacent(next));
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getEntry().getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getEntry().getElementsAfter();
+			}
+		}
+
+		protected class MutableOrderedSingleEntry extends MutableSingleEntry implements MutableOrderedMapEntry<K, V> {
+			protected MutableOrderedSingleEntry(OrderedMultiEntry<K, V> entry) {
+				super(entry);
+			}
+
+			@Override
+			protected OrderedMultiEntry<K, V> getEntry() {
+				return (OrderedMultiEntry<K, V>) super.getEntry();
+			}
+
+			@Override
+			public MutableOrderedMapEntry<K, V> getAdjacent(boolean next) {
+				return mutableEntryFor(getEntry().getAdjacent(next));
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return getEntry().getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return getEntry().getElementsAfter();
+			}
+		}
 	}
 
 	/**
@@ -1071,7 +1486,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	class ActiveObservableSingleMap<K, V, X> extends AbstractIdentifiable implements ObservableMap<K, X> {
 		private final ObservableMultiMap<K, V> theMultiMap;
 		private final BiFunction<? super ObservableCollection<V>, ? super Observable<?>, ? extends SettableValue<X>> theValueProducer;
-		private final ObservableSet<MultiEntryHandle<K, V>> theMultiEntries;
+		private final ObservableSet<OrderedMultiEntry<K, V>> theMultiEntries;
 		private final ObservableSet<MapEntryElement> theEntries;
 		private final ObservableSet<K> theKeySet;
 		private final ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends X>>> theListeners;
@@ -1082,7 +1497,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			theMultiMap = multiMap;
 			theValueProducer = valueProducer;
 			theListeners = ListenerList.build().build();
-			theMultiEntries = (ObservableSet<MultiEntryHandle<K, V>>) theMultiMap.entrySet();
+			theMultiEntries = (ObservableSet<OrderedMultiEntry<K, V>>) theMultiMap.entrySet();
 			// The purpose of using the Map.Entry type is to correctly handle the addition of entries
 			ObservableSet<Map.Entry<K, X>> entries = theMultiEntries.flow()//
 				.<Map.Entry<K, X>> transformEquivalent(tx -> tx.cache(true).reEvalOnUpdate(false).fireIfUnchanged(true)//
@@ -1116,7 +1531,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			Subscription valuesSub = theEntries.subscribe(evt -> {
 				switch (evt.getType()) {
 				case add:
-					evt.getNewValue().theId = evt.getElementId();
+					evt.getNewValue().theElement = theEntries.getElement(evt.getElementId());
 					fire(new ObservableMapEvent.FromEntryEvent<>(evt));
 					break;
 				case remove:
@@ -1179,12 +1594,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public MapEntryHandle<K, X> getEntry(K key) {
+		public OrderedMapEntry<K, X> getEntry(K key) {
 			MultiEntryHandle<K, V> multiEntry = theMultiMap.getEntry(key);
 			return multiEntry == null ? null : getEntryByMultiId(multiEntry.getElementId());
 		}
 
-		private MapEntryHandle<K, X> getEntryByMultiId(ElementId multiId) {
+		private OrderedMapEntry<K, X> getEntryByMultiId(ElementId multiId) {
 			return CollectionElement.get(theEntries.getElementsBySource(multiId, theMultiEntries).peekFirst());
 		}
 
@@ -1203,7 +1618,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public MapEntryHandle<K, X> getOrPutEntry(K key, Function<? super K, ? extends X> value, ElementId after, ElementId before,
+		public OrderedMapEntry<K, X> getOrPutEntry(K key, Function<? super K, ? extends X> value, ElementId after, ElementId before,
 			boolean first, Runnable preAdd, Runnable postAdd) {
 			MultiEntryHandle<K, V> multiEntry = theMultiMap.getOrPutEntry(key, k -> {
 				return getInitialMultiValues(value.apply(k));
@@ -1212,12 +1627,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public MapEntryHandle<K, X> getEntryById(ElementId entryId) {
+		public OrderedMapEntry<K, X> getEntryById(ElementId entryId) {
 			return theEntries.getElement(entryId).get();
 		}
 
 		@Override
-		public MutableMapEntryHandle<K, X> mutableEntry(ElementId entryId) {
+		public MutableOrderedMapEntry<K, X> mutableEntry(ElementId entryId) {
 			return new MutableEntry(theEntries.getElement(entryId).get());
 		}
 
@@ -1295,15 +1710,15 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			return theEntries.toString();
 		}
 
-		class MapEntryElement implements MapEntryHandle<K, X> {
-			final MultiEntryHandle<K, V> multiEntry;
-			ElementId theId;
+		class MapEntryElement implements OrderedMapEntry<K, X> {
+			final OrderedMultiEntry<K, V> multiEntry;
+			CollectionElement<MapEntryElement> theElement;
 			final SettableValue<X> theValue;
 			final LightWeightObservable<Object> theUntil;
 			private Subscription theValueSub;
 			X thePreviousValue;
 
-			MapEntryElement(MultiEntryHandle<K, V> multiEntry, SettableValue<X> value, LightWeightObservable<Object> until) {
+			MapEntryElement(OrderedMultiEntry<K, V> multiEntry, SettableValue<X> value, LightWeightObservable<Object> until) {
 				this.multiEntry = multiEntry;
 				theValue = value;
 				theValueSub = theValue.changes().act(evt -> {
@@ -1329,7 +1744,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 
 			@Override
 			public ElementId getElementId() {
-				return theId;
+				return theElement.getElementId();
 			}
 
 			@Override
@@ -1340,6 +1755,22 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			@Override
 			public X get() {
 				return theValue.get();
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return multiEntry.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return multiEntry.getElementsAfter();
+			}
+
+			@Override
+			public MapEntryElement getAdjacent(boolean next) {
+				CollectionElement<MapEntryElement> adj = theElement.getAdjacent(next);
+				return adj == null ? null : adj.get();
 			}
 
 			@Override
@@ -1358,18 +1789,29 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			}
 		}
 
-		class MutableEntry implements MutableMapEntryHandle<K, X> {
+		class MutableEntry implements MutableOrderedMapEntry<K, X> {
 			private final MapEntryElement theElement;
 			private final MutableCollectionElement<K> theMutableKeyEntry;
 
-			MutableEntry(ActiveObservableSingleMap<K, V, X>.MapEntryElement element) {
+			MutableEntry(MapEntryElement element) {
 				theElement = element;
 				theMutableKeyEntry = theMultiMap.keySet().mutableElement(element.multiEntry.getElementId());
 			}
 
 			@Override
-			public BetterCollection<X> getCollection() {
-				return values();
+			public int getElementsBefore() {
+				return theElement.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theElement.getElementsAfter();
+			}
+
+			@Override
+			public MutableOrderedMapEntry<K, X> getAdjacent(boolean next) {
+				MapEntryElement adj = theElement.getAdjacent(next);
+				return adj == null ? null : new MutableEntry(adj);
 			}
 
 			@Override

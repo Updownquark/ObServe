@@ -982,7 +982,7 @@ public class ObservableCollectionActiveManagers2 {
 						// But now need to re-set the correct element ID for each element
 						el.get().theElementId = el.getElementId();
 						el.get().refresh(r);
-						el = theElements.getAdjacentElement(el.getElementId(), true);
+						el = el.getAdjacent(true);
 					}
 				} finally {
 					if (extraT != null)
@@ -1511,7 +1511,7 @@ public class ObservableCollectionActiveManagers2 {
 								theHolder = end.theHolder;
 						}
 						while (theHolder != null && theHolder.manager == null)
-							theHolder = CollectionElement.get(theOuterElements.getAdjacentElement(theHolder.holderElement, ascending));
+							theHolder = CollectionElement.get(theHolder.holderElement.getAdjacent(ascending));
 						theIterStruct = new FlattenedHolderIter();
 					}
 
@@ -1543,7 +1543,7 @@ public class ObservableCollectionActiveManagers2 {
 						else
 							theIterStruct.highBound = end;
 						do {
-							theHolder = CollectionElement.get(theOuterElements.getAdjacentElement(theHolder.holderElement, ascending));
+							theHolder = CollectionElement.get(theHolder.holderElement.getAdjacent(ascending));
 						} while (theHolder != null && theHolder.manager == null);
 						return theIterStruct;
 					}
@@ -1791,7 +1791,7 @@ public class ObservableCollectionActiveManagers2 {
 			boolean[] init = new boolean[] { true }; // Only honor fromStart for the initial collections
 			theParent.begin(fromStart, (parentEl, cause) -> {
 				FlattenedHolder holder = new FlattenedHolder(parentEl, listening, cause, !init[0] || fromStart);
-				holder.holderElement = theOuterElements.addElement(holder, false).getElementId();
+				holder.holderElement = theOuterElements.addElement(holder, false);
 			}, listening);
 			init[0] = false;
 		}
@@ -1801,7 +1801,7 @@ public class ObservableCollectionActiveManagers2 {
 			private final BetterTreeSet<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
-			ElementId holderElement;
+			CollectionElement<FlattenedHolder> holderElement;
 			private CollectionDataFlow<?, ?, ? extends V> theFlow;
 			ActiveCollectionManager<?, ?, ? extends V> manager;
 			private final XformOptions.XformCacheHandler<I, Void> theCacheHandler;
@@ -1844,7 +1844,7 @@ public class ObservableCollectionActiveManagers2 {
 					public void removed(I value, Object... innerCauses) {
 						try (Transaction parentT = theParent.lock(false, null); Transaction innerT = lockLocal()) {
 							clearSubElements(innerCauses);
-							theOuterElements.mutableElement(holderElement).remove();
+							theOuterElements.mutableElement(holderElement.getElementId()).remove();
 						}
 					}
 				});

@@ -51,6 +51,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 
 class SimpleTableBuilder<R, T extends JTable, P extends SimpleTableBuilder<R, T, P>> extends AbstractSimpleTableBuilder<R, T, P>
@@ -188,7 +189,7 @@ implements TableBuilder<R, T, P> {
 	public P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod) {
 		return withMultiAction(null, values -> {
 			R value = creator.get();
-			CollectionElement<R> el = findElement(value);
+			ListElement<R> el = findElement(value);
 			if (el == null) {
 				el = theRows.addElement(value, false);
 				if (el == null) {
@@ -199,9 +200,9 @@ implements TableBuilder<R, T, P> {
 			// meaning the above add operation has now been propagated to the list model and the selection model
 			// It also means that the row model is sync'd with the collection, so we can use the index from the collection here
 			ObservableCollection<R> rows = getActualRows();
-			CollectionElement<R> displayedRow = rows.getElementsBySource(el.getElementId(), theRows).peekFirst();
+			ListElement<R> displayedRow = (ListElement<R>) rows.getElementsBySource(el.getElementId(), theRows).peekFirst();
 			if (displayedRow != null) {
-				int index = rows.getElementsBefore(displayedRow.getElementId());
+				int index = displayedRow.getElementsBefore();
 				getEditor().getSelectionModel().setSelectionInterval(index, index);
 			}
 		}, action -> {
@@ -212,16 +213,16 @@ implements TableBuilder<R, T, P> {
 		});
 	}
 
-	private CollectionElement<R> findElement(R value) {
-		CollectionElement<R> el = theRows.getElement(value, false);
+	private ListElement<R> findElement(R value) {
+		ListElement<R> el = theRows.getElement(value, false);
 		if (el != null && el.get() != value) {
-			CollectionElement<R> lastMatch = theRows.getElement(value, true);
+			ListElement<R> lastMatch = theRows.getElement(value, true);
 			if (!lastMatch.getElementId().equals(el.getElementId())) {
 				if (lastMatch.get() == value)
 					el = lastMatch;
 				else {
 					while (el.get() != value && !el.getElementId().equals(lastMatch.getElementId()))
-						el = theRows.getAdjacentElement(el.getElementId(), true);
+						el = el.getAdjacent(true);
 				}
 				if (el.get() != value)
 					el = null;
@@ -260,7 +261,7 @@ implements TableBuilder<R, T, P> {
 		for (int i = selModel.getMinSelectionIndex(); i >= 0 && i <= selModel.getMaxSelectionIndex(); i++) {
 			if (!selModel.isSelectedIndex(i))
 				continue;
-			CollectionElement<R> toCopy = theRows.getElement(i);
+			ListElement<R> toCopy = theRows.getElement(i);
 			R copy = copier.apply(toCopy.get());
 			CollectionElement<R> copied = findElement(copy);
 			if (copied != null) {//
@@ -270,9 +271,9 @@ implements TableBuilder<R, T, P> {
 				copied = theRows.addElement(copy, false);
 			if (copied != null) {
 				ObservableCollection<R> rows = getActualRows();
-				CollectionElement<R> rowEl = rows.getElementsBySource(copied.getElementId(), theRows).peekFirst();
+				ListElement<R> rowEl = (ListElement<R>) rows.getElementsBySource(copied.getElementId(), theRows).peekFirst();
 				if (rowEl != null)
-					newSelection.add(rows.getElementsBefore(rowEl.getElementId()));
+					newSelection.add(rowEl.getElementsBefore());
 			}
 		}
 		selModel.setValueIsAdjusting(true);
@@ -297,9 +298,9 @@ implements TableBuilder<R, T, P> {
 						return cell.getCellValue();
 					try (Transaction t = theFilteredRows.lock(true, null)) {
 						CollectionElement<R> row = theRows.getElement(cell.getRowIndex());
-						CollectionElement<R> adj = theRows.getAdjacentElement(row.getElementId(), !up);
+							CollectionElement<R> adj = row.getAdjacent(!up);
 						if (adj != null) {
-							CollectionElement<R> adj2 = theRows.getAdjacentElement(adj.getElementId(), !up);
+								CollectionElement<R> adj2 = adj.getAdjacent(!up);
 							theRows.move(row.getElementId(), up ? CollectionElement.getElementId(adj2) : adj.getElementId(),
 								up ? adj.getElementId() : CollectionElement.getElementId(adj2), up, null);
 							ListSelectionModel selModel = getEditor().getSelectionModel();
@@ -639,43 +640,43 @@ implements TableBuilder<R, T, P> {
 			TitledBorder border = BorderFactory.createTitledBorder(singularItemName);
 			if (theFilteredValueRows != null) {
 				theRows.observeSize()
-					.<String> transform(tx -> tx//
-						.combineWith(theFilteredValueRows.observeSize())//
-						.combineWith(theCountTitleDisplayedText)//
-						.combine((sz, f, ttl) -> {
-							String text;
-							if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
-								if (f != sz)
-									text = numberFormat.format(f) + " of ";
-								else if (sz > 1)
-									text = "All ";
-								else
-									text = "";
-							} else
+				.<String> transform(tx -> tx//
+					.combineWith(theFilteredValueRows.observeSize())//
+					.combineWith(theCountTitleDisplayedText)//
+					.combine((sz, f, ttl) -> {
+						String text;
+						if (theFilter.get() != TableContentControl.DEFAULT) {// Filtering active
+							if (f != sz)
+								text = numberFormat.format(f) + " of ";
+							else if (sz > 1)
+								text = "All ";
+							else
 								text = "";
-							text += numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
-							if (ttl != null && !ttl.isEmpty())
-								text += " " + ttl;
-							return text;
-						}))//
+						} else
+							text = "";
+						text += numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
+						if (ttl != null && !ttl.isEmpty())
+							text += " " + ttl;
+						return text;
+					}))//
 				.changes().takeUntil(getUntil()).act(evt -> {
-						border.setTitle(evt.getNewValue());
+					border.setTitle(evt.getNewValue());
 					comp.repaint();
 				});
 			} else {
 				theRows.observeSize()//
-					.<String> transform(tx -> tx//
-						.combineWith(theCountTitleDisplayedText)//
-						.combine((sz, ttl) -> {
-							String text = numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
-							if (ttl != null && !ttl.isEmpty())
-								text += " " + ttl;
-							return text;
-						}))
-					.changes().takeUntil(getUntil()).act(evt -> {
-						border.setTitle(evt.getNewValue());
-						comp.repaint();
-					});
+				.<String> transform(tx -> tx//
+					.combineWith(theCountTitleDisplayedText)//
+					.combine((sz, ttl) -> {
+						String text = numberFormat.format(sz) + " " + (sz == 1 ? singularItemName : pluralItemName);
+						if (ttl != null && !ttl.isEmpty())
+							text += " " + ttl;
+						return text;
+					}))
+				.changes().takeUntil(getUntil()).act(evt -> {
+					border.setTitle(evt.getNewValue());
+					comp.repaint();
+				});
 			}
 			((JComponent) comp).setBorder(border);
 		}
@@ -707,12 +708,12 @@ implements TableBuilder<R, T, P> {
 
 		@Override
 		protected ElementId getAdjacentRowElement(ElementId rowElement, boolean next) {
-			return CollectionElement.getElementId(theFilteredRows.getAdjacentElement(rowElement, next));
+			return CollectionElement.getElementId(theFilteredRows.getElement(rowElement).getAdjacent(next));
 		}
 
 		@Override
 		protected int getElementsAfter(ElementId rowElement) {
-			return theFilteredRows.getElementsAfter(rowElement);
+			return theFilteredRows.getElement(rowElement).getElementsAfter();
 		}
 
 		@Override

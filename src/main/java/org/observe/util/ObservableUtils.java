@@ -57,7 +57,7 @@ public class ObservableUtils {
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
-				el = collection.getAdjacentElement(el.getElementId(), forward);
+				el = el.getAdjacent(forward);
 				if (forward)
 					index++;
 			}
@@ -88,7 +88,7 @@ public class ObservableUtils {
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
-				el = collection.getAdjacentElement(el.getElementId(), forward);
+				el = el.getAdjacent(forward);
 				if (!forward)
 					index--;
 			}

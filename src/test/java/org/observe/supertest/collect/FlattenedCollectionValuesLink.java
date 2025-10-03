@@ -16,6 +16,7 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.OrderedMapEntry;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.tree.BetterTreeMap;
@@ -57,7 +58,7 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 				.flattenValues(sourceVal -> getBucket(buckets, sourceVal).get());
 			CollectionDataFlow<?, ?, X> multiStepFlow = sourceCL.getDef().multiStepFlow
 				.flattenValues(
-				sourceVal -> getBucket(buckets, sourceVal).get());
+					sourceVal -> getBucket(buckets, sourceVal).get());
 			ObservableCollectionTestDef<X> def = new ObservableCollectionTestDef<>(type, oneStepFlow, multiStepFlow,
 				sourceCL.getDef().orderImportant, sourceCL.getDef().checkOldValues);
 			return new FlattenedCollectionValuesLink<>(path, sourceCL, def, helper, BetterCollections.unmodifiableSortedMap(buckets));
@@ -122,11 +123,12 @@ public class FlattenedCollectionValuesLink<S, T> extends AbstractMappedCollectio
 			int targetIndex = helper.getInt(0, theBuckets.size());
 			T newValue = getValueSupplier().apply(helper);
 
-			MapEntryHandle<S, SettableValue<T>> entry = theBuckets.getEntryById(theBuckets.keySet().getElement(targetIndex).getElementId());
+			OrderedMapEntry<S, SettableValue<T>> entry = theBuckets
+				.getEntryById(theBuckets.keySet().getElement(targetIndex).getElementId());
 			T oldValue = entry.get().get();
 			if (helper.isReproducing())
-				System.out.println("Changing bucket [" + theBuckets.keySet().getElementsBefore(entry.getElementId()) + "]" + entry.getKey()
-				+ " " + oldValue + "->" + newValue);
+				System.out
+					.println("Changing bucket [" + entry.getElementsBefore() + "]" + entry.getKey() + " " + oldValue + "->" + newValue);
 			entry.get().set(newValue, null);
 			expectBucketChange(entry, oldValue, newValue, null);
 		});

@@ -10,7 +10,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ListElement;
 
 /**
  * A default, active implementation of {@link ObservableSortedMultiMap}
@@ -83,7 +83,7 @@ implements ObservableSortedMultiMap<K, V> {
 		}
 
 		@Override
-		public CollectionElement<K> search(Comparable<? super K> search, SortedSearchFilter filter) {
+		public ListElement<K> search(Comparable<? super K> search, SortedSearchFilter filter) {
 			return getActiveEntries().searchValue(entry -> search.compareTo(entry.get()), filter);
 		}
 

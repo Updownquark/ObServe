@@ -67,9 +67,11 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
@@ -538,7 +540,7 @@ public final class ObservableCollectionImpl {
 					return theLastMatch;
 				theLastMatchStamp = stamp;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				find(el -> element.accept(new SimpleElement(el, el.get())));
 				if (element.get() != null)
 					return theLastMatch = element.get().getElementId();
 				else {
@@ -557,7 +559,7 @@ public final class ObservableCollectionImpl {
 					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
 				theLastMatchStamp = stamp;
 				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				find(el -> element.accept(new SimpleElement(el, el.get())));
 				if (element.get() != null) {
 					theLastMatch = element.get().getElementId();
 					return element.get().get();
@@ -660,13 +662,15 @@ public final class ObservableCollectionImpl {
 										sameElement = true;
 										mayReplace = true;
 										better = evt.getType() == CollectionChangeType.set//
-											? theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()),
+											? theElementCompare.compare(
+												new TransientElement(evt.getElementId(), evt.getNewValue()),
 												current) <= 0
 												: false;
 									} else {
 										sameElement = false;
 										mayReplace = better = theElementCompare
-											.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) < 0;
+											.compare(new TransientElement(evt.getElementId(), evt.getNewValue()),
+												current) < 0;
 									}
 								} catch (RuntimeException e) {
 									if (!ListenerList.isSwallowingExceptions())
@@ -722,7 +726,8 @@ public final class ObservableCollectionImpl {
 										// If we already know of a replacement element even better-positioned than the new element,
 										// ignore the new one
 										if (current == null || better) {
-											replacement = new SimpleElement(evt.getElementId(), evt.getNewValue());
+											replacement = new SimpleElement(theCollection.getElement(evt.getElementId()),
+												evt.getNewValue());
 											isRefreshNeeded = false;
 											theLastMatchStamp = getStamp();
 											theLastMatch = evt.getElementId();
@@ -761,7 +766,7 @@ public final class ObservableCollectionImpl {
 								boolean found;
 								try {
 									found = find(//
-										el -> setCurrentElement(new SimpleElement(el.getElementId(), el.get()), cause));
+										el -> setCurrentElement(new SimpleElement(el, el.get()), cause));
 								} catch (RuntimeException e) {
 									if (!ListenerList.isSwallowingExceptions())
 										throw e;
@@ -804,7 +809,7 @@ public final class ObservableCollectionImpl {
 						}
 						FinderListener listener = new FinderListener();
 						if (!find(el -> {
-							listener.theCurrentElement = new SimpleElement(el.getElementId(), el.get());
+							listener.theCurrentElement = new SimpleElement(el, el.get());
 						}))
 							listener.theCurrentElement = null;
 						Subscription collSub = theCollection.onChange(listener);
@@ -876,10 +881,40 @@ public final class ObservableCollectionImpl {
 		}
 
 		private class SimpleElement implements CollectionElement<E> {
+			private final CollectionElement<? extends E> theElement;
+			private final E theValue;
+
+			public SimpleElement(CollectionElement<? extends E> el, E value) {
+				theElement = el;
+				theValue = value;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theElement.getElementId();
+			}
+
+			@Override
+			public E get() {
+				return theValue;
+			}
+
+			@Override
+			public CollectionElement<E> getAdjacent(boolean next) {
+				return (CollectionElement<E>) theElement.getAdjacent(next);
+			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(theValue);
+			}
+		}
+
+		private class TransientElement implements CollectionElement<E> {
 			private final ElementId theId;
 			private final E theValue;
 
-			public SimpleElement(ElementId id, E value) {
+			public TransientElement(ElementId id, E value) {
 				theId = id;
 				theValue = value;
 			}
@@ -895,8 +930,8 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public String toString() {
-				return String.valueOf(theValue);
+			public CollectionElement<E> getAdjacent(boolean next) {
+				return null;
 			}
 		}
 	}
@@ -1285,7 +1320,7 @@ public final class ObservableCollectionImpl {
 			while (el != null) {
 				if (best == null || theCompare.compare(el.get(), best.get()) < 0)
 					best = el;
-				el = getCollection().getAdjacentElement(el.getElementId(), first);
+				el = el.getAdjacent(first);
 			}
 			if (best != null) {
 				onElement.accept(best);
@@ -1455,7 +1490,7 @@ public final class ObservableCollectionImpl {
 				while (el != null) {
 					value = update(value, ObservableCollectionEvent.createCollectionEvent(el.getElementId(), index++, //
 						CollectionChangeType.add, null, el.get()));
-					el = getCollection().getAdjacentElement(el.getElementId(), true);
+					el = el.getAdjacent(true);
 				}
 				return value;
 			}
@@ -2178,7 +2213,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
@@ -2191,7 +2226,7 @@ public final class ObservableCollectionImpl {
 					before = temp;
 					first = !first;
 				}
-				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
+				ListElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -2213,7 +2248,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			String msg = theFlow.canMove();
 			if (msg != null && (after == null || valueEl.compareTo(after) >= 0) && (before == null || valueEl.compareTo(before) <= 0))
@@ -2240,16 +2275,16 @@ public final class ObservableCollectionImpl {
 			else {
 				boolean reverse = isReversed;
 				try (Transaction t = lock(true, null)) {
-					ElementId lastStatic = null;
+					ListElement<E> lastStatic = null;
 					Function<? super E, ? extends T> map = theFlow.map().get();
-					CollectionElement<E> el = theSource.getTerminalElement(reverse);
+					ListElement<E> el = theSource.getTerminalElement(reverse);
 					while (el != null) {
-						MutableCollectionElement<E> mutable = theSource.mutableElement(el.getElementId());
+						MutableListElement<E> mutable = theSource.mutableElement(el.getElementId());
 						if (theFlow.map(mutable, map).canRemove() == null)
 							mutable.remove();
 						else
-							lastStatic = el.getElementId();
-						el = lastStatic == null ? theSource.getTerminalElement(reverse) : theSource.getAdjacentElement(lastStatic, reverse);
+							lastStatic = el;
+						el = lastStatic == null ? theSource.getTerminalElement(reverse) : lastStatic.getAdjacent(reverse);
 					}
 				}
 			}
@@ -2265,30 +2300,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			if (isReversed)
-				return theSource.getElementsAfter(id.reverse());
-			else
-				return theSource.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			if (isReversed)
-				return theSource.getElementsBefore(id.reverse());
-			else
-				return theSource.getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<T> getElement(int index) {
+		public ListElement<T> getElement(int index) {
 			if (isReversed)
 				index = getSource().size() - index - 1;
 			return elementFor(theSource.getElement(index), null);
 		}
 
 		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
+		public ListElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				boolean forward = first ^ isReversed;
@@ -2296,45 +2315,35 @@ public final class ObservableCollectionImpl {
 					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
 					FilterMapResult<T, E> reversed = theFlow.reverse(value, false, true);
 					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
-						CollectionElement<E> srcEl = theSource.getElement(reversed.result, forward);
+						ListElement<E> srcEl = theSource.getElement(reversed.result, forward);
 						return srcEl == null ? null : elementFor(srcEl, null);
 					}
 				}
-				CollectionElement<E> el = theSource.getTerminalElement(forward);
+				ListElement<E> el = theSource.getTerminalElement(forward);
 				while (el != null) {
 					if (equivalence().elementEquals(map.apply(el.get()), value))
 						return elementFor(el, map);
-					el = theSource.getAdjacentElement(el.getElementId(), forward);
+					el = el.getAdjacent(forward);
 				}
 				return null;
 			}
 		}
 
 		@Override
-		public CollectionElement<T> getElement(ElementId id) {
+		public ListElement<T> getElement(ElementId id) {
 			return elementFor(theSource.getElement(mapId(id)), null);
 		}
 
 		@Override
-		public CollectionElement<T> getTerminalElement(boolean first) {
+		public ListElement<T> getTerminalElement(boolean first) {
 			if (isReversed)
 				first = !first;
-			CollectionElement<E> t = theSource.getTerminalElement(first);
+			ListElement<E> t = theSource.getTerminalElement(first);
 			return t == null ? null : elementFor(t, null);
 		}
 
 		@Override
-		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			if (isReversed) {
-				elementId = elementId.reverse();
-				next = !next;
-			}
-			CollectionElement<E> adj = theSource.getAdjacentElement(elementId, next);
-			return adj == null ? null : elementFor(adj, null);
-		}
-
-		@Override
-		public MutableCollectionElement<T> mutableElement(ElementId id) {
+		public MutableListElement<T> mutableElement(ElementId id) {
 			return mutableElementFor(theSource.mutableElement(mapId(id)), null);
 		}
 
@@ -2345,7 +2354,8 @@ public final class ObservableCollectionImpl {
 				sourceEl = sourceEl.reverse();
 			if (sourceCollection == this)
 				sourceCollection = theSource;
-			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl, sourceCollection), el -> elementFor(el, null));
+			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl, sourceCollection),
+				el -> elementFor((ListElement<? extends E>) el, null));
 		}
 
 		@Override
@@ -2372,39 +2382,12 @@ public final class ObservableCollectionImpl {
 		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
 		 * @return The corresponding element for this collection
 		 */
-		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el, Function<? super E, ? extends T> map) {
-			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
-			return new CollectionElement<T>() {
-				@Override
-				public T get() {
-					return fMap.apply(el.get());
-				}
-
-				@Override
-				public ElementId getElementId() {
-					return mapId(el.getElementId());
-				}
-
-				@Override
-				public int hashCode() {
-					return getElementId().hashCode();
-				}
-
-				@Override
-				public boolean equals(Object obj) {
-					return obj instanceof CollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
-				}
-
-				@Override
-				public String toString() {
-					StringBuilder str = new StringBuilder("[");
-					if (getElementId().isPresent())
-						str.append(getElementsBefore(getElementId()));
-					else
-						str.append("removed");
-					return str.append("]: ").append(get()).toString();
-				}
-			};
+		protected ListElement<T> elementFor(ListElement<? extends E> el, Function<? super E, ? extends T> map) {
+			if (el == null)
+				return null;
+			if (map == null)
+				map = theFlow.map().get();
+			return new PassiveElement(el, map);
 		}
 
 		/**
@@ -2412,70 +2395,9 @@ public final class ObservableCollectionImpl {
 		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
 		 * @return The corresponding mutable element for this collection
 		 */
-		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
-			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
-			MutableCollectionElement<T> flowEl = theFlow.map(el, fMap);
-			class PassiveMutableElement implements MutableCollectionElement<T> {
-				@Override
-				public BetterCollection<T> getCollection() {
-					return PassiveDerivedCollection.this;
-				}
-
-				@Override
-				public ElementId getElementId() {
-					return mapId(el.getElementId());
-				}
-
-				@Override
-				public T get() {
-					return flowEl.get();
-				}
-
-				@Override
-				public String isEnabled() {
-					return flowEl.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					return flowEl.isAcceptable(value);
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					try (Transaction t = lock(true, null)) {
-						flowEl.set(value);
-					}
-				}
-
-				@Override
-				public String canRemove() {
-					return flowEl.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					try (Transaction t = lock(true, null)) {
-						flowEl.remove();
-					}
-				}
-
-				@Override
-				public int hashCode() {
-					return getElementId().hashCode();
-				}
-
-				@Override
-				public boolean equals(Object obj) {
-					return obj instanceof MutableCollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
-				}
-
-				@Override
-				public String toString() {
-					return flowEl.toString();
-				}
-			}
-			return new PassiveMutableElement();
+		protected MutableListElement<T> mutableElementFor(MutableListElement<E> el, Function<? super E, ? extends T> map) {
+			MutableListElement<T> flowEl = theFlow.map(el, map == null ? theFlow.map().get() : map);
+			return isReversed ? flowEl.reverse() : flowEl;
 		}
 
 		@Override
@@ -2517,7 +2439,7 @@ public final class ObservableCollectionImpl {
 								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
-								el = theSource.getAdjacentElement(el.getElementId(), !isReversed);
+								el = el.getAdjacent(!isReversed);
 							}
 						} finally {
 							isFiring = false;
@@ -2614,6 +2536,70 @@ public final class ObservableCollectionImpl {
 		public String toString() {
 			return BetterCollection.toString(this);
 		}
+
+		class PassiveElement implements ListElement<T> {
+			private final ListElement<? extends E> theWrappedEl;
+			private final Function<? super E, ? extends T> theMap;
+
+			PassiveElement(ListElement<? extends E> el, Function<? super E, ? extends T> map) {
+				this.theWrappedEl = el;
+				this.theMap = map;
+			}
+
+			@Override
+			public T get() {
+				return theMap.apply(theWrappedEl.get());
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return mapId(theWrappedEl.getElementId());
+			}
+
+			@Override
+			public ListElement<T> getAdjacent(boolean next) {
+				if (isReversed)
+					next = !next;
+				ListElement<? extends E> adj = theWrappedEl.getAdjacent(next);
+				return adj == null ? null : new PassiveElement(adj, theMap);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				if (isReversed)
+					return theWrappedEl.getElementsAfter();
+				else
+					return theWrappedEl.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				if (isReversed)
+					return theWrappedEl.getElementsBefore();
+				else
+					return theWrappedEl.getElementsAfter();
+			}
+
+			@Override
+			public int hashCode() {
+				return getElementId().hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof CollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder("[");
+				if (getElementId().isPresent())
+					str.append(theWrappedEl.getElementsBefore());
+				else
+					str.append("removed");
+				return str.append("]: ").append(get()).toString();
+			}
+		}
 	}
 
 	/**
@@ -2683,7 +2669,8 @@ public final class ObservableCollectionImpl {
 			@Override
 			public String toString() {
 				if (treeNode.getElementId().isPresent())
-					return new StringBuilder().append('[').append(treeNode.getNodesBefore()).append("]: ").append(element.get()).toString();
+					return new StringBuilder().append('[').append(treeNode.getElementsBefore()).append("]: ").append(element.get())
+						.toString();
 				else
 					return new StringBuilder().append("[removed]: ").append(element.get()).toString();
 			}
@@ -2725,7 +2712,7 @@ public final class ObservableCollectionImpl {
 				}
 				if (initMove != null)
 					causes = ArrayUtils.add(causes, initMove);
-				fireListeners(ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getNodesBefore(),
+				fireListeners(ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getElementsBefore(),
 					CollectionChangeType.add, null, el.get(), causes));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
@@ -2735,8 +2722,8 @@ public final class ObservableCollectionImpl {
 						while (holder[0].successor != null)
 							holder[0] = holder[0].successor;
 						theStamp.incrementAndGet();
-						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
-						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
+						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getAdjacent(false);
+						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getAdjacent(true);
 						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
 							|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
 							// Element is out-of-order. This may indicate that only this element has changed,
@@ -2746,7 +2733,7 @@ public final class ObservableCollectionImpl {
 								new BetterTreeSet.RepairListener<DerivedElementHolder<T>, CollectionElementMove>() {
 								@Override
 								public CollectionElementMove removed(CollectionElement<DerivedElementHolder<T>> element) {
-									int index = theDerivedElements.getElementsBefore(element.getElementId());
+									int index = ((ListElement<?>) element).getElementsBefore();
 									T value = element.get() == holder[0] ? oldValue : element.get().get();
 									// We know this is a move because elements are always distinct
 									CollectionElementMove move = new CollectionElementMove();
@@ -2770,7 +2757,7 @@ public final class ObservableCollectionImpl {
 									// Instruct the element's listener how to find the new holder
 									element.get().successor = newHolder;
 									theDerivedElements.mutableElement(element.getElementId()).set(newHolder);
-									int index = theDerivedElements.getElementsBefore(element.getElementId());
+									int index = ((ListElement<?>) element).getElementsBefore();
 									T value = element.get().get();
 									data.moved();
 									fireListeners(ObservableCollectionEvent.createCollectionEvent(newHolder, index,
@@ -2783,12 +2770,12 @@ public final class ObservableCollectionImpl {
 							} else {// Since we weren't actually moved in the repair, we need to fire the listener
 								updateHolder(oldValue, holder[0]);
 								fireListeners(
-									ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getNodesBefore(),
+									ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getElementsBefore(),
 										CollectionChangeType.set, oldValue, newValue, elCauses));
 							}
 						} else {
 							updateHolder(oldValue, holder[0]);
-							fireListeners(ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getNodesBefore(),
+							fireListeners(ObservableCollectionEvent.createCollectionEvent(holder[0], holder[0].treeNode.getElementsBefore(),
 								CollectionChangeType.set, oldValue, newValue, elCauses));
 						}
 					}
@@ -2798,9 +2785,9 @@ public final class ObservableCollectionImpl {
 						while (holder[0].successor != null)
 							holder[0] = holder[0].successor;
 						theStamp.incrementAndGet();
-						int index = holder[0].treeNode.getNodesBefore();
+						int index = holder[0].treeNode.getElementsBefore();
 						if (holder[0].treeNode.getElementId().isPresent()) {// May have been removed already
-							removeHolder(holder[0]);
+							removeHolder(value, holder[0]);
 							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
 						}
 						CollectionElementMove terminalMove = null;
@@ -2845,7 +2832,7 @@ public final class ObservableCollectionImpl {
 		 *
 		 * @param element The removed element
 		 */
-		protected void removeHolder(DerivedElementHolder<T> element) {
+		protected void removeHolder(T oldValue, DerivedElementHolder<T> element) {
 		}
 
 		/** @return This collection's data manager */
@@ -2886,16 +2873,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean isContentControlled() {
 			return theFlow.isContentControlled();
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			return ((DerivedElementHolder<T>) id).treeNode.getNodesBefore();
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return ((DerivedElementHolder<T>) id).treeNode.getNodesAfter();
 		}
 
 		@Override
@@ -2997,12 +2974,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(int index) {
+		public ListElement<T> getElement(int index) {
 			return elementFor(theDerivedElements.get(index));
 		}
 
 		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
+		public ListElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
 				Comparable<ObservableCollectionActiveManagers.DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
 				if (finder != null) {
@@ -3010,9 +2987,9 @@ public final class ObservableCollectionImpl {
 						BetterSortedList.SortedSearchFilter.of(first, false));
 					if (found == null || !equivalence().elementEquals(found.get().element.get(), value))
 						return null;
-					while (found.getClosest(first) != null
-						&& equivalence().elementEquals(found.getClosest(first).get().element.get(), value))
-						found = found.getClosest(first);
+					while (found.getAdjacent(!first) != null
+						&& equivalence().elementEquals(found.getAdjacent(!first).get().element.get(), value))
+						found = found.getAdjacent(!first);
 					return elementFor(found.get());
 				}
 				for (DerivedElementHolder<T> el : (first ? theDerivedElements : theDerivedElements.reverse()))
@@ -3023,79 +3000,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(ElementId id) {
+		public ListElement<T> getElement(ElementId id) {
 			return elementFor((DerivedElementHolder<T>) id);
 		}
 
 		@Override
-		public CollectionElement<T> getTerminalElement(boolean first) {
+		public ListElement<T> getTerminalElement(boolean first) {
 			DerivedElementHolder<T> holder = CollectionElement.get(theDerivedElements.getTerminalElement(first));
 			return holder == null ? null : getElement(holder);
 		}
 
 		@Override
-		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			DerivedElementHolder<T> holder = (DerivedElementHolder<T>) elementId;
-			BinaryTreeNode<DerivedElementHolder<T>> adjacentNode = holder.treeNode.getClosest(!next);
-			return adjacentNode == null ? null : getElement(adjacentNode.get());
-		}
-
-		@Override
-		public MutableCollectionElement<T> mutableElement(ElementId id) {
+		public MutableListElement<T> mutableElement(ElementId id) {
 			if (id == null)
 				throw new NullPointerException();
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
-			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
-				@Override
-				public BetterCollection<T> getCollection() {
-					return ActiveDerivedCollection.this;
-				}
-
-				@Override
-				public ElementId getElementId() {
-					return el;
-				}
-
-				@Override
-				public T get() {
-					return el.element.get();
-				}
-
-				@Override
-				public String isEnabled() {
-					return el.element.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					return el.element.isAcceptable(value);
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theListeners.isFiring())
-						throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
-					el.element.set(value);
-				}
-
-				@Override
-				public String canRemove() {
-					return el.element.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					if (theListeners.isFiring())
-						throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
-					el.element.remove();
-				}
-
-				@Override
-				public String toString() {
-					return el.element.toString();
-				}
-			}
-			return new DerivedMutableCollectionElement();
+			return new DerivedMutableCollectionElement(el);
 		}
 
 		@Override
@@ -3143,12 +3063,12 @@ public final class ObservableCollectionImpl {
 		 * @param el The element holder
 		 * @return A collection element for the given element in this collection
 		 */
-		protected CollectionElement<T> elementFor(DerivedElementHolder<T> el) {
+		protected ListElement<T> elementFor(DerivedElementHolder<T> el) {
 			el.check();
 			return new ActiveDerivedElement<>(el);
 		}
 
-		static class ActiveDerivedElement<T> implements CollectionElement<T> {
+		static class ActiveDerivedElement<T> implements ListElement<T> {
 			private final DerivedElementHolder<T> element;
 
 			ActiveDerivedElement(DerivedElementHolder<T> element) {
@@ -3166,6 +3086,22 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
+			public ListElement<T> getAdjacent(boolean next) {
+				BinaryTreeNode<DerivedElementHolder<T>> adj = element.treeNode.getAdjacent(next);
+				return adj == null ? null : new ActiveDerivedElement<>(adj.get());
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return element.treeNode.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return element.treeNode.getElementsAfter();
+			}
+
+			@Override
 			public int hashCode() {
 				return element.treeNode.hashCode();
 			}
@@ -3179,7 +3115,75 @@ public final class ObservableCollectionImpl {
 			public String toString() {
 				return element.element.toString();
 			}
-		};
+		}
+
+		class DerivedMutableCollectionElement implements MutableListElement<T> {
+			private final DerivedElementHolder<T> element;
+
+			DerivedMutableCollectionElement(DerivedElementHolder<T> element) {
+				this.element = element;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return element;
+			}
+
+			@Override
+			public T get() {
+				return element.element.get();
+			}
+
+			@Override
+			public MutableListElement<T> getAdjacent(boolean next) {
+				BinaryTreeNode<DerivedElementHolder<T>> adj = element.treeNode.getAdjacent(next);
+				return adj == null ? null : new DerivedMutableCollectionElement(adj.get());
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return element.treeNode.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return element.treeNode.getElementsAfter();
+			}
+
+			@Override
+			public String isEnabled() {
+				return element.element.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return element.element.isAcceptable(value);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (theListeners.isFiring())
+					throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+				element.element.set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return element.element.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				if (theListeners.isFiring())
+					throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+				element.element.remove();
+			}
+
+			@Override
+			public String toString() {
+				return element.element.toString();
+			}
+		}
 
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
@@ -3188,7 +3192,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			if (theListeners.isFiring())
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
@@ -3204,7 +3208,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			if (theListeners.isFiring())
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
@@ -3432,18 +3436,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll.getElementsBefore(strip(coll, id));
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll.getElementsAfter(strip(coll, id));
-		}
-
-		@Override
 		public int size() {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			return coll == null ? 0 : coll.size();
@@ -3464,7 +3456,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElement(int index) {
+		public ListElement<E> getElement(int index) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				throw new IndexOutOfBoundsException(index + " of 0");
@@ -3472,7 +3464,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElement(E value, boolean first) {
+		public ListElement<E> getElement(E value, boolean first) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return null;
@@ -3480,13 +3472,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElement(ElementId id) {
+		public ListElement<E> getElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			return getElement(current, current.getElement(strip(current, id)));
 		}
 
 		@Override
-		public CollectionElement<E> getTerminalElement(boolean first) {
+		public ListElement<E> getTerminalElement(boolean first) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return null;
@@ -3494,13 +3486,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-			ObservableCollection<? extends E> current = getWrapped().get();
-			return getElement(current, current.getAdjacentElement(strip(current, elementId), next));
-		}
-
-		@Override
-		public MutableCollectionElement<E> mutableElement(ElementId id) {
+		public MutableListElement<E> mutableElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			return getElement(current, current.mutableElement(strip(current, id)));
 		}
@@ -3512,7 +3498,8 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				return BetterList.empty();
-			return BetterList.of(current.getElementsBySource(sourceEl, sourceCollection).stream().map(el -> getElement(current, el)));
+			return BetterList.of(current.getElementsBySource(sourceEl, sourceCollection).stream()
+				.map(el -> getElement(current, (ListElement<? extends E>) el)));
 		}
 
 		@Override
@@ -3553,7 +3540,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+		public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
@@ -3574,7 +3561,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
@@ -4044,14 +4031,13 @@ public final class ObservableCollectionImpl {
 			return flatId.theSourceEl;
 		}
 
-		CollectionElement<E> getElement(ObservableCollection<? extends E> collection, CollectionElement<? extends E> element) {
+		ListElement<E> getElement(ObservableCollection<? extends E> collection, ListElement<? extends E> element) {
 			if (element == null)
 				return null;
 			return new FlattenedValueElement(collection, element);
 		}
 
-		MutableCollectionElement<E> getElement(ObservableCollection<? extends E> collection,
-			MutableCollectionElement<? extends E> element) {
+		MutableListElement<E> getElement(ObservableCollection<? extends E> collection, MutableListElement<? extends E> element) {
 			return new MutableFlattenedValueElement(collection, element);
 		}
 
@@ -4124,11 +4110,11 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		class FlattenedValueElement implements CollectionElement<E> {
+		class FlattenedValueElement implements ListElement<E> {
 			private final FlattenedElementId theId;
-			private final CollectionElement<? extends E> theElement;
+			private final ListElement<? extends E> theElement;
 
-			FlattenedValueElement(ObservableCollection<? extends E> collection, CollectionElement<? extends E> element) {
+			FlattenedValueElement(ObservableCollection<? extends E> collection, ListElement<? extends E> element) {
 				theElement = element;
 				theId = new FlattenedElementId(collection, element.getElementId());
 			}
@@ -4145,6 +4131,31 @@ public final class ObservableCollectionImpl {
 			@Override
 			public E get() {
 				return theElement.get();
+			}
+
+			@Override
+			public ListElement<E> getAdjacent(boolean next) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (!theId.check(FlattenedValueCollection.this, coll))
+					return null;
+				ListElement<? extends E> adj = theElement.getAdjacent(next);
+				return adj == null ? null : new FlattenedValueElement(coll, adj);
+			}
+
+			@Override
+			public int getElementsBefore() {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (!theId.check(FlattenedValueCollection.this, coll))
+					return 0;
+				return theElement.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (!theId.check(FlattenedValueCollection.this, coll))
+					return 0;
+				return theElement.getElementsAfter();
 			}
 
 			@Override
@@ -4166,19 +4177,23 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		class MutableFlattenedValueElement extends FlattenedValueElement implements MutableCollectionElement<E> {
-			MutableFlattenedValueElement(ObservableCollection<? extends E> collection, MutableCollectionElement<? extends E> element) {
+		class MutableFlattenedValueElement extends FlattenedValueElement implements MutableListElement<E> {
+			MutableFlattenedValueElement(ObservableCollection<? extends E> collection, MutableListElement<? extends E> element) {
 				super(collection, element);
 			}
 
 			@Override
-			protected MutableCollectionElement<? extends E> getElement() {
-				return (MutableCollectionElement<? extends E>) super.getElement();
+			protected MutableListElement<? extends E> getElement() {
+				return (MutableListElement<? extends E>) super.getElement();
 			}
 
 			@Override
-			public BetterCollection<E> getCollection() {
-				return FlattenedValueCollection.this;
+			public MutableListElement<E> getAdjacent(boolean next) {
+				ObservableCollection<? extends E> coll = theCollectionObservable.get();
+				if (!getElementId().check(FlattenedValueCollection.this, coll))
+					return null;
+				MutableListElement<? extends E> adj = getElement().getAdjacent(next);
+				return adj == null ? null : new MutableFlattenedValueElement(coll, adj);
 			}
 
 			@Override
@@ -4253,7 +4268,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
+		public ListElement<T> getElement(int index) throws IndexOutOfBoundsException {
 			update(null);
 			return theCollection.getElement(index);
 		}
@@ -4261,18 +4276,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean isContentControlled() {
 			return theCollection.isContentControlled();
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			update(null);
-			return theCollection.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			update(null);
-			return theCollection.getElementsAfter(id);
 		}
 
 		@Override
@@ -4367,31 +4370,25 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
+		public ListElement<T> getElement(T value, boolean first) {
 			update(null);
 			return theCollection.getElement(value, first);
 		}
 
 		@Override
-		public CollectionElement<T> getElement(ElementId id) {
+		public ListElement<T> getElement(ElementId id) {
 			update(null);
 			return theCollection.getElement(id);
 		}
 
 		@Override
-		public CollectionElement<T> getTerminalElement(boolean first) {
+		public ListElement<T> getTerminalElement(boolean first) {
 			update(null);
 			return theCollection.getTerminalElement(first);
 		}
 
 		@Override
-		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			update(null);
-			return theCollection.getAdjacentElement(elementId, next);
-		}
-
-		@Override
-		public MutableCollectionElement<T> mutableElement(ElementId id) {
+		public MutableListElement<T> mutableElement(ElementId id) {
 			update(null);
 			return new MutableElement(theCollection.mutableElement(id));
 		}
@@ -4436,7 +4433,7 @@ public final class ObservableCollectionImpl {
 					BetterList<T> list = (BetterList<T>) c;
 					result = list.getEquivalentElement(equivalentEl);
 					if (result != null)
-						return getElement(list.getElementsBefore(result)).getElementId();
+						return getElement(list.getElement(result).getElementsBefore()).getElementId();
 				}
 			}
 			return null;
@@ -4461,13 +4458,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				String error = theCollection.canAdd(value, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
-				CollectionElement<T> result;
+				ListElement<T> result;
 				Collection<T> coll = theCollectionValue.get();
 				if (coll instanceof BetterCollection) {
 					CollectionElement<T> backing = ((BetterCollection<T>) coll).addElement(value, getBackingElement(after),
@@ -4479,11 +4476,11 @@ public final class ObservableCollectionImpl {
 					int index;
 					if (first) {
 						if (after != null)
-							index = theCollection.getElementsBefore(after) + 1;
+							index = theCollection.getElement(after).getElementsBefore() + 1;
 						else
 							index = 0;
 					} else if (before != null)
-						index = theCollection.getElementsBefore(before);
+						index = theCollection.getElement(before).getElementsBefore();
 					else
 						index = theCollection.size();
 					((List<T>) coll).add(index, value);
@@ -4537,13 +4534,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				String error = theCollection.canMove(valueEl, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
-				CollectionElement<T> result;
+				ListElement<T> result;
 				Collection<T> coll = theCollectionValue.get();
 				if (coll instanceof BetterCollection) {
 					ElementId backingValueEl = getBackingElement(valueEl);
@@ -4557,12 +4554,12 @@ public final class ObservableCollectionImpl {
 						afterRemove.run();
 					result = addBackingElement(backing);
 				} else if (coll instanceof List) {
-					int sourceIndex = theCollection.getElementsBefore(valueEl);
+					int sourceIndex = theCollection.getElement(valueEl).getElementsBefore();
 					result = theCollection.move(valueEl, after, before, first, afterRemove);
 					if (valueEl.isPresent())
 						return result; // No actual move
 					T value = ((List<T>) coll).remove(sourceIndex);
-					((List<T>) coll).add(theCollection.getElementsBefore(result.getElementId()), value);
+					((List<T>) coll).add(result.getElementsBefore(), value);
 				} else
 					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
 
@@ -4663,7 +4660,7 @@ public final class ObservableCollectionImpl {
 		protected ElementId getBackingElement(ElementId localElement) {
 			if (localElement == null || !localElement.isPresent())
 				return null;
-			return theBackingElements.get(theCollection.getElementsBefore(localElement));
+			return theBackingElements.get(theCollection.getElement(localElement).getElementsBefore());
 		}
 
 		/**
@@ -4675,7 +4672,7 @@ public final class ObservableCollectionImpl {
 			return theCollection.getElement(index).getElementId();
 		}
 
-		private CollectionElement<T> addBackingElement(CollectionElement<T> backingElement) {
+		private ListElement<T> addBackingElement(CollectionElement<T> backingElement) {
 			int index = Collections.binarySearch(theBackingElements, backingElement.getElementId());
 			index = -index - 1;
 			theBackingElements.add(index, backingElement.getElementId());
@@ -4823,10 +4820,10 @@ public final class ObservableCollectionImpl {
 			return BetterCollection.toString(this);
 		}
 
-		class MutableElement implements MutableCollectionElement<T> {
-			private final MutableCollectionElement<T> theWrappedEl;
+		class MutableElement implements MutableListElement<T> {
+			private final MutableListElement<T> theWrappedEl;
 
-			MutableElement(MutableCollectionElement<T> wrappedEl) {
+			MutableElement(MutableListElement<T> wrappedEl) {
 				theWrappedEl = wrappedEl;
 			}
 
@@ -4841,8 +4838,19 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public BetterCollection<T> getCollection() {
-				return SimpleCollectionBackedObservable.this;
+			public int getElementsBefore() {
+				return theWrappedEl.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theWrappedEl.getElementsAfter();
+			}
+
+			@Override
+			public MutableListElement<T> getAdjacent(boolean next) {
+				MutableListElement<T> adj = theWrappedEl.getAdjacent(next);
+				return adj == null ? null : new MutableElement(adj);
 			}
 
 			@Override
@@ -4894,7 +4902,7 @@ public final class ObservableCollectionImpl {
 						((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).set(value);
 						theWrappedEl.set(value);
 					} else if (coll instanceof List) {
-						int index = theCollection.getElementsBefore(getElementId());
+						int index = getElementsBefore();
 						((List<T>) coll).set(index, value);
 						theWrappedEl.set(value);
 					} else
@@ -4936,7 +4944,7 @@ public final class ObservableCollectionImpl {
 						((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).remove();
 						theWrappedEl.remove();
 					} else if (coll instanceof List) {
-						int index = theCollection.getElementsBefore(getElementId());
+						int index = getElementsBefore();
 						((List<T>) coll).remove(index);
 						theWrappedEl.remove();
 					} else

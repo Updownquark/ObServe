@@ -54,12 +54,13 @@ import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
@@ -1051,15 +1052,15 @@ public class ModelTypes {
 				if (!msgs.isEmpty())
 					return StringUtils.print("\n", msgs, s -> s).toString();
 				Equivalence<? super S> eq = cv.equivalence();
-				CollectionUtils.synchronize(cv.elements(), reversed, (el, v) -> eq.elementEquals(el.get(), v))//
-				.adjust(new CollectionUtils.CollectionSynchronizer<CollectionElement<S>, S>() {
+				CollectionUtils.synchronize((BetterList<ListElement<S>>) cv.elements(), reversed, (el, v) -> eq.elementEquals(el.get(), v))//
+					.adjust(new CollectionUtils.CollectionSynchronizer<ListElement<S>, S>() {
 					@Override
-					public boolean getOrder(ElementSyncInput<CollectionElement<S>, S> element) {
+						public boolean getOrder(ElementSyncInput<ListElement<S>, S> element) {
 						return true;
 					}
 
 					@Override
-					public ElementSyncAction leftOnly(ElementSyncInput<CollectionElement<S>, S> element) {
+						public ElementSyncAction leftOnly(ElementSyncInput<ListElement<S>, S> element) {
 						String msg = cv.mutableElement(element.getLeftValue().getElementId()).canRemove();
 						if (msg != null)
 							msgs.add(msg);
@@ -1067,7 +1068,7 @@ public class ModelTypes {
 					}
 
 					@Override
-					public ElementSyncAction rightOnly(ElementSyncInput<CollectionElement<S>, S> element) {
+						public ElementSyncAction rightOnly(ElementSyncInput<ListElement<S>, S> element) {
 						String msg = cv.canAdd(element.getTargetIndex(), element.getRightValue());
 						if (msg != null)
 							msgs.add(msg);
@@ -1075,7 +1076,7 @@ public class ModelTypes {
 					}
 
 					@Override
-					public ElementSyncAction common(ElementSyncInput<CollectionElement<S>, S> element) {
+						public ElementSyncAction common(ElementSyncInput<ListElement<S>, S> element) {
 						String msg = cv.mutableElement(element.getLeftValue().getElementId()).isAcceptable(element.getRightValue()); // TODO
 						// Auto-generated
 						// method
@@ -1356,7 +1357,7 @@ public class ModelTypes {
 			}
 
 			@Override
-			public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd,
+			public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd,
 				Runnable postAdd) {
 				ObservableSet<T> set = theContainer.get();
 				if (set == null)

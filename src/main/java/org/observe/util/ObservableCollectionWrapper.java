@@ -16,7 +16,8 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.ListElement;
+import org.qommons.collect.MutableListElement;
 
 /**
  * An ObservableCollection that simply delegates to another
@@ -60,7 +61,7 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	}
 
 	@Override
-	public CollectionElement<E> getElement(int index) {
+	public ListElement<E> getElement(int index) {
 		return getWrapped().getElement(index);
 	}
 
@@ -70,42 +71,27 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	}
 
 	@Override
-	public int getElementsBefore(ElementId id) {
-		return getWrapped().getElementsBefore(id);
-	}
-
-	@Override
-	public int getElementsAfter(ElementId id) {
-		return getWrapped().getElementsAfter(id);
-	}
-
-	@Override
 	public long getStamp() {
 		return getWrapped().getStamp();
 	}
 
 	@Override
-	public CollectionElement<E> getElement(E value, boolean first) {
+	public ListElement<E> getElement(E value, boolean first) {
 		return getWrapped().getElement(value, first);
 	}
 
 	@Override
-	public CollectionElement<E> getElement(ElementId id) {
+	public ListElement<E> getElement(ElementId id) {
 		return getWrapped().getElement(id);
 	}
 
 	@Override
-	public CollectionElement<E> getTerminalElement(boolean first) {
+	public ListElement<E> getTerminalElement(boolean first) {
 		return getWrapped().getTerminalElement(first);
 	}
 
 	@Override
-	public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-		return getWrapped().getAdjacentElement(elementId, next);
-	}
-
-	@Override
-	public MutableCollectionElement<E> mutableElement(ElementId id) {
+	public MutableListElement<E> mutableElement(ElementId id) {
 		return getWrapped().mutableElement(id);
 	}
 
@@ -134,7 +120,7 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+	public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		return getWrapped().addElement(value, after, before, first);
 	}
@@ -145,7 +131,7 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	}
 
 	@Override
-	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		return getWrapped().move(valueEl, after, before, first, afterRemove);
 	}

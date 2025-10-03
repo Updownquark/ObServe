@@ -50,12 +50,13 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.MutableListElement;
+import org.qommons.collect.MutableOrderedMapEntry;
+import org.qommons.collect.OrderedMapEntry;
+import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
@@ -519,7 +520,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					if (!isChild(child))
 						continue;
 					ConfigElement cve = createElement(child, null, findRefs);
-					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
+					cve.theElement = theElements.putEntry(child.getParentChildRef().getElementId(), cve, false);
 					fire(ObservableCollectionEvent.createCollectionEvent(cve.getElementId(), theElements.size() - 1,
 						CollectionChangeType.add, null, cve.get(), cause));
 				}
@@ -550,7 +551,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					newEl = createElement(config, null, Observable.constant(null));
 				initialize(newEl, thePreAddAction, collectionChange);
 			} else {
-				CollectionElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef());
+				ListElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef().getElementId());
 				if (el == null) {
 					if (relevant) {
 						// Modified config to be relevant to us
@@ -567,8 +568,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
-					fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
-						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, el.get().get(),
+					fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(), el.getElementsBefore(),
+						CollectionChangeType.remove, el.get().get(),
 						el.get().get(), collectionChange, collectionChange.movement));
 				} else {
 					try {
@@ -589,8 +590,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 						incrementStamp();
 						if (newValue != oldValue)
 							el.get()._set(newValue);
-						fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(),
-							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, oldValue, newValue,
+						fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(), el.getElementsBefore(),
+							CollectionChangeType.set, oldValue, newValue,
 							collectionChange));
 					} catch (ParseException e) {
 						e.printStackTrace();
@@ -604,20 +605,20 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				thePreAddAction.accept(newEl);
 				thePreAddAction = null;
 			}
-			ElementId newElId;
+			OrderedMapEntry<ElementId, ConfigElement> newElId;
 			ObservableConfig config = newEl.getConfig();
-			CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef(),
+			CollectionElement<ElementId> el = theElements.keySet().search(config.getParentChildRef().getElementId(),
 				BetterSortedList.SortedSearchFilter.PreferLess);
 			if (el == null)// Must be empty
-				newElId = theElements.putEntry(config.getParentChildRef(), newEl, false).getElementId();
-			else if (el.get().compareTo(config.getParentChildRef()) < 0)
-				newElId = theElements.putEntry(config.getParentChildRef(), newEl, el.getElementId(), null, true).getElementId();
+				newElId = theElements.putEntry(config.getParentChildRef().getElementId(), newEl, false);
+			else if (el.get().compareTo(config.getParentChildRef().getElementId()) < 0)
+				newElId = theElements.putEntry(config.getParentChildRef().getElementId(), newEl, el.getElementId(), null, true);
 			else
-				newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
+				newElId = theElements.putEntry(config.getParentChildRef().getElementId(), newEl, null, el.getElementId(), false);
 			newEl.theElement = newElId;
 			incrementStamp();
 			CollectionElementMove move = cause instanceof ObservableConfigEvent ? ((ObservableConfigEvent) cause).movement : null;
-			fire(ObservableCollectionEvent.createCollectionEvent(newElId, theElements.keySet().getElementsBefore(newElId),
+			fire(ObservableCollectionEvent.createCollectionEvent(newElId.getElementId(), newElId.getElementsBefore(),
 				CollectionChangeType.add, null, newEl.get(), cause, move));
 		}
 
@@ -700,12 +701,12 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			return getCollection().toString();
 		}
 
-		protected abstract class ConfigElement implements MutableCollectionElement<E> {
+		protected abstract class ConfigElement implements MutableListElement<E> {
 			private final ObservableConfig theConfig;
 			private final SimpleObservable<Void> theElementObservable;
-			private ElementId theElement;
+			private OrderedMapEntry<ElementId, ConfigElement> theElement;
 			private E theValue;
-			private CollectionElement<E> immutable;
+			private ListElement<E> immutable;
 			ValueHolder<E> modifying;
 
 			protected ConfigElement(ObservableConfig config, ValueHolder<E> value, Observable<?> findRefs) {
@@ -741,18 +742,32 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public BetterCollection<E> getCollection() {
-				return ObservableConfigBackedCollection.this.getCollection();
-			}
-
-			@Override
 			public ElementId getElementId() {
-				return theElement;
+				return theElement.getElementId();
 			}
 
 			@Override
 			public E get() {
 				return theValue;
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theConfig.getIndexInParent();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				ObservableConfig parent=theConfig.getParent();
+				if(parent==null)
+					return 0;
+				return theConfig.getParentChildRef().getElementsAfter();
+			}
+
+			@Override
+			public ConfigElement getAdjacent(boolean next) {
+				OrderedMapEntry<ElementId, ConfigElement> adj = theElement.getAdjacent(next);
+				return adj == null ? null : adj.get();
 			}
 
 			protected void _set(E value) {
@@ -763,7 +778,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				if (!isConnected().get())
 					throw new UnsupportedOperationException("Not connected");
 				try (Transaction t = lock(true, null)) {
-					if (!theConfig.getParentChildRef().isPresent())
+					if (!theConfig.getParentChildRef().getElementId().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
 					theFormat.format(//
@@ -783,17 +798,33 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public CollectionElement<E> immutable() {
+			public ListElement<E> immutable() {
 				if (immutable == null) {
-					immutable = new CollectionElement<E>() {
+					immutable = new ListElement<E>() {
 						@Override
 						public ElementId getElementId() {
-							return theElement;
+							return theElement.getElementId();
 						}
 
 						@Override
 						public E get() {
 							return theValue;
+						}
+
+						@Override
+						public ListElement<E> getAdjacent(boolean next) {
+							ConfigElement adj = ConfigElement.this.getAdjacent(next);
+							return adj == null ? null : adj.immutable();
+						}
+
+						@Override
+						public int getElementsBefore() {
+							return theElement.getElementsBefore();
+						}
+
+						@Override
+						public int getElementsAfter() {
+							return theElement.getElementsAfter();
 						}
 					};
 				}
@@ -812,8 +843,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public String toString() {
-				return new StringBuilder().append('[').append(theElements.keySet().getElementsBefore(theElement)).append("]=")
-					.append(theValue).toString();
+				return new StringBuilder().append('[').append(theElement.getElementsBefore()).append("]=").append(theValue).toString();
 			}
 		}
 
@@ -890,55 +920,35 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public int getElementsBefore(ElementId id) {
-				try (Transaction t = lock(false, null)) {
-					return theElements.keySet().getElementsBefore(id);
-				}
-			}
-
-			@Override
-			public int getElementsAfter(ElementId id) {
-				try (Transaction t = lock(false, null)) {
-					return theElements.keySet().getElementsAfter(id);
-				}
-			}
-
-			@Override
-			public CollectionElement<E> getElement(int index) {
+			public ListElement<E> getElement(int index) {
 				try (Transaction t = lock(false, null)) {
 					return theElements.getEntryById(theElements.keySet().getElement(index).getElementId()).get();
 				}
 			}
 
 			@Override
-			public CollectionElement<E> getElement(E value, boolean first) {
+			public ListElement<E> getElement(E value, boolean first) {
 				try (Transaction t = lock(false, null)) {
-					CollectionElement<E> el = getTerminalElement(first);
+					ListElement<E> el = getTerminalElement(first);
 					while (el != null && !Objects.equals(el.get(), value))
-						el = getAdjacentElement(el.getElementId(), first);
+						el = el.getAdjacent(first);
 					return el;
 				}
 			}
 
 			@Override
-			public CollectionElement<E> getElement(ElementId id) {
+			public ListElement<E> getElement(ElementId id) {
 				return theElements.getEntryById(id).get().immutable();
 			}
 
 			@Override
-			public CollectionElement<E> getTerminalElement(boolean first) {
-				CollectionElement<ConfigElement> el = theElements.values().getTerminalElement(first);
+			public ListElement<E> getTerminalElement(boolean first) {
+				ListElement<ConfigElement> el = theElements.getTerminalEntry(first);
 				return el == null ? null : el.get().immutable();
 			}
 
 			@Override
-			public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-				CollectionElement<ConfigElement> el = theElements.values().getAdjacentElement(elementId, next);
-				return el == null ? null : el.get().immutable();
-			}
-
-			@Override
-			public MutableCollectionElement<E> mutableElement(ElementId id) {
+			public MutableListElement<E> mutableElement(ElementId id) {
 				return theElements.getEntryById(id).get();
 			}
 
@@ -982,7 +992,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 				throws UnsupportedOperationException, IllegalArgumentException {
 				try (Transaction t = lock(true, null)) {
 					ObservableConfig valueConfig = theElements.getEntryById(valueEl).get().theConfig;
@@ -1077,7 +1087,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					}
 
 					@Override
-					public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+					public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 						throws UnsupportedOperationException, IllegalArgumentException {
 						return Backing.this.add(cfg -> value, after, before, first, null);
 					}
@@ -1224,7 +1234,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+			public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 				throws UnsupportedOperationException, IllegalArgumentException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
@@ -1253,7 +1263,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					ObservableConfig parent = getConfig().getParent();
 					if (parent != null)
 						((ObservableCollection<ObservableConfig>) parent.getAllContent().getValues())
-						.mutableElement(getConfig().getParentChildRef()).set(getConfig());
+							.mutableElement(getConfig().getParentChildRef().getElementId()).set(getConfig());
 				} else
 					throw new UnsupportedOperationException(StdMsg.ILLEGAL_ELEMENT);
 			}
@@ -1356,23 +1366,23 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntry(K key) {
+		public OrderedMapEntry<K, V> getEntry(K key) {
 			return theWrapped.getEntry(key);
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
+		public OrderedMapEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
 			boolean first, Runnable preAdd, Runnable postAdd) {
 			return theWrapped.getOrPutEntry(key, value, after, before, first, preAdd, postAdd);
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+		public OrderedMapEntry<K, V> getEntryById(ElementId entryId) {
 			return theWrapped.getEntryById(entryId);
 		}
 
 		@Override
-		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+		public MutableOrderedMapEntry<K, V> mutableEntry(ElementId entryId) {
 			return theWrapped.mutableEntry(entryId);
 		}
 
@@ -1506,12 +1516,12 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		@Override
-		public MultiEntryHandle<K, V> getEntryById(ElementId keyId) {
+		public OrderedMultiEntry<K, V> getEntryById(ElementId keyId) {
 			return theWrapped.getEntryById(keyId);
 		}
 
 		@Override
-		public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
+		public OrderedMultiEntry<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
 			ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
 			return theWrapped.getOrPutEntry(key, value, afterKey, beforeKey, first, preAdd, postAdd);
 		}

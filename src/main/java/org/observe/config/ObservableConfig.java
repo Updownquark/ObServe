@@ -61,7 +61,7 @@ import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
-import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
@@ -234,12 +234,24 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 	 * @return The {@link CollectionElement#getElementId() element ID} of this child in its {@link #getParent() parent}'s
 	 *         {@link #getContent() content}
 	 */
-	ElementId getParentChildRef();
+	ListElement<ObservableConfig> getParentChildRef();
 
 	/** @return The index of this child in its {@link #getParent() parent}'s {@link #getContent() content}, or -1 if this is a root */
 	default int getIndexInParent() {
-		ElementId pcr = getParentChildRef();
-		return pcr == null ? -1 : getParent().getAllContent().getValues().getElementsBefore(pcr);
+		ListElement<ObservableConfig> pcr = getParentChildRef();
+		return pcr == null ? -1 : pcr.getElementsBefore();
+	}
+
+	/**
+	 * @param next Whether to get the next child in this config's parent or the previous one
+	 * @return This config's sibling in its parent
+	 */
+	default ObservableConfig getSibling(boolean next) {
+		ObservableConfig parent = getParent();
+		ListElement<ObservableConfig> pcr = getParentChildRef();
+		if (parent == null || pcr == null)
+			return null;
+		return CollectionElement.get(pcr.getAdjacent(next));
 	}
 
 	/**
@@ -1193,7 +1205,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 				} else {
 					CollectionElement<ObservableConfig> beforeEl = getContent().getElement(element.getTargetIndex());
 					before = beforeEl.get();
-					after = CollectionElement.get(getContent().getAdjacentElement(beforeEl.getElementId(), false));
+					after = CollectionElement.get(beforeEl.getAdjacent(false));
 				}
 				return element.useValue(addChild(after, before, false, element.getRightValue().getName(),
 					child -> child.replaceContent(element.getRightValue())));

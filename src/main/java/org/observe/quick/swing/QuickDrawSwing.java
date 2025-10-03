@@ -90,6 +90,7 @@ import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MappedList;
 import org.qommons.io.ErrorReporting;
 
@@ -308,12 +309,12 @@ public class QuickDrawSwing implements QuickInterpretation {
 			theHovered = BetterHashSet.build().build();
 		}
 
-		protected abstract CollectionElement<QuickShapeInterpretation> getFocus();
+		protected abstract ListElement<QuickShapeInterpretation> getFocus();
 
-		protected abstract void setFocus(CollectionElement<QuickShapeInterpretation> shape);
+		protected abstract void setFocus(ListElement<QuickShapeInterpretation> shape);
 
-		protected boolean isFocused(CollectionElement<QuickShapeInterpretation> shape) {
-			CollectionElement<QuickShapeInterpretation> focus = getFocus();
+		protected boolean isFocused(ListElement<QuickShapeInterpretation> shape) {
+			ListElement<QuickShapeInterpretation> focus = getFocus();
 			return focus != null && shape.getElementId().equals(focus.getElementId());
 		}
 
@@ -343,8 +344,8 @@ public class QuickDrawSwing implements QuickInterpretation {
 		public void draw(Graphics2D gfx, Rectangle screen) {
 			isDrawing = true;
 			try {
-				for (CollectionElement<QuickShapeInterpretation> shape = theContents
-					.getTerminalElement(true); shape != null; shape = theContents.getAdjacentElement(shape.getElementId(), true)) {
+				for (ListElement<QuickShapeInterpretation> shape = theContents.getTerminalElement(true); shape != null; shape = shape
+					.getAdjacent(true)) {
 					setState(shape);
 					shape.get().draw(gfx, screen);
 				}
@@ -363,7 +364,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 			return mouseHover(e);
 		}
 
-		protected void setState(CollectionElement<QuickShapeInterpretation> shapeEl) {
+		protected void setState(ListElement<QuickShapeInterpretation> shapeEl) {
 			boolean hovered = theHovered.contains(shapeEl.getElementId());
 			shapeEl.get().setState(hovered, isFocused(shapeEl), hovered && isPressed, hovered && isRightPressed);
 		}
@@ -372,8 +373,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 			theHovered.removeIf(el -> !el.isPresent());
 			QuickShapeInterpretation first = null;
 			boolean done = false;
-			for (CollectionElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); el != null; el = theContents
-				.getAdjacentElement(el.getElementId(), false)) {
+			for (ListElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); el != null; el = el.getAdjacent(false)) {
 				setState(el);
 				Point hit = el.get().hit(e.getPoint());
 				if (done && theHovered.remove(el.getElementId())) {
@@ -424,7 +424,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 				ElementId el = hovered.next();
 				if (!el.isPresent())
 					continue;
-				CollectionElement<QuickShapeInterpretation> shape = theContents.getElement(el);
+				ListElement<QuickShapeInterpretation> shape = theContents.getElement(el);
 				setState(shape);
 				Point hit = shape.get().hit(e.getPoint());
 				hovered.remove();
@@ -441,10 +441,10 @@ public class QuickDrawSwing implements QuickInterpretation {
 				isPressed = true;
 			else if (SwingUtilities.isRightMouseButton(e))
 				isRightPressed = true;
-			CollectionElement<QuickShapeInterpretation> focus = null;
+			ListElement<QuickShapeInterpretation> focus = null;
 			Opacity opacity = Opacity.None;
-			for (CollectionElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
-				opacity != Opacity.Full && el != null; el = theContents.getAdjacentElement(el.getElementId(), false)) {
+			for (ListElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
+				opacity != Opacity.Full && el != null; el = el.getAdjacent(false)) {
 				QuickShapeInterpretation shape = el.get();
 				if (e.isConsumed())
 					break;
@@ -487,7 +487,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 		@Override
 		public boolean keyPressed(KeyEvent e) {
-			CollectionElement<QuickShapeInterpretation> focus = getFocus();
+			ListElement<QuickShapeInterpretation> focus = getFocus();
 			if (focus == null)
 				return false;
 			setState(focus);
@@ -497,7 +497,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 		@Override
 		public boolean keyReleased(KeyEvent e) {
-			CollectionElement<QuickShapeInterpretation> focus = getFocus();
+			ListElement<QuickShapeInterpretation> focus = getFocus();
 			if (focus == null)
 				return false;
 			setState(focus);
@@ -507,7 +507,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 		@Override
 		public boolean keyTyped(KeyEvent e) {
-			CollectionElement<QuickShapeInterpretation> focus = getFocus();
+			ListElement<QuickShapeInterpretation> focus = getFocus();
 			if (focus == null)
 				return false;
 			setState(focus);
@@ -523,8 +523,8 @@ public class QuickDrawSwing implements QuickInterpretation {
 		@Override
 		public Opacity getOpacity(Point point) {
 			Opacity opacity = Opacity.None;
-			for (CollectionElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
-				opacity != Opacity.Full && el != null; el = theContents.getAdjacentElement(el.getElementId(), false)) {
+			for (ListElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
+				opacity != Opacity.Full && el != null; el = el.getAdjacent(false)) {
 				QuickShapeInterpretation shape = el.get();
 				if (shape == null)
 					continue;
@@ -539,8 +539,8 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 		public <E extends MouseEvent> Opacity mouseAction(E e, BiConsumer<QuickShapeInterpretation, E> action) {
 			Opacity opacity = Opacity.None;
-			for (CollectionElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
-				opacity != Opacity.Full && el != null; el = theContents.getAdjacentElement(el.getElementId(), false)) {
+			for (ListElement<QuickShapeInterpretation> el = theContents.getTerminalElement(false); //
+				opacity != Opacity.Full && el != null; el = el.getAdjacent(false)) {
 				QuickShapeInterpretation shape = el.get();
 				if (e.isConsumed())
 					break;
@@ -562,7 +562,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 		public String getTooltip() {
 			theHovered.removeIf(el -> !el.isPresent());
 			for (ElementId hovered : theHovered.reverse()) {
-				CollectionElement<QuickShapeInterpretation> shape = getShapes().getElement(hovered);
+				ListElement<QuickShapeInterpretation> shape = getShapes().getElement(hovered);
 				setState(shape);
 				String tooltip = shape.get().getTooltip();
 				if (tooltip != null)
@@ -629,18 +629,18 @@ public class QuickDrawSwing implements QuickInterpretation {
 		private final SimpleShapeContainer theContainer;
 		private final Sizeable theWidth;
 		private final Sizeable theHeight;
-		private CollectionElement<QuickShapeInterpretation> theFocus;
+		private ListElement<QuickShapeInterpretation> theFocus;
 
 		QuickCanvasComponent(QuickCanvas canvas, List<QuickDrawShapePublisher> publishers, Observable<?> until) {
 			theCanvas = canvas;
 			theContainer = new SimpleShapeContainer(publishers, canvas.onDestroy()) {
 				@Override
-				protected CollectionElement<QuickShapeInterpretation> getFocus() {
+				protected ListElement<QuickShapeInterpretation> getFocus() {
 					return theFocus;
 				}
 
 				@Override
-				protected void setFocus(CollectionElement<QuickShapeInterpretation> shape) {
+				protected void setFocus(ListElement<QuickShapeInterpretation> shape) {
 					theFocus = shape;
 				}
 
@@ -822,9 +822,9 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 	static class QuickShapeCollectionPublisher<T> extends SimpleShapeContainer {
 		private final QuickShapeCollection<T> theCollection;
-		private CollectionElement<T> theFocusElement;
-		private CollectionElement<QuickShapeInterpretation> theFocus;
-		private CollectionElement<T> theCurrentValue;
+		private ListElement<T> theFocusElement;
+		private ListElement<QuickShapeInterpretation> theFocus;
+		private ListElement<T> theCurrentValue;
 		private final BetterSet<BiTuple<ElementId, ElementId>> theHovered;
 		private boolean isInAction;
 
@@ -851,8 +851,8 @@ public class QuickDrawSwing implements QuickInterpretation {
 				SettableValue<T> activeValue = theCollection.getActiveValue();
 				SettableValue<Integer> activeIndex = theCollection.getActiveValueIndex();
 				int i = 0;
-				for (CollectionElement<T> value = theCollection.getValues().getTerminalElement(true); //
-					value != null; value = theCollection.getValues().getAdjacentElement(value.getElementId(), true)) {
+				for (ListElement<T> value = theCollection.getValues().getTerminalElement(true); //
+					value != null; value = value.getAdjacent(true)) {
 					theCurrentValue = value;
 					activeValue.set(value.get());
 					activeIndex.set(i);
@@ -874,13 +874,13 @@ public class QuickDrawSwing implements QuickInterpretation {
 			int i = theCollection.getValues().size() - 1;
 			isInAction = true;
 			try {
-				for (CollectionElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
-					valueEl != null; valueEl = theCollection.getValues().getAdjacentElement(valueEl.getElementId(), false)) {
+				for (ListElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
+					valueEl != null; valueEl = valueEl.getAdjacent(false)) {
 					theCurrentValue = valueEl;
 					activeValue.set(valueEl.get());
 					activeIndex.set(i);
 					for (CollectionElement<QuickShapeInterpretation> shapeEl = getContents().getTerminalElement(false); shapeEl != null; //
-						shapeEl = getContents().getAdjacentElement(shapeEl.getElementId(), false)) {
+						shapeEl = shapeEl.getAdjacent(false)) {
 						Point hit = shapeEl.get().hit(e.getPoint());
 						if (done) {
 							if (theHovered.remove(new BiTuple<>(valueEl.getElementId(), shapeEl.getElementId()))) {
@@ -915,16 +915,15 @@ public class QuickDrawSwing implements QuickInterpretation {
 
 		@Override
 		public Opacity mousePressed(MouseEvent e) {
-			CollectionElement<T> focusEl = null;
+			ListElement<T> focusEl = null;
 			Opacity opacity = Opacity.None;
 			SettableValue<T> activeValue = theCollection.getActiveValue();
 			SettableValue<Integer> activeIndex = theCollection.getActiveValueIndex();
 			int i = theCollection.getValues().size() - 1;
 			isInAction = true;
 			try {
-				for (CollectionElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
-					opacity != Opacity.Full
-						&& valueEl != null; valueEl = theCollection.getValues().getAdjacentElement(valueEl.getElementId(), false)) {
+				for (ListElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
+					opacity != Opacity.Full && valueEl != null; valueEl = valueEl.getAdjacent(false)) {
 					theCurrentValue = valueEl;
 					activeValue.set(valueEl.get());
 					activeIndex.set(i);
@@ -950,11 +949,11 @@ public class QuickDrawSwing implements QuickInterpretation {
 				BiTuple<ElementId, ElementId> el = hovered.next();
 				if (!el.getValue1().isPresent() || !el.getValue2().isPresent())
 					continue;
-				CollectionElement<T> valueEl = theCollection.getValues().getElement(el.getValue1());
+				ListElement<T> valueEl = theCollection.getValues().getElement(el.getValue1());
 				theCurrentValue = valueEl;
 				activeValue.set(valueEl.get());
-				activeIndex.set(theCollection.getValues().getElementsBefore(valueEl.getElementId()));
-				CollectionElement<QuickShapeInterpretation> shape = getContents().getElement(el.getValue2());
+				activeIndex.set(valueEl.getElementsBefore());
+				ListElement<QuickShapeInterpretation> shape = getContents().getElement(el.getValue2());
 				setState(shape);
 				Point hit = shape.get().hit(e.getPoint());
 				hovered.remove();
@@ -973,9 +972,8 @@ public class QuickDrawSwing implements QuickInterpretation {
 			int i = theCollection.getValues().size() - 1;
 			isInAction = true;
 			try {
-				for (CollectionElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
-					opacity != Opacity.Full
-						&& valueEl != null; valueEl = theCollection.getValues().getAdjacentElement(valueEl.getElementId(), false)) {
+				for (ListElement<T> valueEl = theCollection.getValues().getTerminalElement(false); //
+					opacity != Opacity.Full && valueEl != null; valueEl = valueEl.getAdjacent(false)) {
 					theCurrentValue = valueEl;
 					activeValue.set(valueEl.get());
 					activeIndex.set(i);
@@ -989,7 +987,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 		}
 
 		@Override
-		protected CollectionElement<QuickShapeInterpretation> getFocus() {
+		protected ListElement<QuickShapeInterpretation> getFocus() {
 			if (!isInAction) {
 				if (theFocusElement != null && !theFocusElement.getElementId().isPresent()) {
 					theFocusElement = null;
@@ -998,19 +996,19 @@ public class QuickDrawSwing implements QuickInterpretation {
 				if (theFocusElement != null) {
 					theCurrentValue = theFocusElement;
 					theCollection.getActiveValue().set(theFocusElement.get());
-					theCollection.getActiveValueIndex().set(theCollection.getValues().getElementsBefore(theFocusElement.getElementId()));
+					theCollection.getActiveValueIndex().set(theFocusElement.getElementsBefore());
 				}
 			}
 			return theFocus;
 		}
 
 		@Override
-		protected void setFocus(CollectionElement<QuickShapeInterpretation> shape) {
+		protected void setFocus(ListElement<QuickShapeInterpretation> shape) {
 			theFocus = shape;
 		}
 
 		@Override
-		protected boolean isFocused(CollectionElement<QuickShapeInterpretation> shape) {
+		protected boolean isFocused(ListElement<QuickShapeInterpretation> shape) {
 			return theFocusElement != null && theCurrentValue != null
 				&& theFocusElement.getElementId().equals(theCurrentValue.getElementId()) && theFocus != null
 				&& theFocus.getElementId().equals(shape.getElementId());
@@ -1024,11 +1022,11 @@ public class QuickDrawSwing implements QuickInterpretation {
 			SettableValue<Integer> activeIndex = theCollection.getActiveValueIndex();
 			try {
 				for (BiTuple<ElementId, ElementId> hovered : theHovered.reverse()) {
-					CollectionElement<T> valueEl = theCollection.getValues().getElement(hovered.getValue1());
+					ListElement<T> valueEl = theCollection.getValues().getElement(hovered.getValue1());
 					theCurrentValue = valueEl;
 					QuickShapeInterpretation shape = getContents().getElement(hovered.getValue2()).get();
 					activeValue.set(valueEl.get());
-					activeIndex.set(theCollection.getValues().getElementsBefore(valueEl.getElementId()));
+					activeIndex.set(valueEl.getElementsBefore());
 					String tooltip = shape.getTooltip();
 					if (tooltip != null)
 						return tooltip;
@@ -1040,7 +1038,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 		}
 
 		@Override
-		protected void setState(CollectionElement<QuickShapeInterpretation> shapeEl) {
+		protected void setState(ListElement<QuickShapeInterpretation> shapeEl) {
 			if (theCurrentValue != null) {
 				boolean hovered = theHovered.contains(new BiTuple<>(theCurrentValue.getElementId(), shapeEl.getElementId()));
 				shapeEl.get().setState(hovered, isFocused(shapeEl), hovered && isPressed(), hovered && isRightPressed());
@@ -1627,18 +1625,18 @@ public class QuickDrawSwing implements QuickInterpretation {
 	static class QuickDrawRectangle extends QuickDrawSimpleShape<QuickRectangle> {
 		private final SimpleShapeContainer theContainer;
 		private final Observable<?> theUpdate;
-		private CollectionElement<QuickShapeInterpretation> theSubFocus;
+		private ListElement<QuickShapeInterpretation> theSubFocus;
 
 		QuickDrawRectangle(QuickRectangle rectangle, List<QuickDrawShapePublisher> contents) {
 			super(rectangle);
 			theContainer = new SimpleShapeContainer(contents, rectangle.onDestroy()) {
 				@Override
-				protected CollectionElement<QuickShapeInterpretation> getFocus() {
+				protected ListElement<QuickShapeInterpretation> getFocus() {
 					return theSubFocus;
 				}
 
 				@Override
-				protected void setFocus(CollectionElement<QuickShapeInterpretation> shape) {
+				protected void setFocus(ListElement<QuickShapeInterpretation> shape) {
 					theSubFocus = shape;
 				}
 			};
@@ -2449,7 +2447,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 	static class QuickDrawShapeView extends SimpleShapeContainer {
 		private final List<QuickDrawTransform> theTransformations;
 		private final Observable<?> theUpdate;
-		private CollectionElement<QuickShapeInterpretation> theFocus;
+		private ListElement<QuickShapeInterpretation> theFocus;
 
 		private AffineTransform theTransform;
 		private AffineTransform theReverseTransform;
@@ -2471,12 +2469,12 @@ public class QuickDrawSwing implements QuickInterpretation {
 		}
 
 		@Override
-		protected CollectionElement<QuickShapeInterpretation> getFocus() {
+		protected ListElement<QuickShapeInterpretation> getFocus() {
 			return theFocus;
 		}
 
 		@Override
-		protected void setFocus(CollectionElement<QuickShapeInterpretation> shape) {
+		protected void setFocus(ListElement<QuickShapeInterpretation> shape) {
 			theFocus = shape;
 		}
 

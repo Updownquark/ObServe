@@ -46,6 +46,7 @@ import org.qommons.FloatList;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.threading.QommonsTimer;
 
@@ -192,7 +193,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		 * @param moved The {@link RangePoint} that the user moved to cause the change
 		 * @return The new Range for the element
 		 */
-		Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved);
+		Range validate(MultiRangeSlider slider, ListElement<Range> element, Range newValue, RangePoint moved);
 
 		/** A simple but useful {@link RangeValidator} that has options for preventing range overlap */
 		public static class NoOverlap implements RangeValidator {
@@ -209,9 +210,9 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			@Override
-			public Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved) {
+			public Range validate(MultiRangeSlider slider, ListElement<Range> element, Range newValue, RangePoint moved) {
 				boolean moveUp = newValue.getValue() > element.get().getValue();
-				Range adj = CollectionElement.get(slider.getRanges().getAdjacentElement(element.getElementId(), moveUp));
+				Range adj = CollectionElement.get(element.getAdjacent(moveUp));
 
 				double bound;
 				if (adj != null) {
@@ -286,7 +287,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			@Override
-			public Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved) {
+			public Range validate(MultiRangeSlider slider, ListElement<Range> element, Range newValue, RangePoint moved) {
 				if (!theSnaps.isEmpty()) {
 					switch (moved) {
 					case min:
@@ -758,7 +759,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		 * @param focused The range point was most recently clicked by the user for editing (or null if none)
 		 * @return A component used to render the range on the slider
 		 */
-		Component renderRange(CollectionElement<Range> range, RangePoint hovered, RangePoint focused);
+		Component renderRange(ListElement<Range> range, RangePoint hovered, RangePoint focused);
 
 		/**
 		 * @param range The collection element containing the range to render
@@ -766,14 +767,14 @@ public class MultiRangeSlider extends ConformingPanel {
 		 * @param focused Whether the range is also focused by the user for editing
 		 * @return The mouse cursor to use for the given point on the range
 		 */
-		Cursor getCursor(CollectionElement<Range> range, RangePoint point, boolean focused);
+		Cursor getCursor(ListElement<Range> range, RangePoint point, boolean focused);
 
 		/**
 		 * @param range The collection element containing the range to render
 		 * @param point The range point that is currently hovered over by the user (not null)
 		 * @return The tooltip to display to the user for the given point on the range
 		 */
-		String getTooltip(CollectionElement<Range> range, RangePoint point);
+		String getTooltip(ListElement<Range> range, RangePoint point);
 
 		/**
 		 * @return The position (perpendicular to the slider's {@link MultiRangeSlider#isVertical() orientation}) where the center of the
@@ -797,8 +798,8 @@ public class MultiRangeSlider extends ConformingPanel {
 			private Cursor theMidCursor;
 			private Cursor theMaxCursor;
 			private DoubleFunction<String> theValueRenderer;
-			private Function<CollectionElement<Range>, Color> theLineColor;
-			private Function<CollectionElement<Range>, Color> theCircleColor;
+			private Function<ListElement<Range>, Color> theLineColor;
+			private Function<ListElement<Range>, Color> theCircleColor;
 
 			private RangePoint theHovered;
 			private RangePoint theFocused;
@@ -888,8 +889,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			 * @param circleColor Produces a color for the circle of each range in the model
 			 * @return This renderer
 			 */
-			public Default withColor(Function<CollectionElement<Range>, Color> lineColor,
-				Function<CollectionElement<Range>, Color> circleColor) {
+			public Default withColor(Function<ListElement<Range>, Color> lineColor, Function<ListElement<Range>, Color> circleColor) {
 				theLineColor = lineColor;
 				theCircleColor = circleColor;
 				return this;
@@ -915,7 +915,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			@Override
-			public Component renderRange(CollectionElement<Range> range, RangePoint hovered, RangePoint focused) {
+			public Component renderRange(ListElement<Range> range, RangePoint hovered, RangePoint focused) {
 				theHovered = hovered;
 				theFocused = focused;
 				setForeground(theLineColor == null ? Color.black : theLineColor.apply(range));
@@ -929,7 +929,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			@Override
-			public Cursor getCursor(CollectionElement<Range> range, RangePoint point, boolean focused) {
+			public Cursor getCursor(ListElement<Range> range, RangePoint point, boolean focused) {
 				switch (point) {
 				case min:
 					return theMinCursor;
@@ -941,7 +941,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			@Override
-			public String getTooltip(CollectionElement<Range> range, RangePoint point) {
+			public String getTooltip(ListElement<Range> range, RangePoint point) {
 				StringBuilder str = new StringBuilder().append("<html><b><font color=\"").append(Colors.toHTML(getForeground()))
 					.append("\">");
 				if (range.get().getExtent() > 0)
@@ -1130,19 +1130,19 @@ public class MultiRangeSlider extends ConformingPanel {
 				ElementId[] foundPerPixel = new ElementId[4];
 				RangePoint[] pointPerPixel = new RangePoint[4];
 				int index = 0;
-				CollectionElement<Range>[] ranges = new CollectionElement[theRanges.size()];
+				ListElement<Range>[] ranges = new ListElement[theRanges.size()];
 				// If there is a focused and/or hovered range, give them priority
 				// Hovered first, since hover responds to the mouse
 				if (theHoveredRange != null && theHoveredRange.isPresent())
 					ranges[index++] = theRanges.getElement(theHoveredRange);
 				if (theFocusedRange != null && theFocusedRange.isPresent() && !theFocusedRange.equals(theHoveredRange))
 					ranges[index++] = theRanges.getElement(theFocusedRange);
-				for (CollectionElement<Range> range : theRanges.elements()) {
+				for (ListElement<Range> range : theRanges.elements()) {
 					if (!range.getElementId().equals(theFocusedRange) && !range.getElementId().equals(theHoveredRange))
 						ranges[index++] = range;
 				}
-				for (CollectionElement<Range> range : ranges) {
-					index = theRanges.getElementsBefore(range.getElementId());
+				for (ListElement<Range> range : ranges) {
+					index = range.getElementsBefore();
 					if (index == theRangeRenderBounds.size())
 						continue;
 					int relPos = pos - theRangeRenderBounds.get(index)[0];
@@ -1202,7 +1202,7 @@ public class MultiRangeSlider extends ConformingPanel {
 				} else
 					_setHovered(found, point);
 				if (found != null) {
-					CollectionElement<Range> range = theRanges.getElement(found);
+					ListElement<Range> range = theRanges.getElement(found);
 					setCursor(theRangeRenderer.getCursor(range, point, focused));
 					setToolTipText(theRangeRenderer.getTooltip(range, point));
 				} else
@@ -1246,7 +1246,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			private void moveFocus(boolean up, KeyEvent evt) {
 				if (theFocusedRange == null || !theFocusedRange.isPresent())
 					return;
-				CollectionElement<Range> range = theRanges.getElement(theFocusedRange);
+				ListElement<Range> range = theRanges.getElement(theFocusedRange);
 				double diff = (up ? 1 : -1) * theSliderRange.get().getExtent() / (isVertical ? getHeight() : getWidth());
 				MultiRangeSlider.this.moveFocus(range, diff, evt);
 			}
@@ -1319,7 +1319,7 @@ public class MultiRangeSlider extends ConformingPanel {
 		if (theValidator != null) {
 			// Re-validate all the ranges
 			try (Transaction t = theRanges.lock(true, null)) {
-				for (CollectionElement<Range> range : theRanges.elements()) {
+				for (ListElement<Range> range : theRanges.elements()) {
 					Range newRange = theValidator.validate(this, range, range.get(), RangePoint.mid);
 					if (newRange!=null && !newRange.equals(range.get()))
 						theRanges.mutableElement(range.getElementId()).set(newRange);
@@ -1465,7 +1465,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	protected boolean moveFocus(MouseEvent e, boolean forceFire) {
 		if (theFocusedRange == null || !theFocusedRange.isPresent())
 			return true;
-		CollectionElement<Range> current = theRanges.getElement(theFocusedRange);
+		ListElement<Range> current = theRanges.getElement(theFocusedRange);
 		double value;
 		Range sliderRange2 = theSliderRange.get();
 		if (isVertical())
@@ -1504,7 +1504,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	 * @param diff The amount for the movement
 	 * @param evt The keyboard event
 	 */
-	protected void moveFocus(CollectionElement<Range> range, double diff, KeyEvent evt) {
+	protected void moveFocus(ListElement<Range> range, double diff, KeyEvent evt) {
 		Range newRange = null;
 		double newV;
 		RangePoint movePoint = theFocusedRangePoint;
@@ -1555,7 +1555,7 @@ public class MultiRangeSlider extends ConformingPanel {
 	 * @param cause The cause of the change
 	 * @return True if the modification was rejected in a way that indicates the attempt should be reattempted
 	 */
-	protected boolean tryMoveFocus(CollectionElement<Range> range, Range newRange, Object cause) {
+	protected boolean tryMoveFocus(ListElement<Range> range, Range newRange, Object cause) {
 		String name = getName();
 		boolean debug = PanelPopulation.isDebugging(name, "mrschg");
 		if (debug)
@@ -1631,8 +1631,8 @@ public class MultiRangeSlider extends ConformingPanel {
 		Shape preClip = g.getClip();
 		Stroke preStroke = ((Graphics2D) g).getStroke();
 		g.setClip(0, 0, getWidth(), getHeight()); // Don't let ranges draw outside the widget's bounds
-		CollectionElement<Range>[] ranges = new CollectionElement[theRanges.size()];
-		for (CollectionElement<Range> range : theRanges.elements()) {
+		ListElement<Range>[] ranges = new ListElement[theRanges.size()];
+		for (ListElement<Range> range : theRanges.elements()) {
 			if (!range.getElementId().equals(theFocusedRange) && !range.getElementId().equals(theHoveredRange))
 				ranges[index++] = range;
 		}
@@ -1646,10 +1646,10 @@ public class MultiRangeSlider extends ConformingPanel {
 		boolean debug = PanelPopulation.isDebugging(name, "mrspaint");
 		if (debug)
 			System.out.println(name + " range=" + min + ", " + sliderRange.getMax());
-		for (CollectionElement<Range> range : ranges) {
+		for (ListElement<Range> range : ranges) {
 			if (debug)
 				System.out.println(name + ": " + range.get());
-			index = theRanges.getElementsBefore(range.getElementId());
+			index = range.getElementsBefore();
 			RangePoint hovered = range.getElementId().equals(theHoveredRange) ? theHoveredRangePoint : null;
 			RangePoint focused = range.getElementId().equals(theFocusedRange) ? theFocusedRangePoint : null;
 			Component render = theRangeRenderer.renderRange(range, hovered, focused);

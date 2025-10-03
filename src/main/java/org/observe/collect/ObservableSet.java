@@ -12,6 +12,8 @@ import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -95,6 +97,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 		ObservableCollection.super.withAll(values);
 		return this;
 	}
+
+	@Override
+	ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd);
 
 	@Override
 	default <T> DistinctDataFlow<E, E, E> flow() {

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.LightWeightObservable;
@@ -23,13 +22,13 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionLockingStrategy;
-import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 
 /** Default, mutable implementation of {@link ObservableConfig} */
 public class DefaultObservableConfig extends AbstractObservableConfig {
-	private ElementId theParentContentRef;
+	private ListElement<ObservableConfig> theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
 	private List<Cause> theCauses;
 	private String theName;
@@ -41,7 +40,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 
 	/**
 	 * Root constructor. This is protected because this class should be instantiated from {@link #createRoot(String, String, Function)} or
-	 * {@link #createRoot(String, ThreadConstraint)}. If this class is inherited, {@link #initialize(DefaultObservableConfig, ElementId)
+	 * {@link #createRoot(String, ThreadConstraint)}. If this class is inherited, {@link #initialize(DefaultObservableConfig, ListElement)
 	 * initialize(null, null)} must be called on this after {@link #setValue(String)}.
 	 *
 	 * @param name The name for the config
@@ -81,7 +80,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	 * @param parent The parent config
 	 * @param parentContentRef The id of this child's element in its parent
 	 */
-	protected void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
+	protected void initialize(DefaultObservableConfig parent, ListElement<ObservableConfig> parentContentRef) {
 		super.initialize(parent);
 		theParentContentRef = parentContentRef;
 		theCauses = parent == null ? new ArrayList<>() : parent.theCauses;
@@ -109,7 +108,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	public ElementId getParentChildRef() {
+	public ListElement<ObservableConfig> getParentChildRef() {
 		return theParentContentRef;
 	}
 
@@ -251,17 +250,17 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	@Override
 	protected void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		CollectionElementMove move) {
-		ElementId el = theContent.addElement(child, //
-			after == null ? null : Objects.requireNonNull(after.getParentChildRef()),
-				before == null ? null : Objects.requireNonNull(before.getParentChildRef()), //
-					first).getElementId();
+		ListElement<ObservableConfig> el = theContent.addElement(child, //
+			after == null ? null : after.getParentChildRef().getElementId(),
+				before == null ? null : before.getParentChildRef().getElementId(), //
+					first);
 		((DefaultObservableConfig) child).initialize(this, el);
 		fire(CollectionChangeType.add, move, BetterList.of(child), child.getName(), null);
 	}
 
 	@Override
 	protected void doRemove(CollectionElementMove move) {
-		getParent().theContent.mutableElement(theParentContentRef).remove();
+		getParent().theContent.mutableElement(theParentContentRef.getElementId()).remove();
 		fire(CollectionChangeType.remove, move, BetterList.empty(), theName, theValue);
 	}
 
@@ -300,7 +299,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		boolean fireWithParent;
 		if (theParentContentRef == null)
 			fireWithParent = false;
-		else if (theParentContentRef.isPresent())
+		else if (theParentContentRef.getElementId().isPresent())
 			fireWithParent = true;
 		else
 			fireWithParent = eventType == CollectionChangeType.remove && relativePath.isEmpty(); // Means this config was just removed

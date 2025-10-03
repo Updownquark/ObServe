@@ -104,7 +104,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 						el.expectAdded(el.getCollectionValue());
 					}
 					el.expectRemoval();
-					el = CollectionElement.get(getElements().getAdjacentElement(el.getElementAddress(), true));
+					el = CollectionElement.get(getElements().getElement(el.getElementAddress()).getAdjacent(true));
 				}
 				if (el == null)
 					break;
@@ -118,7 +118,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 				else
 					el.expectSet(elValue);
 				prevEl = el;
-				el = CollectionElement.get(getElements().getAdjacentElement(el.getElementAddress(), true));
+				el = CollectionElement.get(getElements().getElement(el.getElementAddress()).getAdjacent(true));
 			}
 		});
 	}

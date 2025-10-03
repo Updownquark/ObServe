@@ -37,9 +37,10 @@ import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
@@ -397,7 +398,7 @@ public class ObservableConfigContent {
 			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
 				@Override
 				protected Object createIdentity() {
-					if(theChangesIdentity==null)
+					if (theChangesIdentity == null)
 						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
 					return theChangesIdentity;
 				}
@@ -615,8 +616,7 @@ public class ObservableConfigContent {
 			try (Transaction t = getConfig().lock(true, null)) {
 				ObservableConfig lastChild = getConfig().getContent().peekLast();
 				while (lastChild != null) {
-					ObservableConfig nextLast = CollectionElement
-						.get(getConfig().getContent().getAdjacentElement(lastChild.getParentChildRef(), false));
+					ObservableConfig nextLast = getConfig().getSibling(false);
 					lastChild.remove();
 					lastChild = nextLast;
 				}
@@ -634,49 +634,33 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(int index) {
+		public ListElement<ObservableConfig> getElement(int index) {
 			ObservableConfig child = getConfig().getContent().get(index);
 			return new ConfigCollectionElement(child);
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			return getConfig().getContent().getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return getConfig().getContent().getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
+		public ListElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
 			ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(value, first));
 			return config == null ? null : new ConfigCollectionElement(config);
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(ElementId id) {
+		public ListElement<ObservableConfig> getElement(ElementId id) {
 			ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
 			return new ConfigCollectionElement(config);
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getTerminalElement(boolean first) {
+		public ListElement<ObservableConfig> getTerminalElement(boolean first) {
 			ObservableConfig config = CollectionElement.get(getConfig().getContent().getTerminalElement(first));
 			return config == null ? null : new ConfigCollectionElement(config);
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getAdjacentElement(ElementId elementId, boolean next) {
-			ObservableConfig config = CollectionElement.get(getConfig().getContent().getAdjacentElement(elementId, next));
-			return config == null ? null : new ConfigCollectionElement(config);
-		}
-
-		@Override
-		public MutableCollectionElement<ObservableConfig> mutableElement(ElementId id) {
+		public MutableListElement<ObservableConfig> mutableElement(ElementId id) {
 			ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
-			return new MutableConfigCollectionElement(config, this);
+			return new MutableConfigCollectionElement(config);
 		}
 
 		@Override
@@ -706,7 +690,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
+		public ListElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -720,9 +704,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
-			Runnable afterRemove)
-				throws UnsupportedOperationException, IllegalArgumentException {
+		public ListElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			ObservableConfig valueConfig = getConfig().getContent().getElement(valueEl).get();
 			ObservableConfig afterConfig = after == null ? null : getConfig().getContent().getElement(after).get();
 			ObservableConfig beforeConfig = before == null ? null : getConfig().getContent().getElement(before).get();
@@ -741,13 +724,13 @@ public class ObservableConfigContent {
 				ObservableConfig child = evt.relativePath.get(0);
 				ObservableConfig oldValue = evt.changeType == CollectionChangeType.add ? null : child;
 				ObservableCollectionEvent<ObservableConfig> collEvt = ObservableCollectionEvent.createCollectionEvent(
-					child.getParentChildRef(), child.getIndexInParent(), evt.changeType, oldValue, child, evt, evt.movement);
+					child.getParentChildRef().getElementId(), child.getIndexInParent(), evt.changeType, oldValue, child, evt, evt.movement);
 				observer.accept(collEvt);
 			});
 		}
 	}
 
-	private static class ConfigCollectionElement implements CollectionElement<ObservableConfig> {
+	private static class ConfigCollectionElement implements ListElement<ObservableConfig> {
 		final ObservableConfig theConfig;
 
 		ConfigCollectionElement(ObservableConfig config) {
@@ -756,12 +739,28 @@ public class ObservableConfigContent {
 
 		@Override
 		public ElementId getElementId() {
-			return theConfig.getParentChildRef();
+			return theConfig.getParentChildRef().getElementId();
 		}
 
 		@Override
 		public ObservableConfig get() {
 			return theConfig;
+		}
+
+		@Override
+		public ListElement<ObservableConfig> getAdjacent(boolean next) {
+			ObservableConfig adj = theConfig.getSibling(next);
+			return adj == null ? null : new ConfigCollectionElement(adj);
+		}
+
+		@Override
+		public int getElementsBefore() {
+			return theConfig.getIndexInParent();
+		}
+
+		@Override
+		public int getElementsAfter() {
+			return theConfig.getIndexInParent();
 		}
 
 		@Override
@@ -780,18 +779,15 @@ public class ObservableConfigContent {
 		}
 	}
 
-	private static class MutableConfigCollectionElement extends ConfigCollectionElement
-	implements MutableCollectionElement<ObservableConfig> {
-		private final AbstractObservableConfigContent theCollection;
-
-		MutableConfigCollectionElement(ObservableConfig config, AbstractObservableConfigContent collection) {
+	private static class MutableConfigCollectionElement extends ConfigCollectionElement implements MutableListElement<ObservableConfig> {
+		MutableConfigCollectionElement(ObservableConfig config) {
 			super(config);
-			theCollection = collection;
 		}
 
 		@Override
-		public BetterCollection<ObservableConfig> getCollection() {
-			return theCollection;
+		public MutableListElement<ObservableConfig> getAdjacent(boolean next) {
+			ObservableConfig adj = theConfig.getSibling(next);
+			return adj == null ? null : new MutableConfigCollectionElement(adj);
 		}
 
 		@Override
@@ -856,7 +852,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(int index) {
+		public ListElement<ObservableConfig> getElement(int index) {
 			try (Transaction t = getConfig().lock(false, null)) {
 				int i = 0;
 				for (CollectionElement<ObservableConfig> el : getConfig().getContent().elements()) {
@@ -871,42 +867,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public int getElementsBefore(ElementId id) {
-			try (Transaction t = getConfig().lock(false, null)) {
-				int idx = getConfig().getContent().getElementsBefore(id);
-				int i = 0;
-				int matches = 0;
-				for (CollectionElement<ObservableConfig> el : getConfig().getContent().elements()) {
-					if (i == idx)
-						break;
-					if (thePathElement.matches(el.get()))
-						matches++;
-					i++;
-				}
-				return matches;
-			}
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			try (Transaction t = getConfig().lock(false, null)) {
-				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
-				if (config == null || !thePathElement.matches(config))
-					throw new NoSuchElementException();
-				int i = 0;
-				for (CollectionElement<ObservableConfig> el : getConfig().getContent().reverse().elements()) {
-					if (thePathElement.matches(el.get())) {
-						if (el.get() == config)
-							return i;
-						i++;
-					}
-				}
-				throw new IllegalStateException("Element found but then not found");
-			}
-		}
-
-		@Override
-		public CollectionElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
+		public ListElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
 			if (!thePathElement.matches(value))
 				return null;
 			try (Transaction t = getConfig().lock(false, null)) {
@@ -916,7 +877,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getElement(ElementId id) {
+		public ListElement<ObservableConfig> getElement(ElementId id) {
 			try (Transaction t = getConfig().lock(false, null)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
 				if (!thePathElement.matches(config))
@@ -953,32 +914,22 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getTerminalElement(boolean first) {
+		public ListElement<ObservableConfig> getTerminalElement(boolean first) {
 			try (Transaction t = getConfig().lock(false, null)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getTerminalElement(first));
 				while (config != null && !thePathElement.matches(config))
-					config = CollectionElement.get(getConfig().getContent().getAdjacentElement(config.getParentChildRef(), first));
+					config = config.getSibling(first);
 				return config == null ? null : new ConfigCollectionElement(config);
 			}
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> getAdjacentElement(ElementId elementId, boolean next) {
-			try (Transaction t = getConfig().lock(false, null)) {
-				ObservableConfig config = CollectionElement.get(getConfig().getContent().getAdjacentElement(elementId, next));
-				while (config != null && !thePathElement.matches(config))
-					config = CollectionElement.get(getConfig().getContent().getAdjacentElement(config.getParentChildRef(), next));
-				return config == null ? null : new ConfigCollectionElement(config);
-			}
-		}
-
-		@Override
-		public MutableCollectionElement<ObservableConfig> mutableElement(ElementId id) {
+		public MutableListElement<ObservableConfig> mutableElement(ElementId id) {
 			try (Transaction t = getConfig().lock(false, null)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
 				if (!thePathElement.matches(config))
 					throw new NoSuchElementException();
-				return new MutableConfigCollectionElement(config, this);
+				return new MutableConfigCollectionElement(config);
 			}
 		}
 
@@ -988,7 +939,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
+		public ListElement<ObservableConfig> addElement(ObservableConfig value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -1002,9 +953,8 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first,
-			Runnable afterRemove)
-				throws UnsupportedOperationException, IllegalArgumentException {
+		public ListElement<ObservableConfig> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			ObservableConfig valueConfig = getConfig().getContent().getElement(valueEl).get();
 			ObservableConfig afterConfig = after == null ? null : getConfig().getContent().getElement(after).get();
 			ObservableConfig beforeConfig = before == null ? null : getConfig().getContent().getElement(before).get();
@@ -1033,12 +983,11 @@ public class ObservableConfigContent {
 			return getConfig().watch(ObservableConfigPath.create(watchPath)).act(evt -> {
 				ObservableConfig child = evt.relativePath.get(0);
 				boolean postMatches = thePathElement.matches(child);
-				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt)
-					: postMatches;
+				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt) : postMatches;
 				if (preMatches || postMatches) {
 					int index;
 					if (postMatches)
-						index = getElementsBefore(child.getParentChildRef());
+						index = child.getIndexInParent();
 					else {
 						int i = 0;
 						for (CollectionElement<ObservableConfig> el : getConfig().getContent().elements()) {
@@ -1064,7 +1013,8 @@ public class ObservableConfigContent {
 
 					ObservableConfig oldValue = changeType == CollectionChangeType.add ? null : child;
 					ObservableCollectionEvent<ObservableConfig> collEvt = ObservableCollectionEvent.createCollectionEvent(
-						child.getParentChildRef(), index, changeType, oldValue, child, evt, preMatches ? evt.movement : null);
+						child.getParentChildRef().getElementId(), index, changeType, oldValue, child, evt,
+						preMatches ? evt.movement : null);
 					try (Transaction t = collEvt.use()) {
 						observer.accept(collEvt);
 					}
@@ -1223,16 +1173,15 @@ public class ObservableConfigContent {
 					try (Transaction t = theRoot.lock(true, null)) {
 						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
 						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, isTowardBeginning,
-							thePath.getLastElement().getName(),
-							cfg -> {
+							thePath.getLastElement().getName(), cfg -> {
 								if (theFields != null)
 									for (Map.Entry<String, String> field : theFields.entrySet())
 										cfg.set(field.getKey(), field.getValue());
 								if (preAddAction != null)
 									preAddAction.accept(cfg);
 							});
-						newChildId = theChildren.getElementsBySource(newChild.getParentChildRef(), parent.getContent()).getFirst()
-							.getElementId();
+						newChildId = theChildren.getElementsBySource(newChild.getParentChildRef().getElementId(), parent.getContent())
+							.getFirst().getElementId();
 					}
 					return theChildren.getElement(newChildId);
 				}
