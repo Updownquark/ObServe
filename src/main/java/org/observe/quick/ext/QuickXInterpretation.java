@@ -92,7 +92,8 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickAbstractMultiSlider.SliderBgRenderer.Def::new));
 
 		interpreter.createWith(QuickSettingsMenu.SETTINGS_MENU, QuickSettingsMenu.Def.class, ExElement.creator(QuickSettingsMenu.Def::new));
-		interpreter.createWith(QuickVirtualMultiPane.VIRTUAL_MULTI_PANE, QuickVirtualMultiPane.Def.class, ExElement.creator(QuickVirtualMultiPane.Def::new));
+		interpreter.createWith(QuickVirtualMultiPane.VIRTUAL_MULTI_PANE, QuickVirtualMultiPane.Def.class,
+			ExElement.creator(QuickVirtualMultiPane.Def::new));
 		interpreter.createWith(QuickSuperTable.SUPER_TABLE, QuickSuperTable.Def.class, ExElement.creator(QuickSuperTable.Def::new));
 		interpreter.createWith(QuickSuperTable.WITH_ROW_DRAGGING, QuickSuperTable.WithRowDragging.Def.class,
 			ExElement.creator(QuickSuperTable.WithRowDragging.Def::new));
@@ -100,6 +101,10 @@ public class QuickXInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickSuperTable.AdaptiveHeight.Def::new));
 		interpreter.createWith(QuickValueSelector.VALUE_SELECTOR, QuickValueSelector.Def.class,
 			ExElement.creator(QuickValueSelector.Def::new));
+		interpreter.createWith(QuickCustomPopulator.CUSTOM_POPULATOR, QuickCustomPopulator.Def.class,
+			ExElement.creator(QuickCustomPopulator.Def::new));
+		interpreter.createWith(QuickVCustomPopulator.V_CUSTOM_POPULATOR, QuickVCustomPopulator.Def.class,
+			ExElement.creator(QuickVCustomPopulator.Def::new));
 
 		return interpreter;
 	}

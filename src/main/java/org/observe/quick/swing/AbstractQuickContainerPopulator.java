@@ -417,6 +417,16 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
+	public AbstractQuickContainerPopulator removeWhen(Observable<?> remove) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator addNextAt(int componentIndex) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
 	public ObservableValue<String> getTooltip() {
 		return ObservableValue.of(null);
 	}

@@ -5,13 +5,11 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickContainer;
-import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** A container that arranges its components vertically as fields in a form */
-public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
+public class QuickFieldPanel extends QuickVariableContainer {
 	/** The XML name of this element */
 	public static final String FIELD_PANEL = "field-panel";
 
@@ -24,7 +22,7 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 		qonfigType = FIELD_PANEL,
 		interpretation = Interpreted.class,
 		instance = QuickFieldPanel.class)
-	public static class Def<P extends QuickFieldPanel> extends QuickContainer.Def.Abstract<P, QuickWidget> {
+	public static class Def<P extends QuickFieldPanel> extends QuickVariableContainer.Def<P> {
 		private boolean isShowInvisible;
 
 		/**
@@ -58,7 +56,7 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 	 *
 	 * @param <P> The sub-type of field panel to create
 	 */
-	public static class Interpreted<P extends QuickFieldPanel> extends QuickContainer.Interpreted.Abstract<P, QuickWidget> {
+	public static class Interpreted<P extends QuickFieldPanel> extends QuickVariableContainer.Interpreted<P> {
 		/**
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget

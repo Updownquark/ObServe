@@ -6,13 +6,13 @@ import java.awt.Font;
 import java.awt.font.TextAttribute;
 import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.UnaryOperator;
 
 import javax.swing.AbstractButton;
 import javax.swing.JLabel;
@@ -24,36 +24,68 @@ import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
+import org.qommons.BiTuple;
+
 /** Allows for simple chained modification of a font */
 public class FontAdjuster implements Cloneable {
-	private UnaryOperator<Font> theFont;
+	private static final Map<Object, TextAttribute> STYLE_TO_TEXT;
+	private static final Map<TextAttribute, Object> TEXT_TO_STYLE;
+	private static final Map<BiTuple<Object, Object>, BiTuple<TextAttribute, Object>> INDIRECT_STYLE_TO_TEXT;
+	private static final Map<BiTuple<TextAttribute, Object>, BiTuple<Object, Object>> INDIRECT_TEXT_TO_STYLE;
+
+	static {
+		STYLE_TO_TEXT = new HashMap<>();
+		TEXT_TO_STYLE = new HashMap<>();
+		INDIRECT_STYLE_TO_TEXT = new HashMap<>();
+		INDIRECT_TEXT_TO_STYLE = new HashMap<>();
+
+		addAttributeMapping(TextAttribute.BACKGROUND, StyleConstants.Background);
+		addAttributeMapping(TextAttribute.FOREGROUND, StyleConstants.Foreground);
+		addAttributeMapping(TextAttribute.FAMILY, StyleConstants.Family);
+		addAttributeMapping(TextAttribute.SIZE, StyleConstants.Size);
+		addAttributeMapping(TextAttribute.STRIKETHROUGH, StyleConstants.StrikeThrough);
+
+		addAttributeMapping(TextAttribute.POSTURE, TextAttribute.POSTURE_OBLIQUE, StyleConstants.Italic, true);
+		addAttributeMapping(TextAttribute.POSTURE, TextAttribute.POSTURE_REGULAR, StyleConstants.Italic, false);
+		addAttributeMapping(TextAttribute.SUPERSCRIPT, TextAttribute.SUPERSCRIPT_SUPER, StyleConstants.Superscript, true);
+		addAttributeMapping(TextAttribute.SUPERSCRIPT, TextAttribute.SUPERSCRIPT_SUB, StyleConstants.Subscript, true);
+		addAttributeMapping(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON, StyleConstants.Underline, true);
+		addAttributeMapping(TextAttribute.UNDERLINE, 0, StyleConstants.Underline, false);
+		addAttributeMapping(TextAttribute.WEIGHT, TextAttribute.WEIGHT_BOLD, StyleConstants.Bold, true);
+		addAttributeMapping(TextAttribute.WEIGHT, TextAttribute.WEIGHT_REGULAR, StyleConstants.Bold, false);
+	}
+
+	public static void addAttributeMapping(TextAttribute textAttr, Object styleAttr) {
+		STYLE_TO_TEXT.put(styleAttr, textAttr);
+		TEXT_TO_STYLE.put(textAttr, styleAttr);
+	}
+
+	public static void addAttributeMapping(TextAttribute textAttr, Object textValue, Object styleAttr, Object styleValue) {
+		BiTuple<TextAttribute, Object> textTuple = new BiTuple<>(textAttr, textValue);
+		BiTuple<Object, Object> styleTuple = new BiTuple<>(styleAttr, styleValue);
+		INDIRECT_STYLE_TO_TEXT.put(styleTuple, textTuple);
+		INDIRECT_TEXT_TO_STYLE.put(textTuple, styleTuple);
+	}
+
 	private MutableAttributeSet theFontAttributes;
-	private Color theForeground;
-	private Integer theHAlign;
+	private Map<Attribute, Object> theFontAttributeMap;
 	private Integer theVAlign;
 
 	public FontAdjuster() {
-		this(null);
+		this(new SimpleAttributeSet());
 	}
 
 	public FontAdjuster(MutableAttributeSet fontAttributes) {
 		theFontAttributes = fontAttributes;
-	}
-
-	public Function<Font, Font> getFont() {
-		return theFont;
+		theFontAttributeMap = new HashMap<>();
 	}
 
 	public MutableAttributeSet getFontAttributes() {
 		return theFontAttributes;
 	}
 
-	public Color getColor() {
-		return theForeground;
-	}
-
 	public Integer getHAlign() {
-		return theHAlign;
+		return (Integer) theFontAttributes.getAttribute(StyleConstants.Alignment);
 	}
 
 	public Integer getVAlign() {
@@ -66,45 +98,74 @@ public class FontAdjuster implements Cloneable {
 	}
 
 	public FontAdjuster reset() {
-		theFont = null;
-		theForeground = null;
-		theHAlign = theVAlign = null;
+		// Oh my gosh it's so much work just to clear an attribute set
+		if (theFontAttributes.getAttributeCount() > 0) {
+			List<Object> attrs = new ArrayList<>(theFontAttributes.getAttributeCount());
+			Enumeration<?> attrEnum = theFontAttributes.getAttributeNames();
+			while (attrEnum.hasMoreElements())
+				attrs.add(attrEnum.nextElement());
+			theFontAttributes.removeAttributes(new IterEnum<>(attrs.iterator()));
+		}
+		theFontAttributeMap.clear();
+		theVAlign = null;
 		return this;
 	}
 
-	public FontAdjuster deriveFont(UnaryOperator<Font> font) {
-		if (theFont == null)
-			theFont = font;
-		else if (font != null) {
-			UnaryOperator<Font> oldFont = theFont;
-			theFont = f -> font.apply(oldFont.apply(f));
+	private static class IterEnum<T> implements Enumeration<T> { // Surely someone's done this before?
+		private final Iterator<T> iterator;
+
+		IterEnum(Iterator<T> iterator) {
+			this.iterator = iterator;
 		}
-		return this;
+
+		@Override
+		public boolean hasMoreElements() {
+			return iterator.hasNext();
+		}
+
+		@Override
+		public T nextElement() {
+			return iterator.next();
+		}
 	}
 
 	public FontAdjuster deriveFont(int style, float size) {
-		if (theFontAttributes != null) {
-			StyleConstants.setFontSize(theFontAttributes, Math.round(size));
-			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
-			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
-		}
-		return deriveFont(font -> font == null ? null : font.deriveFont(style, size));
+		withFontSize(size);
+		withFontStyle(style);
+		return this;
 	}
 
-	public FontAdjuster deriveFont(Attribute attr, Object value) {
-		Map<Attribute, Object> attrs = Collections.singletonMap(attr, value);
-		return deriveFont(font -> font == null ? null : font.deriveFont(attrs));
+	public FontAdjuster deriveFont(Object attr, Object value) {
+		Attribute textAttr = STYLE_TO_TEXT.get(attr);
+		if (textAttr != null)
+			theFontAttributeMap.put(textAttr, value);
+		else {
+			BiTuple<TextAttribute, Object> textAttrValue = INDIRECT_STYLE_TO_TEXT.get(new BiTuple<>(attr, value));
+			if (textAttrValue != null)
+				theFontAttributeMap.put(textAttrValue.getValue1(), textAttrValue.getValue2());
+			else if (attr instanceof Attribute)
+				theFontAttributeMap.put((Attribute) attr, value);
+		}
+
+		Object styleAttr = TEXT_TO_STYLE.get(attr);
+		if (styleAttr != null)
+			theFontAttributes.addAttribute(styleAttr, value);
+		else {
+			BiTuple<Object, Object> styleAttrValue = INDIRECT_TEXT_TO_STYLE.get(new BiTuple<>(attr, value));
+			if (styleAttrValue != null)
+				theFontAttributes.addAttribute(styleAttrValue.getValue1(), styleAttrValue.getValue2());
+			else
+				theFontAttributes.addAttribute(attr, value);
+		}
+
+		return this;
 	}
 
 	public FontAdjuster withFontWeight(float weight) {
-		if (theFontAttributes != null)
-			StyleConstants.setBold(theFontAttributes, weight > 1f);
 		return deriveFont(TextAttribute.WEIGHT, weight);
 	}
 
 	public FontAdjuster withFontSlant(float slant) {
-		if (theFontAttributes != null)
-			StyleConstants.setItalic(theFontAttributes, slant > 0f);
 		return deriveFont(TextAttribute.POSTURE, slant);
 	}
 
@@ -113,11 +174,9 @@ public class FontAdjuster implements Cloneable {
 	 * @return This adjuster
 	 */
 	public FontAdjuster withFontStyle(int style) {
-		if (theFontAttributes != null) {
-			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
-			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
-		}
-		return deriveFont(font -> font == null ? null : font.deriveFont(style));
+		bold((style & Font.BOLD) != 0);
+		italic((style & Font.ITALIC) != 0);
+		return this;
 	}
 
 	/**
@@ -125,18 +184,7 @@ public class FontAdjuster implements Cloneable {
 	 * @return This adjuster
 	 */
 	public FontAdjuster withFontSize(float size) {
-		if (theFontAttributes != null)
-			StyleConstants.setFontSize(theFontAttributes, Math.round(size));
-		return deriveFont(font -> font == null ? null : font.deriveFont(size));
-	}
-
-	/**
-	 * @param style The font {@link Font#getStyle() style} for the label
-	 * @param fontSize The point size for the label's font
-	 * @return This holder
-	 */
-	public FontAdjuster withSizeAndStyle(int style, float fontSize) {
-		return deriveFont(style, fontSize);
+		return deriveFont(TextAttribute.SIZE, Math.round(size));
 	}
 
 	/**
@@ -153,7 +201,7 @@ public class FontAdjuster implements Cloneable {
 	 * @return This adjuster
 	 */
 	public FontAdjuster bold(boolean bold) {
-		return withFontStyle(bold ? Font.BOLD : Font.PLAIN);
+		return deriveFont(TextAttribute.WEIGHT, bold ? TextAttribute.WEIGHT_BOLD : TextAttribute.WEIGHT_REGULAR);
 	}
 
 	public FontAdjuster underline() {
@@ -161,9 +209,7 @@ public class FontAdjuster implements Cloneable {
 	}
 
 	public FontAdjuster underline(boolean underline) {
-		if (theFontAttributes != null)
-			StyleConstants.setUnderline(theFontAttributes, underline);
-		return deriveFont(TextAttribute.UNDERLINE, underline ? TextAttribute.UNDERLINE_ON : -1);
+		return deriveFont(TextAttribute.UNDERLINE, underline);
 	}
 
 	public FontAdjuster strikethrough() {
@@ -171,9 +217,7 @@ public class FontAdjuster implements Cloneable {
 	}
 
 	public FontAdjuster strikethrough(boolean strikethrough) {
-		if (theFontAttributes != null)
-			StyleConstants.setStrikeThrough(theFontAttributes, strikethrough);
-		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
+		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough);
 	}
 
 	public FontAdjuster italic() {
@@ -183,6 +227,7 @@ public class FontAdjuster implements Cloneable {
 	public FontAdjuster italic(boolean italic) {
 		return withFontSlant(italic ? TextAttribute.POSTURE_OBLIQUE : TextAttribute.POSTURE_REGULAR);
 	}
+
 	/**
 	 * Makes the label's font {@link Font#PLAIN plain}
 	 *
@@ -193,7 +238,7 @@ public class FontAdjuster implements Cloneable {
 	}
 
 	public Color getForeground() {
-		return theForeground;
+		return (Color) theFontAttributes.getAttribute(StyleConstants.Foreground);
 	}
 
 	/**
@@ -201,11 +246,9 @@ public class FontAdjuster implements Cloneable {
 	 * @return This holder
 	 */
 	public FontAdjuster withForeground(Color foreground) {
-		theForeground = foreground;
-		if (theFontAttributes != null)
-			StyleConstants.setForeground(theFontAttributes, foreground);
-		return this;
+		return deriveFont(TextAttribute.FOREGROUND, foreground);
 	}
+
 	/**
 	 * Changes the horizontal alignment of the component (if supported)
 	 *
@@ -213,11 +256,8 @@ public class FontAdjuster implements Cloneable {
 	 * @return This holder
 	 */
 	public FontAdjuster alignH(int align) {
-		theHAlign = align;
-		if (theFontAttributes != null)
-			StyleConstants.setAlignment(theFontAttributes, //
-				align < 0 ? StyleConstants.ALIGN_LEFT : (align > 0 ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_CENTER));
-		return this;
+		return deriveFont(StyleConstants.Alignment, //
+			align < 0 ? StyleConstants.ALIGN_LEFT : (align > 0 ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_CENTER));
 	}
 
 	/**
@@ -237,19 +277,15 @@ public class FontAdjuster implements Cloneable {
 	 * @return This decorator
 	 */
 	public FontAdjuster align(int hAlign, int vAlign) {
-		theHAlign = hAlign;
+		alignH(hAlign);
 		theVAlign = vAlign;
-		if (theFontAttributes != null)
-			StyleConstants.setAlignment(theFontAttributes, //
-				hAlign < 0 ? StyleConstants.ALIGN_LEFT : (hAlign > 0 ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_CENTER));
 		return this;
 	}
 
 	public Font adjust(Font font) {
-		if (theFont == null)
+		if (font == null || theFontAttributeMap.isEmpty())
 			return font;
-		else
-			return theFont.apply(font);
+		return font.deriveFont(theFontAttributeMap);
 	}
 
 	public <C extends Component> C adjust(C C) {
@@ -259,22 +295,24 @@ public class FontAdjuster implements Cloneable {
 
 	public Runnable decorate(Component c) {
 		List<Runnable> revert = new ArrayList<>();
-		if (theForeground != null) {
-			Color oldFG = c.getForeground();
-			c.setForeground(theForeground);
+		Color fg = getForeground();
+		if (fg != null) {
+			// Color oldFG = c.getForeground();
+			c.setForeground(fg);
 			// revert.add(() -> c.setForeground(oldFG));
 		}
-		if (theFont != null) {
-			Font oldFont = c.getFont();
-			Font newFont = theFont.apply(c.getFont());
+		Font oldFont = c.getFont();
+		Font newFont = adjust(oldFont);
+		if (oldFont != newFont) {
 			c.setFont(newFont);
 			revert.add(() -> {
 				c.setFont(oldFont);
 			});
 		}
 
-		if (theHAlign != null) {
-			int align = theHAlign;
+		Integer hAlign = getHAlign();
+		if (hAlign != null) {
+			int align = hAlign;
 			if (c instanceof JLabel) {
 				int oldAlign = ((JLabel) c).getHorizontalAlignment();
 				((JLabel) c).setHorizontalAlignment(//
@@ -324,19 +362,24 @@ public class FontAdjuster implements Cloneable {
 
 	public Runnable adjust(TitledBorder border) {
 		List<Runnable> revert = new ArrayList<>();
-		if (theForeground != null) {
+		Color fg = getForeground();
+		if (fg != null) {
 			Color oldFG = border.getTitleColor();
-			border.setTitleColor(theForeground);
+			border.setTitleColor(fg);
 			revert.add(() -> border.setTitleColor(oldFG));
 		}
-		if (theFont != null) {
-			Font oldFont = border.getTitleFont();
-			border.setTitleFont(theFont.apply(oldFont));
-			revert.add(() -> border.setTitleFont(oldFont));
+		Font oldFont = border.getTitleFont();
+		Font newFont = adjust(oldFont);
+		if (oldFont != newFont) {
+			border.setTitleFont(newFont);
+			revert.add(() -> {
+				border.setTitleFont(oldFont);
+			});
 		}
-		if (theHAlign != null) {
+		Integer hAlign = getHAlign();
+		if (hAlign != null) {
 			int oldJ = border.getTitleJustification();
-			border.setTitleJustification(theHAlign < 0 ? TitledBorder.LEFT : (theHAlign > 0 ? TitledBorder.RIGHT : TitledBorder.CENTER));
+			border.setTitleJustification(hAlign < 0 ? TitledBorder.LEFT : (hAlign > 0 ? TitledBorder.RIGHT : TitledBorder.CENTER));
 			revert.add(() -> border.setTitleJustification(oldJ));
 		}
 		if (theVAlign != null) {
@@ -359,14 +402,14 @@ public class FontAdjuster implements Cloneable {
 		} catch (CloneNotSupportedException e) {
 			throw new IllegalStateException(e);
 		}
-		if (theFontAttributes != null)
-			cloned.theFontAttributes = new SimpleAttributeSet(theFontAttributes);
+		cloned.theFontAttributes = new SimpleAttributeSet(theFontAttributes);
+		cloned.theFontAttributeMap = new HashMap<>(theFontAttributeMap);
 		return cloned;
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(theFont, theForeground, theHAlign, theVAlign);
+		return Objects.hash(theFontAttributeMap, theVAlign);
 	}
 
 	@Override
@@ -376,12 +419,11 @@ public class FontAdjuster implements Cloneable {
 		else if (!(obj instanceof FontAdjuster))
 			return false;
 		FontAdjuster other = (FontAdjuster) obj;
-		return Objects.equals(theFont, other.theFont) && Objects.equals(theForeground, other.theForeground) && theHAlign == other.theHAlign
-			&& theVAlign == other.theVAlign;
+		return Objects.equals(theFontAttributeMap, other.theFontAttributeMap) && theVAlign == other.theVAlign;
 	}
 
 	@Override
 	public String toString() {
-		return theFont.toString();
+		return theFontAttributes.toString();
 	}
 }

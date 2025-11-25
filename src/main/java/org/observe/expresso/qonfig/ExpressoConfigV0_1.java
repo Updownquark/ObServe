@@ -256,11 +256,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		static class Instantiator<T> extends ConfigModelValue<T, SettableValue<T>> {
 			private final ModelValueInstantiator<SettableValue<T>> theDefaultValue;
+			private final ErrorReporting reporting;
 
 			Instantiator(ConfigValue.Interpreted<T> interpreted) throws ModelInstantiationException {
 				super(interpreted, interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
 					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
 				theDefaultValue = interpreted.getDefaultValue() == null ? null : interpreted.getDefaultValue().instantiate();
+				reporting = interpreted.reporting();
 			}
 
 			public ModelValueInstantiator<SettableValue<T>> getDefaultValue() {
@@ -281,7 +283,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				try {
 					value = config.buildValue(null);
 				} catch (IllegalArgumentException e) {
-					reporting().error("No default format available for type " + config.getType() + ". Specify a format.", e);
+					reporting.error("No default format available for type " + config.getType() + ". Specify a format.", e);
 					String uModMsg = reporting().getPosition().toShortString() + ": Unmodifiable";
 					value = SettableValue.of(null, uModMsg);
 				}

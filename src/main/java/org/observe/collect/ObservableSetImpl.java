@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.function.BiPredicate;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -1105,15 +1104,15 @@ public class ObservableSetImpl {
 						 */
 						UniqueElement ue = theElementsByValue.get(newValue);
 						boolean reInsert;
-						BooleanSupplier consistent;
+						OptimisticContext consistent;
 						if (node.getValue() != newValue)
 							consistent = OptimisticContext.TRUE;
 						else
-							consistent = new BooleanSupplier() {
+							consistent = new OptimisticContext() {
 							private Ternian value = Ternian.NONE;
 
 							@Override
-							public boolean getAsBoolean() {
+							public boolean isOperationValid() {
 								if (value == Ternian.NONE)
 									value = Ternian.ofBoolean(theElementsByValue.isConsistent(theValueId));
 								return value.value;
@@ -1123,7 +1122,7 @@ public class ObservableSetImpl {
 							reInsert = false;
 							if (theActiveElement == parentEl) {
 								// Check to see if the value is still consistent in the structure
-								if (consistent.getAsBoolean()) {
+								if (consistent.isOperationValid()) {
 									theDebug.act("update:trueUpdate").exec();
 									theValue = newValue;
 									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, false, innerCauses);
@@ -1140,7 +1139,7 @@ public class ObservableSetImpl {
 							}
 						} else if (ue == null && theParentElements.size() == 1
 							&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null
-							&& consistent.getAsBoolean()) {
+							&& consistent.isOperationValid()) {
 							// If we can just fire an update instead of an add/remove, let's do that
 							theDebug.act("update:move").exec();
 							moveTo(newValue);
@@ -1153,7 +1152,7 @@ public class ObservableSetImpl {
 
 						if (reInsert) {
 							theParentElements.mutableEntry(node.getElementId()).remove();
-							if (consistent.getAsBoolean()) {
+							if (consistent.isOperationValid()) {
 								// TODO
 							}
 							boolean updateActive = false;
@@ -1198,30 +1197,39 @@ public class ObservableSetImpl {
 						theParentElements.mutableEntry(//
 							node.getElementId())//
 						.remove();
-						if (theParentElements.isEmpty()) {
-							theDebug.act("remove:remove").param("value", theValue).exec();
-							// This element is no longer represented
-							theElementsByValue.mutableEntry(theValueId).remove();
-							ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
-						} else if (theActiveElement == parentEl) {
+						if (theActiveElement == parentEl || !theActiveElement.isPresent()) {
 							theDebug.act("remove:repChange").exec();
-							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
-							theActiveElement = activeEntry.getKey();
-							T oldValue = theValue;
-							theValue = activeEntry.getValue();
-							if (isPreservingSourceOrder) {
-								// If the active element of a unique element is removed,
-								// then the order of the unique elements may have changed
-								// because the new active element may not be in the same order
-								// relative to the active elements of all the other unique elements.
-								// Since the manager doesn't attempt to keep the elements in source order (which would be expensive),
-								// there's no quick way to determine if the new active element actually is out of order.
-								// So we need to just remove and re-add this element
+							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = null;
+							// Collection elements may be removed in batch. Don't update to the next element if it's removed too.
+							for (Map.Entry<DerivedCollectionElement<T>, T> entry : theParentElements.entrySet()) {
+								if (entry.getKey().isPresent()) {
+									activeEntry = entry;
+									break;
+								}
+							}
+							if (activeEntry != null) {
+								theActiveElement = activeEntry.getKey();
+								T oldValue = theValue;
+								theValue = activeEntry.getValue();
+								if (isPreservingSourceOrder) {
+									// If the active element of a unique element is removed,
+									// then the order of the unique elements may have changed
+									// because the new active element may not be in the same order
+									// relative to the active elements of all the other unique elements.
+									// Since the manager doesn't attempt to keep the elements in source order (which would be expensive),
+									// there's no quick way to determine if the new active element actually is out of order.
+									// So we need to just remove and re-add this element
+									ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
+									theAccepter.accept(UniqueElement.this, innerCauses);
+								} else // Fire an internal-only event if there's no actual change
+									ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, oldValue == theValue,
+									innerCauses);
+							} else if (theValueId.isPresent()) { // Full removal may have already been detected
+								theDebug.act("remove:remove").param("value", theValue).exec();
+								// This element is no longer represented
+								theElementsByValue.mutableEntry(theValueId).remove();
 								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
-								theAccepter.accept(UniqueElement.this, innerCauses);
-							} else // Fire an internal-only event if there's no actual change
-								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, oldValue == theValue,
-								innerCauses);
+							}
 						} else
 							ObservableCollectionActiveManagers.update(theListener, theValue, theValue, true, innerCauses);
 					}
@@ -1273,6 +1281,15 @@ public class ObservableSetImpl {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
+			}
+
+			@Override
+			public boolean isPresent() {
+				for (DerivedCollectionElement<T> parentEl : theParentElements.keySet()) {
+					if (parentEl.isPresent())
+						return true;
+				}
+				return false;
 			}
 
 			@Override

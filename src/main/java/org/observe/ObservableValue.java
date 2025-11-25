@@ -105,7 +105,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	@Override
 	ObservableValue<T> alias(String alias);
 
-	/** @return An observable that just reports this observable value's value in an observable without the event */
+	/**
+	 * @return An observable that just reports this observable value's value (including the initial value) in an observable without the
+	 *         event
+	 */
 	default Observable<T> value() {
 		class ValueObservable extends AbstractIdentifiable implements Observable<T> {
 			@Override
@@ -406,8 +409,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
-	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function,
-		ObservableValue<U> arg2, ObservableValue<V> arg3, Consumer<XformOptions> options) {
+	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+		ObservableValue<V> arg3, Consumer<XformOptions> options) {
 		return transform(tx -> {
 			if (options != null)
 				options.accept(tx);
@@ -552,6 +555,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param values The sequence of ObservableValues to get the first passing value of
 	 * @return The observable for the first passing value in the sequence
 	 */
+	@SafeVarargs
 	public static <T> ObservableValue<T> firstValue(Predicate<? super T> test, Supplier<? extends T> def,
 		ObservableValue<? extends T>... values) {
 		return new FirstObservableValue<>(values, test, def);
@@ -561,6 +565,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param values Any number of observable booleans (a null value is equivalent to FALSE)
 	 * @return An observable value that is the AND operation of all the given values
 	 */
+	@SafeVarargs
 	public static ObservableValue<Boolean> AND(ObservableValue<? extends Boolean>... values) {
 		return firstValue(LambdaUtils.BOOLEAN_PREDICATE.negate(), LambdaUtils.constantSupplier(true), values);
 	}
@@ -569,6 +574,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param values Any number of observable booleans (a null value is equivalent to FALSE)
 	 * @return An observable value that is the OR operation of all the given values
 	 */
+	@SafeVarargs
 	public static ObservableValue<Boolean> OR(ObservableValue<? extends Boolean>... values) {
 		return firstValue(LambdaUtils.BOOLEAN_PREDICATE, LambdaUtils.constantSupplier(false), values);
 	}
@@ -581,6 +587,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param components The components whose changes require a new value to be produced
 	 * @return The new observable value
 	 */
+	@SafeVarargs
 	public static <T> ObservableValue<T> assemble(Supplier<T> value, ObservableValue<?>... components) {
 		Observable<?>[] changes = new Observable[components.length];
 		for (int i = 0; i < components.length; i++)
@@ -595,6 +602,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 * @param values All the values to listen to
 	 * @return An observable that fires whenever any of the given values changes
 	 */
+	@SafeVarargs
 	public static <T> Observable<ObservableValueEvent<? extends T>> orChanges(boolean withInitial, ObservableValue<? extends T>... values) {
 		List<Observable<? extends ObservableValueEvent<? extends T>>> changesList = new ArrayList<>(values.length);
 		for (ObservableValue<? extends T> value : values) {
@@ -1855,8 +1863,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final Observable<?> theChanges;
 		private final Supplier<?> theIdentity;
 
-		public SyntheticObservable(Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes,
-			Supplier<?> identity) {
+		public SyntheticObservable(Supplier<? extends T> value, LongSupplier stamp, Observable<?> changes, Supplier<?> identity) {
 			theValue = value;
 			theStamp = stamp;
 			theChanges = changes;
@@ -2435,8 +2442,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final Predicate<? super T> theTest;
 		private final Supplier<? extends T> theDefault;
 
-		protected FirstObservableValue(ObservableValue<? extends T>[] values, Predicate<? super T> test,
-			Supplier<? extends T> def) {
+		protected FirstObservableValue(ObservableValue<? extends T>[] values, Predicate<? super T> test, Supplier<? extends T> def) {
 			for (int i = 0; i < values.length; i++) {
 				if (values[i] == null)
 					throw new IllegalArgumentException("Null value at " + i);

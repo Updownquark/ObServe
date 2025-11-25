@@ -527,10 +527,18 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						.<K> transform(tx -> tx.map(keyMap).modifySource(keySet).withEquivalence(theKeyEquivalence)).distinct(),
 						keyReverse);
 			}
-			return mapFlow.withValues(entries -> entries.<V> transform(tx -> tx.map(valueMap).modifySource(valueSet, //
-				rvrs -> rvrs.createWith(addition))//
-				.withEquivalence(theValueEquivalence)))//
-				.gatherActive(until);
+			if (theValueEquivalence instanceof Equivalence.SortedEquivalence) {
+				return mapFlow.withValues(entries -> entries.<V> transform(tx -> tx.map(valueMap).modifySource(valueSet, //
+					rvrs -> rvrs.createWith(addition))//
+					.withEquivalence(theValueEquivalence))//
+					.sorted(((Equivalence.SortedEquivalence<? super V>) theValueEquivalence).comparator()))//
+					.gatherActive(until);
+			} else {
+				return mapFlow.withValues(entries -> entries.<V> transform(tx -> tx.map(valueMap).modifySource(valueSet, //
+					rvrs -> rvrs.createWith(addition))//
+					.withEquivalence(theValueEquivalence)))//
+					.gatherActive(until);
+			}
 		}
 	}
 

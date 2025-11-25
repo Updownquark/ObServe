@@ -1153,7 +1153,7 @@ public class ExpressoQonfigValues {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theSort = syncChild(ExSort.ExRootSort.class, theSort, session, "sort");
-			if (getElementValue() != null && theSort != null)
+			if (getElementValue() != null && getElementValue().getExpression() != ObservableExpression.EMPTY && theSort != null)
 				reporting().warn("Sorting will not be used if the value of the collection is specified");
 		}
 

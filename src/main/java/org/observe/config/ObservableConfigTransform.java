@@ -378,7 +378,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					try (Transaction parentT = parent.lock(true, null)) {
 						E oldV = theValue;
 						oldValue[0] = oldV;
-						changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, getUntil());
+						changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, false,
+							getUntil());
 					} finally {
 						theModifyingValue.clear();
 					}
@@ -569,8 +570,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
 					fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(), el.getElementsBefore(),
-						CollectionChangeType.remove, el.get().get(),
-						el.get().get(), collectionChange, collectionChange.movement));
+						CollectionChangeType.remove, el.get().get(), el.get().get(), collectionChange, collectionChange.movement));
 				} else {
 					try {
 						E newValue;
@@ -591,8 +591,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 						if (newValue != oldValue)
 							el.get()._set(newValue);
 						fire(ObservableCollectionEvent.createCollectionEvent(el.getElementId(), el.getElementsBefore(),
-							CollectionChangeType.set, oldValue, newValue,
-							collectionChange));
+							CollectionChangeType.set, oldValue, newValue, collectionChange));
 					} catch (ParseException e) {
 						e.printStackTrace();
 					}
@@ -714,7 +713,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				theElementObservable = SimpleObservable.build().withLocking(theConfig).build();
 
 				if (value != null && value.isPresent()) {
-					theFormat.format(getSession(), value.get(), null, (__, trivial) -> config, v -> theValue = v,
+					theFormat.format(getSession(), value.get(), null, (__, trivial) -> config, v -> theValue = v, false,
 						Observable.or(getUntil(), theElementObservable));
 				} else {
 					E val;
@@ -758,8 +757,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public int getElementsAfter() {
-				ObservableConfig parent=theConfig.getParent();
-				if(parent==null)
+				ObservableConfig parent = theConfig.getParent();
+				if (parent == null)
 					return 0;
 				return theConfig.getParentChildRef().getElementsAfter();
 			}
@@ -782,8 +781,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
 					theFormat.format(//
-						getSession(), value, get(), (__, ___) -> theConfig, v -> {
-						}, Observable.or(getUntil(), theElementObservable));
+						getSession(), value, get(), (__, ___) -> theConfig, LambdaUtils.consumeDoNothing(), false,
+						Observable.or(getUntil(), theElementObservable));
 				}
 			}
 
@@ -1263,7 +1262,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 					ObservableConfig parent = getConfig().getParent();
 					if (parent != null)
 						((ObservableCollection<ObservableConfig>) parent.getAllContent().getValues())
-							.mutableElement(getConfig().getParentChildRef().getElementId()).set(getConfig());
+						.mutableElement(getConfig().getParentChildRef().getElementId()).set(getConfig());
 				} else
 					throw new UnsupportedOperationException(StdMsg.ILLEGAL_ELEMENT);
 			}

@@ -33,8 +33,11 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 
 	/** Interpretation of a renderer */
 	public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, QuickRenderer> {
+		private boolean isVirtual;
+
 		Interpreted(Def def, QuickWidget.Interpreted<?> element) {
 			super(def, element);
+			isVirtual = true;
 		}
 
 		@Override
@@ -50,6 +53,19 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		@Override
 		public Class<QuickRenderer> getInstanceType() {
 			return QuickRenderer.class;
+		}
+
+		/**
+		 * @return Whether the element should be treated as a virtual component, which has consequences for style and visibility, among
+		 *         other things
+		 */
+		public boolean isVirtual() {
+			return isVirtual;
+		}
+
+		/** @param virtual whether the element should be treated as a virtual component */
+		public void setVirtual(boolean virtual) {
+			this.isVirtual = virtual;
 		}
 
 		@Override

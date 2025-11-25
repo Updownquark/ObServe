@@ -41,7 +41,7 @@ public interface LocatedExpression {
 		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		try {
 			return interpret(type, env, ExceptionHandler.thrower2());
-		} catch (TypeConversionException e) {
+		} catch (TypeConversionException | RuntimeException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
 		}
 	}

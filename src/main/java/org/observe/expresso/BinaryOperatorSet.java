@@ -3,6 +3,7 @@ package org.observe.expresso;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -564,12 +565,12 @@ public class BinaryOperatorSet {
 	public static Builder standardJava(Builder operators) {
 		// Do equality first, which is special
 		// First, same-type primitive equality
-		operators.with("==", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) == unwrapBool(b2),
+		operators.with("==", Boolean.class, Boolean.class, Objects::equals,
 			(s, b2, r) -> unwrapBool(b2) ? unwrapBool(r) : !unwrapBool(r), null, "Boolean equality comparison");
-		operators.with("!=", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) != unwrapBool(b2),
+		operators.with("!=", Boolean.class, Boolean.class, (b1, b2) -> !Objects.equals(b1, b2),
 			(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r), null, "Boolean inequality comparison");
 
-		operators.with2("==", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) == unwrapByte(i2), //
+		operators.with2("==", Byte.class, Byte.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -579,7 +580,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapByte(s) == unwrapByte(i2)) ? "Equal expression cannot be negated" : null,
 			"Byte equality comparison");
-		operators.with2("!=", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) != unwrapByte(i2), //
+		operators.with2("!=", Byte.class, Byte.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapByte(s) == unwrapByte(i2))
@@ -590,7 +591,7 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapByte(s) != unwrapByte(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Byte inequality comparison");
-		operators.with2("==", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) == unwrapS(i2), //
+		operators.with2("==", Short.class, Short.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -600,7 +601,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapS(s) == unwrapS(i2)) ? "Equal expression cannot be negated" : null,
 			"Short integer equality comparison");
-		operators.with2("!=", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) != unwrapS(i2), //
+		operators.with2("!=", Short.class, Short.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapS(s) == unwrapS(i2))
@@ -611,7 +612,7 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapS(s) != unwrapS(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Short integer inequality comparison");
-		operators.with2("==", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) == unwrapC(i2), //
+		operators.with2("==", Character.class, Character.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -621,7 +622,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapC(s) == unwrapC(i2)) ? "Equal expression cannot be negated" : null,
 			"Character equality comparison");
-		operators.with2("!=", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) != unwrapC(i2), //
+		operators.with2("!=", Character.class, Character.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapC(s) == unwrapC(i2))
@@ -633,7 +634,7 @@ public class BinaryOperatorSet {
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Character inequality comparison");
 
-		operators.with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
+		operators.with2("==", Integer.class, Integer.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -643,7 +644,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null,
 			"Integer equality comparison");
-		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
+		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapI(s) == unwrapI(i2))
@@ -654,7 +655,7 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Integer inequality comparison");
-		operators.with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
+		operators.with2("==", Long.class, Long.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -664,7 +665,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null,
 			"Long integer equality comparison");
-		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
+		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapL(s) == unwrapL(i2))
@@ -675,7 +676,7 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Long integer inequality comparison");
-		operators.with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
+		operators.with2("==", Float.class, Float.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -685,7 +686,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null,
 			"Floating-point value equality comparison");
-		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
+		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapF(s) == unwrapF(i2))
@@ -696,7 +697,7 @@ public class BinaryOperatorSet {
 					return i2;
 			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null,
 			"Floating-point value inequality comparison");
-		operators.with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
+		operators.with2("==", Double.class, Double.class, Boolean.class, Objects::equals, //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
 					return i2;
@@ -706,7 +707,7 @@ public class BinaryOperatorSet {
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
 			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null,
 			"Double-precision floating-point value equality comparison");
-		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
+		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> !Objects.equals(i1, i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
 					if (unwrapD(s) == unwrapD(i2))

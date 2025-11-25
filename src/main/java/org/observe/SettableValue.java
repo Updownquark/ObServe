@@ -398,6 +398,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	}
 
 	@Override
+	default ObservableValue<T> noUpdates() {
+		return new NoUpdatesSettableValue<>(this);
+	}
+
+	@Override
 	default SettableValue<T> takeUntil(Observable<?> until) {
 		return new SettableValueTakenUntil<>(this, until, true);
 	}
@@ -838,6 +843,63 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 					}
 				});
 			}
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#noUpdates()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class NoUpdatesSettableValue<T> extends NoUpdatesValue<T> implements SettableValue<T> {
+		public NoUpdatesSettableValue(SettableValue<T> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public NoUpdatesSettableValue<T> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return getWrapped().tryLock(write, cause);
+		}
+
+		@Override
+		public Collection<Cause> getCurrentCauses() {
+			return getWrapped().getCurrentCauses();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			return getWrapped().set(value);
+		}
+
+		@Override
+		public String isAcceptable(T value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return getWrapped().isEnabled();
 		}
 	}
 

@@ -42,6 +42,7 @@ import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
@@ -376,11 +377,13 @@ implements TreeTableEditor<F, P> {
 				BetterList<F>[] currentRows = new BetterList[editor.getRowCount()];
 				for (int r = 0; r < currentRows.length; r++)
 					currentRows[r] = model.getRow(r, editor);
-				CollectionUtils.synchronize(rows, Arrays.asList(currentRows), SimpleTreeTableBuilder::rowsIdentical)//
-				.simple(LambdaUtils.identity())//
-				.commonUses(true, updateAll)//
-				.rightOrder()//
-				.adjust();
+				try (Transaction t = rows.lock(true, null)) {
+					CollectionUtils.synchronize(rows, Arrays.asList(currentRows), SimpleTreeTableBuilder::rowsIdentical)//
+						.simple(LambdaUtils.identity())//
+						.commonUses(true, updateAll)//
+						.rightOrder()//
+						.adjust();
+				}
 			}
 		};
 		editor.getModel().addTableModelListener(listener);

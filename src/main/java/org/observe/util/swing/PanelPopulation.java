@@ -75,6 +75,7 @@ import org.jdesktop.swingx.JXCollapsiblePane;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
@@ -157,14 +158,25 @@ public class PanelPopulation {
 	}
 
 	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until) {
-		if (!EventQueue.isDispatchThread())
+		return populateHPanel(panel, layout, until, __ -> {
+		});
+	}
+
+	public static <C extends Container> PanelPopulator<C, ?> populateHPanel(C panel, LayoutManager layout, Observable<?> until,
+		Consumer<? super PanelPopulator<C, ?>> configure) {
+		if (!EventQueue.isDispatchThread()) {
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
+			BreakpointHere.breakpoint();
+		}
 		if (panel == null)
 			panel = (C) new ConformingPanel(layout);
 		else if (layout != null)
 			panel.setLayout(layout);
-		return new PanelPopulationImpl.SimpleHPanel<>(null, null, panel, until == null ? Observable.empty() : until);
+		PanelPopulator<C, ?> populator = new PanelPopulationImpl.SimpleHPanel<>(null, null, panel,
+			until == null ? Observable.empty() : until);
+		configure.accept(populator);
+		return populator;
 	}
 
 	/**
@@ -289,6 +301,10 @@ public class PanelPopulation {
 		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JPanel, ?>> panel);
 
 		P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
+		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
+
+		P addNextAt(int componentIndex);
 
 		@Override
 		default Alert alert(String title, String message) {
@@ -434,8 +450,6 @@ public class PanelPopulation {
 			Component box = Box.createRigidArea(new Dimension(size, size));
 			return addComponent(null, box, modify);
 		}
-
-		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
 
 		boolean supportsShading();
 
@@ -1002,6 +1016,8 @@ public class PanelPopulation {
 
 		P visibleWhen(ObservableValue<Boolean> visible);
 
+		P removeWhen(Observable<?> remove);
+
 		ObservableValue<String> getTooltipContents();
 
 		/**
@@ -1101,6 +1117,7 @@ public class PanelPopulation {
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ComponentDecorator theDecorator;
 		private List<Consumer<ComponentDecorator>> theDecorators;
+		private Observable<?> theRemove;
 		private Observable<?> theRepaint;
 		private Consumer<MouseEvent> theMouseListener;
 		private String theName;
@@ -1247,6 +1264,20 @@ public class PanelPopulation {
 			if (theBuiltComponent != null)
 				theDecorator.adjust(theBuiltComponent);
 			return (P) this;
+		}
+
+		@Override
+		public P removeWhen(Observable<?> remove) {
+			if (theRemove == null)
+				theRemove = remove;
+			else
+				theRemove = Observable.or(theRemove, remove);
+			return (P) this;
+		}
+
+		public void onRemove(Observer.SimpleObserver<Object> action) {
+			if (theRemove != null)
+				theRemove.takeUntil(getUntil()).take(1).act(action);
 		}
 
 		@Override

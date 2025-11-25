@@ -1369,7 +1369,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 		 * @param screen The screen bounds
 		 * @param rotateFirst Whether the rotation (if any) should be done before or after sizing
 		 */
-		public void updateBounds(QuickSize width, QuickSize height, double rotation, Rectangle screen, boolean rotateFirst,
+		public boolean updateBounds(QuickSize width, QuickSize height, double rotation, Rectangle screen, boolean rotateFirst,
 			boolean heightIsTopDown) {
 			theRotation = theRotationInverse = null;
 
@@ -1384,13 +1384,13 @@ public class QuickDrawSwing implements QuickInterpretation {
 				Dimension sourceSize = new Dimension();
 				if (width.percent != 0.0f) {
 					if (!evaluateDimension(DO_NOTHING, w -> sourceSize.width = w, DO_NOTHING, hPos, width, screen.x, screen.width, "width"))
-						return;
+						return false;
 				} else
 					sourceSize.width = width.pixels;
 				if (height.percent != 0.0f) {
 					if (!evaluateDimension(DO_NOTHING, h -> sourceSize.height = h, DO_NOTHING, vPos, height, screen.y, screen.height,
 						"height"))
-						return;
+						return false;
 				} else
 					sourceSize.height = height.pixels;
 
@@ -1453,10 +1453,10 @@ public class QuickDrawSwing implements QuickInterpretation {
 			// Similarly if the specify the upper left corner, we should rotate around that.
 			if (!evaluateDimension(x -> theBounds.x = x, w -> theBounds.width = w, a -> anchor.x += a, hPos, width, screen.x, screen.width,
 				"width"))
-				return;
+				return false;
 			if (!evaluateDimension(y -> theBounds.y = y, h -> theBounds.height = h, a -> anchor.y += a, vPos, height, screen.y,
 				screen.height, "height"))
-				return;
+				return false;
 
 			// if (rotateFirst)
 			// System.out.println(rotateFirst + " " + theBounds + " " + anchor);
@@ -1479,6 +1479,7 @@ public class QuickDrawSwing implements QuickInterpretation {
 					theShape.reporting().error(e.getMessage(), e);
 				}
 			}
+			return true;
 		}
 
 		private boolean evaluateDimension(IntConsumer setPosition, IntConsumer setSize, IntConsumer setAnchor, Positionable positions,
@@ -1574,8 +1575,9 @@ public class QuickDrawSwing implements QuickInterpretation {
 			if (!isVisible() || theScreen == null)
 				return null;
 
-			theBounds.updateBounds(getShape().getWidth().get(), getShape().getHeight().get(), theRotationValue.get(), theScreen, false,
-				true);
+			if (!theBounds.updateBounds(getShape().getWidth().get(), getShape().getHeight().get(), theRotationValue.get(), theScreen, false,
+				true))
+				return null;
 			if (theBounds.getRotationInverse() != null) {
 				Point2D.Float transformed = (Point2D.Float) theBounds.getRotationInverse()
 					.transform(new Point2D.Float(containerPoint.x, containerPoint.y), new Point2D.Float(0, 0));
@@ -1594,7 +1596,9 @@ public class QuickDrawSwing implements QuickInterpretation {
 				return;
 
 			theScreen = screen;
-			theBounds.updateBounds(getShape().getWidth().get(), getShape().getHeight().get(), theRotationValue.get(), screen, false, true);
+			if (!theBounds.updateBounds(getShape().getWidth().get(), getShape().getHeight().get(), theRotationValue.get(), screen, false,
+				true))
+				return;
 			if (theBounds.getRotation() != null) {
 				gfx.transform(theBounds.getRotation());
 			}
@@ -2003,10 +2007,11 @@ public class QuickDrawSwing implements QuickInterpretation {
 			if (bounds == null)
 				return;
 			double rotation = theRotationValue == null ? 0.0 : theRotationValue.get();
-			theBounds.updateBounds(QuickSize.ofPixels(bounds.width), QuickSize.ofPixels(bounds.height), rotation, screen, true, true);
+			if (!theBounds.updateBounds(QuickSize.ofPixels(bounds.width), QuickSize.ofPixels(bounds.height), rotation, screen, true, true))
+				return;
 			// System.out.println(theText + " bounds=" + bounds + " screen=" + screen + " rot=" + (rotation / Math.PI * 180) + " tx="
 			// + theBounds.getBounds());
-			theBounds.getBounds().y+=bounds.height;
+			theBounds.getBounds().y += bounds.height;
 			if (theBounds.getRotation() != null)
 				gfx.transform(theBounds.getRotation());
 			try {

@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Spliterator;
+import java.util.function.Consumer;
 
 import org.observe.Equivalence;
 import org.observe.ObservableValue;
@@ -200,6 +201,19 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 */
 	static <E> ObservableSet<E> create(Equivalence<? super E> equivalence) {
 		return ObservableCollection.<E> create().flow().withEquivalence(equivalence).distinct().collect();
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param build Configuration for the new observable set
+	 * @param type The type for the set
+	 * @return A new observable set with the given type
+	 */
+	static <E> ObservableSet<E> create(Consumer<? super ObservableCollectionBuilder.DistinctBuilder<E, ?>> build) {
+		ObservableCollectionBuilder.DistinctBuilder<E, ?> builder = build();
+		if (build != null)
+			build.accept(builder);
+		return builder.build();
 	}
 
 	/**

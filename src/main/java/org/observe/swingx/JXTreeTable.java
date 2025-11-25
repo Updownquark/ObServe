@@ -2384,7 +2384,13 @@ public class JXTreeTable extends JXTable {
 			// moved to let the renderer handle directly
 			//            treeTable.getTreeTableHacker().setExpansionChangedFlag();
 			// JW: delayed fire leads to a certain sluggishness occasionally?
-			fireTableDataChanged();
+
+			// Andrew Butler: OMG really? Tell the table model that the entire tree was changed every single time the user expands a node?
+			// This can have massive performance implications for big trees. I can't imagine the reasoning behind this.
+			// I really hope this isn't necessary because it's killing me.
+			// I may have to come back in later and do something more targeted, like update the node that was expanded.
+			// fireTableDataChanged();
+			treeTable.repaint();
 		}
 
 		/**

@@ -207,6 +207,10 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 			theField.set(entity, fieldValue);
 		}
 
+		public EntityReflector.ReflectedField<E, F> getReflectedField() {
+			return theField;
+		}
+
 		public boolean isParentReference() {
 			if (theField.getGetter().getMethod().getAnnotation(ParentReference.class) != null)
 				return true;

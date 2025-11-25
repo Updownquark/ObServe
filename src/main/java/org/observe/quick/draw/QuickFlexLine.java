@@ -201,6 +201,7 @@ public class QuickFlexLine<T> extends QuickShape.Abstract implements QuickLinear
 		thePoints = SettableValue.create();
 		thePointX = SettableValue.create();
 		thePointY = SettableValue.create();
+		theStyleVarianceDistance = SettableValue.create();
 		theActivePointAs = SettableValue.create();
 		thePointIndexAs = SettableValue.create();
 		theNextPointAs = SettableValue.create();
@@ -330,6 +331,7 @@ public class QuickFlexLine<T> extends QuickShape.Abstract implements QuickLinear
 		copy.thePoints = SettableValue.create();
 		copy.thePointX = SettableValue.create();
 		copy.thePointY = SettableValue.create();
+		copy.theStyleVarianceDistance = SettableValue.create();
 		copy.theActivePointAs = SettableValue.create();
 		copy.thePointIndexAs = SettableValue.create();
 		copy.theNextPointAs = SettableValue.create();

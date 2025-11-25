@@ -45,7 +45,7 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A slide with multiple thumbs and a great deal of control over rendering
+ * A slider with multiple thumbs and a great deal of control over rendering
  *
  * @param <T> The type of values to represent with the slider's handles
  */

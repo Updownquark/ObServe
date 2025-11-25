@@ -1197,12 +1197,22 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public SwingCellPopulator<R, R2, C> disableWith(ObservableValue<String> disabled) {
-			return unsupported("Visibility");
+			return unsupported("Enablement");
 		}
 
 		@Override
 		public SwingCellPopulator<R, R2, C> visibleWhen(ObservableValue<Boolean> visible) {
 			return unsupported("Visibility");
+		}
+
+		@Override
+		public SwingCellPopulator<R, R2, C> removeWhen(Observable<?> remove) {
+			return unsupported("removeWhen");
+		}
+
+		@Override
+		public SwingCellPopulator<R, R2, C> addNextAt(int componentIndex) {
+			return unsupported("addNextAt");
 		}
 
 		@Override
@@ -1446,7 +1456,7 @@ class QuickSwingTablePopulation {
 				else {
 					JCheckBox check = new JCheckBox();
 					ButtonRenderEditor<JCheckBox, ?> fieldEditor = new ButtonRenderEditor<>(null,
-						ObservableCellEditor.createCheckBoxEditor(check, cell -> {
+						ObservableCellEditor.createCheckBoxEditor(check, null, cell -> {
 							check.setOpaque(true);
 							if (!isManaged(check, "background"))
 								check.setBackground(cell.isSelected() ? selectionBG : nonSelectionBG);
@@ -1675,6 +1685,11 @@ class QuickSwingTablePopulation {
 			public E visibleWhen(ObservableValue<Boolean> visible) {
 				// Visibility is unsupported, but don't throw a fit
 				return (E) this;
+			}
+
+			@Override
+			public E removeWhen(Observable<?> remove) {
+				return unsupported("removeWhen");
 			}
 
 			@Override

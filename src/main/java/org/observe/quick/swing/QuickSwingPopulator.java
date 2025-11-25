@@ -55,8 +55,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 * Adds a modifier to this populator to be called when the component is added
 	 *
 	 * @param modify The modifier
+	 * @return An action to remove the modifier
 	 */
-	void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify);
+	Runnable addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify);
 
 	/**
 	 * Performs this populator's modifiers (e.g. decoration) on a component
@@ -119,8 +120,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		@Override
-		public void addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify) {
+		public Runnable addModifier(ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modify) {
 			theModifiers.add(modify);
+			return () -> theModifiers.remove(modify);
 		}
 
 		@Override

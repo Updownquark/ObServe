@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Image;
@@ -157,6 +158,7 @@ class PanelPopulationImpl {
 	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends SimpleComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
 		private Shading theShading;
+		private int theNextAddIndex;
 
 		MigFieldPanel(ComponentEditor<?, ?> parent, String fieldName, C container, boolean showInvisible, Observable<?> until) {
 			super(parent, fieldName, //
@@ -169,6 +171,7 @@ class PanelPopulationImpl {
 					() -> "install the layout before using this class");
 				getContainer().setLayout(migLayout);
 			}
+			theNextAddIndex = -1;
 		}
 
 		@Override
@@ -209,8 +212,24 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public P addNextAt(int componentIndex) {
+			theNextAddIndex = componentIndex;
+			return (P) this;
+		}
+
+		@Override
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			int addIndex = theNextAddIndex;
+			if (addIndex < 0)
+				addIndex = getEditor().getComponentCount();
+			doAdd(addIndex, field, fieldLabel, postLabel, scrolled);
+		}
+
+		@Override
 		public void doAdd(int index, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
-			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
+			if (PanelPopulation.isDebugging(getName(), "population", "add"))
+				BreakpointHere.breakpoint();
+			else if (PanelPopulation.isDebugging(field.getName(), "population", "added"))
 				BreakpointHere.breakpoint();
 			if (fieldLabel != null)
 				getContainer().add(fieldLabel, "align right", index++);
@@ -253,6 +272,16 @@ class PanelPopulationImpl {
 				getContainer().add(postLabel, "growx, wrap", index++);
 			if (field.isVisible() != null)
 				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
+			field.onRemove(__ -> {
+				BreakpointHere.breakpoint();
+				if (fieldLabel != null)
+					getContainer().remove(fieldLabel);
+				getContainer().remove(component);
+				if (postLabel != null)
+					getContainer().remove(postLabel);
+				for (Component assoc : field.getAssociatedComponents())
+					getContainer().remove(assoc);
+			});
 		}
 
 		@Override
@@ -380,9 +409,11 @@ class PanelPopulationImpl {
 	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
 		private Shading theShading;
+		private int theNextAddIndex;
 
 		SimpleHPanel(ComponentEditor<?, ?> parent, String fieldName, C editor, Observable<?> until) {
 			super(parent, fieldName, editor, until);
+			theNextAddIndex = -1;
 		}
 
 		@Override
@@ -424,6 +455,20 @@ class PanelPopulationImpl {
 		}
 
 		@Override
+		public P addNextAt(int componentIndex) {
+			theNextAddIndex = componentIndex;
+			return (P) this;
+		}
+
+		@Override
+		public void doAdd(SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+			int addIndex = theNextAddIndex;
+			if (addIndex < 0)
+				addIndex = getEditor().getComponentCount();
+			doAdd(addIndex, field, fieldLabel, postLabel, scrolled);
+		}
+
+		@Override
 		public void doAdd(int index, SimpleComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (PanelPopulation.isDebugging(getName(), "populate", "add"))
 				BreakpointHere.breakpoint();
@@ -454,6 +499,11 @@ class PanelPopulationImpl {
 				getContainer().add(postLabel, index++);
 			if (field.isVisible() != null)
 				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
+			field.onRemove(__ -> {
+				getContainer().remove(component);
+				for (Component assoc : field.getAssociatedComponents())
+					getContainer().remove(assoc);
+			});
 		}
 
 		@Override
@@ -807,10 +857,14 @@ class PanelPopulationImpl {
 						.setEnabled(theSelection.isAcceptable(value)),
 						CellRenderContext.DEFAULT);
 					if (hovered) {
-						if (index >= 0)
-							popupList.setCursor(rendered.getCursor());
-						else
-							getEditor().setCursor(rendered.getCursor());
+						Cursor cursor = rendered.getCursor();
+						if (index >= 0) {
+							if (popupList.getCursor() != cursor)
+								popupList.setCursor(cursor);
+						} else {
+							if (getEditor().getCursor() != cursor)
+								getEditor().setCursor(cursor);
+						}
 					}
 					return rendered;
 				}
@@ -1817,6 +1871,12 @@ class PanelPopulationImpl {
 		@Override
 		public SimpleCollapsePane withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
 			return super.withGlassPane(layout, panel);
+		}
+
+		@Override
+		public SimpleCollapsePane addNextAt(int componentIndex) {
+			theContentPanel.addNextAt(componentIndex);
+			return this;
 		}
 
 		@Override

@@ -125,9 +125,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 				int index = forward ? 0 : size() - 1;
 				for (CollectionElement<Map.Entry<K, V>> entryEl : entrySet().elements()) {
 					ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent.Default<>(entryEl.getElementId(),
-						entryEl.getElementId(),
-						index, index, CollectionChangeType.add, entryEl.get().getKey(), entryEl.get().getKey(), null,
-						entryEl.get().getValue(), subCause);
+						entryEl.getElementId(), index, index, CollectionChangeType.add, entryEl.get().getKey(), entryEl.get().getKey(),
+						null, entryEl.get().getValue(), subCause);
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
 					}
@@ -954,8 +953,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		private ObservableCollection<V> theValues;
 		private ObservableSet<Map.Entry<K, V>> theExposedEntries;
 
-		public DefaultObservableMap(Equivalence<? super K> keyEquivalence,
-			ObservableCollection<Map.Entry<K, V>> entries) {
+		public DefaultObservableMap(Equivalence<? super K> keyEquivalence, ObservableCollection<Map.Entry<K, V>> entries) {
 			if (keyEquivalence == null)
 				throw new NullPointerException();
 			if (keyEquivalence instanceof Equivalence.SortedEquivalence) {
@@ -975,8 +973,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 						// making interpreting the stack difficult.
 						throw e;
 					}
-				}, true)
-					.collect();
+				}, true).collect();
 			} else
 				theEntries = entries.flow().distinct().collect();
 			theKeySet = theEntries.flow().<K> transformEquivalent(tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
@@ -1854,8 +1851,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
-			public ListElement<K> getOrAdd(K value, ElementId after, ElementId before, boolean first, Runnable preAdd,
-				Runnable postAdd) {
+			public ListElement<K> getOrAdd(K value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 				return elementFor(theBacking.getElement(value, first));
 			}
 

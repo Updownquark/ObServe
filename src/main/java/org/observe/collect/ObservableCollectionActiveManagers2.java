@@ -206,6 +206,11 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
+			public boolean isPresent() {
+				return theParentEl.isPresent();
+			}
+
+			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -681,12 +686,14 @@ public class ObservableCollectionActiveManagers2 {
 			else {
 				Causable cause = Causable.simpleCause();
 				try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
-					theLock.lock();
+					if (theLock != null)
+						theLock.lock();
 					try {
 						for (DerivedCollectionElement<T> el : elements)
 							((UpdateCatchingElement) el).update(newValue, cause);
 					} finally {
-						theLock.unlock();
+						if (theLock != null)
+							theLock.unlock();
 					}
 				}
 			}
@@ -710,11 +717,15 @@ public class ObservableCollectionActiveManagers2 {
 				if (value == get() && theConstraint.isEventThread()) {
 					Causable cause = Causable.simpleCause();
 					try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
-						theLock.lock();
-						try {
+						if (theLock == null)
 							update(value, cause);
-						} finally {
-							theLock.unlock();
+						else {
+							theLock.lock();
+							try {
+								update(value, cause);
+							} finally {
+								theLock.unlock();
+							}
 						}
 					}
 				} else
@@ -1850,6 +1861,10 @@ public class ObservableCollectionActiveManagers2 {
 				});
 			}
 
+			boolean isPresent() {
+				return theParentEl.isPresent();
+			}
+
 			I getValue() {
 				if (theOptions != null && theOptions.isCached())
 					return theCacheHandler.getSourceCache();
@@ -2091,6 +2106,11 @@ public class ObservableCollectionActiveManagers2 {
 					return theCacheHandler.getSourceCache();
 				else
 					return theParentEl.get();
+			}
+
+			@Override
+			public boolean isPresent() {
+				return theParentEl.isPresent() && theHolder.isPresent();
 			}
 
 			@Override

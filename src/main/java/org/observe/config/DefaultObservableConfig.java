@@ -87,6 +87,16 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public <T> T doOptimistically(T init, OptimisticOperation<T> operation) {
+		return theLocking.doOptimistically(init, operation);
+	}
+
+	@Override
+	public int doOptimistically(int init, OptimisticIntOperation operation) {
+		return theLocking.doOptimistically(init, operation);
+	}
+
+	@Override
 	public String getName() {
 		return theName;
 	}
@@ -151,7 +161,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 
 	@Override
 	public Collection<Cause> getCurrentCauses() {
-		return Collections.unmodifiableList(theCauses);
+		return theCauses == null ? Collections.emptyList() : Collections.unmodifiableList(theCauses);
 	}
 
 	@Override

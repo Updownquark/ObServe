@@ -1468,6 +1468,11 @@ public class ExpressoTransformations {
 				isTesting = testing;
 			}
 
+			/** @return Whether this transformation is reversible */
+			protected boolean isReversible() {
+				return theReverse != null;
+			}
+
 			@Override
 			public void instantiate() throws ModelInstantiationException {
 				theLocalModel.forEach(ModelInstantiator::instantiate);

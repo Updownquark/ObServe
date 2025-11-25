@@ -187,6 +187,18 @@ public class ObservableConfigContent {
 
 		@Override
 		public ObservableConfig get() {
+			// First, just see if we're already up-to-date so we don't have to do any locking
+			ObservableConfig parent = theRoot;
+			boolean found = true;
+			for (int i = 0; i < thePathElements.length && parent != null && found; i++) {
+				long stamp = parent.getStamp();
+				if (thePathElementStamps[i] == stamp)
+					parent = thePathElements[i];
+				else
+					found = false;
+			}
+			if (found)
+				return parent;
 			try (Transaction t = lock()) {
 				resolvePath(0, false);
 				return thePathElements[thePathElements.length - 1];
@@ -206,15 +218,18 @@ public class ObservableConfigContent {
 					child = thePathElements[i];
 					if (child == null && createIfAbsent) {
 						child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
+						stamp = parent.getStamp();
 						thePathElementStamps[i] = stamp;
 					}
 				} else {
 					child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
-					thePathElementStamps[i] = stamp;
 					if (thePathElements[i] != child) {
+						if (createIfAbsent)
+							stamp = parent.getStamp();
 						changed = true;
 						thePathElements[i] = child;
 					}
+					thePathElementStamps[i] = stamp;
 				}
 				if (child == null) {
 					resolved = false;

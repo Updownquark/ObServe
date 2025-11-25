@@ -181,7 +181,10 @@
 
 		<?DOC A virtual multi pane takes a list of values and renders each with a renderer.<br>
 			This is similar to a table with a single column, except that this widget allows more customizable layouts,
-			complex rendering, and intuitive interaction.?>
+			complex rendering, and intuitive interaction.<br>
+			As the "virtual" implies, this pane does not create a full component for each value being rendered,
+			allowing this component to have excellent performance even with large collections of values,
+			especially when the 'constant-size' attribute is true.?>
 		<element-def name="virtual-multi-pane" extends="widget" inherits="multi-value-renderable,rendering">
 			<element-model>
 				<?DOC The row index of the value currently in use (e.g. being rendered, hovered, etc.)?>
@@ -252,6 +255,25 @@
 			<?DOC Optional configuration for the exclude-all button?>
 			<child-def name="exclude-all-button" type="button" min="0" inherits="value-selector-button-config" />
 		</element-def>
+
+		<?DOC Similar to <custom-component> in Quick-Base, this is a hook into "native" code for generating a piece of the UI,
+			in this case using the PanelPopulation API.<br />
+			This API is highly custom and not likely to be re-implemented in any language other than Java, but this element is useful to me
+			(the author) for now.?>
+		<element-def name="abstract-custom-populator" extends="widget" abstract="true">
+			<element-model>
+				<value name-attribute="panel-as" priority="1" />
+			</element-model>
+			<attribute name="panel-as" type="identifier" />
+			<value type="expression" />
+		</element-def>
+		<?DOC A custom populator that allows specification of the layout for contents populated by the expression?>
+		<element-def name="custom-populator" extends="abstract-custom-populator">
+			<?DOC The layout for the panel to arrange the contents populated by the expression?>
+			<attribute name="layout" type="layout" specify="required" />
+		</element-def>
+		<?DOC A custom populator that allows specification of field names and post-component widgets via the API?>
+		<element-def name="v-custom-populator" extends="abstract-custom-populator" />
 	</elements>
 
 	<auto-inheritance>

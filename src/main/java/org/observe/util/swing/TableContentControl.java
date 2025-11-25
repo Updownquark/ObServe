@@ -805,6 +805,8 @@ public interface TableContentControl {
 		 * @param filter The filter to apply for the given category
 		 */
 		public CategoryFilter(String category, TableContentControl filter) {
+			if (category == null)
+				throw new NullPointerException();
 			theCategory = category;
 			theFilter = filter;
 		}
@@ -2250,14 +2252,21 @@ public interface TableContentControl {
 					if (elementStart == c[0]) {
 						c[0]++;
 						String elementText = parseQuotedString(controlText, c);
-						if (category == null && c[0] < controlText.length() && controlText.charAt(c[0] + 1) == ':') {
+						c[0]--; // Back up so the loop increment does right
+						if (category == null && c[0] < controlText.length() - 1 && controlText.charAt(c[0] + 1) == ':') {
 							// A category, not a search
 							category = controlText.subSequence(elementStart + 1, c[0] - 1).toString();
 							c[0]++; // Skip the colon
 							elementStart = c[0] + 1;
 							quotedCategory = true;
-						} else
-							next = new QuotedFilter(parseElementText(elementText, c[0], category, quotedCategory));
+						} else {
+							next = new QuotedFilter(parseElementText(elementText, c[0], null, quotedCategory));
+							if (inCategory) {
+								next = new CategoryFilter(category, next);
+								category = null;
+								inCategory = false;
+							}
+						}
 					}
 					break;
 				case '(':
@@ -2538,11 +2547,9 @@ public interface TableContentControl {
 		control.noInitChanges().act(evt -> {
 			System.out.println(evt.getNewValue());
 		});
-		ObservableCollection<Map<String, String>> rows = ObservableCollection
-			.<Map<String, String>> build().onEdt().build();
+		ObservableCollection<Map<String, String>> rows = ObservableCollection.<Map<String, String>> build().onEdt().build();
 		ObservableCollection<CategoryRenderStrategy<Map<String, String>, String>> columns = ObservableCollection
-			.<CategoryRenderStrategy<Map<String, String>, String>> build()
-			.onEdt().build();
+			.<CategoryRenderStrategy<Map<String, String>, String>> build().onEdt().build();
 		SettableValue<Boolean> updating = SettableValue.<Boolean> build().withValue(false).build();
 		ObservableCollection<Map<String, String>> selectedRows = ObservableCollection.<Map<String, String>> build().build();
 		Random random = new Random();

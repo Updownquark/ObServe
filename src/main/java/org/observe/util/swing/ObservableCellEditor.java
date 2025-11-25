@@ -38,6 +38,7 @@ import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.Transformation;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
@@ -250,20 +251,27 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	}
 
 	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor() {
-		return createCheckBoxEditor(new JCheckBox(), null);
+		return createCheckBoxEditor(new JCheckBox(), null, null);
 	}
 
-	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor(JCheckBox check,
-		Consumer<? super ModelCell<? extends M, Boolean>> render) {
-		Function<Boolean, String>[] filter = new Function[1];
-		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
+	public static <M, C> ObservableCellEditor<M, C> createCheckBoxEditor2(
+		Function<Transformation.ReversibleTransformationPrecursor<C, Boolean, ?>, Transformation.ReversibleTransformation<C, Boolean>> toBoolean) {
+		return createCheckBoxEditor(new JCheckBox(), toBoolean, null);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createCheckBoxEditor(JCheckBox check,
+		Function<Transformation.ReversibleTransformationPrecursor<C, Boolean, ?>, Transformation.ReversibleTransformation<C, Boolean>> toBoolean,
+		Consumer<? super ModelCell<? extends M, ? extends C>> render) {
+		Function<C, String>[] filter = new Function[1];
+		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
+		SettableValue<Boolean> boolValue = toBoolean == null ? (SettableValue<Boolean>) value : value.transformReversible(toBoolean);
 		Subscription[] editSub = new Subscription[1];
 		check.setHorizontalAlignment(SwingConstants.CENTER);
-		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, cell, f, tt, vtt) -> {
+		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(check, value, (e, c, cell, f, tt, vtt) -> {
 			filter[0] = f;
-			editSub[0] = ObservableSwingUtils.checkFor(check, tt, value);
+			editSub[0] = ObservableSwingUtils.checkFor(check, tt, boolValue);
 			if (render != null)
-				render.accept((ModelCell<? extends M, Boolean>) e.getEditingCell());
+				render.accept((ModelCell<? extends M, ? extends C>) e.getEditingCell());
 			return commit -> {
 				filter[0] = null;
 				if (editSub[0] != null) {

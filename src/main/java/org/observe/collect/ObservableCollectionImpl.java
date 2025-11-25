@@ -2830,6 +2830,7 @@ public final class ObservableCollectionImpl {
 		/**
 		 * Called when a collection element is removed
 		 *
+		 * @param oldValue The value of the element being removed
 		 * @param element The removed element
 		 */
 		protected void removeHolder(T oldValue, DerivedElementHolder<T> element) {
@@ -3801,16 +3802,13 @@ public final class ObservableCollectionImpl {
 			boolean forward) {
 			class ElementMappingChangeObserver implements Consumer<ObservableCollectionEvent<? extends E>> {
 				private ObservableCollection<? extends E> theCollection;
-				private final Supplier<ObservableCollection<? extends E>> theCurrentCollection;
 				private final Consumer<? super ObservableCollectionEvent<? extends E>> theWrapped;
 				private final List<ContainedElement<E>> theElements;
 				boolean isActive;
 
 				ElementMappingChangeObserver(ObservableCollection<? extends E> collection,
-					Supplier<ObservableCollection<? extends E>> currentCollection,
 					Consumer<? super ObservableCollectionEvent<? extends E>> wrapped) {
 					theCollection = collection;
-					theCurrentCollection = currentCollection;
 					theWrapped = wrapped;
 					theElements = new ArrayList<>();
 					isActive = true;
@@ -3848,8 +3846,10 @@ public final class ObservableCollectionImpl {
 				public void accept(ObservableCollectionEvent<? extends E> event) {
 					// System.out.println(Integer.toHexString(System.identityHashCode(FlattenedValueCollection.this)) + "/"
 					// + Integer.toHexString(System.identityHashCode(this)) + ": " + event);
-					// Possible that the collection has switched out without us having received the event yet
-					if (isActive && !collectionsEquivalent(theCollection, theCurrentCollection.get()))
+
+					// It's possible that the collection has switched out without us having received the event yet.
+					// Very inconvenient, but impossible to prevent entirely.
+					if (isActive && !collectionsEquivalent(theCollection, getWrapped().get()))
 						isActive = false;
 					if (!isActive)
 						return;
@@ -3894,8 +3894,7 @@ public final class ObservableCollectionImpl {
 					}
 				}
 			}
-			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>,
-			Supplier<ObservableCollection<? extends E>> {
+			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
 				ObservableCollection<? extends E> collection;
 				ElementMappingChangeObserver collectionObserver;
 				Subscription collectionSub;
@@ -3940,7 +3939,7 @@ public final class ObservableCollectionImpl {
 						if (collection != null) {
 							try (Transaction newLock = collection.lock(false, null)) {
 								if (collectionObserver == null)
-									collectionObserver = new ElementMappingChangeObserver(collection, this, observer);
+									collectionObserver = new ElementMappingChangeObserver(collection, observer);
 								collectionObserver.sync(collection, populate || !collEvt.isInitial() ? collEvt : null);
 								collectionSub = collection.onChange(collectionObserver);
 							}
@@ -3950,11 +3949,6 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void onCompleted(Supplier<Causable> cause) {
-				}
-
-				@Override
-				public ObservableCollection<? extends E> get() {
-					return collection;
 				}
 
 				void unsubscribe(boolean removeAll) {

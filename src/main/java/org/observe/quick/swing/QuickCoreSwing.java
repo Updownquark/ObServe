@@ -123,7 +123,9 @@ public class QuickCoreSwing implements QuickInterpretation {
 		});
 		tx.with(QuickWindow.Interpreted.class, QuickSwingPopulator.WindowModifier.class, (interp, tx2) -> new QuickWindowModifier());
 		QuickSwingPopulator.modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
-			boolean renderer = qw.getAddOn(QuickRenderer.Interpreted.class) != null;
+			// Cannot fathom why I need this cast
+			QuickRenderer.Interpreted renderAO = (QuickRenderer.Interpreted) qw.getAddOn(QuickRenderer.Interpreted.class);
+			boolean renderer = renderAO != null && renderAO.isVirtual();
 			List<QuickSwingEventListener<QuickEventListener>> listeners = BetterList.of2(//
 				qw.getEventListeners().stream(), //
 				l -> tx2.transform(l, QuickSwingEventListener.class));

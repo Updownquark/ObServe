@@ -461,7 +461,7 @@ public class EntityReflector<E> {
 		private int theFieldIndex;
 		private boolean id;
 		private final FieldGetter<E, F> theGetter;
-		private FieldSetter<E, F> theSetter;
+		private FieldSetter<E, F, ?> theSetter;
 
 		ReflectedField(EntityReflector<E> reflector, String name, int fieldIndex, boolean id, Method getter) {
 			theReflector = reflector;
@@ -471,7 +471,7 @@ public class EntityReflector<E> {
 			theGetter = new FieldGetter<>(reflector, getter, this);
 		}
 
-		void setSetter(FieldSetter<E, F> setter) {
+		void setSetter(FieldSetter<E, F, ?> setter) {
 			theSetter = setter;
 		}
 
@@ -501,7 +501,7 @@ public class EntityReflector<E> {
 		}
 
 		/** @return The entity type's setter method for this field */
-		public FieldSetter<E, F> getSetter() {
+		public FieldSetter<E, F, ?> getSetter() {
 			return theSetter;
 		}
 
@@ -604,15 +604,21 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/** A method signature */
 	public static class MethodSignature implements Named, Comparable<MethodSignature> {
 		final String name;
 		final Class<?>[] parameters;
 		private final int hashCode;
 
+		/** @param method The java method to abstract into a method signature */
 		public MethodSignature(Method method) {
 			this(method.getName(), method.getParameterTypes());
 		}
 
+		/**
+		 * @param methodName The name of the method
+		 * @param params The types of the method parameters
+		 */
 		public MethodSignature(String methodName, Class<?>[] params) {
 			this.name = methodName;
 			this.parameters = params;
@@ -627,10 +633,15 @@ public class EntityReflector<E> {
 			return name;
 		}
 
+		/** @return The number of parameters the method accepts */
 		public int getParameterCount() {
 			return parameters.length;
 		}
 
+		/**
+		 * @param index The parameter index
+		 * @return The type of the given parameter
+		 */
 		public Class<?> getParameter(int index) {
 			return parameters[index];
 		}
@@ -1365,7 +1376,7 @@ public class EntityReflector<E> {
 			@Override
 			public void set(int fieldIndex, Object newValue) {
 				if (MethodInterpreter.this instanceof FieldSetter
-					&& ((FieldSetter<E, ?>) MethodInterpreter.this).getField().getFieldIndex() == fieldIndex) {
+					&& ((FieldSetter<E, ?, ?>) MethodInterpreter.this).getField().getFieldIndex() == fieldIndex) {
 					theBacking.set(fieldIndex, theArgs[0]);
 					return;
 				}
@@ -1478,13 +1489,17 @@ public class EntityReflector<E> {
 	 *
 	 * @param <E> The type of the entity
 	 * @param <F> The type of the field
+	 * @param <R> The return type of the field setter
 	 */
-	public static class FieldSetter<E, F> extends FieldRelatedMethod<E, F, Object> {
+	public static class FieldSetter<E, F, R> extends FieldRelatedMethod<E, F, R> {
 		private final SetterReturnType theReturnType;
+		private final MethodInterpreter<E, R> thePostAction;
 
-		FieldSetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, SetterReturnType returnType) {
+		FieldSetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, SetterReturnType returnType,
+			MethodInterpreter<E, R> postAction) {
 			super(reflector, method, field);
 			theReturnType = returnType;
+			thePostAction = postAction;
 			field.setSetter(this);
 		}
 
@@ -1494,20 +1509,24 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		protected Object invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) {
-			Object returnValue = null;
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
+			R returnValue = null;
 			switch (theReturnType) {
 			case OLD_VALUE:
-				returnValue = backing.get(getField().getFieldIndex());
+				returnValue = (R) backing.get(getField().getFieldIndex());
 				break;
 			case SELF:
-				returnValue = proxy;
+				returnValue = (R) proxy;
 				break;
 			case VOID:
 				returnValue = null;
 				break;
+			case DEFAULT_IMPLEMENTED:
+				break;
 			}
 			backing.set(getField().getFieldIndex(), args[0]);
+			if (thePostAction != null)
+				returnValue = thePostAction.invokeLocal(proxy, args, backing);
 			return returnValue;
 		}
 	}
@@ -1519,7 +1538,9 @@ public class EntityReflector<E> {
 		/** If the setter's return type is the type of the entity, the entity will be returned (e.g. for chained calls) */
 		SELF,
 		/** A void-typed setter */
-		VOID;
+		VOID,
+		/** The setter is a default method which will handle the return value */
+		DEFAULT_IMPLEMENTED;
 	}
 
 	/**
@@ -2203,10 +2224,16 @@ public class EntityReflector<E> {
 				BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
 				if (custom != null) {
 					method = new CustomMethod<>(this, m, custom);
+					MethodInterpreter<E, ?> setter = extractSetter(clazz, m, fields, errors, method);
+					if (setter != null)
+						method = setter;
 				} else if (m.isDefault()) {
 					method = extractDefaultMethod(clazz, m, errors, false);
 					if (method == null)
 						continue;
+					MethodInterpreter<E, ?> setter = extractSetter(clazz, m, fields, errors, method);
+					if (setter != null)
+						method = setter;
 				} else {
 					MethodInterpreter<Object, ?> objectMethod = OBJECT_METHODS.get(m);
 					if (objectMethod != null) {
@@ -2228,36 +2255,11 @@ public class EntityReflector<E> {
 							if (method == null)
 								throw new IllegalStateException(m + " should have been a field");
 						} else {
-							fieldName = theSetterFilter.apply(m);
-							if (fieldName != null) {
-								ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
-								if (field == null) {
-									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-										"No getter found for setter " + m + " of field " + fieldName));
-									continue;
-								}
-								if (!m.getParameterTypes()[0].isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType()))) {
-									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-										"Setter " + m + " for field " + field + " must accept a " + field.getGetter().getReturnType()));
-									continue;
-								}
-								if (field.id)
-									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m, //
-										"ID fields (" + field.getName() + ") should not be settable"));
-								SetterReturnType setterReturnType = null;
-								Class<?> setterRT = m.getReturnType();
-								if (setterRT == void.class || setterRT == Void.class)
-									setterReturnType = SetterReturnType.VOID;
-								else if (setterRT.isAssignableFrom(clazz))
-									setterReturnType = SetterReturnType.SELF;
-								else if (setterRT.isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType())))
-									setterReturnType = SetterReturnType.OLD_VALUE;
-								else {
-									errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-										"Return type of setter " + m + " cannot be satisfied for this class"));
-									continue;
-								}
-								method = new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType);
+							int preErrors = errors.size();
+							method = extractSetter(clazz, m, fields, errors, null);
+							if (method != null) { // Setter found
+							} else if (errors.size() > preErrors) {
+								continue;
 							} else if (clazz != Object.class) {
 								fieldName = theObservableFilter.apply(m);
 								if (fieldName != null && ObservableValue.class.isAssignableFrom(m.getReturnType())) {
@@ -2390,6 +2392,43 @@ public class EntityReflector<E> {
 		return defaultMethod;
 	}
 
+	private FieldSetter<E, ?, ?> extractSetter(Class<?> clazz, Method m, QuickMap<String, ReflectedField<E, ?>> fields,
+		List<EntityReflectionMessage> errors, MethodInterpreter<E, ?> defaultMethod) {
+		String fieldName = theSetterFilter.apply(m);
+		if (fieldName == null)
+			return null;
+		ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
+		if (field == null) {
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+				"No getter found for setter " + m + " of field " + fieldName));
+			return null;
+		}
+		if (!m.getParameterTypes()[0].isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType()))) {
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+				"Setter " + m + " for field " + field + " must accept a " + field.getGetter().getReturnType()));
+			return null;
+		}
+		if (field.id)
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.WARNING, m, //
+				"ID fields (" + field.getName() + ") should not be settable"));
+		SetterReturnType setterReturnType = null;
+		Class<?> setterRT = m.getReturnType();
+		if (defaultMethod != null)
+			setterReturnType = SetterReturnType.DEFAULT_IMPLEMENTED;
+		else if (setterRT == void.class || setterRT == Void.class)
+			setterReturnType = SetterReturnType.VOID;
+		else if (setterRT.isAssignableFrom(clazz))
+			setterReturnType = SetterReturnType.SELF;
+		else if (setterRT.isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType())))
+			setterReturnType = SetterReturnType.OLD_VALUE;
+		else {
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+				"Return type of setter " + m + " cannot be satisfied for this class"));
+			return null;
+		}
+		return new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType, defaultMethod);
+	}
+
 	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields,
 		BetterMap<MethodSignature, MethodInterpreter<E, ?>> methods,
 		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
@@ -2409,8 +2448,8 @@ public class EntityReflector<E> {
 					}
 				} else if (superMethod.get() instanceof FieldSetter)
 					subMethod = new FieldSetter<>(this, superMethod.get().getMethod(),
-						fields.get(((FieldSetter<?, ?>) superMethod.get()).getField().getName()),
-						((FieldSetter<?, ?>) superMethod.get()).getSetterReturnType());
+						fields.get(((FieldSetter<?, ?, ?>) superMethod.get()).getField().getName()),
+						((FieldSetter<?, ?, ?>) superMethod.get()).getSetterReturnType(), null);
 				else if (superMethod.get() instanceof CachedMethod) {
 					DefaultMethod<E, ?> subDefault = new DefaultMethod<>(this, superMethod.get().getMethod(),
 						((CachedMethod<E, ?>) superMethod.get()).getHandle());

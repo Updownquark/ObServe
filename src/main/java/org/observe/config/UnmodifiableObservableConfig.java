@@ -60,6 +60,16 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
+	public <T> T doOptimistically(T init, OptimisticOperation<T> operation) {
+		return theWrapped.doOptimistically(init, operation);
+	}
+
+	@Override
+	public int doOptimistically(int init, OptimisticIntOperation operation) {
+		return theWrapped.doOptimistically(init, operation);
+	}
+
+	@Override
 	public Collection<Cause> getCurrentCauses() {
 		return theWrapped.getCurrentCauses();
 	}

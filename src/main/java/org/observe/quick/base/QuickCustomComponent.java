@@ -91,7 +91,7 @@ public class QuickCustomComponent extends QuickWidget.Abstract {
 	}
 
 	private ModelValueInstantiator<SettableValue<?>> theComponentInstantiator;
-	private final SettableValue<SettableValue<?>> theComponent;
+	private SettableValue<SettableValue<?>> theComponent;
 
 	/** @param id The element ID for this widget */
 	protected QuickCustomComponent(Object id) {
@@ -116,5 +116,12 @@ public class QuickCustomComponent extends QuickWidget.Abstract {
 		myModels = super.doInstantiate(myModels);
 		theComponent.set(theComponentInstantiator.get(myModels), null);
 		return myModels;
+	}
+
+	@Override
+	public QuickCustomComponent copy(ExElement parent) {
+		QuickCustomComponent copy = (QuickCustomComponent) super.copy(parent);
+		copy.theComponent = SettableValue.create();
+		return copy;
 	}
 }

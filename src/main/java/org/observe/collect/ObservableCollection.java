@@ -408,11 +408,14 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 									return null;// Removed what was added--no net change
 								else {
 									hasRemoved = true;
+									isFiring = true;
 									return added;
 								}
 							case add:
+								isFiring = true;
 								return Boolean.TRUE;
 							default:
+								isFiring = true;
 								return added != null ? added : Boolean.FALSE;
 							}
 						});
@@ -436,7 +439,6 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 				private void fire(Causable cause) {
 					if (!isSubscribed)
 						return;
-					isFiring = true;
 					try {
 						theObserver.onNext(cause);
 					} finally {
@@ -447,6 +449,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 				@Override
 				public void unsubscribe() {
 					isSubscribed = false;
+					isFiring = false;
 				}
 			}
 
@@ -578,7 +581,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} with null for the remove function
 	 *
 	 * @param <T> The type of the reduced value
-	 * @param seed The seed value before the reduction
+	 * @param seed The seed value that is the precursor for the reduction
 	 * @param reducer The reducer function to accumulate the values. Must be associative.
 	 * @return The reduced value
 	 */
@@ -587,10 +590,10 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	}
 
 	/**
-	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
+	 * Produces a single value that is the result of some cumulative operation on all values in this collection.
 	 *
 	 * @param <T> The type of the reduced value
-	 * @param seed The seed value before the reduction
+	 * @param seed The seed value that is the precursor for the reduction
 	 * @param add The reducer function to accumulate the values. Must be associative.
 	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
 	 *        replacement of values will result in the entire collection being iterated over for each subscription. Null here will have no
@@ -598,6 +601,22 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @return The reduced value
 	 */
 	default <T> ObservableValue<T> reduce(T seed, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
+		return reduce(LambdaUtils.constantSupplier(seed), add, remove);
+	}
+
+	/**
+	 * Produces a single value that is the result of some cumulative operation on all values in this collection.
+	 *
+	 * @param <T> The type of the reduced value
+	 * @param seed Producer for the seed value that is the precursor for the reduction
+	 * @param add The reducer function to accumulate the values. Must be associative.
+	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
+	 *        replacement of values will result in the entire collection being iterated over for each subscription. Null here will have no
+	 *        consequence if the result is never observed. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(Supplier<T> seed, BiFunction<? super T, ? super E, T> add,
+		BiFunction<? super T, ? super E, T> remove) {
 		return new ObservableCollectionImpl.ReducedValue<E, T, T>(this) {
 			private final T RECALC = (T) new Object(); // Placeholder indicating that the value must be recalculated from scratch
 
@@ -614,7 +633,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			public T get() {
-				T ret = seed;
+				T ret = seed.get();
 				for (E element : ObservableCollection.this)
 					ret = add.apply(ret, element);
 				return ret;
@@ -622,7 +641,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			protected T init() {
-				T value = seed;
+				T value = seed.get();
 				for (E v : getCollection())
 					value = add.apply(value, v);
 				return value;
@@ -802,6 +821,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
+	@SafeVarargs
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(ObservableCollection<? extends E>... colls) {
 		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
@@ -1172,6 +1192,48 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(Function<? super T, K> keyMap,
 			Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
 			return groupSortedFlow(flow -> flow.map(keyMap).distinctSorted(keySorting, false), reverse);
+		}
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
+		 *        into the gathered multi-map.
+		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 */
+		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupByMultiKey(Function<? super T, ? extends Collection<? extends K>> keyMap,
+			BiFunction<K, T, T> reverse) {
+			return groupByFlow(flow -> flow.flatMap(v -> {
+				Collection<? extends K> vKeys = keyMap.apply(v);
+				if (vKeys == null)
+					return null;
+				else if (vKeys instanceof ObservableCollection)
+					return ((ObservableCollection<? extends K>) vKeys).flow();
+				else
+					return ObservableCollection.of(vKeys).flow();
+			}).distinct(), reverse);
+		}
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param keySorting The ordering for the key set
+		 * @param reverse A function to produce a value for this flow from a given key and value. Supplying this function allows additions
+		 *        into the gathered multi-map.
+		 * @return A sorted multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key
+		 *         mapping
+		 */
+		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupByMultiKey(
+			Function<? super T, ? extends Collection<? extends K>> keyMap, Comparator<? super K> keySorting, BiFunction<K, T, T> reverse) {
+			return groupSortedFlow(flow -> flow.flatMap(v -> {
+				Collection<? extends K> vKeys = keyMap.apply(v);
+				if (vKeys == null)
+					return null;
+				else if (vKeys instanceof ObservableCollection)
+					return ((ObservableCollection<? extends K>) vKeys).flow();
+				else
+					return ObservableCollection.of(vKeys).flow();
+			}).distinctSorted(keySorting, false), reverse);
 		}
 
 		<K> ObservableMultiMap.MultiMapFlow<K, T> groupByFlow(

@@ -137,7 +137,8 @@ public class AssignmentExpression implements ObservableExpression {
 		} else if (target == null)
 			return null;
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> value;
-		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
+		int myValueOffset = theTarget.getExpressionLength() + 1;
+		int valueOffset = expressionOffset + myValueOffset;
 		try (Transaction t = Invocation.asAction()) {
 			TypeToken<S> targetType = (TypeToken<S>) target.getType().getType(0);
 			if (SettableValue.class.isAssignableFrom(TypeTokens.getRawType(targetType))) {
@@ -151,7 +152,7 @@ public class AssignmentExpression implements ObservableExpression {
 				 */
 				TypeToken<T> valueType = (TypeToken<T>) targetType.resolveType(SettableValue.class.getTypeParameters()[0]);
 				value = theValue.evaluate(ModelTypes.Value.forType(TypeTokens.get().getExtendsWildcard(valueType)),
-					env.at(theTarget.getExpressionLength() + 1), valueOffset, doubleX.use());
+					env.at(myValueOffset), valueOffset, doubleX.use());
 				if (doubleX.hasException2()) {
 					EvaluatedExpression<SettableValue<?>, SettableValue<S>> target2 = theTarget.evaluate(
 						ModelTypes.Value.forType((TypeToken<S>) TypeTokens.get().getSuperWildcard(value.getType().getType(0))), env,
@@ -171,10 +172,10 @@ public class AssignmentExpression implements ObservableExpression {
 			if (value == null) {
 				value = theValue.evaluate(
 					ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
-					env.at(theTarget.getExpressionLength() + 1), valueOffset, doubleX.use());
+					env.at(myValueOffset), valueOffset, doubleX.use());
 				if (doubleX.hasException2()) {
 					exHandler.handle1(() -> new ExpressoInterpretationException(doubleX.get2().getMessage(),
-						env.reporting().at(valueOffset).getPosition(), theValue.getExpressionLength(), doubleX.get2()));
+						env.reporting().at(myValueOffset).getPosition(), theValue.getExpressionLength(), doubleX.get2()));
 					return null;
 				} else if (value == null)
 					return null;

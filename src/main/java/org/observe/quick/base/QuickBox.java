@@ -6,13 +6,11 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickContainer;
-import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** A simple container that requires a {@link QuickLayout} add-on to arrange its content widgets */
-public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
+public class QuickBox extends QuickVariableContainer {
 	/** The XML name of this element */
 	public static final String BOX = "box";
 
@@ -25,7 +23,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		qonfigType = BOX,
 		interpretation = Interpreted.class,
 		instance = QuickBox.class)
-	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
+	public static class Def<W extends QuickBox> extends QuickVariableContainer.Def<W> {
 		/**
 		 * @param parent The parent element of the widget
 		 * @param type The Qonfig type of the widget
@@ -61,7 +59,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	 *
 	 * @param <W> The sub-type of box to create
 	 */
-	public static class Interpreted<W extends QuickBox> extends QuickContainer.Interpreted.Abstract<W, QuickWidget> {
+	public static class Interpreted<W extends QuickBox> extends QuickVariableContainer.Interpreted<W> {
 		/**
 		 * @param definition The definition to interpret
 		 * @param parent The parent element for the widget

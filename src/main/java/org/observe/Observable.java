@@ -244,6 +244,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @param obs The observables to combine
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
+	@SafeVarargs
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
 		switch (obs.length) {
 		case 0:

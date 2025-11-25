@@ -5,12 +5,13 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.font.TextAttribute;
 import java.awt.image.BufferedImage;
-import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.UnaryOperator;
+import java.util.function.Supplier;
 
 import javax.swing.AbstractButton;
 import javax.swing.Icon;
@@ -52,18 +53,43 @@ public class ComponentDecorator extends BgFontAdjuster {
 	}
 
 	@Override
-	public ComponentDecorator deriveFont(UnaryOperator<Font> font) {
-		return (ComponentDecorator) super.deriveFont(font);
-	}
-
-	@Override
 	public ComponentDecorator deriveFont(int style, float size) {
 		return (ComponentDecorator) super.deriveFont(style, size);
 	}
 
 	@Override
-	public ComponentDecorator deriveFont(Attribute attr, Object value) {
+	public ComponentDecorator deriveFont(Object attr, Object value) {
 		return (ComponentDecorator) super.deriveFont(attr, value);
+	}
+
+	@Override
+	public ComponentDecorator withDefaultBackground(Supplier<Color> defaultBG) {
+		super.withDefaultBackground(defaultBG);
+		return this;
+	}
+
+	@Override
+	public ComponentDecorator withFontWeight(float weight) {
+		super.withFontWeight(weight);
+		return this;
+	}
+
+	@Override
+	public ComponentDecorator withFontSlant(float slant) {
+		super.withFontSlant(slant);
+		return this;
+	}
+
+	@Override
+	public ComponentDecorator italic() {
+		super.italic();
+		return this;
+	}
+
+	@Override
+	public ComponentDecorator italic(boolean italic) {
+		super.italic(italic);
+		return this;
 	}
 
 	@Override
@@ -74,11 +100,6 @@ public class ComponentDecorator extends BgFontAdjuster {
 	@Override
 	public ComponentDecorator withFontSize(float size) {
 		return (ComponentDecorator) super.withFontSize(size);
-	}
-
-	@Override
-	public ComponentDecorator withSizeAndStyle(int style, float fontSize) {
-		return (ComponentDecorator) super.withSizeAndStyle(style, fontSize);
 	}
 
 	@Override
@@ -319,7 +340,9 @@ public class ComponentDecorator extends BgFontAdjuster {
 			.withBackground(c.getBackground())//
 			.withForeground(c.getForeground());
 		Font f = c.getFont();
-		cd.deriveFont(__ -> f);
+		for (Map.Entry<TextAttribute, ?> attr : f.getAttributes().entrySet()) {
+			cd.deriveFont(attr.getKey(), attr.getValue());
+		}
 
 		{
 			Integer swingAlign = null;

@@ -532,13 +532,23 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				try {
-					return source.transform(tx -> {
-						try {
-							return transform(tx, models);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
-					});
+					if (isReversible() && source instanceof ObservableCollection.SortedDataFlow) {
+						return ((ObservableCollection.SortedDataFlow<?, ?, S>) source).transformEquivalent(tx -> {
+							try {
+								return (Transformation.ReversibleTransformation<S, T>) transform(tx, models);
+							} catch (ModelInstantiationException e) {
+								throw new CheckedExceptionWrapper(e);
+							}
+						});
+					} else {
+						return source.transform(tx -> {
+							try {
+								return transform(tx, models);
+							} catch (ModelInstantiationException e) {
+								throw new CheckedExceptionWrapper(e);
+							}
+						});
+					}
 				} catch (CheckedExceptionWrapper e) {
 					throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
 				}

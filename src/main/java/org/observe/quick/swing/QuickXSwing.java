@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -39,6 +40,7 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.QuickButton;
+import org.observe.quick.base.QuickFieldPanel;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickTable;
 import org.observe.quick.ext.QuickAbstractMultiSlider;
@@ -47,6 +49,7 @@ import org.observe.quick.ext.QuickAbstractMultiSlider.SliderBgRenderer;
 import org.observe.quick.ext.QuickAbstractMultiSlider.SliderHandleRenderer;
 import org.observe.quick.ext.QuickCollapsePane;
 import org.observe.quick.ext.QuickComboButton;
+import org.observe.quick.ext.QuickCustomPopulator;
 import org.observe.quick.ext.QuickMultiRangeSlider;
 import org.observe.quick.ext.QuickMultiSlider;
 import org.observe.quick.ext.QuickSettingsMenu;
@@ -54,8 +57,10 @@ import org.observe.quick.ext.QuickShaded;
 import org.observe.quick.ext.QuickShading;
 import org.observe.quick.ext.QuickSuperTable;
 import org.observe.quick.ext.QuickTreeTable;
+import org.observe.quick.ext.QuickVCustomPopulator;
 import org.observe.quick.ext.QuickValueSelector;
 import org.observe.quick.ext.QuickVirtualMultiPane;
+import org.observe.quick.swing.QuickBaseSwing.SwingFieldPanel;
 import org.observe.quick.swing.QuickSwingColumnSet.TabularContext;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
@@ -123,6 +128,8 @@ public class QuickXSwing implements QuickInterpretation {
 		tx.with(QuickVirtualMultiPane.Interpreted.class, QuickSwingPopulator.class, SwingVirtualMultiPane::new);
 		tx.with(QuickSuperTable.Interpreted.class, QuickSwingPopulator.class, SwingSuperTable::new);
 		tx.with(QuickValueSelector.Interpreted.class, QuickSwingPopulator.class, SwingValueSelector::new);
+		tx.with(QuickCustomPopulator.Interpreted.class, QuickSwingPopulator.class, SwingCustomPopulator::new);
+		tx.with(QuickVCustomPopulator.Interpreted.class, QuickSwingPopulator.class, SwingVCustomPopulator::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<QuickCollapsePane> {
@@ -593,29 +600,16 @@ public class QuickXSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingSettingsMenu extends QuickSwingPopulator.Abstract<QuickSettingsMenu> {
-		private final List<QuickSwingPopulator<?>> theChildren;
-
+	static class SwingSettingsMenu extends SwingFieldPanel {
 		SwingSettingsMenu(QuickSettingsMenu.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			theChildren = new ArrayList<>(interpreted.getContents().size());
-			for (QuickWidget.Interpreted<?> child : interpreted.getContents())
-				theChildren.add(tx.transform(child, QuickSwingPopulator.class));
+			super(interpreted, tx);
 		}
 
 		@Override
-		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSettingsMenu quick, Consumer<ComponentEditor<?, ?>> component)
-			throws ModelInstantiationException {
-			panel.addSettingsMenu(menu -> {
-				component.accept(menu);
-				for (int c = 0; c < theChildren.size(); c++) {
-					try {
-						((QuickSwingPopulator<QuickWidget>) theChildren.get(c)).populate(menu, quick.getContents().get(c));
-					} catch (ModelInstantiationException e) {
-						throw new CheckedExceptionWrapper(e);
-					}
-				}
-			});
+		protected void createContainer(ContainerPopulator<?, ?> panel, QuickFieldPanel quick,
+			BiConsumer<Object, PanelPopulator<?, ?>> configure) throws ModelInstantiationException {
+			panel.addSettingsMenu(menu -> configure.accept(createContainerData(), menu));
 		}
 	}
 
@@ -933,6 +927,40 @@ public class QuickXSwing implements QuickInterpretation {
 				.strictOrder().synchronize();
 			until.take(1).act(__ -> includedSub.unsubscribe());
 			panel.addComponent(null, selector[0], c -> component.accept(c));
+		}
+	}
+
+	static class SwingCustomPopulator extends QuickSwingPopulator.Abstract<QuickCustomPopulator> {
+		private final QuickSwingLayout<QuickLayout> theLayout;
+
+		SwingCustomPopulator(QuickCustomPopulator.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theLayout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickCustomPopulator quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			LayoutManager layoutInst = theLayout.create(panel, quick.getLayout());
+			panel.addHPanel(null, layoutInst, p -> {
+				component.accept(p);
+				quick.populate(p);
+			});
+		}
+	}
+
+	static class SwingVCustomPopulator extends QuickSwingPopulator.Abstract<QuickVCustomPopulator> {
+		SwingVCustomPopulator(QuickVCustomPopulator.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickVCustomPopulator quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addVPanel(p -> {
+				component.accept(p);
+				quick.populate(p);
+			});
 		}
 	}
 }

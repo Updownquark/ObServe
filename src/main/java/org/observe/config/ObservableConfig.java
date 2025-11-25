@@ -873,16 +873,32 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 	default ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
 		if (path == null)
 			throw new IllegalArgumentException("No path given");
-		try (Transaction t = lock(createIfAbsent, null)) {
+		if (!createIfAbsent) {
+			return getChildIfPresent(path);
+		}
+		try (Transaction t = lock(true, null)) {
 			ObservableConfig ret = this;
 			for (ObservableConfigPathElement el : path.getElements()) {
-				ObservableConfig found = ret.getChild(el, createIfAbsent, preAddMod);
+				ObservableConfig found = ret.getChild(el, true, preAddMod);
 				if (found == null)
 					return null;
 				ret = found;
 			}
 			return ret;
 		}
+	}
+
+	default ObservableConfig getChildIfPresent(ObservableConfigPath path) {
+		return doOptimistically(null, (init, ctx) -> {
+			ObservableConfig ret = this;
+			for (ObservableConfigPathElement el : path.getElements()) {
+				ObservableConfig found = ret.getChildIfPresent(el);
+				if (found == null)
+					return null;
+				ret = found;
+			}
+			return ret;
+		});
 	}
 
 	/**
@@ -911,6 +927,24 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			});
 		}
 		return found;
+	}
+
+	default ObservableConfig getChildIfPresent(ObservableConfigPathElement el) {
+		String pathName = el.getName();
+		if (pathName.equals(ObservableConfigPath.ANY_NAME) || pathName.equals(ObservableConfigPath.ANY_DEPTH))
+			throw new IllegalArgumentException("Variable paths not allowed for getChild");
+		return doOptimistically(null, (init, ctx) -> {
+			DefaultObservableConfig found = null;
+			for (ObservableConfig config : getContent()) {
+				if (!ctx.isOperationValid())
+					return null;
+				else if (el.matches(config)) {
+					found = (DefaultObservableConfig) config;
+					break;
+				}
+			}
+			return found;
+		});
 	}
 
 	/**

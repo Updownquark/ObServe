@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -109,6 +110,7 @@ import org.observe.quick.base.QuickToggleButton;
 import org.observe.quick.base.QuickToggleButtons;
 import org.observe.quick.base.QuickTransfer;
 import org.observe.quick.base.QuickTree;
+import org.observe.quick.base.QuickVariableContainer;
 import org.observe.quick.base.StyledDocument;
 import org.observe.quick.base.TabularWidget.TableSelectionMode;
 import org.observe.quick.base.ValueAction;
@@ -460,35 +462,141 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingBox extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<QuickBox> {
+	static abstract class SwingVariableContainer<W extends QuickVariableContainer, P extends ComponentEditor<?, ?>>
+	extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<W> {
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theContents;
+
+		protected SwingVariableContainer(QuickVariableContainer.Interpreted<? extends W> interpreted,
+			Transformer<ExpressoInterpretationException> tx)
+				throws ExpressoInterpretationException {
+			theContents = new HashMap<>();
+			for (QuickWidget.Interpreted<?> content : interpreted.getContents())
+				theContents.put(content.getIdentity(), tx.transform(content, QuickSwingPopulator.class));
+			for (QuickVariableContainer.MultiWidget.Interpreted<?> widgetSet : interpreted.getWidgetSets()) {
+				theContents.put(widgetSet.getRenderer().getIdentity(), tx.transform(widgetSet.getRenderer(), QuickSwingPopulator.class));
+			}
+		}
+
+		protected Map<Object, QuickSwingPopulator<QuickWidget>> getContents() {
+			return Collections.unmodifiableMap(theContents);
+		}
+
+		@Override
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, W quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			boolean[] initializing = new boolean[] { true };
+			List<SimpleObservable<Causable>> removes = new ArrayList<>();
+			try {
+				createContainer(panel, quick, (containerData, p) -> {
+					component.accept(p);
+
+					Subscription sub = quick.getAllContent().subscribe(evt -> {
+						switch (evt.getType()) {
+						case add:
+							SimpleObservable<Causable> remove = new SimpleObservable<>();
+							removes.add(evt.getIndex(), remove);
+							QuickSwingPopulator<QuickWidget> renderer = theContents.get(evt.getNewValue().getIdentity());
+							try {
+								addChild(containerData, p, evt.getNewValue(), renderer, evt.getIndex(), remove);
+							} catch (ModelInstantiationException e) {
+								evt.getNewValue().reporting().error("Failed to populate child", e);
+								if (initializing[0])
+									throw new CheckedExceptionWrapper(e);
+							}
+							break;
+						case remove:
+							removes.remove(evt.getIndex()).onNext(evt);
+							removeChild(containerData, p, evt.getOldValue(), evt.getIndex());
+							break;
+						case set:
+							remove = removes.get(evt.getIndex());
+							remove.onNext(evt);
+							removeChild(containerData, p, evt.getOldValue(), evt.getIndex());
+							renderer = theContents.get(evt.getNewValue().getIdentity());
+							try {
+								addChild(containerData, p, evt.getNewValue(), renderer, evt.getIndex(), remove);
+							} catch (ModelInstantiationException e) {
+								evt.getNewValue().reporting().error("Failed to populate child", e);
+							}
+							break;
+						}
+					}, true);
+					Observable.or(p.getUntil(), quick.onDestroy()).take(1).act(__ -> sub.unsubscribe());
+				});
+			} catch (CheckedExceptionWrapper e) {
+				throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
+			} finally {
+				initializing[0] = false;
+			}
+		}
+
+		protected abstract void createContainer(ContainerPopulator<?, ?> panel, W quick,
+			BiConsumer<Object, P> configure) throws ModelInstantiationException;
+
+		protected abstract void addChild(Object containerData, P panel, QuickWidget child, QuickSwingPopulator<QuickWidget> populator,
+			int indexInParent, Observable<Causable> remove) throws ModelInstantiationException;
+
+		protected abstract void removeChild(Object containerData, P panel, QuickWidget child, int indexInParent);
+	}
+
+	static abstract class SwingSimpleVariableContainer<W extends QuickVariableContainer>
+	extends SwingVariableContainer<W, PanelPopulator<?, ?>> {
+		protected SwingSimpleVariableContainer(QuickVariableContainer.Interpreted<? extends W> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			super(interpreted, tx);
+		}
+
+		protected Object createContainerData() {
+			return new ArrayList<>();
+		}
+
+		@Override
+		protected void addChild(Object containerData, PanelPopulator<?, ?> panel, QuickWidget child,
+			QuickSwingPopulator<QuickWidget> populator, int indexInParent, Observable<Causable> remove) throws ModelInstantiationException {
+			List<Integer> components = (List<Integer>) containerData;
+			if (indexInParent == components.size()) { // Just let it add last, the default
+			} else if (indexInParent == 0)
+				panel.addNextAt(0);
+			else {
+				int addIndex = 0;
+				for (int i = 0; i < indexInParent; i++)
+					addIndex += components.get(i);
+				panel.addNextAt(addIndex);
+			}
+			Container container = panel.getEditor();
+			int prevCC = container.getComponentCount();
+			Runnable modRemove = populator.addModifier((comp, w) -> comp.removeWhen(remove));
+			try {
+				populator.populate(panel, child);
+			} finally {
+				modRemove.run();
+				int newCC = container.getComponentCount();
+				components.add(indexInParent, newCC - prevCC);
+			}
+		}
+
+		@Override
+		protected void removeChild(Object containerData, PanelPopulator<?, ?> panel, QuickWidget child, int indexInParent) {
+			((List<?>) containerData).remove(indexInParent);
+		}
+	}
+
+	static class SwingBox extends SwingSimpleVariableContainer<QuickBox> {
 		private final QuickSwingLayout<QuickLayout> theLayout;
-		private final List<QuickSwingPopulator<QuickWidget>> theContents;
 
 		SwingBox(QuickBox.Interpreted<?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
+			super(interpreted, tx);
 			theLayout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
-			theContents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
-				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
-			for (QuickSwingPopulator<QuickWidget> content : theContents)
+			for (QuickSwingPopulator<QuickWidget> content : getContents().values())
 				theLayout.modifyChild(content);
 		}
 
 		@Override
-		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickBox quick, Consumer<ComponentEditor<?, ?>> component)
+		protected void createContainer(ContainerPopulator<?, ?> panel, QuickBox quick, BiConsumer<Object, PanelPopulator<?, ?>> configure)
 			throws ModelInstantiationException {
 			LayoutManager layoutInst = theLayout.create(panel, quick.getLayout());
-			panel.addHPanel(null, layoutInst, p -> {
-				component.accept(p);
-				int c = 0;
-				for (QuickWidget content : quick.getContents()) {
-					try {
-						theContents.get(c).populate(p, content);
-					} catch (ModelInstantiationException e) {
-						content.reporting().error(e.getMessage(), e);
-					}
-					c++;
-				}
-			});
+			panel.addHPanel(null, layoutInst, p -> configure.accept(createContainerData(), p));
 		}
 	}
 
@@ -1144,30 +1252,16 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingFieldPanel extends QuickSwingContainerPopulator.Abstract<QuickFieldPanel> {
-		private BetterList<QuickSwingPopulator<QuickWidget>> theContents;
-
+	static class SwingFieldPanel extends SwingSimpleVariableContainer<QuickFieldPanel> {
 		SwingFieldPanel(QuickFieldPanel.Interpreted<?> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			theContents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
-				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
+			super(interpreted, tx);
 		}
 
 		@Override
-		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickFieldPanel quick, Consumer<ComponentEditor<?, ?>> component)
-			throws ModelInstantiationException {
-			panel.addVPanel(quick.isShowInvisible(), p -> {
-				component.accept(p);
-				int c = 0;
-				for (QuickWidget content : quick.getContents()) {
-					try {
-						theContents.get(c).populate(p, content);
-					} catch (ModelInstantiationException e) {
-						content.reporting().error(e.getMessage(), e);
-					}
-					c++;
-				}
-			});
+		protected void createContainer(ContainerPopulator<?, ?> panel, QuickFieldPanel quick,
+			BiConsumer<Object, PanelPopulator<?, ?>> configure) throws ModelInstantiationException {
+			panel.addVPanel(quick.isShowInvisible(), p -> configure.accept(createContainerData(), p));
 		}
 	}
 
@@ -2330,7 +2424,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 				jDialog.setAlwaysOnTop(dialog.isAlwaysOnTop());
 				PanelPopulation.WindowBuilder<JDialog, ?> swingDialog = WindowPopulation.populateDialog(jDialog, until, false);
 				if (preInit instanceof Container) {
-					((Container) preInit).setLayout(new JustifiedBoxLayout(true).mainJustified().crossJustified());
 					jDialog.setContentPane((Container) preInit);
 				} else
 					jDialog.getContentPane().add((Component) preInit);
@@ -2381,56 +2474,51 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingTabs<T> extends QuickSwingContainerPopulator.Abstract<QuickTabs<T>> {
-		Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
-
+	static class SwingTabs<T> extends SwingVariableContainer<QuickTabs<T>, PanelPopulation.TabPaneEditor<?, ?>> {
 		SwingTabs(QuickTabs.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
 			throws ExpressoInterpretationException {
-			for (QuickWidget.Interpreted<?> content : interpreted.getContents())
-				renderers.put(content.getIdentity(), tx.transform(content, QuickSwingPopulator.class));
-			for (QuickTabs.TabSet.Interpreted<? extends T> tabSet : interpreted.getTabSets())
-				renderers.put(tabSet.getRenderer().getIdentity(), tx.transform(tabSet.getRenderer(), QuickSwingPopulator.class));
+			super(interpreted, tx);
 		}
 
 		@Override
-		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickTabs<T> quick, Consumer<ComponentEditor<?, ?>> component)
-			throws ModelInstantiationException {
-			Map<T, TabsPopulator<T>> tabs = new HashMap<>();
+		protected void createContainer(ContainerPopulator<?, ?> panel, QuickTabs<T> quick,
+			BiConsumer<Object, PanelPopulation.TabPaneEditor<?, ?>> configure)
+				throws ModelInstantiationException {
 			panel.addTabs(t -> {
-				component.accept(t);
-				Subscription sub = quick.getTabs().subscribe(evt -> {
-					switch (evt.getType()) {
-					case add:
-						QuickSwingPopulator<QuickWidget> renderer = renderers.get(evt.getNewValue().getRenderer().getIdentity());
-						TabsPopulator<T> tabPopulator = new TabsPopulator<>(t, evt.getNewValue(), evt.getIndex());
-						tabs.put(evt.getNewValue().getTabValue(), tabPopulator);
-						try {
-							renderer.populate(tabPopulator, evt.getNewValue().getRenderer());
-						} catch (ModelInstantiationException e) {
-							evt.getNewValue().getRenderer().reporting().error("Failed to populate tab", e);
-						}
-						break;
-					case remove:
-						tabPopulator = tabs.remove(evt.getOldValue().getTabValue());
-						if (tabPopulator != null)
-							tabPopulator.remove();
-						break;
-					case set:
-						break;
-					}
-				}, true);
-				Observable.or(t.getUntil(), quick.onDestroy()).take(1).act(__ -> sub.unsubscribe());
+				configure.accept(new HashMap<>(), t);
 				t.withSelectedTab(quick.getSelectedTab());
 			});
 		}
 
+		@Override
+		protected void addChild(Object containerData, PanelPopulation.TabPaneEditor<?, ?> panel, QuickWidget child,
+			QuickSwingPopulator<QuickWidget> populator, int indexInParent, Observable<Causable> remove) throws ModelInstantiationException {
+			Map<T, TabsPopulator<T>> tabs = (Map<T, TabsPopulator<T>>) containerData;
+			QuickTabs.Tab<T> tab = child.getAddOn(QuickTabs.Tab.class);
+			T value = tab.getTabId().get();
+			TabsPopulator<T> tabPopulator = new TabsPopulator<>(panel, tab, indexInParent);
+			tabs.put(value, tabPopulator);
+			populator.populate(tabPopulator, child);
+		}
+
+		@Override
+		protected void removeChild(Object containerData, PanelPopulation.TabPaneEditor<?, ?> panel, QuickWidget child, int indexInParent) {
+			Map<T, TabsPopulator<T>> tabs = (Map<T, TabsPopulator<T>>) containerData;
+			T tabValue = (T) child.getAddOn(QuickTabs.Tab.class).getTabId().get();
+			TabsPopulator<T> tab = tabs.remove(tabValue);
+			if (tab != null)
+				tab.remove();
+			else
+				child.reporting().error("No tab found by value " + tabValue + ". UI may be corrupt");
+		}
+
 		private static class TabsPopulator<T> extends AbstractQuickContainerPopulator {
 			private final PanelPopulation.TabPaneEditor<?, ?> theTabsEditor;
-			private final QuickTabs.TabInstance<? extends T> theTab;
+			private final QuickTabs.Tab<? extends T> theTab;
 			private PanelPopulation.TabEditor<?> theTabEditor;
 			private final int theTabIndex;
 
-			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs.TabInstance<? extends T> tab, int index) {
+			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs.Tab<? extends T> tab, int index) {
 				theTabsEditor = tabEditor;
 				theTab = tab;
 				theTabIndex = index;
@@ -2459,33 +2547,33 @@ public class QuickBaseSwing implements QuickInterpretation {
 			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabsEditor.withHTab(theTab.getTabValue(), theTabIndex, layout, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
+				theTabsEditor.withHTab(theTab.getTabId().get(), theTabIndex, layout, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
 					this::configureTab);
 				return this;
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addVPanel(boolean showInvisible, Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabsEditor.withVTab(theTab.getTabValue(), theTabIndex, showInvisible,
+				theTabsEditor.withVTab(theTab.getTabId().get(), theTabIndex, showInvisible,
 					tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
 					this::configureTab);
 				return this;
 			}
 
 			void configureTab(PanelPopulation.TabEditor<?> tab) {
-				Observable<?> onRemove = Observable.or(theTab.isAvailable().value().filter(Boolean.FALSE::equals),
-					theTab.getRenderer().onDestroy());
+				Observable<?> onRemove = Observable.or(theTab.isTabAvailable().value().filter(Boolean.FALSE::equals),
+					theTab.getElement().onDestroy());
 				theTabEditor = tab;
-				ObservableAction removeTab = theTab.isAvailable().assignmentTo(ObservableValue.of(false));
+				ObservableAction removeTab = theTab.isTabAvailable().assignmentTo(ObservableValue.of(false));
 				tab.setName(theTab.getTabName());
 				tab.setIcon(theTab.getTabIcon());
 				removeTab.isEnabled().changes().takeUntil(onRemove).act(e -> tab.setRemovable(e == null));
 				tab.onRemove(cause -> {
-					if (Boolean.TRUE.equals(theTab.isAvailable().get()) && theTab.isAvailable().isAcceptable(false) == null
-						&& !theTab.isAvailable().isEventing())
-						theTab.isAvailable().set(false, cause);
+					if (Boolean.TRUE.equals(theTab.isTabAvailable().get()) && theTab.isTabAvailable().isAcceptable(false) == null
+						&& !theTab.isTabAvailable().isEventing())
+						theTab.isTabAvailable().set(false, cause);
 				});
-				SettableValue<Boolean> visible = theTab.getRenderer().isVisible();
+				SettableValue<Boolean> visible = ((QuickWidget) theTab.getElement()).isVisible();
 				tab.onSelect(onSelect -> {
 					onSelect.changes().takeUntil(onRemove).act(evt -> {
 						if (Boolean.TRUE.equals(evt.getNewValue())) {

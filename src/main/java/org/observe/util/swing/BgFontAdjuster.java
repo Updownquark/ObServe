@@ -2,20 +2,16 @@ package org.observe.util.swing;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Font;
-import java.text.AttributedCharacterIterator.Attribute;
+import java.awt.font.TextAttribute;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 import javax.swing.JComponent;
 import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.StyleConstants;
 
 public class BgFontAdjuster extends FontAdjuster {
-	private Color theBackground;
 	private Supplier<Color> theDefaultBackground;
 
 	public BgFontAdjuster() {
@@ -27,14 +23,11 @@ public class BgFontAdjuster extends FontAdjuster {
 	}
 
 	public Color getBackground() {
-		return theBackground;
+		return (Color) getFontAttributes().getAttribute(StyleConstants.Background);
 	}
 
 	public BgFontAdjuster withBackground(Color bg) {
-		theBackground = bg;
-		if (getFontAttributes() != null)
-			StyleConstants.setBackground(getFontAttributes(), bg);
-		return this;
+		return deriveFont(TextAttribute.BACKGROUND, bg);
 	}
 
 	public BgFontAdjuster withDefaultBackground(Supplier<Color> defaultBG) {
@@ -45,23 +38,43 @@ public class BgFontAdjuster extends FontAdjuster {
 	@Override
 	public BgFontAdjuster reset() {
 		super.reset();
-		theBackground = null;
+		theDefaultBackground = null;
 		return this;
 	}
 
 	@Override
-	public BgFontAdjuster deriveFont(UnaryOperator<Font> font) {
-		return (BgFontAdjuster) super.deriveFont(font);
+	public BgFontAdjuster deriveFont(Object attr, Object value) {
+		super.deriveFont(attr, value);
+		return this;
+	}
+
+	@Override
+	public BgFontAdjuster withFontWeight(float weight) {
+		super.withFontWeight(weight);
+		return this;
+	}
+
+	@Override
+	public BgFontAdjuster withFontSlant(float slant) {
+		super.withFontSlant(slant);
+		return this;
+	}
+
+	@Override
+	public BgFontAdjuster italic() {
+		super.italic();
+		return this;
+	}
+
+	@Override
+	public BgFontAdjuster italic(boolean italic) {
+		super.italic(italic);
+		return this;
 	}
 
 	@Override
 	public BgFontAdjuster deriveFont(int style, float size) {
 		return (BgFontAdjuster) super.deriveFont(style, size);
-	}
-
-	@Override
-	public BgFontAdjuster deriveFont(Attribute attr, Object value) {
-		return (BgFontAdjuster) super.deriveFont(attr, value);
 	}
 
 	@Override
@@ -72,11 +85,6 @@ public class BgFontAdjuster extends FontAdjuster {
 	@Override
 	public BgFontAdjuster withFontSize(float size) {
 		return (BgFontAdjuster) super.withFontSize(size);
-	}
-
-	@Override
-	public BgFontAdjuster withSizeAndStyle(int style, float fontSize) {
-		return (BgFontAdjuster) super.withSizeAndStyle(style, fontSize);
 	}
 
 	@Override
@@ -138,12 +146,13 @@ public class BgFontAdjuster extends FontAdjuster {
 	public Runnable decorate(Component c) {
 		List<Runnable> revert = new ArrayList<>();
 		revert.add(super.decorate(c));
-		if (theBackground != null) {
+		Color bg = getBackground();
+		if (bg != null) {
 			boolean oldNonOpaque = c instanceof JComponent && !c.isOpaque();
 			Color oldBG = c.getBackground();
 			if (c instanceof JComponent)
 				((JComponent) c).setOpaque(true);
-			c.setBackground(theBackground);
+			c.setBackground(bg);
 			revert.add(() -> {
 				if (!oldNonOpaque)
 					((JComponent) c).setOpaque(false);
@@ -157,18 +166,6 @@ public class BgFontAdjuster extends FontAdjuster {
 			for (Runnable r : revert)
 				r.run();
 		};
-	}
-
-	@Override
-	public int hashCode() {
-		return super.hashCode() ^ Objects.hashCode(theBackground);
-	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (!super.equals(obj))
-			return false;
-		return obj instanceof BgFontAdjuster && Objects.equals(theBackground, ((BgFontAdjuster) obj).theBackground);
 	}
 
 	@Override

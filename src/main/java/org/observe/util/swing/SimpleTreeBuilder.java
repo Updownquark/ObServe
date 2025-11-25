@@ -469,10 +469,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 				if (path == null || theRenderer.getTooltipFn() == null) {
 					getEditor().setToolTipText(null);
 				} else {
-					F value = (F) path.getLastPathComponent();
-					ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
-						getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
-						getEditor().getModel().isLeaf(value));
+					ObservableTreeModel<F>.TreeNode node = (ObservableTreeModel<F>.TreeNode) path.getLastPathComponent();
+					ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), node.get(), row,
+						0, getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
+						getEditor().getModel().isLeaf(node));
 					String tooltip = theRenderer.getTooltip(cell);
 					getEditor().setToolTipText(tooltip);
 				}
@@ -483,10 +483,10 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Sim
 				if (path == null)
 					return null;
 				int row = getEditor().getRowForLocation(e.getX(), e.getY());
-				F value = (F) path.getLastPathComponent();
-				return new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), value, row, 0,
+				ObservableTreeModel<F>.TreeNode node = (ObservableTreeModel<F>.TreeNode) path.getLastPathComponent();
+				return new ModelCell.Default<>(() -> ObservableTreeModel.betterPath(path), node.get(), row, 0,
 					getEditor().getSelectionModel().isRowSelected(row), false, true, true, !getEditor().isCollapsed(row),
-					getEditor().getModel().isLeaf(value));
+					getEditor().getModel().isLeaf(node));
 			}
 		};
 		getEditor().addMouseListener(mouse);

@@ -70,6 +70,9 @@ public class ObservableCollectionActiveManagers {
 		 */
 		void setListener(CollectionElementListener<E> listener);
 
+		/** @return Whether this collection element is still present in the source collection */
+		boolean isPresent();
+
 		/** @return The current value of this element */
 		E get();
 
@@ -118,6 +121,11 @@ public class ObservableCollectionActiveManagers {
 				@Override
 				public void setListener(CollectionElementListener<E> listener) {
 					outer.setListener(listener);
+				}
+
+				@Override
+				public boolean isPresent() {
+					return outer.isPresent();
 				}
 
 				@Override
@@ -585,6 +593,11 @@ public class ObservableCollectionActiveManagers {
 			}
 
 			@Override
+			public boolean isPresent() {
+				return source.getElementId().isPresent();
+			}
+
+			@Override
 			public E get() {
 				return source.get();
 			}
@@ -800,6 +813,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public void setListener(CollectionElementListener<T> listener) {
 			theParentEl.setListener(listener);
+		}
+
+		@Override
+		public boolean isPresent() {
+			return theParentEl.isPresent();
 		}
 
 		@Override
@@ -1194,18 +1212,18 @@ public class ObservableCollectionActiveManagers {
 								theValues.repair(theValueElement.getElementId(), //
 									new ValueStoredCollection.RepairListener<SortedElement, Void>() {
 									@Override
-										public Void removed(CollectionElement<SortedElement> element) {
+									public Void removed(CollectionElement<SortedElement> element) {
 										return null;
 									}
 
 									@Override
-										public void disposed(SortedElement element, Void data) {
+									public void disposed(SortedElement element, Void data) {
 										throw new IllegalStateException();
 									}
 
 									@Override
-										public void transferred(CollectionElement<SortedElement> element, Void data) {
-											element.get().theValueElement = (ListElement<SortedElement>) element;
+									public void transferred(CollectionElement<SortedElement> element, Void data) {
+										element.get().theValueElement = (ListElement<SortedElement>) element;
 									}
 								});
 								/* Update: Regarding the older comment below, the add/remove combo instead of update was done
@@ -1290,6 +1308,11 @@ public class ObservableCollectionActiveManagers {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
+			}
+
+			@Override
+			public boolean isPresent() {
+				return theParentEl.isPresent();
 			}
 
 			@Override
@@ -1790,6 +1813,11 @@ public class ObservableCollectionActiveManagers {
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
 				return theParentEl.compareTo(((TransformedElement) o).theParentEl);
+			}
+
+			@Override
+			public boolean isPresent() {
+				return theParentEl.isPresent();
 			}
 
 			@Override

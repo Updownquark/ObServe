@@ -73,6 +73,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			ExElement.creator(QuickCustomComponent.Def::new));
 
 		// Containers
+		interpreter.createWith(QuickVariableContainer.MultiWidget.MULTI_WIDGET, QuickVariableContainer.MultiWidget.Def.class,
+			ExElement.creator(QuickVariableContainer.MultiWidget.Def::new));
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));
 		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, ExElement.creator(QuickFieldPanel.Def::new));
 		interpreter.createWith(QuickField.FIELD, QuickField.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickField.Def::new));
@@ -123,10 +125,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 		// Tabs
 		interpreter.createWith(QuickTabs.TABS, QuickTabs.Def.class, ExElement.creator(QuickTabs.Def::new));
-		interpreter.createWith(QuickTabs.AbstractTab.ABSTRACT_TAB, QuickTabs.AbstractTab.Def.class,
-			ExAddOn.creator(QuickTabs.AbstractTab.Def::new));
 		interpreter.createWith(QuickTabs.Tab.TAB, QuickTabs.Tab.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickTabs.Tab.Def::new));
-		interpreter.createWith(QuickTabs.TabSet.TAB_SET, QuickTabs.TabSet.Def.class, ExElement.creator(QuickTabs.TabSet.Def::new));
 
 		// Tree
 		interpreter.createWith(QuickTree.TREE, QuickTree.Def.class, ExElement.creator(QuickTree.Def::new));

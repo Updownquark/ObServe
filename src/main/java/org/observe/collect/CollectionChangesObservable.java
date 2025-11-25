@@ -117,7 +117,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				RedBlackNode<Add<E>> left = node.getLeft();
 				if (left != null)
 					nodeIndex += left.size();
-				lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex + nodeIndex - node.getValue().changeIndex);
+				lastComp = Integer.compare(collectionIndex, node.get().collectionIndex + nodeIndex - node.get().changeIndex);
 				if (lastComp == 0) {
 					changeIndex = nodeIndex;
 					break;
@@ -146,7 +146,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				RedBlackNode<Add<E>> left = node.getLeft();
 				if (left != null)
 					nodeIndex += left.size();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex + nodeIndex - node.getValue().changeIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex + nodeIndex - node.get().changeIndex);
 				if (lastComp == 0) {
 					changeIndex = nodeIndex;
 					break;
@@ -160,7 +160,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			if (node == null)
 				return null;
 			node.delete();
-			return node.getValue().value;
+			return node.get().value;
 		}
 
 		@Override
@@ -172,7 +172,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				RedBlackNode<Add<E>> left = node.getLeft();
 				if (left != null)
 					nodeIndex += left.size();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex + nodeIndex - node.getValue().changeIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex + nodeIndex - node.get().changeIndex);
 				if (lastComp == 0) {
 					changeIndex = nodeIndex;
 					break;
@@ -185,7 +185,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			}
 			if (node == null)
 				return false;
-			node.getValue().value = newValue;
+			node.get().value = newValue;
 			return true;
 		}
 
@@ -195,9 +195,9 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Add<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().value, node.getValue().value,
-					node.getValue().collectionIndex + index - node.getValue().changeIndex, node.getValue().id, node.getValue().move);
-				node = node.getClosest(false);
+				dump[index] = new ElementChange<>(node.get().value, node.get().value,
+					node.get().collectionIndex + index - node.get().changeIndex, node.get().id, node.get().move);
+				node = node.getAdjacent(true);
 				index++;
 			}
 			return Arrays.asList(dump);
@@ -209,9 +209,9 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Add<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				str.append('\t').append(node.getValue().collectionIndex + index - node.getValue().changeIndex)//
-				.append(": ").append(node.getValue().value).append('\n');
-				node = node.getClosest(false);
+				str.append('\t').append(node.get().collectionIndex + index - node.get().changeIndex)//
+				.append(": ").append(node.get().value).append('\n');
+				node = node.getAdjacent(true);
 				index++;
 			}
 			return str.toString();
@@ -258,7 +258,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				int newCI = collectionIndex;
 				if (left != null)
 					newCI += left.size();
-				lastComp = Integer.compare(newCI, node.getValue().collectionIndex);
+				lastComp = Integer.compare(newCI, node.get().collectionIndex);
 				if (lastComp < 0) {
 					if (left == null)
 						break;
@@ -280,7 +280,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Remove<E>> node = changes.getRoot();
 			while (node != null) {
 				RedBlackNode<Remove<E>> left = node.getLeft();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex);
 				if (lastComp == 0) {
 					collectionIndex++;
 					if (left != null)
@@ -298,7 +298,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			if (node == null)
 				return null;
 			node.delete();
-			return node.getValue().value;
+			return node.get().value;
 		}
 
 		@Override
@@ -306,7 +306,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Remove<E>> node = changes.getRoot();
 			while (node != null) {
 				RedBlackNode<Remove<E>> left = node.getLeft();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex);
 				if (lastComp == 0) {
 					collectionIndex++;
 					if (left != null)
@@ -323,7 +323,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			}
 			if (node == null)
 				return false;
-			node.getValue().value = newValue;
+			node.get().value = newValue;
 			return true;
 		}
 
@@ -333,9 +333,9 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Remove<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().value, node.getValue().value, node.getValue().collectionIndex,
-					node.getValue().id, node.getValue().move);
-				node = node.getClosest(false);
+				dump[index] = new ElementChange<>(node.get().value, node.get().value, node.get().collectionIndex,
+					node.get().id, node.get().move);
+				node = node.getAdjacent(true);
 				index++;
 			}
 			return Arrays.asList(dump);
@@ -346,9 +346,9 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			StringBuilder str = new StringBuilder("remove:\n");
 			RedBlackNode<Remove<E>> node = changes.getFirst();
 			while (node != null) {
-				str.append('\t').append(node.getValue().collectionIndex)//
-				.append(": ").append(node.getValue().value).append('\n');
-				node = node.getClosest(false);
+				str.append('\t').append(node.get().collectionIndex)//
+				.append(": ").append(node.get().value).append('\n');
+				node = node.getAdjacent(true);
 			}
 			return str.toString();
 		}
@@ -391,7 +391,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			int lastComp = 0;
 			while (true) {
 				RedBlackNode<Set<E>> left = node.getLeft();
-				lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
+				lastComp = Integer.compare(collectionIndex, node.get().collectionIndex);
 				if (lastComp == 0)
 					break;
 				else if (lastComp < 0) {
@@ -405,7 +405,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				}
 			}
 			if (lastComp == 0)
-				node.getValue().newValue = newValue;
+				node.get().newValue = newValue;
 			else {
 				boolean left = lastComp < 0;
 				node.add(new RedBlackNode<>(changes, new Set<>(collectionIndex, id, oldValue, newValue)), left);
@@ -418,7 +418,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Set<E>> node = changes.getRoot();
 			while (node != null) {
 				RedBlackNode<Set<E>> left = node.getLeft();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex);
 				if (lastComp == 0)
 					break;
 				else if (lastComp < 0)
@@ -429,7 +429,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			if (node == null)
 				return null;
 			node.delete();
-			return node.getValue().oldValue;
+			return node.get().oldValue;
 		}
 
 		@Override
@@ -437,7 +437,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Set<E>> node = changes.getRoot();
 			while (node != null) {
 				RedBlackNode<Set<E>> left = node.getLeft();
-				int lastComp = Integer.compare(collectionIndex, node.getValue().collectionIndex);
+				int lastComp = Integer.compare(collectionIndex, node.get().collectionIndex);
 				if (lastComp == 0)
 					break;
 				else if (lastComp < 0)
@@ -447,7 +447,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			}
 			if (node == null)
 				return false;
-			node.getValue().newValue = newValue;
+			node.get().newValue = newValue;
 			return true;
 		}
 
@@ -457,9 +457,9 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Set<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().newValue, node.getValue().oldValue, node.getValue().collectionIndex,
-					node.getValue().id, null);
-				node = node.getClosest(false);
+				dump[index] = new ElementChange<>(node.get().newValue, node.get().oldValue, node.get().collectionIndex,
+					node.get().id, null);
+				node = node.getAdjacent(true);
 				index++;
 			}
 			return Arrays.asList(dump);
@@ -470,14 +470,14 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			StringBuilder str = new StringBuilder("set:\n");
 			RedBlackNode<Set<E>> node = changes.getFirst();
 			while (node != null) {
-				str.append('\t').append(node.getValue().collectionIndex)//
-				.append(": ").append(node.getValue().oldValue);
-				if (node.getValue().oldValue == node.getValue().newValue)
+				str.append('\t').append(node.get().collectionIndex)//
+				.append(": ").append(node.get().oldValue);
+				if (node.get().oldValue == node.get().newValue)
 					str.append(" (update)");
 				else
-					str.append("->").append(node.getValue().newValue);
+					str.append("->").append(node.get().newValue);
 				str.append('\n');
-				node = node.getClosest(false);
+				node = node.getAdjacent(true);
 			}
 			return str.toString();
 		}

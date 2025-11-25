@@ -24,6 +24,7 @@ public @interface ObjectMethodOverride {
 		/** {@link Object#toString()} */
 		toString(new MethodSignature("toString", new Class[0]));
 
+		/** The method signature of the {@link Object} method */
 		public final MethodSignature signature;
 
 		private ObjectMethod(MethodSignature signature) {

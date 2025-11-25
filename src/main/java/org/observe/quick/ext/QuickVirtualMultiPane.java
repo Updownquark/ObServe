@@ -23,7 +23,6 @@ import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.MultiValueRenderable;
-import org.observe.quick.base.QuickComboBox;
 import org.observe.quick.base.QuickLayout;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -44,13 +43,14 @@ public class QuickVirtualMultiPane<T> extends QuickWidget.Abstract implements Mu
 		@ExElementTraceable(toolkit = QuickXInterpretation.X,
 			qonfigType = VIRTUAL_MULTI_PANE,
 			interpretation = Interpreted.class,
-			instance = QuickComboBox.class),
+			instance = QuickVirtualMultiPane.class),
 		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = "rendering",
 		interpretation = Interpreted.class,
-		instance = QuickComboBox.class)//
+		instance = QuickVirtualMultiPane.class)//
 	})
-	public static class Def extends QuickWidget.Def.Abstract<QuickVirtualMultiPane<?>> implements MultiValueRenderable.Def<QuickVirtualMultiPane<?>> {
+	public static class Def extends QuickWidget.Def.Abstract<QuickVirtualMultiPane<?>>
+	implements MultiValueRenderable.Def<QuickVirtualMultiPane<?>> {
 		private ModelComponentId theActiveValueVariable;
 		private ModelComponentId theSelectedVariable;
 		private ModelComponentId theValueIndexVariable;

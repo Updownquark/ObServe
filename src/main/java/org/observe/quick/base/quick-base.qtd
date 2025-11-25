@@ -63,9 +63,14 @@
 			<?DOC The region (edge) that this widget should occupy in its parent?>
 			<attribute name="region" type="border-layout-region" />
 		</add-on>
+		<?DOC Requires the specification of the region for variable children of a container whose layout is a &lt;border-layout>?>
+		<add-on name="border-layout-child-set" requires="multi-widget">
+			<child-mod child="multi-widget.renderer" inherits="border-layout-child" />
+		</add-on>
 		<?DOC A layout that arranges children along the edges of the container, with a single optional child using up the remaining space in the center.?>
 		<add-on name="border-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="border-layout-child" />
+			<child-mod child="box.widget-set" inherits="border-layout-child-set" />
 		</add-on>
 		<?DOC Components will be arranged toward the leading edge (top or left) of the container?>
 		<add-on name="leading" inherits="inline-alignment" />
@@ -88,13 +93,17 @@
 			<attribute name="padding" type="int" default="2" />
 			<?DOC Whether this layout should allocate space to invisible components?>
 			<attribute name="show-invisible" type="boolean" default="false" />
-			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
 		</add-on>
 		<?DOC Allows the specification of the position and size for children of a container with a &lt;simple-layout>?>
 		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
+		<?DOC Requires the specification of the region for variable children of a container whose layout is a &lt;simple-layout>?>
+		<add-on name="simple-layout-child-set" requires="multi-widget">
+			<child-mod child="multi-widget.renderer" inherits="simple-layout-child" />
+		</add-on>
 		<?DOC A layout that places each widget in the container independently with a large amount of control over positioning and size?>
 		<add-on name="simple-layout" requires="box" inherits="layout,h-sizeable,v-sizeable">
 			<child-mod child="box.content" inherits="simple-layout-child" />
+			<child-mod child="box.widget-set" inherits="simple-layout-child-set" />
 		</add-on>
 		<?DOC A layout that arranges components next to each other up to a maximum number of components before wrapping to a new row?>
 		<add-on name="grid-flow-layout" inherits="layout">
@@ -197,9 +206,18 @@
 			<attribute name="v-fill" type="boolean" specify="optional" />
 			<child-def name="post" type="post-field" min="0" />
 		</add-on>
+		<add-on name="widget-set-field" requires="multi-widget">
+			<child-mod child="multi-widget.renderer" inherits="field" />
+		</add-on>
 
 		<?DOC A tab in a &lt;tabs> pane?>
-		<add-on name="abstract-tab" abstract="true" inherits="styled">
+		<add-on name="tab" inherits="styled,with-element-model">
+			<element-model>
+				<?DOC The ID of the current tab being rendered?>
+				<value name="tabId" priority="100" />
+			</element-model>
+			<?DOC The ID for this tab?>
+			<attribute name="tab-id" type="expression" />
 			<?DOC The name to display to represent this tab?>
 			<attribute name="tab-name" type="expression" specify="optional" />
 			<?DOC The icon to display to represent this tab?>
@@ -210,10 +228,11 @@
 				When the user does this, this value will be assigned to false.?>
 			<attribute name="tab-available" type="expression" default="true" />
 		</add-on>
-		<?DOC A tab in a &lt;tabs> pane?>
-		<add-on name="tab" requires="widget" inherits="abstract-tab">
-			<?DOC The ID for this tab?>
-			<attribute name="tab-id" type="expression" />
+		<add-on name="tab-set-tab" inherits="tab">
+			<attr-mod name="tab.tab-id" specify="optional" default="${active-value-name}" />
+		</add-on>
+		<add-on name="tab-set" requires="multi-widget">
+			<child-mod child="multi-widget.renderer" inherits="tab-set-tab" />
 		</add-on>
 
 		<?DOC Something that may have a &lt;menu-bar>?>
@@ -636,16 +655,34 @@
 		</element-def>
 
 		<!-- Containers -->
+		<?DOC A container that also supports &lt;multi-widget> components, rendering a widget for each value in a collection?>
+		<element-def name="variable-container" extends="container">
+			<?DOC &lt;multi-widget>s defining set of widgets to display?>
+			<child-def name="widget-set" type="multi-widget" min="0" max="inf" />
+		</element-def>
+		<?DOC An element that creates a variable number of children within a &lt;variable-container>, one for each value in a collection?>
+		<element-def name="multi-widget" inherits="rendering,styled,with-element-model">
+			<element-model>
+				<?DOC The value in the list of the active widget?>
+				<value name-attribute="active-value-name" priority="1" />
+			</element-model>
+			<?DOC The name of the currently applicable value, e.g. for rendering?>
+			<attribute name="active-value-name" type="identifier" default="activeValue" />
+			<?DOC The values to show as component widgets?>
+			<attribute name="values" type="expression" />
+		</element-def>
 		<?DOC A simple container with a layout for arranging its contents?>
-		<element-def name="box" extends="container">
+		<element-def name="box" extends="variable-container">
 			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
 		<?DOC A panel for vertically listing various related fields, each with an optional field description for the user?>
-		<element-def name="field-panel" extends="container">
-			<?DOC Whether this panel should allocate space to invisible components?>
+		<element-def name="field-panel" extends="variable-container">
+			<?DOC Whether this panel should allocate (empty) space to invisible components?>
 			<attribute name="show-invisible" type="boolean" default="false" />
 			<child-mod child="content" inherits="field" />
+			<?DOC &lt;multi-widget>s defining set of widgets to display?>
+			<child-mod child="widget-set" inherits="widget-set-field" />
 		</element-def>
 		<element-def name="post-field">
 			<child-def name="content" type="widget" />
@@ -669,7 +706,7 @@
 			When the user selects a tab, its visible boolean will be set to true if allowed,
 				and similarly the newly de-selected tab's visible boolean will be set to false if allowed.<br>
 			A tab may also be selected by its visible value being set to true.?>
-		<element-def name="tabs" extends="container">
+		<element-def name="tabs" extends="variable-container">
 			<element-model>
 				<?DOC The ID value of the tab that is selected?>
 				<value name="selectedTab" priority="1" />
@@ -677,19 +714,7 @@
 			<?DOC Allows control over the selected tab--the ID value of the tab to select?>
 			<attribute name="selected" type="expression" specify="optional" />
 			<child-mod child="content" inherits="tab" />
-			<?DOC A &lt;tab-set> defining a set of tabs to display?>
-			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
-		</element-def>
-		<?DOC A dynamic set of tabs in a &lt;tabs> pane.  Each tab is represented by a value in a collection?>
-		<element-def name="tab-set" inherits="with-element-model">
-			<element-model>
-				<?DOC The ID of the current tab being rendered?>
-				<value name="tabId" />
-			</element-model>
-			<?DOC The values to show as tabs?>
-			<attribute name="values" type="expression" />
-			<?DOC Renders the selected tab?>
-			<child-def name="renderer" type="widget" inherits="abstract-tab" />
+			<child-mod child="widget-set" inherits="tab-set" />
 		</element-def>
 		<?DOC A split pane that displays two widgets adjacent to each other, with an adjustable bar in between?>
 		<element-def name="split" extends="container">
