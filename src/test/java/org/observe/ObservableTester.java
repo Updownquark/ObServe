@@ -1,5 +1,7 @@
 package org.observe;
 
+import org.qommons.Subscription;
+
 /** A utility for testing an observable */
 public class ObservableTester extends AbstractObservableTester<Void> {
 	private final Observable<?> theObservable;

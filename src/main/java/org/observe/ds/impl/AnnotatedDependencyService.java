@@ -34,14 +34,13 @@ import java.util.function.Function;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.ds.ComponentController;
 import org.observe.ds.DSComponent;
 import org.observe.ds.DependencyService;
 import org.observe.util.TypeTokens;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterHashMultiMap;
@@ -49,6 +48,7 @@ import org.qommons.collect.MultiMap;
 import org.qommons.collect.RRWLockingStrategy;
 import org.qommons.collect.SortedMultiMap;
 import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 import org.qommons.osgi.ComponentBasedExecutor;
@@ -483,7 +483,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 				String status = compAnn == null ? "" : compAnn.loadStatus();
 				Function<T, ObservableValue<String>> loadStatus;
 				if (status.isEmpty())
-					loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()), "simpleStatus",
+					loadStatus = FunctionUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()), "simpleStatus",
 						null);
 				else if (status.endsWith("()")) {
 					Method statusMethod;
@@ -500,7 +500,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					Method fStatusMethod = statusMethod;
 					Type statusType = statusMethod == null ? null : statusMethod.getGenericReturnType();
 					if (statusType == null) {
-						loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+						loadStatus = FunctionUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
 							"simpleStatus", null);
 					} else if (statusType == String.class) {
 						loadStatus = inst -> {
@@ -531,17 +531,17 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 						} else {
 							System.err.println("Load status method " + componentType.getName() + "." + status + " returns " + statusType
 								+ ", which cannot be interpreted.  Return a String or an ObservableValue<String>.");
-							loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+							loadStatus = FunctionUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
 								"simpleStatus", null);
 						}
 					} else {
 						System.err.println("Load status method " + componentType.getName() + "." + status + " returns " + statusType
 							+ ", which cannot be interpreted.  Return a String or an ObservableValue<String>.");
-						loadStatus = LambdaUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
+						loadStatus = FunctionUtils.constantFn(ObservableValue.of("Initializing " + componentType.getSimpleName()),
 							"simpleStatus", null);
 					}
 				} else
-					loadStatus = LambdaUtils.constantFn(ObservableValue.of(status), status, null);
+					loadStatus = FunctionUtils.constantFn(ObservableValue.of(status), status, null);
 				ComponentActivate<T> cm = new ComponentActivate<>(ct.method(m), false, loadStatus);
 				if (cm.getType() != null)
 					throw new IllegalArgumentException(componentType + ": Activate method " + cm

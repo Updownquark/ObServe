@@ -7,9 +7,9 @@ import java.util.function.Consumer;
 import org.observe.Equivalence;
 import org.observe.LightWeightObservable;
 import org.observe.Observable.CoreChangeSources;
-import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
+import org.qommons.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
@@ -64,15 +64,11 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
 		theValues = list;
 		theLock = list;
-		theChanges = new LightWeightObservable<ObservableCollectionEvent<E>>(ListenerList.build()//
+		theChanges = new LightWeightObservable<>(ListenerList.build()//
 			.reentrancyError(() -> ObservableCollection.REENTRANT_EVENT_ERROR + ": " + getIdentity().toString())//
 			.forEachSafe(!theLock.getThreadConstraint().isDedicated())//
-			.build()) {
-			@Override
-			protected boolean isInternalState() {
-				return true;
-			}
-		};
+			.skipAddByDefault(true)//
+			.build());
 		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;

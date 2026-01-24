@@ -24,7 +24,6 @@ import java.util.stream.Stream;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
-import org.observe.Subscription;
 import org.observe.XformOptions;
 import org.observe.collect.FlatMapOptions.FlatMapDef;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -39,9 +38,9 @@ import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.Subscription;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
@@ -58,6 +57,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.OptimisticContext;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
@@ -1936,6 +1936,8 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
+				if (manager == null)
+					return ThreadConstraint.NONE;
 				return manager.getThreadConstraint();
 			}
 
@@ -2028,7 +2030,7 @@ public class ObservableCollectionActiveManagers2 {
 					public void update(X oldValue, X newValue, boolean internalOnly, Object... causes) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = Lockable.lockAll(Lockable.lockable(theParent),
-							() -> Arrays.asList(Lockable.lockable(theHolder)), LambdaUtils.identity())) {
+							() -> Arrays.asList(Lockable.lockable(theHolder)), FunctionUtils.identity())) {
 							if (internalOnly) {
 								valueUpdated(oldValue, newValue, causes, true);
 								return;

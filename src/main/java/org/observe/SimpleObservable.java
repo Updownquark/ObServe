@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -21,6 +22,18 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	/** @return A builder for a {@link SimpleObservable} */
 	public static Builder build() {
 		return new Builder();
+	}
+
+	/**
+	 * @param <T> The type of observable to create
+	 * @param build Configuration for the observable
+	 * @return The new observable
+	 */
+	public static <T> SimpleObservable<T> create(Consumer<Builder> build) {
+		Builder builder = build();
+		if (build != null)
+			build.accept(builder);
+		return builder.build();
 	}
 
 	/** Builds {@link SimpleObservable}s */
@@ -57,7 +70,6 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 
 	private final Consumer<? super Observer<? super T>> theOnSubscribe;
 	private final Object theIdentity;
-	private final boolean isInternalState;
 	private final Transactable theLock;
 
 	/** Creates a simple observable */
@@ -104,10 +116,9 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	 */
 	protected SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description,
 		boolean internalState, Function<Object, Transactable> lock, ListenerList.Builder listening) {
-		super((listening == null ? ListenerList.build() : listening).build());
+		super((listening == null ? ListenerList.build() : listening).skipAddByDefault(internalState).build());
 		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
 		theOnSubscribe = onSubscribe;
-		isInternalState = internalState;
 		theLock = lock == null ? null : lock.apply(this);
 	}
 
@@ -120,10 +131,9 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	 */
 	protected SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description,
 		boolean internalState, AbstractEventableBuilder.EventableData<? super SimpleObservable<T>> eventableData) {
-		super(obs -> eventableData.getListening((SimpleObservable<T>) obs).build());
+		super(obs -> eventableData.getListening((SimpleObservable<T>) obs).skipAddByDefault(internalState).build());
 		theIdentity = identity != null ? identity : Identifiable.baseId(description != null ? description : "observable", this);
 		theOnSubscribe = onSubscribe;
-		isInternalState = internalState;
 		theLock = eventableData.getLock(this);
 	}
 
@@ -140,11 +150,6 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	@Override
 	public Object getIdentity() {
 		return theIdentity;
-	}
-
-	@Override
-	protected boolean isInternalState() {
-		return isInternalState;
 	}
 
 	@Override

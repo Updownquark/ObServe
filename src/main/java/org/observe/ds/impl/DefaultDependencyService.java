@@ -172,6 +172,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 			task.run();
 	}
 
+	@SuppressWarnings("resource")
 	private void runScheduledTasks() {
 		ListenerList.Element<Runnable> task = theScheduledTasks.poll(0);
 		while (task != null) {

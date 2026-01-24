@@ -14,9 +14,9 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.LambdaUtils;
 import org.qommons.Transactable;
 import org.qommons.collect.CollectionElement;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
@@ -50,7 +50,7 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> im
 				derivedOneStepFlow = derivedOneStepFlow.refresh(filterValue.changes().noInit());
 				derivedMultiStepFlow = derivedMultiStepFlow.refresh(filterValue.changes().noInit());
 			}
-			Function<T, String> filter = LambdaUtils.printableFn(v -> filterValue.get().apply(v), () -> filterValue.get().toString());
+			Function<T, String> filter = FunctionUtils.printableFn(v -> filterValue.get().apply(v), () -> filterValue.get().toString());
 			derivedOneStepFlow = derivedOneStepFlow.filter(filter);
 			derivedMultiStepFlow = derivedMultiStepFlow.filter(filter);
 			ObservableCollectionTestDef<T> def = new ObservableCollectionTestDef<>(sourceCL.getType(), derivedOneStepFlow,

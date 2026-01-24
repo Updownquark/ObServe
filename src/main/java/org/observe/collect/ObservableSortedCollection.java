@@ -9,12 +9,9 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.SortedTreeList;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * A sorted collection whose content can be observed.
@@ -25,9 +22,6 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the collection
  */
 public interface ObservableSortedCollection<E> extends ObservableCollection<E>, BetterSortedList<E> {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableSortedCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedCollection.class).wildCard();
-
 	@Override
 	ObservableSortedCollection<E> alias(String alias);
 

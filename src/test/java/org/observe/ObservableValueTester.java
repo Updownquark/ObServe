@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.Objects;
 
+import org.qommons.Subscription;
+
 /**
  * A utility for testing an observable value
  *

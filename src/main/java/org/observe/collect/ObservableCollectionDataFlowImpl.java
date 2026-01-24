@@ -39,7 +39,6 @@ import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollection
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -49,6 +48,7 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 
 /** Contains implementations of {@link CollectionDataFlow} and its dependencies */
 public class ObservableCollectionDataFlowImpl {
@@ -736,7 +736,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private <K> CollectionDataFlow<E, ?, T> gatherValues(AddKeyHolder.Default<K> addKey, BiFunction<K, T, T> reverse) {
-			return transform(tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.printableFn(v -> {
+			return transform(tx -> tx.map(FunctionUtils.identity()).withReverse(FunctionUtils.printableFn(v -> {
 				if (addKey.get() != null)
 					return reverse.apply(addKey.get(), v);
 				else
@@ -942,17 +942,17 @@ public class ObservableCollectionDataFlowImpl {
 					// we also need this transform for non-default equivalence (e.g. sorted)
 					return def.equivalence();
 				} else {
-					Function<? super I, ? extends T> map = LambdaUtils.printableFn(v -> {
+					Function<? super I, ? extends T> map = FunctionUtils.printableFn(v -> {
 						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 						return engine.map(v, engine.get());
 					}, def::toString, def);
 					Equivalence<T> mappedEquivalence = sourceEquivalence.map( //
-						LambdaUtils.printablePred(v -> {
+						FunctionUtils.printablePred(v -> {
 							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getError() == null;
 						}, def + ".filter", def), map, //
-						LambdaUtils.printableFn(v -> {
+						FunctionUtils.printableFn(v -> {
 							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getReversed();
@@ -1155,9 +1155,9 @@ public class ObservableCollectionDataFlowImpl {
 			}
 			ActiveCollectionManager<E, ?, T> manager = getParent()//
 				.map(theMap)//
-				.refreshEach(LambdaUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
+				.refreshEach(FunctionUtils.printableFn(ObservableValue::noInitChanges, "noInitChanges", "ObservableValue.noInitChanges"))//
 				.<T> transform(tx -> {
-					return tx.map(LambdaUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
+					return tx.map(FunctionUtils.printableFn(obs -> obs == null ? null : obs.get(), () -> "flatten"))
 						.withReverse(new RefreshingMapReverse());
 				})//
 				.manageActive();

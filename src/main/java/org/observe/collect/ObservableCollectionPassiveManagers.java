@@ -21,7 +21,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.MapWithParent;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.Stamped;
@@ -31,10 +30,8 @@ import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.MutableListElement;
-
-import com.google.common.reflect.TypeParameter;
-import com.google.common.reflect.TypeToken;
 
 /** Contains implementations of {@link PassiveCollectionManager} and its dependencies */
 public class ObservableCollectionPassiveManagers {
@@ -118,20 +115,6 @@ public class ObservableCollectionPassiveManagers {
 	}
 
 	/**
-	 * Derives a function type from its parameter types
-	 *
-	 * @param <E> The compiler type of the function's source parameter
-	 * @param <T> The compiler type of the function's product parameter
-	 * @param srcType The run-time type of the function's source parameter
-	 * @param destType The run-time type of the function's product parameter
-	 * @return The type of a function with the given parameter types
-	 */
-	static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
-		return new TypeToken<Function<? super E, T>>() {}.where(new TypeParameter<E>() {}, srcType.wrap()).where(new TypeParameter<T>() {},
-			destType.wrap());
-	}
-
-	/**
 	 * Supports passive collection of a base collection flow
 	 *
 	 * @param <E> The type of the collection and therefore the flow
@@ -144,7 +127,7 @@ public class ObservableCollectionPassiveManagers {
 		public BaseCollectionPassThrough(ObservableCollection<E> source) {
 			theSource = source;
 
-			theFunctionValue = ObservableValue.of(LambdaUtils.identity());
+			theFunctionValue = ObservableValue.of(FunctionUtils.identity());
 		}
 
 		@Override

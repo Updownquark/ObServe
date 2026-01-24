@@ -18,15 +18,16 @@ import org.observe.collect.ObservableCollection;
 import org.qommons.BiTuple;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.TriFunction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
+import org.qommons.fn.TriFunction;
 
 /**
  * An observable value for which a value can be assigned directly
@@ -149,10 +150,10 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, //
+				return ObservableValue.firstValue(FunctionUtils.NON_NULL, null, //
 					SettableValue.this.isEnabled(), //
 					value.refresh(noInitChanges())
-					.map(LambdaUtils.printableFn(v -> isAcceptable(v), () -> "acceptableTo(" + this + ")", null))//
+					.map(FunctionUtils.printableFn(v -> isAcceptable(v), () -> "acceptableTo(" + this + ")", null))//
 					);
 			}
 
@@ -228,7 +229,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	default <R> SettableValue<R> transformReversible(
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
 		Transformation.ReversibleTransformation<T, R> def = combination.apply(new Transformation.ReversibleTransformationPrecursor<>());
-		if (def.getArgs().isEmpty() && LambdaUtils.isTrivial(def.getCombination()))
+		if (def.getArgs().isEmpty() && FunctionUtils.isTrivial(def.getCombination()))
 			return (SettableValue<R>) this;
 		return new TransformedSettableValue<>(this, def);
 	}
@@ -429,7 +430,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value) {
-		return flatten(value, LambdaUtils.constantSupplier(null));
+		return flatten(value, FunctionUtils.constantSupplier(null));
 	}
 
 	/**
@@ -494,7 +495,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return An unmodifiable settable value
 	 */
 	public static <T> SettableValue<T> of(T value, String disabled) {
-		return asSettable(ObservableValue.of(value), LambdaUtils.constantFn(disabled, disabled, disabled));
+		return asSettable(ObservableValue.of(value), FunctionUtils.constantFn(disabled, disabled, disabled));
 	}
 
 	/**
@@ -779,12 +780,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			ObservableValue<String> txEnabled = transform(tx -> tx.cache(true).map(LambdaUtils.printableFn(__ -> {
+			ObservableValue<String> txEnabled = transform(tx -> tx.cache(true).map(FunctionUtils.printableFn(__ -> {
 				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
 				return state.getValue1().isEnabled(state.getValue2());
 			}, "enabled", "enabled")));
 			if (getTransformation().getReverse().requiresSourceModification()) {
-				return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, txEnabled, getSource().isEnabled());
+				return ObservableValue.firstValue(FunctionUtils.NON_NULL, null, txEnabled, getSource().isEnabled());
 			} else
 				return txEnabled;
 		}
@@ -1460,7 +1461,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(LambdaUtils.NON_NULL, null, isEnabled, getWrapped().isEnabled());
+			return ObservableValue.firstValue(FunctionUtils.NON_NULL, null, isEnabled, getWrapped().isEnabled());
 		}
 	}
 

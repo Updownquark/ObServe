@@ -36,7 +36,6 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.config.ParentReference;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
@@ -47,6 +46,7 @@ import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -2855,7 +2855,7 @@ public class EntityReflector<E> {
 			if (theFieldChanges == null)
 				theFieldChanges = new LightWeightObservable[theFields.keySize()];
 			if (theFieldChanges[fieldIndex] == null) {
-				theFieldChanges[fieldIndex] = new LightWeightObservable<EntityFieldChangeEvent<E, ?>>(//
+				theFieldChanges[fieldIndex] = new LightWeightObservable<>(//
 					ListenerList.build().withInUse(new ListenerList.InUseListener() {
 						private Subscription fieldSub;
 
@@ -2869,12 +2869,7 @@ public class EntityReflector<E> {
 								fieldSub = null;
 							}
 						}
-					}).build()) {
-					@Override
-					protected boolean isInternalState() {
-						return true;
-					}
-				};
+					}).withFastSize(false).skipAddByDefault(true).build());
 			}
 			return theFieldChanges[fieldIndex];
 		}

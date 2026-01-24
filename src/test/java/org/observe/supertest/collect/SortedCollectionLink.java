@@ -14,9 +14,9 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.CollectionElement;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
@@ -44,7 +44,7 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 			Comparator<T> compare = compare(sourceLink.getType(), helper);
 			SettableValue<SortedLinkHelper<T>> sort = SettableValue.<SortedLinkHelper<T>> build()
 				.withValue(new SortedLinkHelper<>(compare, true)).build();
-			Comparator<T> wrappedCompare = LambdaUtils.printableComparator((v1, v2) -> sort.get().getCompare().compare(v1, v2),
+			Comparator<T> wrappedCompare = FunctionUtils.printableComparator((v1, v2) -> sort.get().getCompare().compare(v1, v2),
 				() -> sort.get().getCompare().toString() + "*", null);
 			CollectionDataFlow<?, ?, T> derivedOneStepFlow = sourceCL.getCollection().flow();
 			CollectionDataFlow<?, ?, T> derivedMultiStepFlow = sourceCL.getDef().multiStepFlow;
@@ -243,37 +243,37 @@ public class SortedCollectionLink<T> extends ObservableCollectionLink<T, T> impl
 			switch (type) {
 			case INT:
 				COMPARATORS.put(type, Arrays.asList(//
-					LambdaUtils.printableComparator(Integer::compareTo, () -> "int asc"), //
-					LambdaUtils.<Integer> printableComparator((i1, i2) -> -Integer.compare(i1, i2), () -> "int desc"), //
-					LambdaUtils.<Integer> printableComparator((i1, i2) -> compareIntAbs(i1, i2), () -> "int abs asc"), //
-					LambdaUtils.<Integer> printableComparator((i1, i2) -> -compareIntAbs(i1, i2),
+					FunctionUtils.printableComparator(Integer::compareTo, () -> "int asc"), //
+					FunctionUtils.<Integer> printableComparator((i1, i2) -> -Integer.compare(i1, i2), () -> "int desc"), //
+					FunctionUtils.<Integer> printableComparator((i1, i2) -> compareIntAbs(i1, i2), () -> "int abs asc"), //
+					FunctionUtils.<Integer> printableComparator((i1, i2) -> -compareIntAbs(i1, i2),
 						() -> "int abs desc")//
 					));
 				break;
 			case DOUBLE:
 				COMPARATORS.put(type, Arrays.asList(//
-					LambdaUtils.printableComparator(Double::compareTo, () -> "double asc"), //
-					LambdaUtils.<Double> printableComparator((i1, i2) -> -Double.compare(i1, i2), () -> "double desc"), //
-					LambdaUtils.<Double> printableComparator((i1, i2) -> compareDoubleAbs(i1, i2),
+					FunctionUtils.printableComparator(Double::compareTo, () -> "double asc"), //
+					FunctionUtils.<Double> printableComparator((i1, i2) -> -Double.compare(i1, i2), () -> "double desc"), //
+					FunctionUtils.<Double> printableComparator((i1, i2) -> compareDoubleAbs(i1, i2),
 						() -> "double abs asc"), //
-					LambdaUtils.<Double> printableComparator((i1, i2) -> -compareDoubleAbs(i1, i2),
+					FunctionUtils.<Double> printableComparator((i1, i2) -> -compareDoubleAbs(i1, i2),
 						() -> "double abs desc")//
 					));
 				break;
 			case STRING:
 				COMPARATORS.put(type, Arrays.asList(//
-					LambdaUtils.printableComparator(String::compareTo, () -> "string asc"), //
-					LambdaUtils.<String> printableComparator((i1, i2) -> -i1.compareTo(i2), () -> "string desc"), //
-					LambdaUtils.<String> printableComparator((i1, i2) -> StringUtils.compareNumberTolerant(i1, i2, true, true),
+					FunctionUtils.printableComparator(String::compareTo, () -> "string asc"), //
+					FunctionUtils.<String> printableComparator((i1, i2) -> -i1.compareTo(i2), () -> "string desc"), //
+					FunctionUtils.<String> printableComparator((i1, i2) -> StringUtils.compareNumberTolerant(i1, i2, true, true),
 						() -> "string asc(i)"), //
-					LambdaUtils.<String> printableComparator((i1, i2) -> -StringUtils.compareNumberTolerant(i1, i2, true, true),
+					FunctionUtils.<String> printableComparator((i1, i2) -> -StringUtils.compareNumberTolerant(i1, i2, true, true),
 						() -> "string desc(i)")//
 					));
 				break;
 			case BOOLEAN:
 				COMPARATORS.put(type, Arrays.asList(//
-					LambdaUtils.printableComparator(Boolean::compareTo, () -> "boolean asc"), //
-					LambdaUtils.<Boolean> printableComparator((v1, v2) -> -Boolean.compare(v1, v2), () -> "boolean desc")//
+					FunctionUtils.printableComparator(Boolean::compareTo, () -> "boolean asc"), //
+					FunctionUtils.<Boolean> printableComparator((v1, v2) -> -Boolean.compare(v1, v2), () -> "boolean desc")//
 					));
 				break;
 			}

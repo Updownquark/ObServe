@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -12,7 +13,6 @@ import java.util.function.Function;
 import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
 import org.observe.Observable.CoreChangeSources;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
@@ -20,6 +20,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList;
@@ -521,6 +522,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		protected ObservableSortedSet<Map.Entry<K, V>> getEntries() {
+			return (ObservableSortedSet<Map.Entry<K, V>>) super.getEntries();
+		}
+
+		@Override
 		public DefaultObservableSortedMap<K, V> alias(String alias) {
 			super.alias(alias);
 			return this;
@@ -542,9 +548,70 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
+		public OrderedMapEntry<K, V> getEntry(K key) {
+			Comparator<? super K> sorting = comparator();
+			try {
+				return searchEntries(entry -> sorting.compare(key, entry.getKey()), SortedSearchFilter.OnlyMatch);
+			} catch (NullPointerException e) {
+				/* A very common use case is to make a sorted map with a lambda comparator (e.g. Comparable::compareTo).
+				 * In such cases, any query with a null key will result in a NullPointerException.
+				 * Ideally, either every comparator would be able to handle null (which I think it is unreasonable to expect of a developer),
+				 * or we would be able to detect whether the comparator handles null and deal with it,
+				 * but the Comparator API does not allow this.
+				 *
+				 * In many cases (as here), the intended result of query with a null key into a map that does not handle null keys is clear.
+				 * So we can either propagate (or not handle) the exception when the comparator throws it, or we can handle it as it should
+				 * be handled with a slight performance hit for allowing the NPE to be thrown.
+				 */
+				if (key == null) // The comparator must not handle nulls
+					return null;
+				// else That can't be the problem and the dev needs to know there's some other issue
+				throw e;
+			}
+		}
+
+		@Override
 		public OrderedMapEntry<K, V> searchEntries(Comparable<? super Map.Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
-			CollectionElement<Map.Entry<K, V>> entry = entrySet().search(search, filter);
-			return entry == null ? null : getEntryById(entry.getElementId());
+			CollectionElement<Entry<K, V>> found = getEntries().search(search, filter);
+			return found == null ? null : getEntryById(found.getElementId());
+		}
+
+		class SearchEntry implements Map.Entry<K, V>{
+			private final K theKey;
+
+			SearchEntry(K key) {
+				theKey = key;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public V getValue() {
+				return get(theKey);
+			}
+
+			@Override
+			public V setValue(V value) {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hash(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof Map.Entry && Objects.equals(getKey(), ((Map.Entry<?, ?>) obj).getKey());
+			}
+
+			@Override
+			public String toString() {
+				return getKey()+"=?";
+			}
 		}
 	}
 

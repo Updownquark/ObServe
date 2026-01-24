@@ -3,11 +3,10 @@ package org.observe.util;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -16,9 +15,9 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.Observer.SimpleObserver;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -27,7 +26,7 @@ import org.qommons.collect.ListenerList;
  * <p>
  * A collection of listeners that are weakly reachable from the event sources they are subscribed to. As long the WeakListening object is
  * strongly reachable, all the listeners are safe from garbage collection. If the WeakListening object is garbage-collected, all listeners
- * become available for garbage collection and the subscriptions to the event sources will be unsubscribed.
+ * become available for garbage collection and the subscriptions to the event sources will be unsubscribed when they are next utilized.
  * </p>
  *
  * <p>
@@ -37,12 +36,19 @@ import org.qommons.collect.ListenerList;
  * </p>
  */
 public class WeakListening {
-	private final AtomicLong theIdGen;
-	private final ConcurrentHashMap<Long, ActionStruct> theActions;
+	static class WeakActionKey {
+	}
+
+	private interface WeakActionMaker<X> {
+		X make(WeakListening listening, WeakActionKey actionKey);
+	}
+
+	private final Map<WeakActionKey, ActionStruct> theActions;
+	private final WeakReference<WeakListening> theWeakMe;
 
 	private WeakListening() {
-		theIdGen = new AtomicLong();
-		theActions = new ConcurrentHashMap<>();
+		theActions = new LinkedHashMap<>();
+		theWeakMe = new WeakReference<>(this);
 	}
 
 	/**
@@ -96,44 +102,52 @@ public class WeakListening {
 	 *         parent is not affected.
 	 */
 	public Builder child() {
-		Long actionId = theIdGen.getAndIncrement();
+		WeakActionKey actionKey = new WeakActionKey();
 		ActionStruct as = new ActionStruct(null);
-		theActions.put(actionId, as);
+		theActions.put(actionKey, as);
 
 		SimpleObservable<Void> childUnsub = new SimpleObservable<>();
+		// It looks like the key is never removed from the map by unsubscription here,
+		// but when I add that in the subscription lambda, I get ConcurrentModificationExceptions from the unsubscribe() method
 		as.subscription = () -> childUnsub.onNext(null);
 
 		@SuppressWarnings("resource")
 		Builder child = new Builder().withUntil(//
-			action -> childUnsub.act(v -> action.run()));
+			action -> childUnsub.act0(action::run));
 		return child;
 	}
 
 	// This a utility method, not public, as weakMaker must produce an X that is also an extension of WeakAction
-	private <X> Subscription with(X action, BiFunction<WeakListening, Long, X> weakMaker,
+	private <X> Subscription with(X action, WeakActionMaker<X> weakMaker,
 		Function<? super X, ? extends Subscription> subscribe) {
-		Long actionId = theIdGen.getAndIncrement();
-		X weak = weakMaker.apply(this, actionId);
+		WeakActionKey actionKey = new WeakActionKey();
+		X weak = weakMaker.make(this, actionKey);
 		ActionStruct as = new ActionStruct(action);
-		theActions.put(actionId, as);
+		theActions.put(actionKey, as);
 		as.subscription = subscribe.apply(weak);
 		((WeakAction) weak).withSubscription(as.subscription);
 		return () -> {
 			as.unsubscribe();
-			theActions.remove(actionId);
 		};
 	}
 
-	Object getAction(Long actionId) {
-		ActionStruct action = theActions.get(actionId);
+	WeakReference<WeakListening> getWeakRef() {
+		return theWeakMe;
+	}
+
+	Object getAction(WeakActionKey actionKey) {
+		ActionStruct action = theActions.get(actionKey);
 		return action == null ? null : action.action;
 	}
 
 	void unsubscribe() {
 		Iterator<ActionStruct> subIter = theActions.values().iterator();
+		int size = theActions.size();
 		while (subIter.hasNext()) {
 			subIter.next().unsubscribe();
-			subIter.remove();
+			if (theActions.size() == size)
+				subIter.remove();
+			size--;
 		}
 	}
 
@@ -158,8 +172,7 @@ public class WeakListening {
 		 */
 		public Builder withUntil(Function<? super Runnable, ? extends Subscription> until) {
 			theListening.withAction(//
-				() -> theListening.unsubscribe(), //
-				until);
+				theListening::unsubscribe, until);
 			return this;
 		}
 
@@ -192,12 +205,12 @@ public class WeakListening {
 
 	private static abstract class WeakAction {
 		private final Reference<WeakListening> theListening;
-		private final Long theActionId;
+		private final WeakActionKey theActionKey;
 		private Subscription theSubscription;
 
-		WeakAction(WeakListening listening, Long actionId) {
-			theListening = new WeakReference<>(listening);
-			theActionId = actionId;
+		WeakAction(WeakListening listening, WeakActionKey actionKey) {
+			theListening = listening.getWeakRef();
+			theActionKey = actionKey;
 		}
 
 		void withSubscription(Subscription sub) {
@@ -213,13 +226,13 @@ public class WeakListening {
 					sub.unsubscribe();
 				return null;
 			} else
-				return (A) listening.getAction(theActionId);
+				return (A) listening.getAction(theActionKey);
 		}
 	}
 
 	private static class WeakRunnable extends WeakAction implements Runnable {
-		WeakRunnable(WeakListening listening, Long actionId) {
-			super(listening, actionId);
+		WeakRunnable(WeakListening listening, WeakActionKey actionKey) {
+			super(listening, actionKey);
 		}
 
 		@Override
@@ -231,8 +244,8 @@ public class WeakListening {
 	}
 
 	private static class WeakConsumer<E> extends WeakAction implements Consumer<E> {
-		WeakConsumer(WeakListening listening, Long actionId) {
-			super(listening, actionId);
+		WeakConsumer(WeakListening listening, WeakActionKey actionKey) {
+			super(listening, actionKey);
 		}
 
 		@Override
@@ -249,8 +262,8 @@ public class WeakListening {
 	}
 
 	private static class WeakObserver<E> extends WeakAction implements SimpleObserver<E> {
-		WeakObserver(WeakListening listening, Long actionId) {
-			super(listening, actionId);
+		WeakObserver(WeakListening listening, WeakActionKey actionKey) {
+			super(listening, actionKey);
 		}
 
 		@Override
@@ -267,8 +280,8 @@ public class WeakListening {
 	}
 
 	private static class WeakBiConsumer<E, F> extends WeakAction implements BiConsumer<E, F> {
-		WeakBiConsumer(WeakListening listening, Long actionId) {
-			super(listening, actionId);
+		WeakBiConsumer(WeakListening listening, WeakActionKey actionKey) {
+			super(listening, actionKey);
 		}
 
 		@Override

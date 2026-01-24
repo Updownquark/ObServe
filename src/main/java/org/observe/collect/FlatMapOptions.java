@@ -7,10 +7,10 @@ import java.util.function.Supplier;
 
 import org.observe.XformOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.qommons.LambdaUtils;
-import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
+import org.qommons.fn.TriFunction;
 
 /**
  * Options for creating flat-mapped {@link CollectionDataFlow}s
@@ -124,11 +124,11 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	default FlatMapOptions<S, V, X> replaceSource(BiFunction<? super V, ? super X, ? extends S> reverse,
 		BiFunction<? super V, ? super X, String> enabled){
 		return withReverse(new SimpleFlatMapReverse<>(//
-			LambdaUtils.<S, V, X, S> printableTriFn((s, v, x) -> reverse.apply(v, x), reverse::toString,
-				LambdaUtils.getIdentifier(reverse)),
+			FunctionUtils.<S, V, X, S> printableTriFn((s, v, x) -> reverse.apply(v, x), reverse::toString,
+				FunctionUtils.getIdentifier(reverse)),
 			null,
-			enabled == null ? null : LambdaUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
-				LambdaUtils.getIdentifier(enabled)),
+			enabled == null ? null : FunctionUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
+				FunctionUtils.getIdentifier(enabled)),
 				false));
 	}
 
@@ -162,10 +162,10 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	default FlatMapOptions<S, V, X> replaceValue(BiFunction<? super S, ? super X, ? extends V> reverse,
 		BiFunction<? super S, ? super X, String> enabled){
 		return withReverse(new SimpleFlatMapReverse<>(null,
-			LambdaUtils.<S, V, X, V> printableTriFn((s, v, x) -> reverse.apply(s, x), reverse::toString,
-				LambdaUtils.getIdentifier(reverse)),
-			enabled == null ? null : LambdaUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(s, x), enabled::toString,
-				LambdaUtils.getIdentifier(enabled)),
+			FunctionUtils.<S, V, X, V> printableTriFn((s, v, x) -> reverse.apply(s, x), reverse::toString,
+				FunctionUtils.getIdentifier(reverse)),
+			enabled == null ? null : FunctionUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(s, x), enabled::toString,
+				FunctionUtils.getIdentifier(enabled)),
 				false));
 	}
 
@@ -199,8 +199,8 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	default FlatMapOptions<S, V, X> sourceFieldSetter(BiConsumer<? super S, ? super X> setter,
 		BiFunction<? super S, ? super X, String> enabled) {
 		return withReverse(new FieldSettingFlatMapReverse<>(setter, null, //
-			enabled == null ? null : LambdaUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(s, x), enabled::toString,
-				LambdaUtils.getIdentifier(enabled)),
+			enabled == null ? null : FunctionUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(s, x), enabled::toString,
+				FunctionUtils.getIdentifier(enabled)),
 				null, null));
 	}
 
@@ -215,8 +215,8 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 	default FlatMapOptions<S, V, X> valueFieldSetter(BiConsumer<? super V, ? super X> setter,
 		BiFunction<? super V, ? super X, String> enabled) {
 		return withReverse(new FieldSettingFlatMapReverse<>(null, setter, //
-			enabled == null ? null : LambdaUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
-				LambdaUtils.getIdentifier(enabled)),
+			enabled == null ? null : FunctionUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
+				FunctionUtils.getIdentifier(enabled)),
 				null, null));
 	}
 
@@ -236,8 +236,8 @@ public interface FlatMapOptions<S, V, X> extends XformOptions {
 		BiFunction<? super V, ? super X, String> enabled, TriFunction<? super S, ? super X, Boolean, ? extends V> creator,
 		BiFunction<? super S, ? super X, String> createEnabled) {
 		return withReverse(new FieldSettingFlatMapReverse<>(null, setter, //
-			enabled == null ? null : LambdaUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
-				LambdaUtils.getIdentifier(enabled)),
+			enabled == null ? null : FunctionUtils.<S, V, X, String> printableTriFn((s, v, x) -> enabled.apply(v, x), enabled::toString,
+				FunctionUtils.getIdentifier(enabled)),
 				creator, createEnabled));
 	}
 

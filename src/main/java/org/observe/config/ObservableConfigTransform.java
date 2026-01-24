@@ -18,7 +18,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMapEvent;
 import org.observe.assoc.ObservableMultiMap;
@@ -37,10 +36,10 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -53,6 +52,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListElement;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.MutableListElement;
 import org.qommons.collect.MutableOrderedMapEntry;
 import org.qommons.collect.OrderedMapEntry;
@@ -355,7 +355,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-					return theListeners.add(observer, true)::run;
+					return theListeners.add(observer, true);
 				}
 			}
 			return new OCVChanges();
@@ -633,7 +633,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		public Subscription addListener(Consumer<? super ObservableCollectionEvent<? extends E>> listener) {
-			return theListeners.add(listener, true)::run;
+			return theListeners.add(listener, true);
 		}
 
 		public ObservableCollection<E> getCollection() {
@@ -781,7 +781,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
 					theFormat.format(//
-						getSession(), value, get(), (__, ___) -> theConfig, LambdaUtils.consumeDoNothing(), false,
+						getSession(), value, get(), (__, ___) -> theConfig, FunctionUtils.consumeDoNothing(), false,
 						Observable.or(getUntil(), theElementObservable));
 				}
 			}
@@ -1295,16 +1295,16 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate, entryFormat,
 				entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
-				theWrapped = theCollection.flow().<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-					LambdaUtils.printableBiFn((key, entry) -> {
+				theWrapped = theCollection.flow().<K> groupBy(FunctionUtils.printableFn(entry -> entry.key, "key", null), //
+					FunctionUtils.printableBiFn((key, entry) -> {
 						entry.key = key;
 						return entry;
 					}, "setKey", null))//
 					.withValues(values -> values.<V> transform(tx -> {
-						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
-							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+						return tx.cache(false).map(FunctionUtils.printableFn(entry -> entry.value, "value", null))//
+							.modifySource(FunctionUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
 								rvrs -> rvrs
-								.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+								.createWith(FunctionUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
 					})).gatherActive(until).singleMap(true);
 			});
 		}
@@ -1430,16 +1430,16 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			theCollection = new ObservableConfigValues<>(lock, session, collectionElement, ceCreate, entryFormat,
 				entryFormat.getValueField().childName, until, listen, findRefs);
 			findRefs.act(__ -> {
-				theWrapped = theCollection.flow().<K> groupBy(LambdaUtils.printableFn(entry -> entry.key, "key", null), //
-					LambdaUtils.printableBiFn((key, entry) -> {
+				theWrapped = theCollection.flow().<K> groupBy(FunctionUtils.printableFn(entry -> entry.key, "key", null), //
+					FunctionUtils.printableBiFn((key, entry) -> {
 						entry.key = key;
 						return entry;
 					}, "setKey", null))//
 					.withValues(values -> values.<V> transform(tx -> {
-						return tx.cache(false).map(LambdaUtils.printableFn(entry -> entry.value, "value", null))//
-							.modifySource(LambdaUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
+						return tx.cache(false).map(FunctionUtils.printableFn(entry -> entry.value, "value", null))//
+							.modifySource(FunctionUtils.printableBiConsumer((entry, value) -> entry.value = value, () -> "setValue", null), //
 								rvrs -> rvrs
-								.createWith(LambdaUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
+								.createWith(FunctionUtils.printableFn(value -> new MapEntry<>(null, value), "createEntry", null)));
 					})).gatherActive(until);
 			});
 		}

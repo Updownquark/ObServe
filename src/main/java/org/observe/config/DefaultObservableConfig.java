@@ -10,11 +10,11 @@ import org.observe.LightWeightObservable;
 import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
 import org.observe.Observer;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionElementMove;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstraint;
@@ -23,6 +23,7 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ListElement;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 
@@ -52,12 +53,10 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		theLocking = locking.apply(this);
 		theName = name;
 		theContent = BetterTreeList.<ObservableConfig> build().withLocking(theLocking).build();
-		theChanges = new LightWeightObservable<ObservableConfigEvent>() {
-			@Override
-			protected boolean isInternalState() {
-				return true;
-			}
-		};
+		theChanges = new LightWeightObservable<>(ListenerList.build()//
+			.withFastSize(false)//
+			.skipAddByDefault(true)//
+			.build());
 	}
 
 	/**

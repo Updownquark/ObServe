@@ -18,9 +18,9 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.TypeTransformation;
-import org.qommons.LambdaUtils;
 import org.qommons.Transactable;
 import org.qommons.ValueHolder;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
@@ -67,8 +67,8 @@ public class MappedCollectionLink<S, T> extends AbstractMappedCollectionLink<S, 
 			boolean oneToMany = variableMap || transform.isOneToMany();
 			boolean manyToOne = variableMap || transform.isManyToOne();
 			boolean allowInexactReversible = withReverse ? helper.getBoolean(0.1) : false;
-			Function<T, X> map = LambdaUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
-			Function<X, T> reverse = LambdaUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
+			Function<T, X> map = FunctionUtils.printableFn(src -> txValue.get().map(src), () -> txValue.get().toString());
+			Function<X, T> reverse = FunctionUtils.printableFn(dest -> txValue.get().reverse(dest), () -> txValue.get().reverseName());
 			Consumer<TransformationPrecursor<T, X, ?>> opts = o -> {
 				o.manyToOne(manyToOne).oneToMany(oneToMany);
 				options.accept(o.cache(cache).fireIfUnchanged(fireIfUnchanged).reEvalOnUpdate(reEvalOnUpdate));

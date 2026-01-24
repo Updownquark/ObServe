@@ -20,10 +20,10 @@ import org.qommons.ArgumentParsing;
 import org.qommons.ArgumentParsing.ArgumentPattern;
 import org.qommons.ArgumentParsing.ArgumentType;
 import org.qommons.ArgumentParsing.ValuedArgumentSetBuilder;
-import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.QuickSet.QuickMap;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.io.BetterFile;
 
 /**
@@ -508,7 +508,7 @@ public class EntityArguments<E> {
 			if (checkMethod[0] == null)
 				throw new IllegalArgumentException(
 					"No such check method matching boolean " + filterName + " for field " + theEntityType.getFields().keySet().get(index));
-			Predicate<T> filter = LambdaUtils.printablePred(v -> {
+			Predicate<T> filter = FunctionUtils.printablePred(v -> {
 				try {
 					return ((Boolean) checkMethod[0].invoke(null, v)).booleanValue();
 				} catch (InvocationTargetException e) {

@@ -2,11 +2,11 @@ package org.observe.util;
 
 import java.util.function.Consumer;
 
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.LongList;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 
 /**

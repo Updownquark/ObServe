@@ -26,7 +26,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
@@ -42,14 +41,15 @@ import org.qommons.Causable.AbstractCausable;
 import org.qommons.CausalLock;
 import org.qommons.Colors;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
 
@@ -62,28 +62,28 @@ import com.google.common.reflect.TypeToken;
  */
 public interface ObservableConfigFormat<E> {
 	/** Persists text ({@link String}s) */
-	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, LambdaUtils.constantSupplier(null));
+	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, FunctionUtils.constantSupplier(null));
 	/** Persists {@link Double}s */
 	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat(13)//
 		.printIntFor(3, false)//
 		.withExpCondition(6, -1)//
-		.build(), LambdaUtils.constantSupplier(0.0));
+		.build(), FunctionUtils.constantSupplier(0.0));
 	/** Persists {@link Float}s */
 	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.doubleFormat(9)//
 		.printIntFor(3, false)//
 		.withExpCondition(6, -1)//
-		.buildFloat(), LambdaUtils.constantSupplier(0.0f));
+		.buildFloat(), FunctionUtils.constantSupplier(0.0f));
 	/** Persists {@link Long}s */
-	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG, LambdaUtils.constantSupplier(0L));
+	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG, FunctionUtils.constantSupplier(0L));
 	/** Persists {@link Integer}s */
-	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, LambdaUtils.constantSupplier(0));
+	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, FunctionUtils.constantSupplier(0));
 	/** Persists {@link Boolean}s */
-	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, LambdaUtils.constantSupplier(false));
+	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, FunctionUtils.constantSupplier(false));
 	/** Persists {@link Duration}s */
-	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, LambdaUtils.constantSupplier(Duration.ZERO));
+	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, FunctionUtils.constantSupplier(Duration.ZERO));
 	/** Persists {@link Instant}s */
 	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.flexibleDate("ddMMMyyyy", TimeZone.getDefault()),
-		LambdaUtils.constantSupplier(null));
+		FunctionUtils.constantSupplier(null));
 	/** Persists {@link Color}s */
 	public static ObservableConfigFormat<Color> COLOR = ofQommonFormat(new Format<Color>() {
 		@Override
@@ -98,7 +98,7 @@ public interface ObservableConfigFormat<E> {
 		}
 	}, () -> null);
 	/** Persists {@link File}s */
-	public static ObservableConfigFormat<File> FILE = ofQommonFormat(FileUtils.FILE_FORMAT, LambdaUtils.constantSupplier(null));
+	public static ObservableConfigFormat<File> FILE = ofQommonFormat(FileUtils.FILE_FORMAT, FunctionUtils.constantSupplier(null));
 
 	/** Persists {@link ObservableConfig} instances */
 	public static ObservableConfigFormat<ObservableConfig> CONFIG = new Impl.ConfigFormat();
@@ -211,12 +211,12 @@ public interface ObservableConfigFormat<E> {
 		default <V> ObservableConfigParseContext<V> forChild(ConfigChildGetter child, ObservableConfigEvent childChange, V previousValue,
 			Consumer<V> delayedAccept) {
 			ObservableValue<? extends ObservableConfig> childConfig = ObservableValue.flatten(getConfig().transform(
-				tx -> tx.cache(false).map(LambdaUtils.printableFn(parent -> child.observeChild(parent), child::toString, child))));
+				tx -> tx.cache(false).map(FunctionUtils.printableFn(parent -> child.observeChild(parent), child::toString, child))));
 			// = getConfig().transform(ObservableConfig.class,
 			// tx -> tx.cache(false).map(LambdaUtils.printableFn(c -> {
 			// return child.getChild(c, false, false);
 			// }, child::toString, child)));
-			Function<Boolean, ? extends ObservableConfig> childCreate = LambdaUtils.printableFn(trivial -> {
+			Function<Boolean, ? extends ObservableConfig> childCreate = FunctionUtils.printableFn(trivial -> {
 				return child.getChild(getConfig(true, trivial), true, trivial);
 			}, () -> getConfig() + "." + child, null);
 			return map(childConfig, childCreate, childChange, previousValue, delayedAccept);
@@ -409,7 +409,7 @@ public interface ObservableConfigFormat<E> {
 			if (theRetriever != null)
 				retriever = theRetriever;
 			else {
-				retriever = LambdaUtils.printableBiFn((config, fieldValues) -> {
+				retriever = FunctionUtils.printableBiFn((config, fieldValues) -> {
 					Iterable<? extends T> retrieved = theMultiRetriever.apply(config, fieldValues);
 					// TODO Null check
 					for (T value : retrieved) {
@@ -440,10 +440,10 @@ public interface ObservableConfigFormat<E> {
 	 */
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Iterable<? extends T> values, Supplier<? extends T> defaultValue) {
 		if (values instanceof Identifiable)
-			return buildReferenceFormat(LambdaUtils.printableFn(__ -> values, () -> ((Identifiable) values).getIdentity().toString(),
+			return buildReferenceFormat(FunctionUtils.printableFn(__ -> values, () -> ((Identifiable) values).getIdentity().toString(),
 				((Identifiable) values).getIdentity()), defaultValue);
 		else
-			return buildReferenceFormat(LambdaUtils.printableFn(__ -> values, values::toString, values), defaultValue);
+			return buildReferenceFormat(FunctionUtils.printableFn(__ -> values, values::toString, values), defaultValue);
 	}
 
 	/**
@@ -470,7 +470,7 @@ public interface ObservableConfigFormat<E> {
 	 * @return The reference format
 	 */
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends T> retriever) {
-		return new ReferenceFormatBuilder<>(LambdaUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever));
+		return new ReferenceFormatBuilder<>(FunctionUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever));
 	}
 
 	/**
@@ -484,7 +484,7 @@ public interface ObservableConfigFormat<E> {
 	 */
 	static <T> ReferenceFormatBuilder<T> buildReferenceFormat(Function<QuickMap<String, Object>, ? extends Iterable<? extends T>> retriever,
 		Supplier<? extends T> defaultValue) {
-		return new ReferenceFormatBuilder<>(LambdaUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever),
+		return new ReferenceFormatBuilder<>(FunctionUtils.printableBiFn((cfg, ids) -> retriever.apply(ids), retriever::toString, retriever),
 			defaultValue);
 	}
 
@@ -946,7 +946,7 @@ public interface ObservableConfigFormat<E> {
 				if (value != null && config.getConfig(false, true) == null) {
 					for (E v : value) {
 						ObservableConfig newChild = config.getConfig(true, true).addChild(childName);
-						elementFormat.format(session, v, null, (__, ___) -> newChild, LambdaUtils.consumeDoNothing(), refresh, until);
+						elementFormat.format(session, v, null, (__, ___) -> newChild, FunctionUtils.consumeDoNothing(), refresh, until);
 					}
 				}
 				// Otherwise, there's nothing to do
@@ -998,7 +998,7 @@ public interface ObservableConfigFormat<E> {
 				if (value != null && config.getConfig(false, true) == null) {
 					for (E v : value.getValues()) {
 						ObservableConfig newChild = config.getConfig(true, true).addChild(childName);
-						elementFormat.format(session, v, null, (__, ___) -> newChild, LambdaUtils.consumeDoNothing(), refresh, until);
+						elementFormat.format(session, v, null, (__, ___) -> newChild, FunctionUtils.consumeDoNothing(), refresh, until);
 					}
 				}
 				// Otherwise, there's nothing to do
@@ -1061,9 +1061,9 @@ public interface ObservableConfigFormat<E> {
 					for (Map.Entry<K, V> entry : value.entrySet()) {
 						ObservableConfig newChild = config.getConfig(true, true).addChild(valueName);
 						ObservableConfig keyChild = newChild.addChild(keyName);
-						keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, LambdaUtils.consumeDoNothing(), refresh,
+						keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, FunctionUtils.consumeDoNothing(), refresh,
 							until);
-						valueFormat.format(session, entry.getValue(), null, (__, ___) -> newChild, LambdaUtils.consumeDoNothing(), refresh,
+						valueFormat.format(session, entry.getValue(), null, (__, ___) -> newChild, FunctionUtils.consumeDoNothing(), refresh,
 							until);
 					}
 				}
@@ -1126,9 +1126,9 @@ public interface ObservableConfigFormat<E> {
 						for (V v : entry.getValues()) {
 							ObservableConfig newChild = config.getConfig(true, true).addChild(valueName);
 							ObservableConfig keyChild = newChild.addChild(keyName);
-							keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, LambdaUtils.consumeDoNothing(), refresh,
+							keyFormat.format(session, entry.getKey(), null, (__, ___) -> keyChild, FunctionUtils.consumeDoNothing(), refresh,
 								until);
-							valueFormat.format(session, v, null, (__, ___) -> newChild, LambdaUtils.consumeDoNothing(), refresh, until);
+							valueFormat.format(session, v, null, (__, ___) -> newChild, FunctionUtils.consumeDoNothing(), refresh, until);
 						}
 					}
 				}
@@ -2009,7 +2009,7 @@ public interface ObservableConfigFormat<E> {
 							if (theFields.get(i).childName == null) {
 								Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
 								change |= formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue,
-									c, LambdaUtils.consumeDoNothing(), refresh, until, null);
+									c, FunctionUtils.consumeDoNothing(), refresh, until, null);
 							} else {
 								ObservableConfig cfg = c.getChild(theFields.get(i).childName);
 								if (cfg != null) {
@@ -2035,7 +2035,7 @@ public interface ObservableConfigFormat<E> {
 						ComponentField<E, ?> field = theFields.get(i);
 						Object fieldValue = field.getter.apply(value);
 						change |= formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, c,
-							LambdaUtils.consumeDoNothing(), refresh, until, null);
+							FunctionUtils.consumeDoNothing(), refresh, until, null);
 					}
 					c.withParsedItem(session, value);
 				}
@@ -2420,7 +2420,7 @@ public interface ObservableConfigFormat<E> {
 							listeners = ListenerList.build().build();
 							theEntityType.associate(entity, key, listeners);
 						}
-						return listeners.add(listener, true)::run;
+						return listeners.add(listener, true);
 					}
 				}
 
@@ -2689,12 +2689,12 @@ public interface ObservableConfigFormat<E> {
 				if (fieldType == int.class) {
 					((ObservableConfigFormat<Integer>) field.format).format(session, (int) id, //
 						(Integer) currentValue, (cia, trivial) -> config.getChild(field.childName, cia, child -> child.setTrivial(trivial)),
-						LambdaUtils.consumeDoNothing(), false, Observable.empty());
+						FunctionUtils.consumeDoNothing(), false, Observable.empty());
 					fieldValues.put(fieldIndex, (int) id);
 				} else {
 					((ObservableConfigFormat<Long>) field.format).format(session, id, //
 						(Long) currentValue, (cia, trivial) -> config.getChild(field.childName, cia, child -> child.setTrivial(trivial)),
-						LambdaUtils.consumeDoNothing(), false, Observable.empty());
+						FunctionUtils.consumeDoNothing(), false, Observable.empty());
 					fieldValues.put(fieldIndex, id);
 				}
 				return true;

@@ -19,8 +19,8 @@ import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.collect.CombinedCollectionLink;
 import org.qommons.Transactable;
-import org.qommons.TriFunction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.TriFunction;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 

@@ -13,7 +13,6 @@ import org.observe.Equivalence;
 import org.observe.Equivalence.SortedEquivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationPrecursor;
@@ -27,8 +26,8 @@ import org.observe.collect.ObservableCollectionBuilder.DataControlAutoRefresher;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.ReversedComparator;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
@@ -41,6 +40,7 @@ import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 
 /** Holds default implementation methods and classes for {@link ObservableSortedSet} and {@link DistinctSortedDataFlow} methods */
@@ -658,9 +658,9 @@ public class ObservableSortedSetImpl {
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
 			Comparable<? super T> fSearch = isReversed() ? BetterSortedSet.ReversedSortedSet.reverse(search) : search;
 			Function<? super E, ? extends T> map = getFlow().map().get();
-			if (LambdaUtils.getIdentifier(map) == LambdaUtils.IDENTITY)
+			if (FunctionUtils.getIdentifier(map) == FunctionUtils.IDENTITY)
 				return (Comparable<? super E>) fSearch;
-			return LambdaUtils.printableComparable(v -> fSearch.compareTo(map.apply(v)), () -> fSearch + ".mapFrom(" + map + ")");
+			return FunctionUtils.printableComparable(v -> fSearch.compareTo(map.apply(v)), () -> fSearch + ".mapFrom(" + map + ")");
 		}
 
 		@Override

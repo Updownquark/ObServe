@@ -17,7 +17,6 @@ import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
@@ -29,6 +28,7 @@ import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -979,6 +979,10 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			theKeySet = theEntries.flow().<K> transformEquivalent(tx -> tx.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false)//
 				.map(Map.Entry::getKey).withEquivalence(keyEquivalence).withReverse(key -> new SimpleMapEntry<>(key, null, false)))
 				.collectPassive();
+		}
+
+		protected ObservableSet<Map.Entry<K, V>> getEntries() {
+			return theEntries;
 		}
 
 		@Override

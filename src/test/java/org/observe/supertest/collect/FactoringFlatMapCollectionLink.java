@@ -13,9 +13,9 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.LambdaUtils;
 import org.qommons.Primes;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.TestHelper;
 
 /** Simple flat-map test that maps integer-typed collections to the factorization of each element */
@@ -37,7 +37,7 @@ public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollection
 		public <T, X> ObservableCollectionLink<T, X> deriveLink(String path, ObservableChainLink<?, T> sourceLink, TestValueType targetType,
 			TestHelper helper) {
 			ObservableCollectionLink<?, Integer> sourceCL = (ObservableCollectionLink<?, Integer>) sourceLink;
-			Function<Integer, CollectionDataFlow<Integer, Integer, Integer>> factorize = LambdaUtils.printableFn(//
+			Function<Integer, CollectionDataFlow<Integer, Integer, Integer>> factorize = FunctionUtils.printableFn(//
 				i -> getPrimeFactors(i).flow(), "factorize", null);
 			ObservableCollection.CollectionDataFlow<?, ?, Integer> oneStepFlow = sourceCL.getCollection().flow()
 				.flatMap(factorize);

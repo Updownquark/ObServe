@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Spliterator;
@@ -10,15 +9,13 @@ import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
-import org.observe.util.TypeTokens;
-import org.qommons.LambdaUtils;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-
-import com.google.common.reflect.TypeToken;
+import org.qommons.fn.FunctionUtils;
 
 /**
  * A set whose content can be observed.
@@ -28,9 +25,6 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<ObservableSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSet.class).wildCard();
-
 	@Override
 	ObservableSet<E> alias(String alias);
 
@@ -127,7 +121,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 			} else
 				return canAdd(value.get());
 		})));
-		return SettableValue.settable(found, this, LambdaUtils.printableConsumer(v -> {
+		return SettableValue.settable(found, this, FunctionUtils.printableConsumer(v -> {
 			if (v) {
 				if (found.get()) {
 					MutableCollectionElement<E> el = mutableElement(element.get().getElementId());
@@ -162,7 +156,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @return An immutable set with the given values
 	 */
 	static <E> ObservableSet<E> of(E... values) {
-		return of(Arrays.asList(values));
+		return new ConstantObservableSet<>(Equivalence.DEFAULT, BetterList.of(values));
 	}
 
 	/**
@@ -181,7 +175,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @return An immutable set with the given values
 	 */
 	static <E> ObservableSet<E> of(Equivalence<? super E> equivalence, Collection<? extends E> values) {
-		return new ConstantObservableSet<>(equivalence, ObservableCollection.<E> createDefaultBacking().withAll(values));
+		return new ConstantObservableSet<>(equivalence, BetterList.of(values));
 	}
 
 	/**

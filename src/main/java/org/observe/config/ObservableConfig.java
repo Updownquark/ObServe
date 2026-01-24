@@ -31,7 +31,6 @@ import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.CollectionChangeType;
@@ -49,6 +48,7 @@ import org.qommons.CausalLock;
 import org.qommons.Nameable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.TransactableBuilder;
@@ -888,6 +888,10 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		}
 	}
 
+	/**
+	 * @param path The path of the descendant to get
+	 * @return The first descendant of this config element matching the given path, or null if no such descendant exists
+	 */
 	default ObservableConfig getChildIfPresent(ObservableConfigPath path) {
 		return doOptimistically(null, (init, ctx) -> {
 			ObservableConfig ret = this;
@@ -929,6 +933,10 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		return found;
 	}
 
+	/**
+	 * @param el A path element for the child
+	 * @return The first child of this config element matching the given path element, or null if no such child exists
+	 */
 	default ObservableConfig getChildIfPresent(ObservableConfigPathElement el) {
 		String pathName = el.getName();
 		if (pathName.equals(ObservableConfigPath.ANY_NAME) || pathName.equals(ObservableConfigPath.ANY_DEPTH))

@@ -5,9 +5,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Causable;
+import org.qommons.Subscription;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;

@@ -5,10 +5,12 @@ import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.ListenerQueue;
 
 /**
  * A simple observable that can be controlled directly
@@ -17,15 +19,15 @@ import org.qommons.collect.ListenerList;
  */
 public class LightWeightObservable<T> extends AbstractIdentifiable implements Observable<T>, Observer<T> {
 	private boolean isAlive = true;
-	private final ListenerList<Observer<? super T>> theListeners;
+	private final ListenerQueue<Observer<? super T>> theListeners;
 
 	/** Creates a simple observable */
 	public LightWeightObservable() {
-		this(ListenerList.build().build());
+		this(ListenerList.build().withFastSize(false).build());
 	}
 
 	/** @param listeners The listeners for this observable */
-	public LightWeightObservable(ListenerList<Observer<? super T>> listeners) {
+	public LightWeightObservable(ListenerQueue<Observer<? super T>> listeners) {
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
 		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the
@@ -40,7 +42,7 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 	}
 
 	/** @param listening Produces the listener list for this observable */
-	public LightWeightObservable(Function<? super LightWeightObservable<T>, ListenerList<Observer<? super T>>> listening) {
+	public LightWeightObservable(Function<? super LightWeightObservable<T>, ? extends ListenerQueue<Observer<? super T>>> listening) {
 		theListeners = listening.apply(this);
 	}
 
@@ -84,19 +86,13 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		return isAlive;
 	}
 
-	/** @return Whether this observable reflects an internal state, such as a value */
-	protected boolean isInternalState() {
-		return false;
-	}
-
 	@Override
 	public Subscription subscribe(Observer<? super T> observer) {
 		if (!isAlive) {
 			observer.onCompleted(null);
 			return Subscription.NONE;
 		} else {
-			Runnable unsub = theListeners.add(observer, isInternalState());
-			return unsub::run;
+			return theListeners.addNew(observer);
 		}
 	}
 

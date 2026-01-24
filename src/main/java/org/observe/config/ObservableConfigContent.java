@@ -18,7 +18,6 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
@@ -31,6 +30,7 @@ import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -288,7 +288,7 @@ public class ObservableConfigContent {
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<ObservableConfig>> observer) {
-					return theListeners.add(observer, true)::run;
+					return theListeners.add(observer, true);
 				}
 
 				@Override

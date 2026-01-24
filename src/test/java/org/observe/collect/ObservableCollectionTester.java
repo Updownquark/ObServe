@@ -12,7 +12,7 @@ import java.util.Objects;
 import org.observe.AbstractObservableTester;
 import org.observe.Observable;
 import org.observe.Observer;
-import org.observe.Subscription;
+import org.qommons.Subscription;
 import org.qommons.testing.QommonsTestUtils;
 
 /**

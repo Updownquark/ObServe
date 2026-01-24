@@ -14,7 +14,6 @@ import org.observe.Equivalence.SortedEquivalence;
 import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
 import org.observe.ObservableValue;
-import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationPrecursor;
@@ -30,8 +29,8 @@ import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollection
 import org.observe.collect.ObservableSetImpl.ActiveSetMgrPlaceholder;
 import org.observe.collect.ObservableSetImpl.ValueStoredBaseManager;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.ReversedComparator;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -47,6 +46,7 @@ import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 
 /** Holds default implementation methods and classes for {@link ObservableSortedCollection} and {@link SortedDataFlow} methods */
@@ -721,7 +721,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<E>> getElementFinder(E value) {
-			return LambdaUtils.<DerivedCollectionElement<E>> printableComparable(el -> getSource().comparator().compare(value, el.get()),
+			return FunctionUtils.<DerivedCollectionElement<E>> printableComparable(el -> getSource().comparator().compare(value, el.get()),
 				() -> getSource().comparator().toString());
 		}
 	}
@@ -779,9 +779,9 @@ public class ObservableSortedCollectionImpl {
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
 			Comparable<? super T> fSearch = isReversed() ? BetterSortedList.ReversedSortedList.reverse(search) : search;
 			Function<? super E, ? extends T> map = getFlow().map().get();
-			if (LambdaUtils.getIdentifier(map) == LambdaUtils.IDENTITY)
+			if (FunctionUtils.getIdentifier(map) == FunctionUtils.IDENTITY)
 				return (Comparable<? super E>) fSearch;
-			return LambdaUtils.printableComparable(v -> fSearch.compareTo(map.apply(v)), () -> fSearch + ".mapFrom(" + map + ")");
+			return FunctionUtils.printableComparable(v -> fSearch.compareTo(map.apply(v)), () -> fSearch + ".mapFrom(" + map + ")");
 		}
 
 		@Override

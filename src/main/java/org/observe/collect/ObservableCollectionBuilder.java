@@ -877,6 +877,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		/** Closes this refresher, ceasing all refresh activity and disabling {@link #add(DataControlledCollection)} */
+		@SuppressWarnings("resource")
 		public void close() {
 			isClosed = true;
 			for (ListenerList.Element<CollectionRefresher> node = theRefreshers.poll(0); node != null; node = theRefreshers.poll(0)) {

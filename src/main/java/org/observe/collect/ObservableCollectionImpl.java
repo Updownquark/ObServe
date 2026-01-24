@@ -12,7 +12,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -29,14 +28,12 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.CollectionElementListener;
 import org.observe.collect.ObservableCollectionActiveManagers.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionActiveManagers.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
-import org.observe.dbug.DbugAnchor;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
@@ -48,11 +45,11 @@ import org.qommons.ConcurrentHashSet;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.IdentityKey;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
@@ -75,18 +72,14 @@ import org.qommons.collect.MutableListElement;
 import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
-
-import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableCollection} */
 public final class ObservableCollectionImpl {
 	private ObservableCollectionImpl() {
 	}
-
-	/** Cached TypeToken of {@link String} */
-	public static final TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
 
 	/**
 	 * @param <E> The type for the set
@@ -491,7 +484,7 @@ public final class ObservableCollectionImpl {
 			theCollection = collection;
 			theElementCompare = elementCompare;
 			theLastMatchStamp = -1;
-			theDefault = def != null ? def : LambdaUtils.constantSupplier(null);
+			theDefault = def != null ? def : FunctionUtils.constantSupplier(null);
 			theRefresh = refresh != null ? refresh : Observable.empty();
 			theRefreshStamp = refreshStamp;
 		}
@@ -2314,9 +2307,12 @@ public final class ObservableCollectionImpl {
 				if (!theFlow.isManyToOne()) {
 					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
 					FilterMapResult<T, E> reversed = theFlow.reverse(value, false, true);
-					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
-						ListElement<E> srcEl = theSource.getElement(reversed.result, forward);
-						return srcEl == null ? null : elementFor(srcEl, null);
+					if(!reversed.isError()) {
+						T mappedReversed = map.apply(reversed.result);
+						if (mappedReversed == value || equivalence().elementEquals(mappedReversed, value)) {
+							ListElement<E> srcEl = theSource.getElement(reversed.result, forward);
+							return srcEl == null ? null : elementFor(srcEl, null);
+						}
 					}
 				}
 				ListElement<E> el = theSource.getTerminalElement(forward);
@@ -2679,11 +2675,9 @@ public final class ObservableCollectionImpl {
 		private final ActiveCollectionManager<?, ?, T> theFlow;
 		private final BetterTreeSet<DerivedElementHolder<T>> theDerivedElements;
 		private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
-		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
-		private final AtomicLong theStamp;
+		private volatile long theStamp;
 		private final WeakListening.Builder theWeakListening;
-		private final DbugAnchor<ObservableCollection<?>> theDbugAnchor;
 
 		/**
 		 * @param flow The active data manager to power this collection
@@ -2692,15 +2686,19 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = BetterTreeSet.<DerivedElementHolder<T>> buildTreeSet((e1, e2) -> e1.element.compareTo(e2.element)).build();
-			theListeners = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR).build();
-			theListenerCount = new AtomicInteger();
+			theListeners = ListenerList.build().reentrancyError(ObservableCollection.REENTRANT_EVENT_ERROR)//
+				.withInUse(inUse -> {
+					if (inUse) {
+						STRONG_REFS.add(new IdentityKey<>(this));
+					} else {
+						STRONG_REFS.remove(new IdentityKey<>(this));
+					}
+				}).build();
 			theEquivalence = flow.equivalence();
-			theStamp = new AtomicLong();
-			theDbugAnchor = DBUG.instance(this, LambdaUtils.consumeDoNothing());
 
 			// Begin listening
 			ElementAccepter<T> onElement = (el, causes) -> {
-				theStamp.incrementAndGet();
+				theStamp++;
 				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
 				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
 				if (holder[0].treeNode == null)
@@ -2721,7 +2719,7 @@ public final class ObservableCollectionImpl {
 							return;
 						while (holder[0].successor != null)
 							holder[0] = holder[0].successor;
-						theStamp.incrementAndGet();
+						theStamp++;
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getAdjacent(false);
 						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getAdjacent(true);
 						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
@@ -2784,7 +2782,7 @@ public final class ObservableCollectionImpl {
 					public void removed(T value, Object... elCauses) {
 						while (holder[0].successor != null)
 							holder[0] = holder[0].successor;
-						theStamp.incrementAndGet();
+						theStamp++;
 						int index = holder[0].treeNode.getElementsBefore();
 						if (holder[0].treeNode.getElementId().isPresent()) {// May have been removed already
 							removeHolder(value, holder[0]);
@@ -2850,13 +2848,6 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = event.use()) {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
-
-				theDbugAnchor.event("change", event, evt -> evt//
-					.withParameter("type", event.getType())//
-					.withParameter("id", event.getElementId())//
-					.withParameter("index", event.getIndex())//
-					.withParameter("oldValue", event.getOldValue())//
-					.withParameter("newValue", event.getNewValue()));
 			}
 		}
 
@@ -2878,28 +2869,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return onChange(observer, true);
-		}
-
-		/**
-		 * Allows adding a listener to this collection without creating a persistent strong reference to keep it alive
-		 *
-		 * @param observer The listener for changes to this collection
-		 * @param withStrongRef Whether to install a strong reference to this collection to keep it alive while the listener is active, in
-		 *        case no strong reference to the actual collection (or the subscription returned from this method) is kept
-		 * @return A subscription to uninstall the listener
-		 */
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer, boolean withStrongRef) {
 			Runnable remove = theListeners.add(observer, true);
-			// Add a strong reference to this collection while we have listeners.
-			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
-			if (withStrongRef && theListenerCount.getAndIncrement() == 0)
-				STRONG_REFS.add(new IdentityKey<>(this));
-			return () -> {
-				remove.run();
-				if (withStrongRef && theListenerCount.decrementAndGet() == 0)
-					STRONG_REFS.remove(new IdentityKey<>(this));
-			};
+			return remove::run;
 		}
 
 		@Override
@@ -2949,7 +2920,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public long getStamp() {
-			return theStamp.get();
+			return theStamp;
 		}
 
 		@Override
@@ -3382,7 +3353,7 @@ public final class ObservableCollectionImpl {
 				return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
 			else
 				return Lockable.lockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
-					LambdaUtils.identity());
+					FunctionUtils.identity());
 		}
 
 		@Override
@@ -3391,7 +3362,7 @@ public final class ObservableCollectionImpl {
 				return Transactable.tryWriteLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
 			else
 				return Lockable.tryLockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
-					LambdaUtils.identity());
+					FunctionUtils.identity());
 		}
 
 		@Override
@@ -3767,7 +3738,7 @@ public final class ObservableCollectionImpl {
 		public Observable<Causable> simpleChanges() {
 			// We can be more efficient here. Listen to the changes observable of the content collection,
 			// as well as logical changes to the container.
-			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable.map(LambdaUtils.printableFn(
+			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable.map(FunctionUtils.printableFn(
 				coll -> coll != null ? coll.simpleChanges() : Observable.<Causable> empty(), "simpleChanges", "simpleChanges"));
 			return Observable.onRootFinish(Observable.or(theCollectionObservable.noInitChanges(), //
 				new ObservableValue.FlattenedValueObservable<Causable>(toFlattenChanges) {
@@ -4751,7 +4722,7 @@ public final class ObservableCollectionImpl {
 					List<T> list = content instanceof List ? (List<T>) content : QommonsUtils.unmodifiableCopy(content);
 					CollectionUtils.SimpleAdjustment<T, T, RuntimeException> syncAction = CollectionUtils
 						.synchronize(theCollection, list, equal)//
-						.simple(LambdaUtils.identity())//
+						.simple(FunctionUtils.identity())//
 						.commonUses(true, updateAll);
 					if (theCollection.isContentControlled())
 						syncAction.addLast();

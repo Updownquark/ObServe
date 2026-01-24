@@ -4,7 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
-import org.qommons.TriFunction;
+import org.qommons.Subscription;
+import org.qommons.fn.TriFunction;
 
 /** Tests observable classes in the org.observe package */
 public class ObservableTest {

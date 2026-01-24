@@ -12,19 +12,16 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.observe.Observable;
-import org.observe.Subscription;
 import org.observe.collect.CollectionElementMove;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableCollectionEvent;
-import org.observe.dbug.Dbug;
-import org.observe.dbug.DbugAnchorType;
-import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -44,8 +41,6 @@ import org.qommons.debug.Debug.DebugData;
 import org.qommons.threading.QommonsTimer;
 import org.qommons.tree.BetterTreeList;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * An {@link ObservableCollection} that only fires updates on a particular thread. This collection also batches events for performance, e.g.
  * for use in UI models.
@@ -53,13 +48,6 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the collection
  */
 public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
-	/** Anchor type for {@link Dbug}-based debugging */
-	@SuppressWarnings("rawtypes")
-	public static DbugAnchorType<SafeObservableCollection> SOC_DBUG = Dbug.common().anchor(SafeObservableCollection.class, a -> a//
-		.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
-		.withEvent("handleEvent").withEvent("flush")//
-		);
-
 	/**
 	 * Represents an element in a {@link SafeObservableCollection}, which may or may not also be present in the source collection
 	 *
@@ -391,7 +379,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		Transaction sourceLock = theCollection.tryLock(false, null);
 		if (sourceLock == null)
 			return true;
-		ObservableSwingUtils.flushEQCache();
+		ThreadConstraint.EDT.flush();
 		if (!theFlushLock.compareAndSet(false, true)) {
 			sourceLock.close();
 			if (isFlushing)

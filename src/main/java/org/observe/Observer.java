@@ -3,8 +3,8 @@ package org.observe;
 import java.util.function.Supplier;
 
 import org.qommons.Causable;
-import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
+import org.qommons.fn.FunctionUtils;
 
 /**
  * Listens to an observable
@@ -159,7 +159,7 @@ public interface Observer<T> {
 	 *
 	 * @param <T> The type of value the observer expects
 	 */
-	class PrintableObserver<T> extends LambdaUtils.PrintableLambda<SimpleObserver<T>> implements SimpleObserver<T> {
+	class PrintableObserver<T> extends FunctionUtils.PrintableLambda<SimpleObserver<T>> implements SimpleObserver<T> {
 		public PrintableObserver(SimpleObserver<T> lambda, String print, Object identifier) {
 			super(lambda, print, identifier);
 		}

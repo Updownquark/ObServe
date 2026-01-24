@@ -13,8 +13,8 @@ import java.util.stream.Collectors;
 import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -425,7 +425,7 @@ public interface OperationResult<T> {
 							wrapped.watchStatus().map(__ -> WrapperResult.this).subscribe(observer);
 						if (theObservers == null)
 							theObservers = ListenerList.build().build();
-						return theObservers.add(observer, false)::run;
+						return theObservers.add(observer, false);
 					}
 				}
 

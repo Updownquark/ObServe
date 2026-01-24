@@ -22,7 +22,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
 import org.observe.Transformation.ReversibleTransformationPrecursor;
@@ -32,17 +31,14 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredManager;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
-import org.observe.dbug.Dbug;
-import org.observe.dbug.DbugAnchorType;
 import org.observe.util.ObservableUtils;
 import org.observe.util.SafeObservableCollection;
-import org.observe.util.TypeTokens;
 import org.qommons.Betterable;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
@@ -54,6 +50,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeList;
 
 /**
@@ -89,18 +86,6 @@ import org.qommons.tree.BetterTreeList;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends BetterList<E>, Eventable, CausableChanging {
-	/** The {@link Dbug} anchor type for this class */
-	public static final DbugAnchorType<ObservableCollection<?>> DBUG = Dbug.common()
-		.anchor((Class<ObservableCollection<?>>) (Class<?>) ObservableCollection.class, b -> b//
-			.withEvent("change", e -> e//
-				.withParameter("type", TypeTokens.get().of(CollectionChangeType.class))//
-				.withParameter("id", TypeTokens.get().of(ElementId.class))//
-				.withParameter("index", TypeTokens.get().INT)//
-				.withParameter("oldValue", TypeTokens.get().OBJECT)//
-				.withParameter("newValue", TypeTokens.get().OBJECT)//
-				)//
-			);
-
 	/**
 	 * It is illegal to attempt to modify a collection (or even fire an update event on it) as a result of a currently executing
 	 * modification (or update) to the collection. If such an attempt is made (and the implementation is able detect it), an
@@ -366,7 +351,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	/** @return An observable value for when this collection is empty */
 	default ObservableValue<Boolean> observeEmpty() {
 		// Can probably do this better with something custom later
-		return observeSize().map(LambdaUtils.printableFn(sz -> sz == 0, "==0", "==0"));
+		return observeSize().map(FunctionUtils.printableFn(sz -> sz == 0, "==0", "==0"));
 	}
 
 	/**
@@ -512,7 +497,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	/** @return An observable value of the first or last element in the collection */
 	default ObservableFinderBuilder<E> observeTerminal() {
-		return new ObservableFinderBuilder<>(this, LambdaUtils.TRUE);
+		return new ObservableFinderBuilder<>(this, FunctionUtils.TRUE);
 	}
 
 	/**
@@ -601,7 +586,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @return The reduced value
 	 */
 	default <T> ObservableValue<T> reduce(T seed, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
-		return reduce(LambdaUtils.constantSupplier(seed), add, remove);
+		return reduce(FunctionUtils.constantSupplier(seed), add, remove);
 	}
 
 	/**
@@ -823,7 +808,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 */
 	@SafeVarargs
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(ObservableCollection<? extends E>... colls) {
-		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
+		return of(colls).flow().flatMap(FunctionUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
 
 	/**
@@ -832,7 +817,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 * @return A collection containing all elements of the given collections
 	 */
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(Collection<? extends ObservableCollection<? extends E>> colls) {
-		return of(colls).flow().flatMap(LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
+		return of(colls).flow().flatMap(FunctionUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
 
 	/**
@@ -870,7 +855,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
-				return ThreadConstrained.getThreadConstraint(coll, coll, LambdaUtils.identity());
+				return ThreadConstrained.getThreadConstraint(coll, coll, FunctionUtils.identity());
 			}
 
 			@Override
@@ -980,7 +965,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		 *         the given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
-			return filter(LambdaUtils.printableFn(value -> {
+			return filter(FunctionUtils.printableFn(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
@@ -1096,7 +1081,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		 * @see #withEquivalence(Equivalence)
 		 */
 		default DistinctDataFlow<E, T, T> distinct() {
-			return distinct(LambdaUtils.consumeDoNothing());
+			return distinct(FunctionUtils.consumeDoNothing());
 		}
 
 		/**
@@ -1687,7 +1672,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 		}
 
 		public ModFilterBuilder<T> unmodifiable(String modMsg, boolean allowUpdates) {
-			return unmodifiable(LambdaUtils.constantSupplier(modMsg, modMsg, modMsg), allowUpdates);
+			return unmodifiable(FunctionUtils.constantSupplier(modMsg, modMsg, modMsg), allowUpdates);
 		}
 
 		public ModFilterBuilder<T> unmodifiable(Supplier<String> modMsg, boolean allowUpdates) {

@@ -1,8 +1,12 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.observe</groupId>
 	<artifactId>ObServe</artifactId>
 	<version>3.0.0</version>
+	<name>ObServe</name>
+	<description>Observable structures</description>
 	<dependencies>
 		<dependency>
 			<groupId>org.qommons</groupId>
@@ -87,7 +91,8 @@
 				<version>4.3</version>
 				<configuration>
 					<sourceDirectory>${basedir}/src/main/antlr</sourceDirectory>
-					<outputDirectory>${project.build.directory}/generated-sources/antlr4/org/observe/expresso</outputDirectory>
+					<outputDirectory>
+						${project.build.directory}/generated-sources/antlr4/org/observe/expresso</outputDirectory>
 					<arguments>
 						<argument>-package</argument>
 						<argument>org.observe.expresso</argument>

@@ -19,7 +19,6 @@ import org.observe.LightWeightObservable;
 import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
@@ -38,8 +37,8 @@ import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -58,6 +57,7 @@ import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.MutableListElement;
 import org.qommons.collect.MutableMultiMapHandle;
 import org.qommons.collect.MutableOrderedMapEntry;
@@ -506,17 +506,17 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		public ObservableMultiMap<K, V> build(Observable<?> until) {
 			ObservableCollection<MapEntry<K, V>> backing = theBackingBuilder.withDescription(getDescription() + " backing").build();
 			MultiMapFlow<K, MapEntry<K, V>> mapFlow;
-			Function<MapEntry<K, V>, K> keyMap = LambdaUtils.printableFn(entry -> entry.key, "key", null);
-			BiConsumer<MapEntry<K, V>, K> keySet = LambdaUtils.printableBiConsumer((element, newKey) -> element.key = newKey,
+			Function<MapEntry<K, V>, K> keyMap = FunctionUtils.printableFn(entry -> entry.key, "key", null);
+			BiConsumer<MapEntry<K, V>, K> keySet = FunctionUtils.printableBiConsumer((element, newKey) -> element.key = newKey,
 				() -> "key-set", null);
-			BiFunction<K, MapEntry<K, V>, MapEntry<K, V>> keyReverse = LambdaUtils.printableBiFn((key, entry) -> {
+			BiFunction<K, MapEntry<K, V>, MapEntry<K, V>> keyReverse = FunctionUtils.printableBiFn((key, entry) -> {
 				entry.key = key;
 				return entry;
 			}, "key-reverse", null);
-			Function<MapEntry<K, V>, V> valueMap = LambdaUtils.printableFn(entry -> entry.value, "value", null);
-			BiConsumer<MapEntry<K, V>, V> valueSet = LambdaUtils.printableBiConsumer((element, newValue) -> element.value = newValue,
+			Function<MapEntry<K, V>, V> valueMap = FunctionUtils.printableFn(entry -> entry.value, "value", null);
+			BiConsumer<MapEntry<K, V>, V> valueSet = FunctionUtils.printableBiConsumer((element, newValue) -> element.value = newValue,
 				() -> "value-set", null);
-			Function<V, MapEntry<K, V>> addition = LambdaUtils.printableFn(value -> new MapEntry<>(value), "addition", null);
+			Function<V, MapEntry<K, V>> addition = FunctionUtils.printableFn(value -> new MapEntry<>(value), "addition", null);
 			if (theKeyEquivalence instanceof Equivalence.SortedEquivalence) {
 				mapFlow = backing.flow().groupSortedFlow(entries -> entries.<K> transform(tx -> tx.map(keyMap).modifySource(keySet))//
 					.distinctSorted(((Equivalence.SortedEquivalence<K>) theKeyEquivalence).comparator(), true), //
@@ -1663,7 +1663,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends X>> action) {
-			return theListeners.add(action, true)::run;
+			return theListeners.add(action, true);
 		}
 
 		@Override

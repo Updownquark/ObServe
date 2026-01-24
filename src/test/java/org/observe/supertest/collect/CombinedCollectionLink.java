@@ -20,9 +20,9 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.TypeTransformation;
-import org.qommons.LambdaUtils;
 import org.qommons.Transactable;
 import org.qommons.ValueHolder;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.RandomAction;
 
@@ -66,7 +66,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 				values.get(i).set(valueSupplier.apply(helper), null);
 			Function<List<V>, V> valueCombination = getValueCombination(transform.getValueType());
 
-			BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> map = LambdaUtils.printableBiFn((s, cv) -> {
+			BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> map = FunctionUtils.printableBiFn((s, cv) -> {
 				List<V> valueList = (List<V>) Arrays.asList(new Object[values.size()]);
 				for (int i = 0; i < values.size(); i++)
 					valueList.set(i, cv.get(values.get(i)));

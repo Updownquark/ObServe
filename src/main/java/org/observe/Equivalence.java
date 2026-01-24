@@ -11,7 +11,6 @@ import java.util.function.ToIntFunction;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ReversedComparator;
@@ -30,6 +29,7 @@ import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.ValueStoredCollection;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -143,7 +143,7 @@ public interface Equivalence<E> {
 			theType = type;
 			theEquals = equals;
 			theHashCode = hashCode;
-			theObjectEquals = LambdaUtils.printableBiPredicate((o1, o2) -> {
+			theObjectEquals = FunctionUtils.printableBiPredicate((o1, o2) -> {
 				if (o1 == null)
 					return o2 == null;
 				else if (theType.isInstance(o1)) {
@@ -260,7 +260,7 @@ public interface Equivalence<E> {
 			if (parent == DEFAULT || parent == ID)
 				this.compare = compare;
 			else
-				this.compare = LambdaUtils.printableComparator((o1, o2) -> {
+				this.compare = FunctionUtils.printableComparator((o1, o2) -> {
 					E o1SM = theParentEquivalence.getSetMember(o1);
 					E o2SM = theParentEquivalence.getSetMember(o2);
 					if (o1 != null && o1SM == null) {
@@ -425,7 +425,7 @@ public interface Equivalence<E> {
 		MappedComparatorEquivalence(SortedEquivalence<E> wrapped, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
 			super(wrapped, filter, map, reverse);
-			theSorting = LambdaUtils.printableComparator((t1, t2) -> {
+			theSorting = FunctionUtils.printableComparator((t1, t2) -> {
 				E2 e1 = reverse.apply(t1);
 				E2 e2 = reverse.apply(t2);
 				return wrapped.comparator().compare(e1, e2);

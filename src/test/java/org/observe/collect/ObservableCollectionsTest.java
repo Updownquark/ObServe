@@ -25,18 +25,18 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueTester;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.Causable;
-import org.qommons.LambdaUtils;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableList;
 import org.qommons.debug.Debug;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.testing.QommonsTestUtils;
 import org.qommons.testing.TestHelper;
 import org.qommons.testing.TestHelper.Testable;
@@ -96,8 +96,8 @@ public class ObservableCollectionsTest {
 		if(check != null)
 			check.accept(coll);
 
-		Function<Integer, Integer> mapFn = LambdaUtils.printableFn(v -> v + 1000, () -> "+1000");
-		Function<Integer, Integer> reverseMapFn = LambdaUtils.printableFn(v -> v - 1000, () -> "-1000");
+		Function<Integer, Integer> mapFn = FunctionUtils.printableFn(v -> v + 1000, () -> "+1000");
+		Function<Integer, Integer> reverseMapFn = FunctionUtils.printableFn(v -> v - 1000, () -> "-1000");
 		ObservableCollection<Integer> mappedOL;
 		ObservableCollectionTester<Integer> mappedTester;
 		if (BARRAGE_USE_MAP) {
@@ -110,7 +110,7 @@ public class ObservableCollectionsTest {
 			mappedTester = null;
 		}
 
-		Function<Integer, String> filterFn1 = LambdaUtils.printableFn(v -> v % 3 == 0 ? null : "no", () -> "multiple of 3 only");
+		Function<Integer, String> filterFn1 = FunctionUtils.printableFn(v -> v % 3 == 0 ? null : "no", () -> "multiple of 3 only");
 		ObservableCollection<Integer> filteredOL1;
 		ObservableCollectionTester<Integer> filterTester1;
 		if (BARRAGE_USE_FILTER) {
@@ -122,7 +122,7 @@ public class ObservableCollectionsTest {
 			filterTester1 = null;
 		}
 
-		Function<Integer, Integer> groupFn = LambdaUtils.printableFn(v -> v % 3, () -> "%3");
+		Function<Integer, Integer> groupFn = FunctionUtils.printableFn(v -> v % 3, () -> "%3");
 		ObservableMultiMap<Integer, Integer> grouped;
 		Map<Integer, List<Integer>> groupedSynced;
 		ObservableSortedMultiMap<Integer, Integer> groupedSorted;
@@ -144,8 +144,8 @@ public class ObservableCollectionsTest {
 			groupedSortedSynced = null;
 		}
 
-		BiFunction<Integer, Integer, Integer> combineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 + v2, "+", null);
-		BiFunction<Integer, Integer, Integer> reverseCombineFn = LambdaUtils.printableBiFn((v1, v2) -> v1 - v2, "-", null);
+		BiFunction<Integer, Integer, Integer> combineFn = FunctionUtils.printableBiFn((v1, v2) -> v1 + v2, "+", null);
+		BiFunction<Integer, Integer, Integer> reverseCombineFn = FunctionUtils.printableBiFn((v1, v2) -> v1 - v2, "-", null);
 		SettableValue<Integer> combineVar = SettableValue.<Integer> build().build();
 		combineVar.set(10000, null);
 		ObservableCollection<Integer> combinedOL;
@@ -165,7 +165,7 @@ public class ObservableCollectionsTest {
 
 		// TODO Test reversed observable collections
 
-		BiFunction<Integer, Integer, Integer> maxFn = LambdaUtils.printableBiFn((v1, v2) -> v1 >= v2 ? v1 : v2, "max", null);
+		BiFunction<Integer, Integer, Integer> maxFn = FunctionUtils.printableBiFn((v1, v2) -> v1 >= v2 ? v1 : v2, "max", null);
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
 		ObservableValue<Integer> maxValue = coll.reduce(Integer.MIN_VALUE, maxFn);
 		Integer [] observedSum = new Integer[1];

@@ -7,6 +7,7 @@ import java.util.LinkedList;
 import org.qommons.CausalLock;
 import org.qommons.DefaultCausalLock;
 import org.qommons.Identifiable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -225,7 +226,7 @@ public class VetoableSettableValue<T> extends Identifiable.AbstractIdentifiable 
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(false, null)) {
 				if (isAlive)
-					return theListeners.add(new ListenerHolder<>(observer, theStamp, theValue), false)::run;
+					return theListeners.add(new ListenerHolder<>(observer, theStamp, theValue), false);
 				else
 					return Subscription.NONE;
 			}

@@ -19,17 +19,18 @@ import java.util.function.Supplier;
 import org.qommons.BiTuple;
 import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.TriConsumer;
-import org.qommons.TriFunction;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.fn.FunctionUtils;
+import org.qommons.fn.TriConsumer;
+import org.qommons.fn.TriFunction;
 
 /**
  * <p>
@@ -500,7 +501,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 *         the given filter
 		 */
 		default ConfigurableReverse<S, T> rejectWith(Function<? super T, String> acceptance) {
-			return rejectWith(LambdaUtils.toBiFunction1(acceptance), true, false);
+			return rejectWith(FunctionUtils.toBiFunction1(acceptance), true, false);
 		}
 
 		/**
@@ -512,7 +513,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 *         the given filter
 		 */
 		default ConfigurableReverse<S, T> rejectWith(BiFunction<? super S, ? super T, String> acceptance) {
-			return rejectWith(acceptance == null ? null : LambdaUtils.printableBiFn((t, cv) -> {
+			return rejectWith(acceptance == null ? null : FunctionUtils.printableBiFn((t, cv) -> {
 				return acceptance.apply(cv.getCurrentSource(), t);
 			}, acceptance::toString, null), false, true);
 		}
@@ -525,7 +526,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 *         given function
 		 */
 		default ConfigurableReverse<S, T> createWith(Function<? super T, ? extends S> creator) {
-			return createWith(LambdaUtils.toTriFunction1(creator));
+			return createWith(FunctionUtils.toTriFunction1(creator));
 		}
 
 		/**
@@ -559,7 +560,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 *         the given filter
 		 */
 		default ConfigurableReverse<S, T> rejectAddWith(Function<? super T, String> addAcceptance) {
-			return rejectAddWith(LambdaUtils.toBiFunction1(addAcceptance));
+			return rejectAddWith(FunctionUtils.toBiFunction1(addAcceptance));
 		}
 
 		/**
@@ -630,7 +631,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		public ReversibleTransformation<S, T> replaceSourceWith(
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
 			Function<? super SourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
-			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = LambdaUtils
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = FunctionUtils
 				.toTriFunction1And2(reverse);
 			SourceReplacingReverse<S, T> srr = new SourceReplacingReverse<>(this, reverse, null, null, creator, null, true, false);
 			if (configure != null)
@@ -661,7 +662,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			BiConsumer<? super T, ? super TransformationValues<? extends S, ? extends T>> modifier,
 				Function<SourceModifyingReverse<S, T>, SourceModifyingReverse<S, T>> configure) {
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(modifier,
-				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
+				FunctionUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
 				null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
@@ -1432,7 +1433,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The transformation
 		 */
 		public Transformation<S, T> map(Function<? super S, ? extends T> map) {
-			return build(LambdaUtils.toBiFunction1(map));
+			return build(FunctionUtils.toBiFunction1(map));
 		}
 
 		/**
@@ -1442,7 +1443,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The transformation
 		 */
 		public Transformation<S, T> map(BiFunction<? super S, ? super T, ? extends T> map) {
-			return build(LambdaUtils.printableBiFn((src, tx) -> {
+			return build(FunctionUtils.printableBiFn((src, tx) -> {
 				return map.apply(src, tx.getPreviousResult());
 			}, map::toString, map));
 		}
@@ -1527,7 +1528,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		public ReversibleTransformation<S, T> replaceMappingSourceWith(
 			BiFunction<? super T, ? super TransformationValues<? extends S, ? extends T>, ? extends S> reverse,
 			Function<? super MappingSourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
-			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = LambdaUtils
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, ? extends S> creator = FunctionUtils
 				.toTriFunction1And2(reverse);
 			MappingSourceReplacingReverse<S, T> srr = new MappingSourceReplacingReverse<>(this, reverse, null, null, creator, null, true,
 				false);
@@ -1546,8 +1547,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> replaceSource(Function<? super T, ? extends S> reverse, //
 			Function<? super MappingSourceReplacingReverse<S, T>, ? extends SourceReplacingReverse<S, T>> configure) {
-			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = LambdaUtils.toBiFunction1(reverse);
-			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = LambdaUtils.toTriFunction1(reverse);
+			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = FunctionUtils.toBiFunction1(reverse);
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = FunctionUtils.toTriFunction1(reverse);
 			MappingSourceReplacingReverse<S, T> srr = new MappingSourceReplacingReverse<>(this, reverse2, null, null, creator, null, false,
 				false);
 			SourceReplacingReverse<S, T> srr2 = srr;
@@ -1576,13 +1577,13 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> modifySource(BiConsumer<? super S, ? super T> modifier, //
 			Function<SourceModifyingReverse<S, T>, SourceModifyingReverse<S, T>> configure) {
-			BiConsumer<? super T, TransformationValues<? extends S, ? extends T>> modifier2 = LambdaUtils
+			BiConsumer<? super T, TransformationValues<? extends S, ? extends T>> modifier2 = FunctionUtils
 				.printableBiConsumer((result, tx) -> {
 					S source = tx.getCurrentSource();
 					modifier.accept(source, result);
 				}, modifier::toString, modifier);
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(modifier2,
-				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
+				FunctionUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), null,
 				null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
@@ -1607,7 +1608,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The combination definition
 		 */
 		default Transformation<S, T> combine(BiFunction<? super S, ? super V, ? extends T> combination) {
-			return build(LambdaUtils.printableBiFn((src, tx) -> {
+			return build(FunctionUtils.printableBiFn((src, tx) -> {
 				return combination.apply(src, tx.get(getArg2()));
 			}, combination::toString, combination));
 		}
@@ -1684,10 +1685,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> replaceSource(BiFunction<? super T, ? super V, ? extends S> reverse, //
 			Function<SourceReplacingReverse<S, T>, SourceReplacingReverse<S, T>> configure) {
-			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = LambdaUtils.printableBiFn((v, tx) -> {
+			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = FunctionUtils.printableBiFn((v, tx) -> {
 				return reverse.apply(v, tx.get(getArg2()));
 			}, reverse::toString, reverse);
-			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = LambdaUtils
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = FunctionUtils
 				.printableTriFn((v, tx, create) -> {
 					return reverse.apply(v, tx.get(getArg2()));
 				}, reverse::toString, reverse);
@@ -1718,11 +1719,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> modifySource(TriConsumer<? super S, ? super V, ? super T> modifier, //
 			Function<SourceModifyingReverse<S, T>, SourceModifyingReverse<S, T>> configure) {
-			BiConsumer<T, TransformationValues<? extends S, ? extends T>> reverse2 = LambdaUtils.printableBiConsumer((v, tx) -> {
+			BiConsumer<T, TransformationValues<? extends S, ? extends T>> reverse2 = FunctionUtils.printableBiConsumer((v, tx) -> {
 				modifier.accept(tx.getCurrentSource(), tx.get(getArg2()), v);
 			}, modifier::toString, modifier);
 			SourceModifyingReverse<S, T> srr = new SourceModifyingReverse<>(reverse2, //
-				LambdaUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), //
+				FunctionUtils.printableFn(tx -> tx.getCurrentSource() == null ? "No source value" : null, "Non-null source", null), //
 				null, null, null, true);
 			if (configure != null)
 				srr = configure.apply(srr);
@@ -1752,7 +1753,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The combination definition
 		 */
 		default Transformation<S, T> combine(TriFunction<? super S, ? super V1, ? super V2, ? extends T> combination) {
-			return build(LambdaUtils.printableBiFn((src, tx) -> {
+			return build(FunctionUtils.printableBiFn((src, tx) -> {
 				return combination.apply(src, tx.get(getArg2()), tx.get(getArg3()));
 			}, combination::toString, combination));
 		}
@@ -1832,10 +1833,10 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 */
 		public ReversibleTransformation<S, T> replaceSource(TriFunction<? super T, ? super V1, ? super V2, ? extends S> reverse, //
 			Function<SourceReplacingReverse<S, T>, SourceReplacingReverse<S, T>> configure) {
-			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = LambdaUtils.printableBiFn((v, tx) -> {
+			BiFunction<T, TransformationValues<? extends S, ? extends T>, S> reverse2 = FunctionUtils.printableBiFn((v, tx) -> {
 				return reverse.apply(v, tx.get(getArg2()), tx.get(getArg3()));
 			}, reverse::toString, reverse);
-			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = LambdaUtils
+			TriFunction<T, TransformationValues<? extends S, ? extends T>, Boolean, S> creator = FunctionUtils
 				.printableTriFn((v, tx, create) -> {
 					return reverse.apply(v, tx.get(getArg2()), tx.get(getArg3()));
 				}, reverse::toString, reverse);
@@ -2480,7 +2481,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				public Subscription subscribe(Observer<? super ObservableValueEvent<TransformationState>> observer) {
 					if (theChanges == null)
 						return Subscription.NONE;
-					return theChanges.add(observer, true)::run;
+					return theChanges.add(observer, true);
 				}
 			}
 			return new Changes();

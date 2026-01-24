@@ -22,10 +22,10 @@ import org.observe.Observer.NoArgObserver;
 import org.observe.Observer.SimpleObserver;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
@@ -35,6 +35,7 @@ import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MappedCollection;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.threading.QommonsTimer;
 
 /**
@@ -94,7 +95,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
 	 */
 	default Observable<T> filter(Function<? super T, Boolean> func) {
-		return filterMap(LambdaUtils.printableFn(value -> (value != null && func.apply(value)) ? value : null, func::toString, func));
+		return filterMap(FunctionUtils.printableFn(value -> (value != null && func.apply(value)) ? value : null, func::toString, func));
 	}
 
 	/**
@@ -102,7 +103,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
 	 */
 	default Observable<T> filterP(Predicate<? super T> func) {
-		return filterMap(LambdaUtils.printableFn(value -> func.test(value) ? value : null, func::toString, func));
+		return filterMap(FunctionUtils.printableFn(value -> func.test(value) ? value : null, func::toString, func));
 	}
 
 	/**
@@ -111,7 +112,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 */
 	default <X> Observable<X> filter(Class<X> type) {
 		return filterMap(
-			LambdaUtils.printableFn(v -> type.isInstance(type) ? type.cast(v) : null, () -> "instanceof " + type.getName(), null));
+			FunctionUtils.printableFn(v -> type.isInstance(type) ? type.cast(v) : null, () -> "instanceof " + type.getName(), null));
 	}
 
 	/**
@@ -120,7 +121,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return new ComposedObservable<>(LambdaUtils.printableFn(args -> func.apply((T) args[0]), func::toString, func), "map", this);
+		return new ComposedObservable<>(FunctionUtils.printableFn(args -> func.apply((T) args[0]), func::toString, func), "map", this);
 	}
 
 	/**
@@ -141,7 +142,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return new ComposedObservable<>(LambdaUtils.printableFn(args -> func.apply((T) args[0], (V) args[1]), func::toString, func),
+		return new ComposedObservable<>(FunctionUtils.printableFn(args -> func.apply((T) args[0], (V) args[1]), func::toString, func),
 			"combine", this, other);
 	}
 
@@ -169,7 +170,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 	 * @return An observable that provides the same values as this observable but completes after the given number of values
 	 */
 	default Observable<T> take(int times) {
-		if (times <= 0)
+		if (getThreadConstraint() == ThreadConstraint.NONE) {
+			return this; // This will never fire--don't bother the until
+		} else if (times <= 0)
 			return Observable.empty();
 		else if (times == 1)
 			return new ObservableTakenOnce<>(this);
@@ -814,7 +817,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			return theObservers.add(observer, true)::run;
+			return theObservers.add(observer, true);
 		}
 
 		@Override
@@ -1451,7 +1454,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 			return theListeners.add(() -> {
 				observer.onNext(null);
 				observer.onCompleted(null);
-			}, false)::run;
+			}, false);
 		}
 
 		@Override
@@ -1574,7 +1577,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			return theObservers.add(observer, true)::run;
+			return theObservers.add(observer, true);
 		}
 
 		void fire() {

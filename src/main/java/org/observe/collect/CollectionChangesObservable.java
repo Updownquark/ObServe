@@ -7,11 +7,11 @@ import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.Observer;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent.ElementChange;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
@@ -486,11 +486,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	private static final String SESSION_TRACKER_PROPERTY = "change-tracker";
 
 	/** The collection that this change observable watches */
-	protected final ObservableCollection<E> collection;
+	protected final ObservableCollection<? extends E> collection;
 	private boolean isFiring;
 
 	/** @param coll The collection for this change observable to watch */
-	protected CollectionChangesObservable(ObservableCollection<E> coll) {
+	protected CollectionChangesObservable(ObservableCollection<? extends E> coll) {
 		collection = coll;
 		DebugData d = Debug.d().debug(coll);
 		if (d.isActive())

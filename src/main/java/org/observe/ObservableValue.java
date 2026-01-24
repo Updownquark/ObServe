@@ -20,24 +20,27 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.Observer.NoArgObserver;
+import org.observe.Observer.SimpleObserver;
 import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
 import org.qommons.Lockable;
 import org.qommons.Stamped;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.ThreadConstrainedLockingStrategy;
+import org.qommons.fn.FunctionUtils;
+import org.qommons.fn.TriFunction;
 
 /**
  * A value holder that can notify listeners when the value changes. The {@link #changes()} observable will always notify subscribers with an
@@ -268,7 +271,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	default <R> ObservableValue<R> transform(Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
 		Transformation<T, R> def = transform.apply(new Transformation.TransformationPrecursor<>());
-		if (def.getArgs().isEmpty() && LambdaUtils.isTrivial(def.getCombination()))
+		if (def.getArgs().isEmpty() && FunctionUtils.isTrivial(def.getCombination()))
 			return (ObservableValue<R>) this;
 		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
 		argValues[0] = this;
@@ -567,7 +570,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	@SafeVarargs
 	public static ObservableValue<Boolean> AND(ObservableValue<? extends Boolean>... values) {
-		return firstValue(LambdaUtils.BOOLEAN_PREDICATE.negate(), LambdaUtils.constantSupplier(true), values);
+		return firstValue(FunctionUtils.BOOLEAN_PREDICATE.negate(), FunctionUtils.constantSupplier(true), values);
 	}
 
 	/**
@@ -576,7 +579,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	@SafeVarargs
 	public static ObservableValue<Boolean> OR(ObservableValue<? extends Boolean>... values) {
-		return firstValue(LambdaUtils.BOOLEAN_PREDICATE, LambdaUtils.constantSupplier(false), values);
+		return firstValue(FunctionUtils.BOOLEAN_PREDICATE, FunctionUtils.constantSupplier(false), values);
 	}
 
 	/**
@@ -828,7 +831,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				System.err.println("Transformation error @" + this);
 				err.printStackTrace();
 			});
-			theElement = theEngine.createElement(LambdaUtils.printableSupplier(theSource::get, theSource::toString, null));
+			theElement = theEngine.createElement(FunctionUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
 			theObservers = ListenerList.build()//
 				.reentrancyError(() -> "Reentrancy not allowed: " + toString())//
@@ -968,7 +971,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		protected Object createIdentity() {
-			if (theTransformation.getArgs().isEmpty() && LambdaUtils.isTrivial(theTransformation.getCombination()))
+			if (theTransformation.getArgs().isEmpty() && FunctionUtils.isTrivial(theTransformation.getCombination()))
 				return theSource.getIdentity();
 			Identifiable.CustomIdentityBuilder idBuilder = Identifiable.buildId()//
 				.withPrintedId(theSource)//
@@ -1040,7 +1043,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					return theObservers.add(observer, true)::run;
+					return theObservers.add(observer, true);
 				}
 
 				@Override
@@ -1686,6 +1689,46 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public CoreChangeSources getChangeSources() {
 					return CoreChangeSources.empty();
 				}
+
+				@Override
+				public Subscription act(SimpleObserver<? super ObservableValueEvent<T>> action) {
+					return Subscription.NONE;
+				}
+
+				@Override
+				public Subscription act0(NoArgObserver action) {
+					return Subscription.NONE;
+				}
+
+				@Override
+				public <R> Observable<R> filterMap(Function<? super ObservableValueEvent<T>, R> func) {
+					return (Observable<R>) this;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> takeUntil(Observable<?> until) {
+					return this;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> take(int times) {
+					return this;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> skip(int times) {
+					return this;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> skip(Supplier<Integer> times) {
+					return this;
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<T>> safe(ThreadConstraint threading) {
+					return this;
+				}
 			}
 			return new ConstantNoInitChanges();
 		}
@@ -2115,7 +2158,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-						return theListeners.add(observer, true)::run;
+						return theListeners.add(observer, true);
 					}
 
 					@Override
@@ -2536,7 +2579,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public ThreadConstraint getThreadConstraint() {
-			return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), LambdaUtils.identity());
+			return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), FunctionUtils.identity());
 		}
 
 		class FirstValueChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
@@ -2548,7 +2591,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {
-					ObservableValueEvent<T> evt = createInitialEvent(theDefault.get(), null);
+					T defaultV=theDefault==null ? null : theDefault.get();
+					ObservableValueEvent<T> evt = createInitialEvent(defaultV, null);
 					try (Transaction t = evt.use()) {
 						observer.onNext(evt);
 					}
@@ -2664,7 +2708,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
-				return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), LambdaUtils.identity());
+				return ThreadConstrained.getThreadConstraint(null, Arrays.asList(theValues), FunctionUtils.identity());
 			}
 
 			@Override
@@ -3043,7 +3087,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					return theListeners.add(observer, true)::run;
+					return theListeners.add(observer, true);
 				}
 
 				@Override

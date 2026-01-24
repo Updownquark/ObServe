@@ -27,12 +27,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.LambdaUtils;
 import org.qommons.MultiInheritanceView;
 import org.qommons.MultiInheritanceView.MultiInheritanceMap2;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.fn.FunctionUtils;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -187,7 +187,7 @@ public class TypeTokens implements TypeParser {
 		}
 	}
 
-	private static final Function<Object, String> ALWAYS_NULL = LambdaUtils.constantFn(null, "null", null);
+	private static final Function<Object, String> ALWAYS_NULL = FunctionUtils.constantFn(null, "null", null);
 
 	/**
 	 * A type key for a primitive/wrapper type
@@ -236,12 +236,12 @@ public class TypeTokens implements TypeParser {
 			theForcedPrimitiveCasts = new HashMap<>();
 			primitiveUnity = new NoOpTypeConverter<>(primitiveType, primitiveType);
 			safeCast = isVoid ? null : new TypeConverter<>("safeCast", "primitiveWrap", type, primitiveType, //
-				ALWAYS_NULL, LambdaUtils.printableFn(w -> w != null ? w : defaultValue, "safeCast", null), //
-				ALWAYS_NULL, LambdaUtils.identity());
+				ALWAYS_NULL, FunctionUtils.printableFn(w -> w != null ? w : defaultValue, "safeCast", null), //
+				ALWAYS_NULL, FunctionUtils.identity());
 			String castError = "Null cannot be cast to primitive type " + primitive.getName();
 			unsafeCast = isVoid ? null : new TypeConverter<>("unsafeCast", "primitiveWrap", type, primitiveType, //
-				LambdaUtils.printableFn(w -> w == null ? castError : null, "nullCheck", null), LambdaUtils.identity(), //
-				ALWAYS_NULL, LambdaUtils.identity());
+				FunctionUtils.printableFn(w -> w == null ? castError : null, "nullCheck", null), FunctionUtils.identity(), //
+				ALWAYS_NULL, FunctionUtils.identity());
 			thePrimitiveCasts.put(primitiveClass, unsafeCast);
 		}
 
@@ -443,66 +443,66 @@ public class TypeTokens implements TypeParser {
 		NumberTypeData<Integer> intData, NumberTypeData<Long> longData, NumberTypeData<Float> floatData,
 		NumberTypeData<Double> doubleData) {
 		// Allow conversion of to void (null) and void to the primitive default value
-		Function<Object, Void> toVoid = LambdaUtils.constantFn(null, "null", null);
+		Function<Object, Void> toVoid = FunctionUtils.constantFn(null, "null", null);
 		voidData.populatePrimitiveCast(boolData, false, //
 			new TypeConverter<>("null-to-void", "null", boolData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(boolData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(boolData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(charData, false, //
 			new TypeConverter<>("null-to-void", "null", charData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(charData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(charData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(byteData, false, //
 			new TypeConverter<>("null-to-void", "null", byteData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(byteData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(byteData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(shortData, false, //
 			new TypeConverter<>("null-to-void", "null", shortData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(shortData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(shortData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(intData, false, //
 			new TypeConverter<>("null-to-void", "null", intData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(intData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(intData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(longData, false, //
 			new TypeConverter<>("null-to-void", "null", longData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(longData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(longData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("null-to-void", "null", floatData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(floatData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(floatData.defaultValue, "false", null)));
 		voidData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("null-to-void", "null", doubleData.primitiveType, voidData.primitiveType, //
-				null, toVoid, null, LambdaUtils.constantFn(doubleData.defaultValue, "false", null)));
+				null, toVoid, null, FunctionUtils.constantFn(doubleData.defaultValue, "false", null)));
 
 		// No boolean conversions except with void above
 
 		// Character conversions
-		Function<Byte, Character> byteToChar = LambdaUtils.printableFn(b -> (char) b.byteValue(), "byte-to-char", null);
-		Function<Character, Byte> charToByte = LambdaUtils.printableFn(ch -> (byte) (ch == null ? 0 : ch.charValue()), "char-to-byte",
+		Function<Byte, Character> byteToChar = FunctionUtils.printableFn(b -> (char) b.byteValue(), "byte-to-char", null);
+		Function<Character, Byte> charToByte = FunctionUtils.printableFn(ch -> (byte) (ch == null ? 0 : ch.charValue()), "char-to-byte",
 			null);
 		charData.populatePrimitiveCast(byteData, false, //
 			new TypeConverter<>("byte-to-char", "char-to-byte", byteData.primitiveType, charData.primitiveType, //
 				null, byteToChar, //
-				LambdaUtils.printableFn(ch -> ch <= (char) Byte.MAX_VALUE ? null : "Char value " + (int) ch + " is not in byte range",
+				FunctionUtils.printableFn(ch -> ch <= (char) Byte.MAX_VALUE ? null : "Char value " + (int) ch + " is not in byte range",
 					"check-byte-range", null),
 				charToByte));
 		charData.populatePrimitiveCast(byteData, true,
 			new TypeConverter<>("byte-to-char", "force-char-to-byte", byteData.primitiveType, charData.primitiveType, //
 				null, byteToChar, null, charToByte));
-		Function<Short, Character> shortToChar = LambdaUtils.printableFn(sh -> (char) (sh == null ? 0 : sh.shortValue()), "short-to-char",
+		Function<Short, Character> shortToChar = FunctionUtils.printableFn(sh -> (char) (sh == null ? 0 : sh.shortValue()), "short-to-char",
 			null);
-		Function<Character, Short> charToShort = LambdaUtils.printableFn(ch -> (short) (ch == null ? 0 : ch.charValue()), "char-to-short",
+		Function<Character, Short> charToShort = FunctionUtils.printableFn(ch -> (short) (ch == null ? 0 : ch.charValue()), "char-to-short",
 			null);
 		charData.populatePrimitiveCast(shortData, false, //
 			new TypeConverter<>("short-to-char", "char-to-short", shortData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(sh -> sh >= 0 ? null : "A character cannot be negative", "check-char-range", null),
+				FunctionUtils.printableFn(sh -> sh >= 0 ? null : "A character cannot be negative", "check-char-range", null),
 				shortToChar, //
-				LambdaUtils.printableFn(ch -> ch <= (char) Short.MAX_VALUE ? null : "Char value " + (int) ch + " is not in short range",
+				FunctionUtils.printableFn(ch -> ch <= (char) Short.MAX_VALUE ? null : "Char value " + (int) ch + " is not in short range",
 					"check-short-range", null),
 				charToShort));
 		charData.populatePrimitiveCast(shortData, true,
 			new TypeConverter<>("force-short-to-char", "force-char-to-short", shortData.primitiveType, charData.primitiveType, //
 				null, shortToChar, null, charToShort));
-		Function<Integer, Character> intToChar = LambdaUtils.printableFn(i -> (char) (i == null ? 0 : i.intValue()), "int-to-char", null);
-		Function<Character, Integer> charToInt = LambdaUtils.printableFn(ch -> ch == null ? 0 : (int) ch.charValue(), "char-to-int", null);
+		Function<Integer, Character> intToChar = FunctionUtils.printableFn(i -> (char) (i == null ? 0 : i.intValue()), "int-to-char", null);
+		Function<Character, Integer> charToInt = FunctionUtils.printableFn(ch -> ch == null ? 0 : (int) ch.charValue(), "char-to-int", null);
 		charData.populatePrimitiveCast(intData, false, //
 			new TypeConverter<>("int-to-char", "char-to-int", intData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(i -> {
+				FunctionUtils.printableFn(i -> {
 					if (i < 0)
 						return "A character cannot be negative";
 					else if (i > Character.MAX_VALUE)
@@ -514,24 +514,24 @@ public class TypeTokens implements TypeParser {
 		charData.populatePrimitiveCast(intData, true,
 			new TypeConverter<>("force-int-to-char", "char-to-int", intData.primitiveType, charData.primitiveType, //
 				null, intToChar, null, charToInt));
-		Function<Long, Character> longToChar = LambdaUtils.printableFn(i -> (char) (i == null ? 0 : i.longValue()), "long-to-char", null);
-		Function<Character, Long> charToLong = LambdaUtils.printableFn(ch -> ch == null ? 0L : (long) ch.charValue(), "char-to-long", null);
+		Function<Long, Character> longToChar = FunctionUtils.printableFn(i -> (char) (i == null ? 0 : i.longValue()), "long-to-char", null);
+		Function<Character, Long> charToLong = FunctionUtils.printableFn(ch -> ch == null ? 0L : (long) ch.charValue(), "char-to-long", null);
 		charData.populatePrimitiveCast(longData, false, //
 			new TypeConverter<>("long-to-char", "char-to-long", longData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(i -> (i >= 0 && i <= Character.MAX_VALUE) ? null : "Long value " + i + " is not in char range",
+				FunctionUtils.printableFn(i -> (i >= 0 && i <= Character.MAX_VALUE) ? null : "Long value " + i + " is not in char range",
 					"check-char-range", null),
 				longToChar, //
 				null, charToLong));
 		charData.populatePrimitiveCast(longData, true,
 			new TypeConverter<>("force-long-to-char", "char-to-long", longData.primitiveType, charData.primitiveType, //
 				null, longToChar, null, charToLong));
-		Function<Float, Character> floatToChar = LambdaUtils.printableFn(f -> (char) (f == null ? 0 : f.floatValue()), "float-to-char",
+		Function<Float, Character> floatToChar = FunctionUtils.printableFn(f -> (char) (f == null ? 0 : f.floatValue()), "float-to-char",
 			null);
-		Function<Character, Float> charToFloat = LambdaUtils.printableFn(ch -> ch == null ? 0.0f : (float) ch.charValue(), "char-to-float",
+		Function<Character, Float> charToFloat = FunctionUtils.printableFn(ch -> ch == null ? 0.0f : (float) ch.charValue(), "char-to-float",
 			null);
 		charData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("float-to-char", "char-to-float", floatData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(f -> {
+				FunctionUtils.printableFn(f -> {
 					if (f < 0)
 						return "A character cannot be negative";
 					else if (f > Character.MAX_VALUE)
@@ -545,13 +545,13 @@ public class TypeTokens implements TypeParser {
 		charData.populatePrimitiveCast(floatData, true,
 			new TypeConverter<>("force-float-to-char", "char-to-float", floatData.primitiveType, charData.primitiveType, //
 				null, floatToChar, null, charToFloat));
-		Function<Double, Character> doubleToChar = LambdaUtils.printableFn(d -> (char) (d == null ? 0 : d.floatValue()), "double-to-char",
+		Function<Double, Character> doubleToChar = FunctionUtils.printableFn(d -> (char) (d == null ? 0 : d.floatValue()), "double-to-char",
 			null);
-		Function<Character, Double> charToDouble = LambdaUtils.printableFn(ch -> ch == null ? 0.0 : (double) ch.charValue(),
+		Function<Character, Double> charToDouble = FunctionUtils.printableFn(ch -> ch == null ? 0.0 : (double) ch.charValue(),
 			"char-to-double", null);
 		charData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-char", "char-to-double", doubleData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < 0)
 						return "A character cannot be negative";
 					else if (d > Character.MAX_VALUE)
@@ -567,11 +567,11 @@ public class TypeTokens implements TypeParser {
 				null, doubleToChar, null, charToDouble));
 
 		// Byte conversions
-		Function<Short, Byte> shortToByte = LambdaUtils.printableFn(sh -> (byte) (sh == null ? 0 : sh.shortValue()), "short-to-byte", null);
-		Function<Byte, Short> byteToShort = LambdaUtils.printableFn(b -> (short) (b == null ? 0 : b.byteValue()), "byte-to-short", null);
+		Function<Short, Byte> shortToByte = FunctionUtils.printableFn(sh -> (byte) (sh == null ? 0 : sh.shortValue()), "short-to-byte", null);
+		Function<Byte, Short> byteToShort = FunctionUtils.printableFn(b -> (short) (b == null ? 0 : b.byteValue()), "byte-to-short", null);
 		byteData.populatePrimitiveCast(shortData, false, //
 			new TypeConverter<>("short-to-byte", "byte-to-short", shortData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					sh -> (sh >= Byte.MIN_VALUE && sh <= Byte.MAX_VALUE) ? null : "Short value " + sh + " is not in byte range",
 						"check-byte-range", null),
 				shortToByte, //
@@ -579,11 +579,11 @@ public class TypeTokens implements TypeParser {
 		byteData.populatePrimitiveCast(shortData, true,
 			new TypeConverter<>("force-short-to-byte", "byte-to-short", shortData.primitiveType, byteData.primitiveType, //
 				null, shortToByte, null, byteToShort));
-		Function<Integer, Byte> intToByte = LambdaUtils.printableFn(i -> (byte) (i == null ? 0 : i.intValue()), "int-to-byte", null);
-		Function<Byte, Integer> byteToInt = LambdaUtils.printableFn(b -> b == null ? 0 : (int) b.byteValue(), "byte-to-int", null);
+		Function<Integer, Byte> intToByte = FunctionUtils.printableFn(i -> (byte) (i == null ? 0 : i.intValue()), "int-to-byte", null);
+		Function<Byte, Integer> byteToInt = FunctionUtils.printableFn(b -> b == null ? 0 : (int) b.byteValue(), "byte-to-int", null);
 		byteData.populatePrimitiveCast(intData, false, //
 			new TypeConverter<>("int-to-byte", "byte-to-int", intData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					i -> (i >= Byte.MIN_VALUE && i <= Byte.MAX_VALUE) ? null : "Int value " + i + " is not in byte range",
 						"check-byte-range", null),
 				intToByte, //
@@ -591,11 +591,11 @@ public class TypeTokens implements TypeParser {
 		byteData.populatePrimitiveCast(intData, true,
 			new TypeConverter<>("force-int-to-byte", "byte-to-int", intData.primitiveType, byteData.primitiveType, //
 				null, intToByte, null, byteToInt));
-		Function<Long, Byte> longToByte = LambdaUtils.printableFn(sh -> (byte) (sh == null ? 0 : sh.longValue()), "long-to-byte", null);
-		Function<Byte, Long> byteToLong = LambdaUtils.printableFn(b -> b == null ? 0L : (long) b.byteValue(), "byte-to-long", null);
+		Function<Long, Byte> longToByte = FunctionUtils.printableFn(sh -> (byte) (sh == null ? 0 : sh.longValue()), "long-to-byte", null);
+		Function<Byte, Long> byteToLong = FunctionUtils.printableFn(b -> b == null ? 0L : (long) b.byteValue(), "byte-to-long", null);
 		byteData.populatePrimitiveCast(longData, false, //
 			new TypeConverter<>("long-to-byte", "byte-to-long", longData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					i -> (i >= Byte.MIN_VALUE && i <= Byte.MAX_VALUE) ? null : "Long value " + i + " is not in byte range",
 						"check-byte-range", null),
 				longToByte, //
@@ -603,11 +603,11 @@ public class TypeTokens implements TypeParser {
 		byteData.populatePrimitiveCast(longData, true,
 			new TypeConverter<>("force-long-to-byte", "byte-to-long", longData.primitiveType, byteData.primitiveType, //
 				null, longToByte, null, byteToLong));
-		Function<Float, Byte> floatToByte = LambdaUtils.printableFn(f -> (byte) (f == null ? 0 : f.floatValue()), "float-to-byte", null);
-		Function<Byte, Float> byteToFloat = LambdaUtils.printableFn(b -> b == null ? 0.0f : (float) b.byteValue(), "byte-to-float", null);
+		Function<Float, Byte> floatToByte = FunctionUtils.printableFn(f -> (byte) (f == null ? 0 : f.floatValue()), "float-to-byte", null);
+		Function<Byte, Float> byteToFloat = FunctionUtils.printableFn(b -> b == null ? 0.0f : (float) b.byteValue(), "byte-to-float", null);
 		byteData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("float-to-byte", "byte-to-float", floatData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(f -> {
+				FunctionUtils.printableFn(f -> {
 					if (f < Byte.MIN_VALUE || f > Byte.MAX_VALUE)
 						return "Float value " + f + " is not in byte range";
 					float rem = f % 1;
@@ -619,13 +619,13 @@ public class TypeTokens implements TypeParser {
 		byteData.populatePrimitiveCast(floatData, true,
 			new TypeConverter<>("force-float-to-byte", "byte-to-float", floatData.primitiveType, byteData.primitiveType, //
 				null, floatToByte, null, byteToFloat));
-		Function<Double, Byte> doubleToByte = LambdaUtils.printableFn(d -> (byte) (d == null ? 0 : d.doubleValue()), "double-to-byte",
+		Function<Double, Byte> doubleToByte = FunctionUtils.printableFn(d -> (byte) (d == null ? 0 : d.doubleValue()), "double-to-byte",
 			null);
-		Function<Byte, Double> byteToDouble = LambdaUtils.printableFn(b -> b == null ? 0.0 : (double) b.byteValue(), "byte-to-double",
+		Function<Byte, Double> byteToDouble = FunctionUtils.printableFn(b -> b == null ? 0.0 : (double) b.byteValue(), "byte-to-double",
 			null);
 		byteData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-byte", "byte-to-double", doubleData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < Byte.MIN_VALUE || d > Byte.MAX_VALUE)
 						return "Double value " + d + " is not in byte range";
 					double rem = d % 1;
@@ -639,11 +639,11 @@ public class TypeTokens implements TypeParser {
 				null, doubleToByte, null, byteToDouble));
 
 		// Short conversions
-		Function<Integer, Short> intToShort = LambdaUtils.printableFn(i -> (short) (i == null ? 0 : i.intValue()), "int-to-short", null);
-		Function<Short, Integer> shortToInt = LambdaUtils.printableFn(b -> b == null ? 0 : (int) b.shortValue(), "short-to-int", null);
+		Function<Integer, Short> intToShort = FunctionUtils.printableFn(i -> (short) (i == null ? 0 : i.intValue()), "int-to-short", null);
+		Function<Short, Integer> shortToInt = FunctionUtils.printableFn(b -> b == null ? 0 : (int) b.shortValue(), "short-to-int", null);
 		shortData.populatePrimitiveCast(intData, false, //
 			new TypeConverter<>("int-to-short", "short-to-int", intData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					i -> (i >= Short.MIN_VALUE && i <= Short.MAX_VALUE) ? null : "Int value " + i + " is not in short range",
 						"check-short-range", null),
 				intToShort, //
@@ -651,11 +651,11 @@ public class TypeTokens implements TypeParser {
 		shortData.populatePrimitiveCast(intData, true,
 			new TypeConverter<>("force-int-to-short", "short-to-int", intData.primitiveType, shortData.primitiveType, //
 				null, intToShort, null, shortToInt));
-		Function<Long, Short> longToShort = LambdaUtils.printableFn(i -> (short) (i == null ? 0 : i.longValue()), "long-to-short", null);
-		Function<Short, Long> shortToLong = LambdaUtils.printableFn(b -> b == null ? 0L : (long) b.shortValue(), "short-to-long", null);
+		Function<Long, Short> longToShort = FunctionUtils.printableFn(i -> (short) (i == null ? 0 : i.longValue()), "long-to-short", null);
+		Function<Short, Long> shortToLong = FunctionUtils.printableFn(b -> b == null ? 0L : (long) b.shortValue(), "short-to-long", null);
 		shortData.populatePrimitiveCast(longData, false, //
 			new TypeConverter<>("long-to-short", "short-to-long", longData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					i -> (i >= Short.MIN_VALUE && i <= Short.MAX_VALUE) ? null : "Long value " + i + " is not in short range",
 						"check-short-range", null),
 				longToShort, //
@@ -663,13 +663,13 @@ public class TypeTokens implements TypeParser {
 		shortData.populatePrimitiveCast(longData, true,
 			new TypeConverter<>("force-long-to-short", "short-to-long", longData.primitiveType, shortData.primitiveType, //
 				null, longToShort, null, shortToLong));
-		Function<Float, Short> floatToShort = LambdaUtils.printableFn(i -> (short) (i == null ? 0 : i.floatValue()), "float-to-short",
+		Function<Float, Short> floatToShort = FunctionUtils.printableFn(i -> (short) (i == null ? 0 : i.floatValue()), "float-to-short",
 			null);
-		Function<Short, Float> shortToFloat = LambdaUtils.printableFn(b -> b == null ? 0.0f : (float) b.shortValue(), "short-to-float",
+		Function<Short, Float> shortToFloat = FunctionUtils.printableFn(b -> b == null ? 0.0f : (float) b.shortValue(), "short-to-float",
 			null);
 		shortData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("float-to-short", "short-to-float", floatData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(f -> {
+				FunctionUtils.printableFn(f -> {
 					if (f < Short.MIN_VALUE || f > Short.MAX_VALUE)
 						return "FLoat value " + f + " is not in short range";
 					float rem = f % 1;
@@ -681,13 +681,13 @@ public class TypeTokens implements TypeParser {
 		shortData.populatePrimitiveCast(floatData, true,
 			new TypeConverter<>("force-float-to-short", "short-to-float", floatData.primitiveType, shortData.primitiveType, //
 				null, floatToShort, null, shortToFloat));
-		Function<Double, Short> doubleToShort = LambdaUtils.printableFn(i -> (short) (i == null ? 0 : i.doubleValue()), "double-to-short",
+		Function<Double, Short> doubleToShort = FunctionUtils.printableFn(i -> (short) (i == null ? 0 : i.doubleValue()), "double-to-short",
 			null);
-		Function<Short, Double> shortToDouble = LambdaUtils.printableFn(b -> b == null ? 0.0 : (double) b.shortValue(), "short-to-double",
+		Function<Short, Double> shortToDouble = FunctionUtils.printableFn(b -> b == null ? 0.0 : (double) b.shortValue(), "short-to-double",
 			null);
 		shortData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-short", "short-to-double", doubleData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < Short.MIN_VALUE || d > Short.MAX_VALUE)
 						return "Double value " + d + " is not in short range";
 					double rem = d % 1;
@@ -701,11 +701,11 @@ public class TypeTokens implements TypeParser {
 				null, doubleToShort, null, shortToDouble));
 
 		// Int conversions
-		Function<Long, Integer> longToInt = LambdaUtils.printableFn(i -> i == null ? 0 : (int) i.longValue(), "long-to-int", null);
-		Function<Integer, Long> intToLong = LambdaUtils.printableFn(b -> b == null ? 0L : (long) b.intValue(), "int-to-long", null);
+		Function<Long, Integer> longToInt = FunctionUtils.printableFn(i -> i == null ? 0 : (int) i.longValue(), "long-to-int", null);
+		Function<Integer, Long> intToLong = FunctionUtils.printableFn(b -> b == null ? 0L : (long) b.intValue(), "int-to-long", null);
 		intData.populatePrimitiveCast(longData, false, //
 			new TypeConverter<>("long-to-int", "int-to-long", longData.primitiveType, intData.primitiveType, //
-				LambdaUtils.printableFn(
+				FunctionUtils.printableFn(
 					i -> (i >= Integer.MIN_VALUE && i <= Integer.MAX_VALUE) ? null : "Long value " + i + " is not in int range",
 						"check-int-range", null),
 				longToInt, //
@@ -713,11 +713,11 @@ public class TypeTokens implements TypeParser {
 		intData.populatePrimitiveCast(longData, true,
 			new TypeConverter<>("force-long-to-int", "int-to-long", longData.primitiveType, intData.primitiveType, //
 				null, longToInt, null, intToLong));
-		Function<Float, Integer> floatToInt = LambdaUtils.printableFn(i -> i == null ? 0 : (int) i.floatValue(), "float-to-int", null);
-		Function<Integer, Float> intToFloat = LambdaUtils.printableFn(b -> b == null ? 0.0f : (float) b.intValue(), "int-to-float", null);
+		Function<Float, Integer> floatToInt = FunctionUtils.printableFn(i -> i == null ? 0 : (int) i.floatValue(), "float-to-int", null);
+		Function<Integer, Float> intToFloat = FunctionUtils.printableFn(b -> b == null ? 0.0f : (float) b.intValue(), "int-to-float", null);
 		intData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("float-to-int", "int-to-float", floatData.primitiveType, intData.primitiveType, //
-				LambdaUtils.printableFn(f -> {
+				FunctionUtils.printableFn(f -> {
 					if (f < Integer.MIN_VALUE || f > Integer.MAX_VALUE)
 						return "Float value " + f + " is not in int range";
 					float rem = f % 1;
@@ -729,11 +729,11 @@ public class TypeTokens implements TypeParser {
 		intData.populatePrimitiveCast(floatData, true,
 			new TypeConverter<>("force-float-to-int", "int-to-float", floatData.primitiveType, intData.primitiveType, //
 				null, floatToInt, null, intToFloat));
-		Function<Double, Integer> doubleToInt = LambdaUtils.printableFn(i -> i == null ? 0 : (int) i.doubleValue(), "double-to-int", null);
-		Function<Integer, Double> intToDouble = LambdaUtils.printableFn(b -> b == null ? 0.0 : b.doubleValue(), "int-to-double", null);
+		Function<Double, Integer> doubleToInt = FunctionUtils.printableFn(i -> i == null ? 0 : (int) i.doubleValue(), "double-to-int", null);
+		Function<Integer, Double> intToDouble = FunctionUtils.printableFn(b -> b == null ? 0.0 : b.doubleValue(), "int-to-double", null);
 		intData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-int", "int-to-double", doubleData.primitiveType, intData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < Integer.MIN_VALUE || d > Integer.MAX_VALUE)
 						return "Double value " + d + " is not in int range";
 					double rem = d % 1;
@@ -747,11 +747,11 @@ public class TypeTokens implements TypeParser {
 				null, doubleToInt, null, intToDouble));
 
 		// Long conversions
-		Function<Float, Long> floatToLong = LambdaUtils.printableFn(i -> i == null ? 0L : (long) i.floatValue(), "float-to-long", null);
-		Function<Long, Float> longToFloat = LambdaUtils.printableFn(b -> b == null ? 0.0f : (float) b.longValue(), "long-to-float", null);
+		Function<Float, Long> floatToLong = FunctionUtils.printableFn(i -> i == null ? 0L : (long) i.floatValue(), "float-to-long", null);
+		Function<Long, Float> longToFloat = FunctionUtils.printableFn(b -> b == null ? 0.0f : (float) b.longValue(), "long-to-float", null);
 		longData.populatePrimitiveCast(floatData, false, //
 			new TypeConverter<>("float-to-long", "long-to-float", floatData.primitiveType, longData.primitiveType, //
-				LambdaUtils.printableFn(f -> {
+				FunctionUtils.printableFn(f -> {
 					if (f < Long.MIN_VALUE || f > Long.MAX_VALUE)
 						return "Float value " + f + " is not in long range";
 					float rem = f % 1;
@@ -763,12 +763,12 @@ public class TypeTokens implements TypeParser {
 		longData.populatePrimitiveCast(floatData, true,
 			new TypeConverter<>("force-float-to-long", "long-to-float", floatData.primitiveType, longData.primitiveType, //
 				null, floatToLong, null, longToFloat));
-		Function<Double, Long> doubleToLong = LambdaUtils.printableFn(i -> i == null ? 0L : (long) i.doubleValue(), "double-to-long", null);
-		Function<Long, Double> longToDouble = LambdaUtils.printableFn(b -> b == null ? 0.0 : (double) b.longValue(), "long-to-double",
+		Function<Double, Long> doubleToLong = FunctionUtils.printableFn(i -> i == null ? 0L : (long) i.doubleValue(), "double-to-long", null);
+		Function<Long, Double> longToDouble = FunctionUtils.printableFn(b -> b == null ? 0.0 : (double) b.longValue(), "long-to-double",
 			null);
 		longData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-long", "long-to-double", doubleData.primitiveType, longData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < Long.MIN_VALUE || d > Long.MAX_VALUE)
 						return "Double value " + d + " is not in long range";
 					double rem = d % 1;
@@ -782,13 +782,13 @@ public class TypeTokens implements TypeParser {
 				null, doubleToLong, null, longToDouble));
 
 		// Float conversion
-		Function<Double, Float> doubleToFloat = LambdaUtils.printableFn(i -> i == null ? 0.0f : (float) i.doubleValue(), "double-to-float",
+		Function<Double, Float> doubleToFloat = FunctionUtils.printableFn(i -> i == null ? 0.0f : (float) i.doubleValue(), "double-to-float",
 			null);
-		Function<Float, Double> floatToDouble = LambdaUtils.printableFn(b -> b == null ? 0.0 : (double) b.floatValue(), "float-to-double",
+		Function<Float, Double> floatToDouble = FunctionUtils.printableFn(b -> b == null ? 0.0 : (double) b.floatValue(), "float-to-double",
 			null);
 		floatData.populatePrimitiveCast(doubleData, false, //
 			new TypeConverter<>("double-to-float", "float-to-double", doubleData.primitiveType, floatData.primitiveType, //
-				LambdaUtils.printableFn(d -> {
+				FunctionUtils.printableFn(d -> {
 					if (d < Float.MIN_VALUE || d > Float.MAX_VALUE)
 						return "Double value is too large for a float";
 					float f = d.floatValue();
@@ -1275,7 +1275,7 @@ public class TypeTokens implements TypeParser {
 	 * @param <TR> The super-type of all values that this converter can {@link #reverse(Object) reverse}
 	 * @param <T> The super-type of all values that this converter can produce
 	 */
-	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T>, LambdaUtils.LambdaUtility {
+	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T>, FunctionUtils.LambdaUtility {
 		private final String theName;
 		private final String theReverseName;
 		private final TypeToken<R> theReverseType;
@@ -1393,7 +1393,7 @@ public class TypeTokens implements TypeParser {
 
 		@Override
 		public boolean isTrivial() {
-			return LambdaUtils.isTrivial(theConverter) && LambdaUtils.isTrivial(theReverse);
+			return FunctionUtils.isTrivial(theConverter) && FunctionUtils.isTrivial(theReverse);
 		}
 
 		/**
@@ -1446,13 +1446,13 @@ public class TypeTokens implements TypeParser {
 			if (other instanceof NoOpTypeConverter)
 				return (TypeConverter<S, R, TR2, T2>) this;
 			// If one or the other is trivial, keep it simple
-			if (LambdaUtils.isTrivial(theConverter)) {
+			if (FunctionUtils.isTrivial(theConverter)) {
 				if (theReverseType.equals(other.theReverseType))
 					return (TypeConverter<S, R, TR2, T2>) other;
 				return new TypeConverter<>(other.theName, other.theReverseName, theReverseType, other.theConvertedType, //
 					(Function<S, String>) other.theApplicability, (Function<S, T2>) other.theConverter, //
 					other.theReversibility, (Function<TR2, R>) other.theReverse);
-			} else if (LambdaUtils.isTrivial(other.theConverter)) {
+			} else if (FunctionUtils.isTrivial(other.theConverter)) {
 				if (theConvertedType.equals(other.theConvertedType))
 					return (TypeConverter<S, R, TR2, T2>) this;
 				return new TypeConverter<>(theName, theReverseName, theReverseType, other.theConvertedType, //
@@ -1467,7 +1467,7 @@ public class TypeTokens implements TypeParser {
 				Function<? super S, String> myApp = theApplicability;
 				Function<? super S, T> myConverter = theConverter;
 				Function<? super T, String> otherApp = other.theApplicability;
-				applicability = LambdaUtils.printableFn(s -> {
+				applicability = FunctionUtils.printableFn(s -> {
 					String msg = myApp == null ? null : myApp.apply(s);
 					if (msg != null)
 						return msg;
@@ -1481,7 +1481,7 @@ public class TypeTokens implements TypeParser {
 				Function<? super T, String> myRev = theReversibility;
 				Function<? super TR2, ? extends T> otherReverse = other.theReverse;
 				Function<? super TR2, String> otherRev = other.theReversibility;
-				reversibility = LambdaUtils.printableFn(s -> {
+				reversibility = FunctionUtils.printableFn(s -> {
 					String msg = otherRev == null ? null : otherRev.apply(s);
 					if (msg != null)
 						return msg;
@@ -1529,7 +1529,7 @@ public class TypeTokens implements TypeParser {
 		 * @param convertedType The super-type of all values that may be produced by this converter
 		 */
 		public NoOpTypeConverter(TypeToken<R> sourceType, TypeToken<T> convertedType) {
-			super(NAME, NAME, sourceType, convertedType, null, LambdaUtils.unenforcedCast(), null, LambdaUtils.unenforcedCast());
+			super(NAME, NAME, sourceType, convertedType, null, FunctionUtils.unenforcedCast(), null, FunctionUtils.unenforcedCast());
 		}
 
 		@Override
@@ -1589,7 +1589,7 @@ public class TypeTokens implements TypeParser {
 		InstanceChecker(Class<T> type, String simpleName) {
 			String error = "Not an instance of " + type.getName();
 			checkString = "check:" + simpleName;
-			check = LambdaUtils.printableFn(value -> {
+			check = FunctionUtils.printableFn(value -> {
 				if (value == null)
 					return null;
 				else if (type.isInstance(value))
@@ -1597,7 +1597,7 @@ public class TypeTokens implements TypeParser {
 				else
 					return error;
 			}, checkString, null);
-			cast = LambdaUtils.printableFn(type::cast, "cast:" + simpleName, null);
+			cast = FunctionUtils.printableFn(type::cast, "cast:" + simpleName, null);
 		}
 
 		@Override
@@ -1666,13 +1666,13 @@ public class TypeTokens implements TypeParser {
 				else
 					return new TypeConverter<>(primitiveCast.getName(), primitiveCast.getReverseName(), source, target, //
 						primitiveCast.isSafe() ? null
-							: LambdaUtils.printableFn(s -> s == null ? null : primitiveCast.isApplicable(s),
+							: FunctionUtils.printableFn(s -> s == null ? null : primitiveCast.isApplicable(s),
 								primitiveCast.getApplicability()::toString, null), //
-							LambdaUtils.printableFn(s -> s == null ? null : primitiveCast.apply(s), primitiveCast.getName(), null), //
+							FunctionUtils.printableFn(s -> s == null ? null : primitiveCast.apply(s), primitiveCast.getName(), null), //
 							primitiveCast.isReverseSafe() ? null
-								: LambdaUtils.printableFn(t -> t == null ? null : primitiveCast.isReversible(t),
+								: FunctionUtils.printableFn(t -> t == null ? null : primitiveCast.isReversible(t),
 									primitiveCast.getReversibility()::toString, null), //
-								LambdaUtils.printableFn(t -> t == null ? null : primitiveCast.reverse(t), primitiveCast.getReverseName(), null));
+								FunctionUtils.printableFn(t -> t == null ? null : primitiveCast.reverse(t), primitiveCast.getReverseName(), null));
 			}
 			TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
 			if (suppConvert != null)
@@ -1687,7 +1687,7 @@ public class TypeTokens implements TypeParser {
 				InstanceChecker<T> checker = new InstanceChecker<>(primTarget.clazz, primTarget.getSimpleName());
 				TypeConverter<S, S, T, T> typeCheckConverter = new TypeConverter<>(checker.toString(), "no-op", (TypeToken<S>) target,
 					target, //
-					checker.check, checker.cast, null, LambdaUtils.<T, S> unenforcedCast());
+					checker.check, checker.cast, null, FunctionUtils.<T, S> unenforcedCast());
 				if (!target.isPrimitive() || primTarget.isVoid)
 					return typeCheckConverter;
 				else
@@ -1730,7 +1730,7 @@ public class TypeTokens implements TypeParser {
 			else {
 				InstanceChecker<S> sourceChecker = new InstanceChecker<>(rawSource, sourceKey.getSimpleName());
 				return new TypeConverter<>("no-op", sourceChecker.checkString, source, (TypeToken<T>) source, //
-					null, LambdaUtils.<S, T> unenforcedCast(), sourceChecker.check, sourceChecker.cast);
+					null, FunctionUtils.<S, T> unenforcedCast(), sourceChecker.check, sourceChecker.cast);
 			}
 		} else if (target.isArray()) {
 			TypeToken<T> fTarget = target;
@@ -1778,7 +1778,7 @@ public class TypeTokens implements TypeParser {
 				return new TypeConverter<>(suppCast.toString(), "Impossible", //
 					sourceType, (TypeToken<T>) suppCast.getCastType(sourceType), //
 					suppCast.isSafe() ? null : suppCast::canCast, suppCast::cast, //
-						LambdaUtils.constantFn("Impossible", "Impossible", null), __ -> {
+						FunctionUtils.constantFn("Impossible", "Impossible", null), __ -> {
 							throw new IllegalStateException("Impossible");
 						});
 		}

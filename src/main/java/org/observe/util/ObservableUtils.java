@@ -6,12 +6,12 @@ import java.util.function.Function;
 
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.util.ObservableCollectionSynchronization.ObservableCollectionLinkEvent;
 import org.qommons.Causable;
+import org.qommons.Subscription;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;

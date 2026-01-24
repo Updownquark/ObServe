@@ -17,7 +17,6 @@ import java.util.function.Function;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
-import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.collect.CollectionChangeType;
@@ -42,6 +41,7 @@ import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -286,7 +286,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
-		return theMapListeners.add(action, true)::run;
+		return theMapListeners.add(action, true);
 	}
 
 	@Override
@@ -1466,7 +1466,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends K>> observer) {
-			return theKeySetListeners.add(observer, true)::run;
+			return theKeySetListeners.add(observer, true);
 		}
 
 		@Override
@@ -1745,7 +1745,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
-			return getValueListeners(theKey).add(observer, true)::run;
+			return getValueListeners(theKey).add(observer, true);
 		}
 
 		@Override

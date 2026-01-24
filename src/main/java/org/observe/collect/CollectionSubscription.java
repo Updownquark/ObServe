@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import org.observe.Subscription;
+import org.qommons.Subscription;
 
 /** A subscription to a collection that can be canceled */
 @FunctionalInterface
