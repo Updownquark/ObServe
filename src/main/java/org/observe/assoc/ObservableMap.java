@@ -585,6 +585,32 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	}
 
 	/**
+	 * Creates an unconstrained {@link ObservableMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @return The new map
+	 */
+	static <K, V> ObservableMap<K, V> create() {
+		return create(null);
+	}
+
+	/**
+	 * Creates an unconstrained {@link ObservableMap} with optional configuration
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param build The configuration for the map
+	 * @return The new map
+	 */
+	static <K, V> ObservableMap<K, V> create(Consumer<Builder<K, V, ?>> build) {
+		Builder<K, V, ?> builder = build();
+		if (build != null)
+			build.accept(builder);
+		return builder.buildMap();
+	}
+
+	/**
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
 	 * @param map The data for the map

@@ -9,9 +9,9 @@ import org.observe.LightWeightObservable;
 import org.observe.Observable.CoreChangeSources;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
-import org.qommons.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable.CoreId;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -98,6 +98,11 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	@Override
 	public boolean isEventing() {
 		return theChanges.isEventing() || theLock.hasFinishingCauses();
+	}
+
+	/** @return Whether anyone is listening to changes to this collection */
+	public boolean isAnyoneListening() {
+		return theChanges.isAnyoneListening();
 	}
 
 	@Override

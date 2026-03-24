@@ -57,7 +57,6 @@ import org.qommons.collect.MultiEntryValueHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.MutableListElement;
 import org.qommons.collect.MutableMultiMapHandle;
 import org.qommons.collect.MutableOrderedMapEntry;
@@ -65,6 +64,7 @@ import org.qommons.collect.OrderedMapEntry;
 import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.SimpleMultiEntry;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 
 /**
@@ -398,6 +398,23 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 */
 	public static <K, V> Builder<K, V, ?> build() {
 		return new Builder<>(null, "ObservableMultiMap");
+	}
+
+	/**
+	 * Builds a basic {@link ObservableMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param build Configures the new {@link ObservableMultiMap}
+	 * @param until ObservableMultiMaps are fairly heavy structures. This observable will destroy the multi-map when it fires to release its
+	 *        resources.
+	 * @return The new multi-map
+	 */
+	public static <K, V> ObservableMultiMap<K, V> create(Consumer<Builder<K, V, ?>> build, Observable<?> until) {
+		Builder<K, V, ?> builder = build();
+		if (build != null)
+			build.accept(builder);
+		return builder.build(until);
 	}
 
 	/**

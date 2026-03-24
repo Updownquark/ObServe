@@ -118,6 +118,11 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 		return theEventer.isEventing();
 	}
 
+	/** @return Whether anyone is listening to changes to this value */
+	public boolean isAnyoneListening() {
+		return theEventer.isAnyoneListening();
+	}
+
 	@Override
 	public Collection<Cause> getCurrentCauses() {
 		return theLock == null ? Collections.emptyList() : theLock.getCurrentCauses();
