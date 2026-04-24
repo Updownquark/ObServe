@@ -11,20 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -37,29 +24,9 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.config.ParentReference;
-import org.qommons.CausalLock;
-import org.qommons.Identifiable;
+import org.qommons.*;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.IntList;
-import org.qommons.MethodRetrievingHandler;
-import org.qommons.Named;
-import org.qommons.QommonsUtils;
-import org.qommons.Stamped;
-import org.qommons.StringUtils;
-import org.qommons.Subscription;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transaction;
-import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollections;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterHashSet;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.QuickSet;
+import org.qommons.collect.*;
 import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.Invokable;
@@ -462,6 +429,7 @@ public class EntityReflector<E> {
 		private boolean id;
 		private final FieldGetter<E, F> theGetter;
 		private FieldSetter<E, F, ?> theSetter;
+		private DequeList<ObservableFieldGetter<E, F>> theObservableGetters;
 
 		ReflectedField(EntityReflector<E> reflector, String name, int fieldIndex, boolean id, Method getter) {
 			theReflector = reflector;
@@ -469,10 +437,15 @@ public class EntityReflector<E> {
 			theFieldIndex = fieldIndex;
 			this.id = id;
 			theGetter = new FieldGetter<>(reflector, getter, this);
+			theObservableGetters = DequeList.empty();
 		}
 
 		void setSetter(FieldSetter<E, F, ?> setter) {
 			theSetter = setter;
+		}
+
+		void addObservableGetter(ObservableFieldGetter<E, F> getter) {
+			theObservableGetters = DequeList.concat(theObservableGetters, getter);
 		}
 
 		/** @return The name of the field */
@@ -503,6 +476,11 @@ public class EntityReflector<E> {
 		/** @return The entity type's setter method for this field */
 		public FieldSetter<E, F, ?> getSetter() {
 			return theSetter;
+		}
+
+		/** @return Any observable getters for the field */
+		public DequeList<ObservableFieldGetter<E, F>> getObservableGetters() {
+			return theObservableGetters;
 		}
 
 		/**
@@ -1556,6 +1534,7 @@ public class EntityReflector<E> {
 		ObservableFieldGetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, ObservableGetterType type) {
 			super(reflector, method, field);
 			theType = type;
+			field.addObservableGetter(this);
 		}
 
 		/** @return The type of the observable this getter returns */
@@ -2785,8 +2764,8 @@ public class EntityReflector<E> {
 	 * @param associated The data to associate with the entity for the key
 	 * @return The entity
 	 */
-	public E associate(E proxy, Object key, Object associated) {
-		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
+	public static <E> E associate(E proxy, Object key, Object associated) {
+		EntityReflector<?>.ProxyMethodHandler handler = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
 		handler.associate(key, associated);
 		return proxy;
 	}
@@ -2796,18 +2775,23 @@ public class EntityReflector<E> {
 	 * @param key The key the data is associated with
 	 * @return The data {@link #associate(Object, Object, Object) associated} with the entity and key
 	 */
-	public Object getAssociated(E proxy, Object key) {
-		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).getAssociated(key);
+	public static Object getAssociated(Object proxy, Object key) {
+		return ((EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).getAssociated(key);
 	}
 
 	/**
 	 * @param <E> The type of the entity
 	 * @param proxy The entity instance
-	 * @return The reflector managing the entity
+	 * @return The reflector managing the entity, or null if the proxy is not managed by an instance of this class
 	 */
 	public static <E> EntityReflector<E> getReflector(E proxy) {
-		EntityReflector<E>.ProxyMethodHandler handler = getHandler(proxy);
-		return handler.getReflector();
+		if (proxy == null || !Proxy.isProxyClass(proxy.getClass()))
+			return null;
+		InvocationHandler handler = Proxy.getInvocationHandler(proxy);
+		if (handler instanceof EntityReflector.ProxyMethodHandler)
+			return ((EntityReflector<E>.ProxyMethodHandler) handler).getReflector();
+		else
+			return null;
 	}
 
 	static <E> EntityReflector<E>.ProxyMethodHandler getHandler(E proxy) {

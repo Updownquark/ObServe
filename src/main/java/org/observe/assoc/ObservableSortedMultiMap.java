@@ -146,6 +146,25 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	/**
+	 * Builds a basic {@link ObservableMultiMap}
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 * @param keySorting The sorting for the key set
+	 * @param build Configures the new {@link ObservableMultiMap}
+	 * @param until ObservableMultiMaps are fairly heavy structures. This observable will destroy the multi-map when it fires to release its
+	 *        resources.
+	 * @return The new multi-map
+	 */
+	public static <K, V> ObservableSortedMultiMap<K, V> create(Comparator<? super K> keySorting, Consumer<Builder<K, V, ?>> build,
+		Observable<?> until) {
+		Builder<K, V, ?> builder = ObservableMultiMap.<K, V> build().sortedBy(keySorting);
+		if (build != null)
+			build.accept(builder);
+		return builder.build(until);
+	}
+
+	/**
 	 * A {@link ObservableMultiMap.MultiMapFlow} that produces an {@link ObservableSortedMultiMap}
 	 *
 	 * @param <K> The key type for the map

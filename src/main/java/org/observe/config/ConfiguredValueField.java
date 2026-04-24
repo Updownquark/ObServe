@@ -17,6 +17,16 @@ public interface ConfiguredValueField<E, F> {
 	/** @return The fields in the entity's super types that this field overrides */
 	List<? extends ConfiguredValueField<? super E, ? super F>> getOverrides();
 
+	/**
+	 * @param other the other field to compare
+	 * @return Whether the given field is the same as or an {@link #getOverrides()} of (or an override of an override, etc.) this field
+	 */
+	default boolean isAssignableFrom(ConfiguredValueField<?, ?> other) {
+		if (this == other)
+			return true;
+		return getName().equals(other.getName()) && getOwnerType().isAssignableFrom(other.getOwnerType());
+	}
+
 	/** @return The name */
 	String getName();
 

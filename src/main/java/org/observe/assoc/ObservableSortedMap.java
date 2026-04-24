@@ -158,6 +158,48 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		return new Builder<>(sorting, "ObservableMap");
 	}
 
+	@Override
+	default ObservableSortedMap<K, V> with(K key, V value) {
+		ObservableMap.super.with(key, value);
+		return this;
+	}
+
+	@Override
+	default ObservableSortedMap<K, V> withAll(Map<? extends K, ? extends V> values) {
+		ObservableMap.super.withAll(values);
+		return this;
+	}
+
+	@Override
+	default ObservableSortedMap<K, V> withAll(Iterable<? extends K> keys, V value) {
+		ObservableMap.super.withAll(keys, value);
+		return this;
+	}
+
+	/**
+	 * @param <K> The key-type of the map
+	 * @param <V> The value-type of the map
+	 * @param sorting The sorting for the map's keys
+	 * @return The new observable sorted map
+	 */
+	static <K, V> ObservableSortedMap<K, V> create(Comparator<? super K> sorting) {
+		return create(sorting, null);
+	}
+
+	/**
+	 * @param <K> The key-type of the map
+	 * @param <V> The value-type of the map
+	 * @param sorting The sorting for the map's keys
+	 * @param build Optional configuration for the new sorted map
+	 * @return The new observable sorted map
+	 */
+	static <K, V> ObservableSortedMap<K, V> create(Comparator<? super K> sorting, Consumer<Builder<K, V, ?>> build) {
+		Builder<K, V, ?> builder = build(sorting);
+		if (build != null)
+			build.accept(builder);
+		return builder.buildMap();
+	}
+
 	/**
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
@@ -175,7 +217,18 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @return An unmodifiable map with the same content as the given map
 	 */
 	public static <K, V> ObservableSortedMap<K, V> unmodifiable(ObservableSortedMap<K, V> map) {
-		return new UnmodifiableSortedObservableMap<>(map);
+		return unmodifiable(map, StdMsg.UNSUPPORTED_OPERATION);
+	}
+
+	/**
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to wrap
+	 * @param message The message to report when modification is attempted on the unmodifiable map
+	 * @return An {@link ObservableMap} that reflects the given map's contents but does not allow any modifications
+	 */
+	static <K, V> ObservableSortedMap<K, V> unmodifiable(ObservableSortedMap<K, V> map, String message) {
+		return new UnmodifiableSortedObservableMap<>(map, message);
 	}
 
 	/**
@@ -271,8 +324,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public ListElement<Map.Entry<K, V>> search(Comparable<? super Map.Entry<K, V>> search,
-			BetterSortedList.SortedSearchFilter filter) {
+		public ListElement<Map.Entry<K, V>> search(Comparable<? super Map.Entry<K, V>> search, BetterSortedList.SortedSearchFilter filter) {
 			MapEntryHandle<K, V> entry = getMap().searchEntries(search, filter);
 			return entry == null ? null : getElement(entry.getElementId());
 		}
@@ -501,8 +553,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			return getSource().onChange(evt -> {
 				int index = keySet().getElement(evt.getElementId()).getElementsBefore();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId(), index, evt.getType(),
-					evt.getOldKey(),
-					evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
+					evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}
@@ -576,7 +627,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			return found == null ? null : getEntryById(found.getElementId());
 		}
 
-		class SearchEntry implements Map.Entry<K, V>{
+		class SearchEntry implements Map.Entry<K, V> {
 			private final K theKey;
 
 			SearchEntry(K key) {
@@ -610,7 +661,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 			@Override
 			public String toString() {
-				return getKey()+"=?";
+				return getKey() + "=?";
 			}
 		}
 	}
@@ -622,8 +673,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 * @param <V> The value type of the map
 	 */
 	class UnmodifiableSortedObservableMap<K, V> extends UnmodifiableObservableMap<K, V> implements ObservableSortedMap<K, V> {
-		public UnmodifiableSortedObservableMap(ObservableSortedMap<K, V> wrapped) {
-			super(wrapped);
+		public UnmodifiableSortedObservableMap(ObservableSortedMap<K, V> wrapped, String message) {
+			super(wrapped, message);
 		}
 
 		@Override
@@ -737,7 +788,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			return theKeySet;
 		}
 
-
 		@Override
 		public int hashCode() {
 			return 0;
@@ -751,6 +801,100 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public String toString() {
 			return "{}";
+		}
+	}
+
+	/**
+	 * Sorted extension of {@link ObservableMap.MappedMap}
+	 *
+	 * @param <KS> The key-type of the source map
+	 * @param <KT> The key-type of this map
+	 * @param <VS> The value-type of the source map
+	 * @param <VT> The value-type of this map
+	 */
+	public class MappedSortedMap<KS, KT, VS, VT> extends ObservableMap.MappedMap<KS, KT, VS, VT> implements ObservableSortedMap<KT, VT> {
+		/**
+		 * @param source The source map to wrap
+		 * @param keyMap The function to produce keys for this map from keys in the source map
+		 * @param keyReverse The function to produce keys for the source map from keys in this map
+		 * @param valueMap The function to produce values for this map from values in the source map
+		 * @param valueReverse The function to produce values for the source map from values in this map
+		 */
+		public MappedSortedMap(ObservableSortedMap<KS, VS> source, Function<? super KS, ? extends KT> keyMap,
+			Function<? super KT, ? extends KS> keyReverse, Function<? super VS, ? extends VT> valueMap,
+			Function<? super VT, ? extends VS> valueReverse) {
+			super(source, keyMap, keyReverse, valueMap, valueReverse);
+		}
+
+		@Override
+		protected ObservableSortedMap<KS, VS> getSource() {
+			return (ObservableSortedMap<KS, VS>) super.getSource();
+		}
+
+		@Override
+		public MappedSortedMap<KS, KT, VS, VT> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public ObservableSortedSet<KT> keySet() {
+			return (ObservableSortedSet<KT>) super.keySet();
+		}
+
+		@Override
+		public OrderedMapEntry<KT, VT> searchEntries(Comparable<? super Map.Entry<KT, VT>> search, SortedSearchFilter filter) {
+			return wrapEntry(getSource().searchEntries(entry -> search.compareTo(//
+				new MappedSimpleEntry<>(getKeyMap().apply(entry.getKey()), entry.getValue(), getValueMap())), filter));
+		}
+
+		static class MappedSimpleEntry<KS, KT, VS, VT> implements Map.Entry<KT, VT> {
+			private final KT theKey;
+			private final VS theSourceValue;
+			private final Function<? super VS, ? extends VT> theValueMap;
+			private VT theValue;
+
+			MappedSimpleEntry(KT key, VS sourceValue, Function<? super VS, ? extends VT> valueMap) {
+				theKey = key;
+				theSourceValue = sourceValue;
+				theValueMap = valueMap;
+			}
+
+			@Override
+			public KT getKey() {
+				return theKey;
+			}
+
+			@Override
+			public VT getValue() {
+				if (theValue == null)
+					theValue = theValueMap.apply(theSourceValue);
+				return theValue;
+			}
+
+			@Override
+			public VT setValue(VT value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (this == obj)
+					return true;
+				else if (!(obj instanceof Map.Entry))
+					return false;
+				return Objects.equals(theKey, ((Map.Entry<?, ?>) obj).getKey());
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + getValue();
+			}
 		}
 	}
 }

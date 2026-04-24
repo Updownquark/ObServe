@@ -18,6 +18,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
@@ -31,22 +32,10 @@ import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
+import org.qommons.collect.*;
 import org.qommons.collect.BetterCollection.EmptyCollection;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableListElement;
-import org.qommons.collect.MutableMapEntryHandle;
-import org.qommons.collect.MutableOrderedMapEntry;
-import org.qommons.collect.OrderedMapEntry;
-import org.qommons.collect.SimpleMapEntry;
+import org.qommons.fn.FunctionUtils;
 
 /**
  * A map with observable capabilities
@@ -573,6 +562,24 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		return changes();
 	}
 
+	@Override
+	default ObservableMap<K, V> with(K key, V value) {
+		BetterMap.super.with(key, value);
+		return this;
+	}
+
+	@Override
+	default ObservableMap<K, V> withAll(Map<? extends K, ? extends V> values) {
+		BetterMap.super.withAll(values);
+		return this;
+	}
+
+	@Override
+	default ObservableMap<K, V> withAll(Iterable<? extends K> keys, V value) {
+		BetterMap.super.withAll(keys, value);
+		return this;
+	}
+
 	/**
 	 * Creates a builder to build an unconstrained {@link ObservableMap}
 	 *
@@ -678,7 +685,18 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @return An {@link ObservableMap} that reflects the given map's contents but does not allow any modifications
 	 */
 	static <K, V> ObservableMap<K, V> unmodifiable(ObservableMap<K, V> map) {
-		return new UnmodifiableObservableMap<>(map);
+		return unmodifiable(map, StdMsg.UNSUPPORTED_OPERATION);
+	}
+
+	/**
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to wrap
+	 * @param message The message to report when modification is attempted on the unmodifiable map
+	 * @return An {@link ObservableMap} that reflects the given map's contents but does not allow any modifications
+	 */
+	static <K, V> ObservableMap<K, V> unmodifiable(ObservableMap<K, V> map, String message) {
+		return new UnmodifiableObservableMap<>(map, message);
 	}
 
 	/**
@@ -1443,10 +1461,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	class UnmodifiableObservableMap<K, V> extends AbstractIdentifiable implements ObservableMap<K, V> {
 		private final ObservableMap<K, V> theWrapped;
 		private final ObservableSet<K> theKeySet;
+		private final String theMessage;
 
-		public UnmodifiableObservableMap(ObservableMap<K, V> wrapped) {
+		public UnmodifiableObservableMap(ObservableMap<K, V> wrapped, String message) {
 			theWrapped = wrapped;
 			theKeySet = theWrapped.keySet().flow().unmodifiable().collectPassive();
+			theMessage = message;
 		}
 
 		/** @return The modifiable map this map wraps */
@@ -1513,7 +1533,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public String canPut(K key, V value) {
-			return StdMsg.UNSUPPORTED_OPERATION;
+			return theMessage;
 		}
 
 		@Override
@@ -1578,27 +1598,27 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 			@Override
 			public String isEnabled() {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return theMessage;
 			}
 
 			@Override
 			public String isAcceptable(V value) {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return theMessage;
 			}
 
 			@Override
 			public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new UnsupportedOperationException(theMessage);
 			}
 
 			@Override
 			public String canRemove() {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return theMessage;
 			}
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new UnsupportedOperationException(theMessage);
 			}
 		}
 	}
@@ -2185,6 +2205,355 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+		}
+	}
+
+	/**
+	 * Since I've not yet implemented flow for ObservableMaps, this class allows a simple, uncached key and mapping on top of a source map
+	 *
+	 * @param <KS> The key-type of the source map
+	 * @param <KT> The key-type of this map
+	 * @param <VS> The value-type of the source map
+	 * @param <VT> The value-type of this map
+	 */
+	public class MappedMap<KS, KT, VS, VT> extends Identifiable.AbstractIdentifiable implements ObservableMap<KT, VT> {
+		private final ObservableMap<KS, VS> theSource;
+		private final Function<? super KS, ? extends KT> theKeyMap;
+		private final Function<? super KT, ? extends KS> theKeyReverse;
+		private final Function<? super VS, ? extends VT> theValueMap;
+		private final Function<? super VT, ? extends VS> theValueReverse;
+		private final ObservableSet<KT> theKeySet;
+
+		/**
+		 * @param source The source map to wrap
+		 * @param keyMap The function to produce keys for this map from keys in the source map
+		 * @param keyReverse The function to produce keys for the source map from keys in this map
+		 * @param valueMap The function to produce values for this map from values in the source map
+		 * @param valueReverse The function to produce values for the source map from values in this map
+		 */
+		public MappedMap(ObservableMap<KS, VS> source, Function<? super KS, ? extends KT> keyMap,
+			Function<? super KT, ? extends KS> keyReverse, Function<? super VS, ? extends VT> valueMap,
+			Function<? super VT, ? extends VS> valueReverse) {
+			theSource = source;
+			theKeyMap = keyMap;
+			theKeyReverse = keyReverse;
+			theValueMap = valueMap;
+			theValueReverse = valueReverse;
+			theKeySet = theSource.keySet().flow()//
+				.<KT> mapEquivalent(theKeyMap, theKeyReverse)//
+				.collectPassive();
+		}
+
+		/** @return The wrapped source map */
+		protected ObservableMap<KS, VS> getSource() {
+			return theSource;
+		}
+
+		/** @return The function producing keys for this map from keys in the source map */
+		protected Function<? super KS, ? extends KT> getKeyMap() {
+			return theKeyMap;
+		}
+
+		/** @return The function producing keys for the source map from keys in this map */
+		protected Function<? super KT, ? extends KS> getKeyReverse() {
+			return theKeyReverse;
+		}
+
+		/** @return The function producing values for this map from values in the source map */
+		protected Function<? super VS, ? extends VT> getValueMap() {
+			return theValueMap;
+		}
+
+		/** @return The function producing values for the source map from values in this map */
+		protected Function<? super VT, ? extends VS> getValueReverse() {
+			return theValueReverse;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theSource, "map", theKeyMap);
+		}
+
+		@Override
+		public MappedMap<KS, KT, VS, VT> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theSource.isEventing();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theSource.isLockSupported();
+		}
+
+		@Override
+		public Equivalence<? super VT> equivalence() {
+			Equivalence<? super VS> sourceEquiv = theSource.equivalence();
+			if (sourceEquiv == Equivalence.DEFAULT || sourceEquiv == Equivalence.ID || theValueMap == FunctionUtils.identity())
+				return (Equivalence<? super VT>) sourceEquiv;
+			else
+				return sourceEquiv.map(null, theValueMap, theValueReverse);
+		}
+
+		@Override
+		public ObservableSet<KT> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public String canPut(KT key, VT value) {
+			return theSource.canPut(theKeyReverse.apply(key), theValueReverse.apply(value));
+		}
+
+		@Override
+		public OrderedMapEntry<KT, VT> getEntry(KT key) {
+			return wrapEntry(theSource.getEntry(theKeyReverse.apply(key)));
+		}
+
+		@Override
+		public OrderedMapEntry<KT, VT> getOrPutEntry(KT key, Function<? super KT, ? extends VT> value, ElementId after, ElementId before,
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			return wrapEntry(theSource.getOrPutEntry(theKeyReverse.apply(key), k -> theValueReverse.apply(value.apply(key)), after, before,
+				first, preAdd, postAdd));
+		}
+
+		@Override
+		public OrderedMapEntry<KT, VT> getEntryById(ElementId entryId) {
+			return wrapEntry(theSource.getEntryById(entryId));
+		}
+
+		@Override
+		public MutableOrderedMapEntry<KT, VT> mutableEntry(ElementId entryId) {
+			return wrapMutableEntry(theSource.mutableEntry(entryId));
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends KT, ? extends VT>> action) {
+			return theSource.onChange(evt -> {
+				action.accept(new MappedMapEvent<>(evt, //
+					evt.isInitial() ? null : theKeyMap.apply(evt.getOldKey()), theKeyMap.apply(evt.getKey()), //
+					evt.isInitial() ? null : theValueMap.apply(evt.getOldValue()), theValueMap.apply(evt.getNewValue())));
+			});
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterMap.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterMap.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
+		}
+
+		protected OrderedMapEntry<KT, VT> wrapEntry(OrderedMapEntry<KS, VS> sourceEntry) {
+			return sourceEntry == null ? null : new MappedEntry(sourceEntry);
+		}
+
+		protected MutableOrderedMapEntry<KT, VT> wrapMutableEntry(MutableOrderedMapEntry<KS, VS> sourceEntry) {
+			return sourceEntry == null ? null : new MutableMappedEntry(sourceEntry);
+		}
+
+		class MappedEntry implements OrderedMapEntry<KT, VT> {
+			private final OrderedMapEntry<KS, VS> theSourceEntry;
+
+			public MappedEntry(OrderedMapEntry<KS, VS> sourceEntry) {
+				theSourceEntry = sourceEntry;
+			}
+
+			protected OrderedMapEntry<KS, VS> getSourceEntry() {
+				return theSourceEntry;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theSourceEntry.getElementId();
+			}
+
+			@Override
+			public KT getKey() {
+				return theKeyMap.apply(theSourceEntry.getKey());
+			}
+
+			@Override
+			public VT get() {
+				return theValueMap.apply(theSourceEntry.get());
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theSourceEntry.getElementsBefore();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theSourceEntry.getElementsAfter();
+			}
+
+			@Override
+			public OrderedMapEntry<KT, VT> getAdjacent(boolean next) {
+				return wrapEntry(theSourceEntry.getAdjacent(next));
+			}
+
+			@Override
+			public String toString() {
+				return getKey() + "=" + getValue();
+			}
+		}
+
+		class MutableMappedEntry extends MappedEntry implements MutableOrderedMapEntry<KT, VT> {
+			public MutableMappedEntry(OrderedMapEntry<KS, VS> sourceEntry) {
+				super(sourceEntry);
+			}
+
+			@Override
+			protected MutableOrderedMapEntry<KS, VS> getSourceEntry() {
+				return (MutableOrderedMapEntry<KS, VS>) super.getSourceEntry();
+			}
+
+			@Override
+			public MutableOrderedMapEntry<KT, VT> getAdjacent(boolean next) {
+				return wrapMutableEntry(getSourceEntry().getAdjacent(next));
+			}
+
+			@Override
+			public String isEnabled() {
+				return getSourceEntry().isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(VT value) {
+				return getSourceEntry().isAcceptable(theValueReverse.apply(value));
+			}
+
+			@Override
+			public void set(VT value) throws UnsupportedOperationException, IllegalArgumentException {
+				getSourceEntry().set(theValueReverse.apply(value));
+			}
+
+			@Override
+			public String canRemove() {
+				return getSourceEntry().canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				getSourceEntry().remove();
+			}
+		}
+
+		static class MappedMapEvent<K, V> implements ObservableMapEvent<K, V> {
+			private final ObservableMapEvent<?, ?> theSource;
+			private final K theOldKey;
+			private final K theNewKey;
+			private final V theOldValue;
+			private final V theNewValue;
+
+			MappedMapEvent(ObservableMapEvent<?, ?> source, K oldKey, K newKey, V oldValue, V newValue) {
+				theSource = source;
+				theOldKey = oldKey;
+				theNewKey = newKey;
+				theOldValue = oldValue;
+				theNewValue = newValue;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theSource.getElementId();
+			}
+
+			@Override
+			public int getIndex() {
+				return theSource.getIndex();
+			}
+
+			@Override
+			public CollectionChangeType getType() {
+				return theSource.getType();
+			}
+
+			@Override
+			public CollectionElementMove getMovement() {
+				return theSource.getMovement();
+			}
+
+			@Override
+			public ObservableCollectionEvent<V> derive(ElementId element, int index) {
+				if (element.equals(getElementId()))
+					return this;
+				return new ElementChangedCollectionEvent<>(this, element, index);
+			}
+
+			@Override
+			public <E2> ObservableCollectionEvent<E2> derive(ElementId element, int index, E2 oldValue, E2 newValue) {
+				if (element.equals(getElementId()) && getOldValue() == oldValue && getNewValue() == newValue)
+					return (ObservableCollectionEvent<E2>) this;
+				return new ValueChangedCollectionEvent<>(this, element, index, oldValue, newValue);
+			}
+
+			@Override
+			public BetterList<Object> getCauses() {
+				return BetterList.single(theSource);
+			}
+
+			@Override
+			public Causable getRootCausable() {
+				return theSource.getRootCausable();
+			}
+
+			@Override
+			public Effect onFinish(CausableKey key) {
+				return theSource.onFinish(key);
+			}
+
+			@Override
+			public boolean isFinished() {
+				return theSource.isFinished();
+			}
+
+			@Override
+			public boolean isTerminated() {
+				return theSource.isTerminated();
+			}
+
+			@Override
+			public Transaction use() {
+				return Transaction.NONE; // The source event is already in use
+			}
+
+			@Override
+			public boolean isInitial() {
+				return theSource.isInitial();
+			}
+
+			@Override
+			public V getOldValue() {
+				return theOldValue;
+			}
+
+			@Override
+			public V getNewValue() {
+				return theNewValue;
+			}
+
+			@Override
+			public K getOldKey() {
+				return theOldKey;
+			}
+
+			@Override
+			public K getKey() {
+				return theNewKey;
 			}
 		}
 	}

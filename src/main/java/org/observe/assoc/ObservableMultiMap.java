@@ -41,29 +41,8 @@ import org.qommons.QommonsUtils;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMultiMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionBuilder;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MultiEntryValueHandle;
-import org.qommons.collect.MultiMap;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableListElement;
-import org.qommons.collect.MutableMultiMapHandle;
-import org.qommons.collect.MutableOrderedMapEntry;
-import org.qommons.collect.OrderedMapEntry;
-import org.qommons.collect.OrderedMultiEntry;
-import org.qommons.collect.SimpleMapEntry;
-import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 
@@ -1928,6 +1907,16 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		default MultiMapFlow<K, V> unmodifiable(boolean allowUpdates) {
 			return withKeys(keys -> keys.unmodifiable(allowUpdates))//
 				.withValues(values -> values.unmodifiable(allowUpdates));
+		}
+
+		/**
+		 * @param message The message to report when modification is attempted on the unmodifiable map
+		 * @param allowUpdates Whether to allow updates in the resulting map
+		 * @return A flow that forbids modifications to the source map
+		 */
+		default MultiMapFlow<K, V> unmodifiable(String message, boolean allowUpdates) {
+			return withKeys(keys -> keys.filterMod(mod -> mod.unmodifiable(message, allowUpdates)))//
+				.withValues(values -> values.filterMod(mod -> mod.unmodifiable(message, allowUpdates)));
 		}
 
 		/**

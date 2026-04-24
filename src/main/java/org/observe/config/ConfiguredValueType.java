@@ -20,6 +20,20 @@ public interface ConfiguredValueType<E> {
 	/** @return Any other types that this type inherits from */
 	List<? extends ConfiguredValueType<? super E>> getSupers();
 
+	/**
+	 * @param other The other type to compare
+	 * @return Whether this type is the same as or a {@link #getSupers() super type} of (or a super of a super, etc.) this type
+	 */
+	default boolean isAssignableFrom(ConfiguredValueType<?> other) {
+		if (this == other)
+			return true;
+		for (ConfiguredValueType<? super E> superType : getSupers()) {
+			if (superType.isAssignableFrom(other))
+				return true;
+		}
+		return false;
+	}
+
 	/** @return This value type's fields */
 	QuickMap<String, ? extends ConfiguredValueField<E, ?>> getFields();
 
