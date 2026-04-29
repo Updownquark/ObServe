@@ -22,6 +22,7 @@ import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.data.types.EntityField;
 import org.qommons.data.types.EntityType;
 import org.qommons.data.types.EnumType;
+import org.qommons.data.types.EnumValue;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 import org.qommons.fn.FunctionUtils;
@@ -286,7 +287,8 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 
 	private static <G, R, E extends Enum<E>> RealFieldValueProducer<G, R> mapToRealEnum(TypeToken<?> type) {
 		Class<E> enumType = (Class<E>) TypeTokens.getRawType(type);
-		return RealFieldValueProducer.of(genericValue -> genericValue == null ? null : (R) Enum.valueOf(enumType, genericValue.toString()));
+		return RealFieldValueProducer
+			.of(genericValue -> genericValue == null ? null : (R) Enum.valueOf(enumType, ((EnumValue) genericValue).getName()));
 	}
 
 	<R, G> Function<R, G> mapRealToGeneric(TypeToken<R> realType, FieldType<G> genericType) {
@@ -298,5 +300,10 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 			return realValue -> realValue == null ? null : (G) ((EnumType) genericType).getValue(((Enum<?>) realValue).name());
 		} else
 			return null;
+	}
+
+	@Override
+	public String toString() {
+		return theGenericType + "(" + theReflector.getType() + ")";
 	}
 }

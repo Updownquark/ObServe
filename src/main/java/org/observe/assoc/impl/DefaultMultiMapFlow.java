@@ -236,12 +236,12 @@ public class DefaultMultiMapFlow<S, K0, V0, K, V> implements MultiMapFlow<K, V> 
 			throw new IllegalStateException("Passive gathering is not supported by this flow");
 
 		if (theKeyFlow instanceof DistinctSortedDataFlow)
-			return new DefaultPassiveSortedMultiMap<>((ObservableSortedMultiMap<K0, V0>) theSourceMap, //
-				(DistinctSortedDataFlow<K0, ?, K>) thePassiveKeyFlow, thePassiveValueFlow, //
-				theSource, (DistinctSortedDataFlow<S, ?, K>) theKeyFlow, theValueFlow, theAddKey);
+			return new PassiveCollectionDerivedMultiMap.Sorted<>((ObservableSortedMultiMap<K0, V0>) theSourceMap, //
+				(DistinctSortedDataFlow<K0, ?, K>) thePassiveKeyFlow, thePassiveValueFlow, theAddKey, //
+				theSource, (DistinctSortedDataFlow<S, ?, K>) theKeyFlow, theValueFlow);
 		else
-			return new DefaultPassiveMultiMap<>(theSourceMap, thePassiveKeyFlow, thePassiveValueFlow, //
-				theSource, theKeyFlow, theValueFlow, theAddKey);
+			return new PassiveCollectionDerivedMultiMap<>(theSourceMap, thePassiveKeyFlow, thePassiveValueFlow, theAddKey, //
+				theSource, theKeyFlow, theValueFlow);
 	}
 
 	@Override

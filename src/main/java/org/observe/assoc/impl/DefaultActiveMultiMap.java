@@ -1,16 +1,6 @@
 package org.observe.assoc.impl;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -44,23 +34,9 @@ import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
+import org.qommons.collect.*;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
-import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableListElement;
-import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -117,7 +93,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		theKeySetListeners = ListenerList.build().withFastSize(false).build();
 		theValueListeners = keyFlow.equivalence().createMap();
 
-		// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
+		// Must maintain a strong reference to the event listening so it is not GC'd while the multi-map is still alive
 		theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
 		WeakListening listening = theWeakListening.getListening();
 		theKeyManager.begin(true, new ElementAccepter<K>() {

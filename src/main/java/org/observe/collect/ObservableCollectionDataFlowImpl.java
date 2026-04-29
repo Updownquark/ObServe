@@ -112,12 +112,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		/**
+		 * @return This result, if accepted
 		 * @throws UnsupportedOperationException If the rejection reason is that the operation is unsupported
 		 * @throws IllegalArgumentException If the rejection reason is that the argument was illegal
 		 */
-		public void throwIfRejected() throws UnsupportedOperationException, IllegalArgumentException {
+		public FilterMapResult<E, T> throwIfRejected() throws UnsupportedOperationException, IllegalArgumentException {
 			if (rejectReason == null)
-				return;
+				return this;
 			else if (StdMsg.UNSUPPORTED_OPERATION.equals(rejectReason))
 				throw new UnsupportedOperationException(rejectReason);
 			else

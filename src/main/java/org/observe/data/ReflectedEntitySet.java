@@ -28,7 +28,6 @@ import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -42,6 +41,7 @@ import org.qommons.data.mapping.EntityTypeSetMapping;
 import org.qommons.data.migration.MigrationUtil;
 import org.qommons.data.types.EntityField;
 import org.qommons.data.types.EntityType;
+import org.qommons.data.types.FieldMapping;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 
@@ -58,7 +58,8 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 
 	public ReflectedEntitySet(EntityTypeSetMapping dataTypes, Map<TypeToken<?>, EntityReflector<?>> reflectors,
 		Function<? super ReflectedEntitySet, ? extends CollectionLockingStrategy> locking, Observable<?> until) {
-		super(dataTypes.getGenericTypes(), (Function<? super InMemoryEntitySet, ? extends CollectionLockingStrategy>) locking);
+		super(dataTypes.getGenericTypes(),
+			locking == null ? null : (Function<? super InMemoryEntitySet, ? extends CollectionLockingStrategy>) locking);
 		theValueTypes = new HashMap<>();
 		theValueTypesByName = new HashMap<>();
 		theValueSets = new HashMap<>();
@@ -103,8 +104,16 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 
 	@Override
 	protected void entityAffected(EntityType entityType) {
-		super.entityAffected(entityType);
-		getLock().getRootCausable().onFinish(theChangeKey);
+		Causable cause = getLock().getRootCausable();
+		if (cause == null) {
+			try (Causable.CausableInUse c = Causable.cause()) {
+				c.onFinish(theChangeKey);
+				super.entityAffected(entityType);
+			}
+		} else {
+			super.entityAffected(entityType);
+			cause.onFinish(theChangeKey);
+		}
 	}
 
 	public Observable<?> getUntil() {
@@ -177,10 +186,26 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		}
 	}
 
+	public <E> E getEntity(Class<E> type, Object... id) throws IllegalArgumentException {
+		ReflectedEntityValueType<E> valueType = getType(type);
+		if (valueType == null)
+			throw new IllegalArgumentException("No such entity type: " + type.getName());
+		try (Transaction t = lock(false, null)) {
+			int f = 0;
+			for (EntityField<?> field : valueType.getGenericType().getIdFields()) {
+				if (field.getType() instanceof EntityType && id[f] != null)
+					id[f] = EntityReflector.getAssociated(id[f], MappedEntity.ENTITY_ASSOC);
+			}
+			GenericEntity found = getEntity(valueType.getGenericType().getName(), id);
+			return found == null ? null : ((MappedEntity<E>) found).getRealEntity();
+		}
+	}
+
 	<O, E> SyncValueSet<E> createMemberValueSet(EntityType type, ObservableSortedSet<E> values, EntityField<GenericEntity> mappingField,
 		GenericEntity owner) {
 		ReflectedEntityValueType<E> entityType = (ReflectedEntityValueType<E>) theValueTypesByName.get(type.getName());
-		ReflectedRootValueSet<E> rootValues = (ReflectedRootValueSet<E>) observeEntities(TypeTokens.getRawType(entityType.getReflector().getType()));
+		ReflectedRootValueSet<E> rootValues = (ReflectedRootValueSet<E>) observeEntities(
+			TypeTokens.getRawType(entityType.getReflector().getType()));
 		if (mappingField == null)
 			return new MemberValueSet<>(rootValues, values);
 		O realOwner = ((MappedEntity<O>) owner).getRealEntity();
@@ -211,8 +236,27 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 			}
 			theExposedValues = theBaseValues.flow()//
 				.filterMod(mod -> mod//
-					.noAdd("Entities cannot be added this way.  Use " + SyncValueSet.class.getSimpleName() + ".create()"))//
+					.noAdd("Entities cannot be added this way.  Use " + SyncValueSet.class.getSimpleName() + ".create()")//
+					.filterRemove(entity -> ((GenericEntity) EntityReflector.getAssociated(entity, MappedEntity.ENTITY_ASSOC)).canDelete())//
+				)//
 				.collectPassive();
+			theBaseValues.onChange(evt -> {
+				switch (evt.getType()) {
+				case add: // Handled by the creator
+					break;
+				case remove:
+					if (evt.getMovement() == null)
+						((GenericEntity) EntityReflector.getAssociated(evt.getOldValue(), MappedEntity.ENTITY_ASSOC)).delete();
+					else {
+						evt.getMovement().onDiscard(__ -> {
+							((GenericEntity) EntityReflector.getAssociated(evt.getOldValue(), MappedEntity.ENTITY_ASSOC)).delete();
+						});
+					}
+					break;
+				case set:
+					break;
+				}
+			});
 		}
 
 		@Override
@@ -284,12 +328,12 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				Set<Integer> required = Collections.emptySet();
 				for (EntityField<?> field : theSubType.getGenericType().getIdFields()) {
 					if (!MigrationUtil.isIncrementable(field.getType())) {
-						if (required == null)
+						if (required.isEmpty())
 							required = new TreeSet<>();
 						required.add(theSubType.getGenericType().indexOf(field));
 					}
 				}
-				return required == null ? Collections.emptySet() : required;
+				return required;
 			}
 
 			@Override
@@ -306,7 +350,9 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				if (enabled != null)
 					return enabled;
 				ReflectedFieldType<E2, ?, F> myField = (ReflectedFieldType<E2, ?, F>) field;
-				if (value == null) {
+				if (myField.getGenericField().getIndexReference() != null)
+					return "Field " + myField.getName() + " is controlled by " + myField.getGenericField().getIndexReference().parentField;
+				else if (value == null) {
 					if (myField.getGenericField().isId() && myField.getGenericField().getType() instanceof FieldType.SimpleType)
 						return "null is not acceptable for simple ID fields";
 					else
@@ -315,16 +361,53 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 					return "Expected an instance of " + myField.getFieldType() + ", not " + value.getClass().getName();
 				else if (myField.getGenericField().getType() instanceof EntityType) {
 					// Make sure it's an entity from this entity set
-					EntityReflector<?> reflector = EntityReflector.getReflector(value);
-					MappedEntity<?> entity = reflector == null ? null
-						: (MappedEntity<?>) EntityReflector.getAssociated(value, MappedEntity.ENTITY_ASSOC);
+					MappedEntity<?> entity = (MappedEntity<?>) EntityReflector.getAssociated(value, MappedEntity.ENTITY_ASSOC);
 					if (entity == null || entity.getEntitySet() != getEntitySet()//
-						|| !((EntityType) myField.getGenericField().getType()).isInstance(value)//
+						|| !((EntityType) myField.getGenericField().getType()).isInstance(entity)//
 						|| !getEntitySet().isMember(entity))
 						return "This " + myField.getFieldType() + " is not a member of this entity set";
-					return null;
-				} else
-					return null;
+					else if (myField.getGenericField().getMappingReference() != null) {
+						EntityField<?> refField = myField.getGenericField().getMappingReference().parentField;
+						if (refField.getType() instanceof EntityType) {
+							if (entity.get(refField) != null)
+								return "Entity " + entity + "'s " + refField.getName() + " is already set";
+						} else if (refField.getType() instanceof FieldType.MapType) {
+							ReflectedFieldType<E2, Object, Object> keyField = (ReflectedFieldType<E2, Object, Object>) theSubType
+								.getFields()
+								.get(theSubType.getGenericType().indexOf(myField.getGenericField().getMappingReference().keyField));
+							Object key = keyField.getGenericMapping().apply(theFieldValues[keyField.getIndex()]);
+							if (((Map<Object, ?>) entity.get(refField)).containsKey(key))
+								return "Entity " + value + "already has a " + refField.getName() + " entry with " + keyField.getName() + " "
+								+ key;
+						}
+						EntityField<Object> sortBy = (EntityField<Object>) myField.getGenericField().getMappingReference().sortByField;
+						if (sortBy != null && refField instanceof FieldType.CollectionType
+							&& ((FieldType.CollectionType<?, ?>) refField).isDistinct) {
+							ReflectedFieldType<E2, Object, Object> mySortBy = (ReflectedFieldType<E2, Object, Object>) theSubType
+								.getFields().get(theSubType.getGenericType().indexOf(sortBy));
+							Object sortValue = mySortBy.getGenericMapping().apply(theFieldValues[mySortBy.getIndex()]);
+							BetterSortedSet<GenericEntity> collection = (BetterSortedSet<GenericEntity>) entity.get(refField);
+							if (collection.search(e -> sortBy.getType().compare(sortValue, e.get(sortBy)),
+								SortedSearchFilter.OnlyMatch) != null) {
+								return "Entity " + value + "'s " + refField.getName() + " already has a value with " + sortBy.getName()
+								+ " " + sortValue;
+							}
+						}
+					}
+				}
+				for (FieldMapping<?, ?, ?> ref : myField.getGenericField().getAncillaryMappingReferences()) {
+					if (ref.keyField == myField.getGenericField() && ref.parentField.getType() instanceof FieldType.MapType) {
+						Object realEntity = theFieldValues[theSubType.getGenericType().indexOf(ref.mappedReferenceField)];
+						if (realEntity != null) {
+							MappedEntity<?> entity = (MappedEntity<?>) EntityReflector.getAssociated(realEntity, MappedEntity.ENTITY_ASSOC);
+							Object key = myField.getGenericMapping().apply(value);
+							if (entity != null && ((Map<Object, ?>) entity.get(ref.parentField)).containsKey(key))
+								return "Entity " + realEntity + "already has a " + ref.parentField.getName() + " entry with "
+								+ myField.getName() + " " + key;
+						}
+					}
+				}
+				return null;
 			}
 
 			@Override
@@ -350,7 +433,9 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				// Creating using the protected method, so it's not added yet
 				MappedEntity<E2> entity = (MappedEntity<E2>) getEntitySet().createEntity(theSubType.getGenericType(), id);
 				for (int f = 0; f < theFieldValues.length; f++) {
-					ValueHolder<?> holder = theFieldValues[f++];
+					if (theSubType.getFields().get(f).getGenericField().isId())
+						continue;
+					ValueHolder<?> holder = theFieldValues[f];
 					if (holder != null)
 						entity.set(f, holder.get());
 				}
@@ -365,46 +450,9 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				String msg = getId(id);
 				if (msg != null)
 					return msg;
-				int f = 0;
-				for (ReflectedFieldType<E2, ?, ?> field : theSubType.getFields().values()) {
-					if (field.getGenericField().getMappingReference() == null)
-						continue;
-					Object value;
-					if (field.getGenericField().isId())
-						value = id[theSubType.getGenericType().getIdFields().indexOf(field.getGenericField())];
-					else
-						value = theFieldValues[f] == null ? null : theFieldValues[f].get();
-					if (value == null)
-						continue;
-					GenericEntity genericValue = (GenericEntity) EntityReflector.getAssociated(value, MappedEntity.ENTITY_ASSOC);
-					EntityField<?> parentField = field.getGenericField().getMappingReference().parentField;
-					if (parentField.getType() instanceof EntityType) {
-						if (genericValue.get(parentField) != null)
-							return parentField.getOwner() + " " + value + "'s " + parentField.getName() + " is already populated";
-					} else if (parentField.getType() instanceof FieldType.CollectionType) {
-						BetterCollection<GenericEntity> collection = (BetterCollection<GenericEntity>) genericValue
-							.get(field.getGenericField().getMappingReference().parentField);
-						if (field.getGenericField().getMappingReference().sortByField != null
-							&& ((FieldType.CollectionType<?, ?>) parentField.getType()).isDistinct) {
-							EntityField<Object> sortBy = (EntityField<Object>) field.getGenericField().getMappingReference().sortByField;
-							ValueHolder<?> sortValueHolder = theFieldValues[theSubType.getGenericType().indexOf(sortBy)];
-							Object sortValue = sortValueHolder == null ? null : sortValueHolder.get();
-							if (((BetterSortedSet<GenericEntity>) collection)
-								.search(e -> sortBy.getType().compare(sortValue, e.get(sortBy)), SortedSearchFilter.OnlyMatch) != null) {
-								throw new IllegalArgumentException("Entity " + value + "'s " + parentField.getName()
-								+ " already has a value with " + sortBy.getName() + " " + sortValue);
-							}
-						} // else No issue
-					} else if (parentField.getType() instanceof FieldType.MapType) {
-						Map<Object, GenericEntity> map = (Map<Object, GenericEntity>) genericValue.get(parentField);
-						ValueHolder<?> keyHolder = theFieldValues[theSubType.getGenericType()
-						                                          .indexOf(field.getGenericField().getMappingReference().keyField)];
-						Object key = keyHolder == null ? null : keyHolder.get();
-						if (map.containsKey(key))
-							return "Entity " + value + "'s " + parentField.getName() + " already has a value for key " + key;
-					}
-					f++;
-				}
+				// We've already checked all the arguments.
+				// It's possible that a referenced entity has changed in a way that will cause this creator to throw an exception,
+				// but it's not worth re-checking for that case.
 				return null;
 			}
 
@@ -425,11 +473,13 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 					int fieldIndex = theSubType.getGenericType().indexOf(field);
 					if (theFieldValues[fieldIndex] != null) {
 						Object value = theFieldValues[fieldIndex].get();
-						if (value != null && field.getMappingReference() != null) {
+						if (value != null && field.getMappingReference() != null
+							&& field.getMappingReference().parentField.getType() instanceof EntityType) {
 							// Make sure the target entity's mapped field is empty
 							// Parameterized types are not allowed for ID fields, so we know this is just an entity type field
 							GenericEntity genericValue = (GenericEntity) EntityReflector.getAssociated(value, MappedEntity.ENTITY_ASSOC);
-							if (genericValue.get(field.getMappingReference().parentField) != null)
+							Object entityValue = genericValue.get(field.getMappingReference().parentField);
+							if (entityValue != null)
 								return theSubType.getFields().get(fieldIndex).getFieldType() + " " + value + "'s "
 								+ field.getMappingReference().parentField.getName() + " is already populated";
 						}
@@ -454,7 +504,8 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 									beforeRelevant = false;
 							}
 						}
-						id[i++] = value;
+						id[i] = ((Function<Object, ?>) theSubType.getFields().get(fieldIndex).getGenericMapping()).apply(value);
+						i++;
 					} else if (missingIdx >= 0) {
 						return "Only a single ID field may remain unspecified";
 					} else if (MigrationUtil.isIncrementable(field.getType())) {
@@ -559,6 +610,11 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 					if (isAvailable(entities, adj))
 						return adj;
 				}
+			}
+
+			@Override
+			public String toString() {
+				return theSubType + " creator";
 			}
 		}
 	}
@@ -702,7 +758,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 			O owner, ReflectedFieldType<E2, GenericEntity, O> mappedReferenceField, int mappedReferenceFieldIndex) {
 			super(rootCreator, rootMembers, members);
 			theMappedReferenceField = mappedReferenceField;
-			with(mappedReferenceField, owner);
+			super.with(mappedReferenceField, owner);
 			// Don't require the field we're overriding
 			NavigableSet<Integer> required = new TreeSet<>(super.getRequiredFields());
 			required.remove(mappedReferenceFieldIndex);

@@ -119,7 +119,8 @@ public class EntityReflector<E> {
 	 * @return Whether the type is an entity type candidate to be reflected by this class
 	 */
 	public static boolean isEntityType(Class<?> type) {
-		return type.isInterface() && (type.getModifiers() & Modifier.PUBLIC) != 0;
+		return type.isInterface() && (type.getModifiers() & Modifier.PUBLIC) != 0//
+			&& !Collection.class.isAssignableFrom(type) && !Map.class.isAssignableFrom(type) && !MultiMap.class.isAssignableFrom(type);
 	}
 
 	/**
@@ -1791,6 +1792,17 @@ public class EntityReflector<E> {
 		}
 	}
 
+	public static class BadMethod<E, R> extends MethodInterpreter<E, R> {
+		public BadMethod(EntityReflector<E> reflector, Method method) {
+			super(reflector, method);
+		}
+
+		@Override
+		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
+			throw new IllegalStateException("Method " + this + " was not reflectable");
+		}
+	}
+
 	/** Default implementation of {@link Object#equals(Object)} for entities when not overridden using @{@link ObjectMethodOverride} */
 	public static MethodInterpreter<Object, Boolean> OBJECT_EQUALS;
 	/** Default implementation of {@link Object#hashCode()} for entities when not overridden using @{@link ObjectMethodOverride} */
@@ -2338,7 +2350,7 @@ public class EntityReflector<E> {
 		}
 	}
 
-	DefaultMethod<E, ?> extractDefaultMethod(Class<?> clazz, Method m, List<EntityReflectionMessage> errors, boolean field) {
+	MethodInterpreter<E, ?> extractDefaultMethod(Class<?> clazz, Method m, List<EntityReflectionMessage> errors, boolean field) {
 		MethodHandle handle;
 		try {
 			Lookup lookup = getLookup(clazz);
@@ -2349,13 +2361,15 @@ public class EntityReflector<E> {
 				handle = lookup.findSpecial(clazz, m.getName(), MethodType.methodType(m.getReturnType(), m.getParameterTypes()), clazz);
 			}
 		} catch (IllegalArgumentException | InstantiationException | InvocationTargetException | NoSuchMethodException e) {
-			throw new IllegalStateException("Bad method? " + m + ": " + e);
+			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "Bad method? " + m + ": " + e));
+			// throw new IllegalStateException("Bad method? " + m + ": " + e);
+			return new BadMethod<>(this, m);
 		} catch (SecurityException | IllegalAccessException e) {
 			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
-			return null;
+			return new BadMethod<>(this, m);
 		} catch (RuntimeException | Error e) {
 			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
-			return null;
+			return new BadMethod<>(this, m);
 		}
 		DefaultMethod<E, ?> defaultMethod = new DefaultMethod<>(this, m, handle);
 		if (m.getAnnotation(Cached.class) != null) {

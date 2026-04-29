@@ -80,7 +80,11 @@ public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 
 	@Override
 	public R get(E entity) {
-		return (R) ((MappedEntity<E>) EntityReflector.getAssociated(entity, MappedEntity.ENTITY_ASSOC)).get(theReflector.getFieldIndex());
+		MappedEntity<E> backing = (MappedEntity<E>) EntityReflector.getAssociated(entity, MappedEntity.ENTITY_ASSOC);
+		if (backing != null)
+			return (R) backing.get(theReflector.getFieldIndex());
+		else
+			return theReflector.get(entity);
 	}
 
 	@Override
@@ -96,6 +100,6 @@ public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 
 	@Override
 	public String toString() {
-		return theReflector.toString();
+		return theField.toString();
 	}
 }

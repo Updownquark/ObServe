@@ -58,6 +58,13 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 			return theKey;
 		}
 
+		public K getAndClear() {
+			K key = theKey;
+			theKey = null;
+			isPresent = false;
+			return key;
+		}
+
 		@Override
 		public void clear() {
 			theKey = null;

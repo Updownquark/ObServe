@@ -69,6 +69,11 @@ public class ObservableConfigFormatSet {
 		return getEntityFormat(type).getEntityType();
 	}
 
+	/** @return This format set's cache of type reflectors, used to synthesize entity instances */
+	public Map<TypeToken<?>, EntityReflector<?>> getReflectors() {
+		return theReflectors;
+	}
+
 	/**
 	 * @param <E> The entity type
 	 * @param type The entity type

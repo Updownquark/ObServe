@@ -1,7 +1,6 @@
 package org.observe.assoc.impl;
 
 import java.util.Collection;
-import java.util.Objects;
 
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
@@ -155,31 +154,5 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> extends Abstrac
 	@Override
 	public String toString() {
 		return BetterMultiMap.toString(this);
-	}
-
-	private static class MultiMapIdentity {
-		private final Object theKeyId;
-		private final Object theValueId;
-
-		MultiMapIdentity(Object keyId, Object valueId) {
-			theKeyId = keyId;
-			theValueId = valueId;
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hash(theKeyId, theValueId);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return obj instanceof MultiMapIdentity && theKeyId.equals(((MultiMapIdentity) obj).theKeyId)
-				&& theValueId.equals(((MultiMapIdentity) obj).theValueId);
-		}
-
-		@Override
-		public String toString() {
-			return new StringBuilder("{keys:").append(theKeyId).append(", values:").append(theValueId).append("}").toString();
-		}
 	}
 }

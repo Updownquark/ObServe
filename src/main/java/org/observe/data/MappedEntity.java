@@ -7,9 +7,12 @@ import java.util.function.Function;
 import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.SimpleObservable;
+import org.observe.assoc.ModControlledObservableMap;
+import org.observe.assoc.ModControlledObservableMultiMap;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
+import org.observe.collect.ModControlledObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
@@ -22,9 +25,13 @@ import org.qommons.CausalLock;
 import org.qommons.SimpleUniqueKey;
 import org.qommons.Subscription;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.ListenerList;
 import org.qommons.data.impl.AbstractGenericEntity;
 import org.qommons.data.types.EntityField;
+import org.qommons.data.types.FieldMapping;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 
@@ -47,6 +54,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 		for (ReflectedFieldType<E, ?, ?> field : theType.getFields().values()) {
 			theRealFieldValues[f] = ((RealFieldValueProducer<Object, ?>) field.getRealMapping()).genericToReal(//
 				get(field.getGenericField()), entitySet, this);
+			f++;
 		}
 	}
 
@@ -71,7 +79,8 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 			super.set(field, value);
 			int index = theType.getGenericType().indexOf(field);
 			Object oldValue = theRealFieldValues[index];
-			Object newValue = ((Function<Object, Object>) theType.getFields().get(index).getGenericMapping()).apply(value);
+			Object newValue = ((RealFieldValueProducer<Object, Object>) theType.getFields().get(index).getRealMapping()).asFunction()
+				.apply(value);
 			theRealFieldValues[index] = newValue;
 			if (theListeners != null) {
 				ListenerList<Consumer<FieldChange<?>>> listeners = theListeners[index];
@@ -107,7 +116,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 				if (field.getMapping() != null && field.getMapping().sortByField != null)
 					sort = field.getMapping().entitySort;
 				else
-					sort = type;
+					sort = collType.componentType;
 				if (collType.isDistinct)
 					builder = ObservableSortedSet.build(sort);
 				else
@@ -140,6 +149,48 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 			return (T) builder.withLocking(getEntitySet().getLock()).withDescription(this + "." + field.getName()).build(getUntil());
 		} else
 			throw new IllegalStateException("Unrecognized parameterized field type: " + type);
+	}
+
+	@Override
+	protected <F, K, S> F controlMappedStructure(F structure, FieldMapping<F, K, S> field) {
+		FieldType<F> type = field.parentField.getType();
+		if (type instanceof FieldType.CollectionType) {
+			MappedEntityCollectionControl<?> control = new MappedEntityCollectionControl<>(
+				(FieldMapping<? extends BetterCollection<GenericEntity>, Void, S>) field, this);
+			ObservableCollection<GenericEntity> collection = ModControlledObservableCollection
+				.controlCollection((ObservableCollection<GenericEntity>) structure, control, control);
+			((MappedEntityCollectionControl<ObservableCollection<GenericEntity>>) control).init(collection);
+			return (F) collection;
+		} else if (type instanceof FieldType.MapType) {
+			MappedEntityMapControl<Object, ?> control = new MappedEntityMapControl<>(
+				(FieldMapping<? extends BetterMap<Object, GenericEntity>, Object, S>) field, this);
+			ObservableMap<Object, GenericEntity> map = ModControlledObservableMap
+				.controlMap((ObservableMap<Object, GenericEntity>) structure, control, control);
+			((MappedEntityMapControl<Object, ObservableMap<Object, GenericEntity>>) control).init(map);
+			return (F) map;
+		} else if (type instanceof FieldType.MultiMapType) {
+			MappedEntityMultiMapControl<Object, ?> control = new MappedEntityMultiMapControl<>(
+				(FieldMapping<? extends BetterMultiMap<Object, GenericEntity>, Object, S>) field, this);
+			ObservableMultiMap<Object, GenericEntity> map = ModControlledObservableMultiMap
+				.controlMultiMap((ObservableMultiMap<Object, GenericEntity>) structure, control, control);
+			((MappedEntityMultiMapControl<Object, BetterMultiMap<Object, GenericEntity>>) control).init(map);
+			return (F) map;
+		} else
+			throw new IllegalStateException("Unrecognized mapped field type: " + type);
+	}
+
+	@Override
+	protected <K, V, F> F controlUnmappedStructure(F structure, EntityField<F> field) {
+		if (field.getType() instanceof FieldType.CollectionType) {
+			return (F) ModControlledObservableCollection.controlCollection((ObservableCollection<V>) structure, null,
+				new MemberCollectionControl<>(this, field));
+		} else if (field.getType() instanceof FieldType.MapType) {
+			return (F) ModControlledObservableMap.controlMap((ObservableMap<K, V>) structure, null, new MemberMapControl<>(this, field));
+		} else if (field.getType() instanceof FieldType.MultiMapType) {
+			return (F) ModControlledObservableMultiMap.controlMultiMap((ObservableMultiMap<K, V>) structure, null,
+				new MemberMultiMapControl<>(this, field));
+		} else
+			throw new IllegalStateException("Unrecognized structure field type: " + field.getType());
 	}
 
 	@Override

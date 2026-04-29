@@ -6,10 +6,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.config.ObservableValueSet;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableSortedMap;
+import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedCollection;
+import org.observe.collect.ObservableSortedSet;
+import org.observe.config.SyncValueSet;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterMultiMap;
+import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.BetterSortedMultiMap;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.data.mapping.EntityFieldMapping;
 import org.qommons.data.mapping.EntityTypeMapping;
 import org.qommons.data.mapping.EntityTypeSetMapping;
@@ -34,11 +49,11 @@ public class ReflectedEntityMappingScheme implements EntityTypeSetMapping.Entity
 		EntityReflector<?> preLoaded = theReflectorCache.get(typeToken);
 		if (preLoaded != null)
 			return preLoaded;
-		else if (EntityReflector.isEntityType(type))
-			return EntityReflector.build(typeToken, true)//
+		else if (EntityReflector.isEntityType(type)) {
+			return theReflectorCache.computeIfAbsent(typeToken, tt -> EntityReflector.build(tt, true)//
 				.withSupers(theReflectorCache)//
-				.build();
-		else
+				.build());
+		} else
 			return null;
 	}
 
@@ -59,8 +74,25 @@ public class ReflectedEntityMappingScheme implements EntityTypeSetMapping.Entity
 	@Override
 	public Class<?> getGenericRawType(Class<?> fieldType) {
 		// Support value sets
-		if (ObservableValueSet.class.isAssignableFrom(fieldType))
-			return BetterCollection.class;
+		if (fieldType.isAssignableFrom(SyncValueSet.class))
+			return BetterSortedSet.class;
+		// Support observable structures
+		else if (fieldType.isAssignableFrom(ObservableCollection.class))
+			return BetterList.class;
+		else if (fieldType.isAssignableFrom(ObservableSet.class))
+			return BetterSet.class;
+		else if (fieldType.isAssignableFrom(ObservableSortedCollection.class))
+			return BetterSortedList.class;
+		else if (fieldType.isAssignableFrom(ObservableSortedSet.class))
+			return BetterSortedSet.class;
+		else if (fieldType.isAssignableFrom(ObservableMap.class))
+			return BetterMap.class;
+		else if (fieldType.isAssignableFrom(ObservableSortedMap.class))
+			return BetterSortedMap.class;
+		else if (fieldType.isAssignableFrom(ObservableMultiMap.class))
+			return BetterMultiMap.class;
+		else if (fieldType.isAssignableFrom(ObservableSortedMultiMap.class))
+			return BetterSortedMultiMap.class;
 		else
 			return fieldType;
 	}
