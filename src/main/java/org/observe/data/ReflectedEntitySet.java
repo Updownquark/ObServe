@@ -238,7 +238,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				.filterMod(mod -> mod//
 					.noAdd("Entities cannot be added this way.  Use " + SyncValueSet.class.getSimpleName() + ".create()")//
 					.filterRemove(entity -> ((GenericEntity) EntityReflector.getAssociated(entity, MappedEntity.ENTITY_ASSOC)).canDelete())//
-				)//
+					)//
 				.collectPassive();
 			theBaseValues.onChange(evt -> {
 				switch (evt.getType()) {
@@ -339,7 +339,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 			@Override
 			public String isEnabled(ConfiguredValueField<? super E2, ?> field) {
 				EntityField<?> genericField = theSubType.getGenericType().getFields().get(((ReflectedFieldType<?, ?, ?>) field).getIndex());
-				if (genericField.getType() instanceof FieldType.ParameterizedType)
+				if (genericField.getType() instanceof FieldType.ParameterizedType || genericField.getType() == FieldType.BLOB)
 					return "The structure value of field " + field + " cannot be set, but its content may be changed";
 				return null;
 			}

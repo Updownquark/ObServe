@@ -30,6 +30,7 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.ListenerList;
 import org.qommons.data.impl.AbstractGenericEntity;
+import org.qommons.data.types.Blob;
 import org.qommons.data.types.EntityField;
 import org.qommons.data.types.FieldMapping;
 import org.qommons.data.types.FieldType;
@@ -108,7 +109,9 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 
 	@Override
 	protected <T> T createEmptyStructure(EntityField<?> field, FieldType.ParameterizedType<T> type) {
-		if (type instanceof FieldType.CollectionType) {
+		if (type == FieldType.BLOB) {
+			return (T) new Blob.InMemoryBlob();
+		} else if (type instanceof FieldType.CollectionType) {
 			ObservableCollectionBuilder<?, ?> builder;
 			FieldType.CollectionType<?, ?> collType = (FieldType.CollectionType<?, ?>) type;
 			if (collType.isSorted) {

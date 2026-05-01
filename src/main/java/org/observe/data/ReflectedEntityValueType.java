@@ -156,7 +156,7 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 		"identity", null);
 
 	<G, R> RealFieldValueProducer<G, R> mapGenericToReal(FieldType<G> genericType, TypeToken<R> realType, EntityField<G> field) {
-		if (genericType instanceof FieldType.SimpleType) {
+		if (genericType instanceof FieldType.SimpleType || genericType == FieldType.BLOB) {
 			if (realType.isPrimitive()) {
 				R defaultValue = TypeTokens.get().getDefaultValue(realType);
 				return RealFieldValueProducer.of(genericValue -> genericValue == null ? defaultValue : (R) genericValue);
@@ -292,7 +292,7 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	<R, G> Function<R, G> mapRealToGeneric(TypeToken<R> realType, FieldType<G> genericType) {
-		if (genericType instanceof FieldType.SimpleType) {
+		if (genericType instanceof FieldType.SimpleType || genericType == FieldType.BLOB) {
 			return (Function<R, G>) FunctionUtils.identity();
 		} else if (genericType instanceof EntityType) {
 			return realValue -> (G) EntityReflector.getAssociated(realValue, MappedEntity.ENTITY_ASSOC);
