@@ -41,12 +41,14 @@ import org.qommons.data.mapping.EntityTypeSetMapping;
 import org.qommons.data.migration.MigrationUtil;
 import org.qommons.data.types.EntityField;
 import org.qommons.data.types.EntityType;
+import org.qommons.data.types.EntityTypeSet;
 import org.qommons.data.types.FieldMapping;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 
 import com.google.common.reflect.TypeToken;
 
+/** {@link ObservableEntityDataSource} using a generic QommonData {@link EntityTypeSet} and {@link EntityReflector}s for each entity type */
 public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableEntityDataSource {
 	private final Map<Class<?>, ReflectedEntityValueType<?>> theValueTypes;
 	private final Map<String, ReflectedEntityValueType<?>> theValueTypesByName;
@@ -56,6 +58,12 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 	private final Observable<?> theUntil;
 	private final Causable.CausableKey theChangeKey;
 
+	/**
+	 * @param dataTypes The generic mapped entity type set
+	 * @param reflectors The cache containing reflectors for each entity type
+	 * @param locking The locking strategy for this entity set
+	 * @param until An observable to destroy all actively-maintained structures associated with this entity set
+	 */
 	public ReflectedEntitySet(EntityTypeSetMapping dataTypes, Map<TypeToken<?>, EntityReflector<?>> reflectors,
 		Function<? super ReflectedEntitySet, ? extends CollectionLockingStrategy> locking, Observable<?> until) {
 		super(dataTypes.getGenericTypes(),
@@ -98,6 +106,10 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		return super.getLock();
 	}
 
+	/**
+	 * @param onChange A listener to be called when a set of changes to entities in this set ends
+	 * @return A subscription to unsubscribe the listener
+	 */
 	public Subscription onChange(Consumer<? super Causable> onChange) {
 		return theChangeListeners.add(onChange, true);
 	}
@@ -116,6 +128,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		}
 	}
 
+	/** @return The observable that will destroy this entity set and all actively-maintained structures in it */
 	public Observable<?> getUntil() {
 		return theUntil;
 	}
@@ -186,6 +199,13 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		}
 	}
 
+	/**
+	 * @param <E> The compile-time type of the entity to get
+	 * @param type The run-time type of the entity to get
+	 * @param id The ID values for the entity to get
+	 * @return The entity in this set with the given type and ID
+	 * @throws IllegalArgumentException If the given entity type is not supported by this entity set
+	 */
 	public <E> E getEntity(Class<E> type, Object... id) throws IllegalArgumentException {
 		ReflectedEntityValueType<E> valueType = getType(type);
 		if (valueType == null)

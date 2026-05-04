@@ -1792,7 +1792,18 @@ public class EntityReflector<E> {
 		}
 	}
 
+	/**
+	 * Exception -throwing placeholder for a method whose implementation could not be resolved. This allows types to be reflected and the
+	 * errors will only be thrown when the bad method is invoked.
+	 *
+	 * @param <E> The type that the method belongs to
+	 * @param <R> The return type of the method
+	 */
 	public static class BadMethod<E, R> extends MethodInterpreter<E, R> {
+		/**
+		 * @param reflector The reflector owner
+		 * @param method The method
+		 */
 		public BadMethod(EntityReflector<E> reflector, Method method) {
 			super(reflector, method);
 		}

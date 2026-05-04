@@ -2337,7 +2337,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			return theSource.onChange(evt -> {
 				action.accept(new MappedMapEvent<>(evt, //
 					evt.isInitial() ? null : theKeyMap.apply(evt.getOldKey()), theKeyMap.apply(evt.getKey()), //
-					evt.isInitial() ? null : theValueMap.apply(evt.getOldValue()), theValueMap.apply(evt.getNewValue())));
+						evt.isInitial() ? null : theValueMap.apply(evt.getOldValue()), theValueMap.apply(evt.getNewValue())));
 			});
 		}
 
@@ -2356,10 +2356,18 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			return entrySet().toString();
 		}
 
+		/**
+		 * @param sourceEntry The map entry to wrap
+		 * @return The mapped map entry
+		 */
 		protected OrderedMapEntry<KT, VT> wrapEntry(OrderedMapEntry<KS, VS> sourceEntry) {
 			return sourceEntry == null ? null : new MappedEntry(sourceEntry);
 		}
 
+		/**
+		 * @param sourceEntry The modifiable map entry to wrap
+		 * @return The mapped modifiable map entry
+		 */
 		protected MutableOrderedMapEntry<KT, VT> wrapMutableEntry(MutableOrderedMapEntry<KS, VS> sourceEntry) {
 			return sourceEntry == null ? null : new MutableMappedEntry(sourceEntry);
 		}

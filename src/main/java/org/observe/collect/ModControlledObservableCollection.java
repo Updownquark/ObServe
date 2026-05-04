@@ -10,8 +10,24 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListElement;
 import org.qommons.collect.ModControlledCollection;
 
+/**
+ * Observable extension of {@link ModControlledCollection}
+ *
+ * @param <E> The type of elements in the collection
+ * @param <C> The sub-type of ObservableCollection
+ */
 public class ModControlledObservableCollection<E, C extends ObservableCollection<E>> extends ModControlledCollection.ModControlledList<E, C>
 implements ObservableCollection<E> {
+	/**
+	 * Creates an ObservableCollection that is modification-controlled
+	 *
+	 * @param <E> The type of elements in the collection
+	 * @param <C> The sub-type of the collection
+	 * @param collection The collection to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 * @return The modification-controlled ObservableCollection
+	 */
 	public static <E, C extends ObservableCollection<E>> C controlCollection(C collection,
 		CollectionModificationControl<E> control,
 		CollectionModificationListener<E> listener){
@@ -25,6 +41,16 @@ implements ObservableCollection<E> {
 			return (C) new ModControlledObservableCollection<>(collection, control, listener);
 	}
 
+	/**
+	 * Creates an ObservableSet that is modification-controlled
+	 *
+	 * @param <E> The type of elements in the set
+	 * @param <C> The sub-type of the set
+	 * @param collection The collection to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 * @return The modification-controlled ObservableSet
+	 */
 	public static <E, C extends ObservableSet<E>> C controlSet(C collection, CollectionModificationControl<E> control,
 		CollectionModificationListener<E> listener) {
 		if (collection instanceof ObservableSortedSet)
@@ -33,6 +59,11 @@ implements ObservableCollection<E> {
 			return (C) new MCOSet<>(collection, control, listener);
 	}
 
+	/**
+	 * @param backing The collection to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 */
 	public ModControlledObservableCollection(C backing, CollectionModificationControl<E> control,
 		CollectionModificationListener<E> listener) {
 		super(backing, control, listener);
@@ -84,8 +115,19 @@ implements ObservableCollection<E> {
 			listener.elementReplaced(backing.getElement(id), value);
 	}
 
+	/**
+	 * ObservableSet extension of {@link ModControlledObservableCollection}
+	 *
+	 * @param <E> The type of elements in the set
+	 * @param <C> The sub-type of ObservableSet
+	 */
 	public static class MCOSet<E, C extends ObservableSet<E>> extends ModControlledObservableCollection<E, ObservableSet<E>>
 	implements ObservableSet<E> {
+		/**
+		 * @param backing The collection to control
+		 * @param control The optional modification controller
+		 * @param listener The optional modification listener
+		 */
 		public MCOSet(ObservableSet<E> backing, CollectionModificationControl<E> control, CollectionModificationListener<E> listener) {
 			super(backing, control, listener);
 		}
@@ -150,8 +192,19 @@ implements ObservableCollection<E> {
 		}
 	}
 
+	/**
+	 * ObservableSortedCollection extension of {@link ModControlledObservableCollection}
+	 *
+	 * @param <E> The type of elements in the collection
+	 * @param <C> The sub-type of ObservableSortedCollection
+	 */
 	public static class MCOSortedCollection<E, C extends ObservableSortedCollection<E>>
 	extends ModControlledCollection.ModControlledSortedList<E, C> implements ObservableSortedCollection<E> {
+		/**
+		 * @param backing The collection to control
+		 * @param control The optional modification controller
+		 * @param listener The optional modification listener
+		 */
 		public MCOSortedCollection(C backing, CollectionModificationControl<E> control, CollectionModificationListener<E> listener) {
 			super(backing, control, listener);
 		}
@@ -188,8 +241,19 @@ implements ObservableCollection<E> {
 		}
 	}
 
+	/**
+	 * ObservableSortedSet extension of {@link ModControlledObservableCollection}
+	 *
+	 * @param <E> The type of elements in the set
+	 * @param <C> The sub-type of ObservableSortedSet
+	 */
 	public static class MCOSortedSet<E, C extends ObservableSortedSet<E>> extends ModControlledCollection.ModControlledSortedSet<E, C>
 	implements ObservableSortedSet<E> {
+		/**
+		 * @param backing The collection to control
+		 * @param control The optional modification controller
+		 * @param listener The optional modification listener
+		 */
 		public MCOSortedSet(C backing, CollectionModificationControl<E> control, CollectionModificationListener<E> listener) {
 			super(backing, control, listener);
 		}

@@ -13,8 +13,26 @@ import org.qommons.collect.ModControlledMap;
 import org.qommons.collect.MutableOrderedMapEntry;
 import org.qommons.collect.OrderedMapEntry;
 
+/**
+ * Observable extension of {@link ModControlledMap}
+ *
+ * @param <K> The key type of the map
+ * @param <V> The value type of the map
+ * @param <M> The sub-type of ObservableMap
+ */
 public class ModControlledObservableMap<K, V, M extends ObservableMap<K, V>> extends ModControlledMap<K, V, M>
 implements ObservableMap<K, V> {
+	/**
+	 * Creates a modification-controlled ObservableMap
+	 *
+	 * @param <K> The type of keys in the map
+	 * @param <V> The type of values in the map
+	 * @param <M> The sub type of the map
+	 * @param map The map to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 * @return The modification-controlled ObservableMap
+	 */
 	public static <K, V, M extends ObservableMap<K, V>> M controlMap(M map, MapModificationControl<K, V> control,
 		MapModificationListener<K, V> listener) {
 		if (map instanceof ObservableSortedMap)
@@ -23,6 +41,11 @@ implements ObservableMap<K, V> {
 			return (M) new ModControlledObservableMap<>(map, control, listener);
 	}
 
+	/**
+	 * @param backing The map to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 */
 	public ModControlledObservableMap(M backing, MapModificationControl<K, V> control, MapModificationListener<K, V> listener) {
 		super(backing, control, listener);
 	}
@@ -85,8 +108,20 @@ implements ObservableMap<K, V> {
 		return getBacking().onChange(action);
 	}
 
+	/**
+	 * SortedObservableMap implementation for {@link ModControlledObservableMap}
+	 *
+	 * @param <K> The type of keys in the map
+	 * @param <V> The type of values in the map
+	 * @param <M> The sub type of this sorted map
+	 */
 	public static class MCOSortedMap<K, V, M extends ObservableSortedMap<K, V>> extends ModControlledMap.ModControlledSortedMap<K, V, M>
 	implements ObservableSortedMap<K, V> {
+		/**
+		 * @param backing The map to control
+		 * @param control The optional modification controller
+		 * @param listener The optional modification listener
+		 */
 		public MCOSortedMap(M backing, MapModificationControl<K, V> control, MapModificationListener<K, V> listener) {
 			super(backing, control, listener);
 		}

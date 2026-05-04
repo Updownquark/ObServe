@@ -26,16 +26,25 @@ import org.qommons.data.types.EnumValue;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 import org.qommons.fn.FunctionUtils;
-import org.qommons.fn.TriFunction;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * {@link ConfiguredValueType} implementation backed by both a generic QommonData {@link EntityType} and an {@link EntityReflector}
+ *
+ * @param <E> The java type of this entity type
+ */
 public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 	private final List<ReflectedEntityValueType<? super E>> theSupers;
 	private final EntityType theGenericType;
 	private final EntityReflector<E> theReflector;
 	private final QuickMap<String, ReflectedFieldType<E, ?, ?>> theFields;
 
+	/**
+	 * @param supers The super types of this type
+	 * @param type The generic entity type of this type
+	 * @param reflector The reflector for this type
+	 */
 	public ReflectedEntityValueType(List<ReflectedEntityValueType<? super E>> supers, EntityType type, EntityReflector<E> reflector) {
 		theSupers = supers;
 		theGenericType = type;
@@ -49,16 +58,24 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 		theFields = fields.unmodifiable();
 	}
 
+	/** @return The generic entity type of this type */
 	public EntityType getGenericType() {
 		return theGenericType;
 	}
 
+	/** @return The reflector for instances of this type */
 	public EntityReflector<E> getReflector() {
 		return theReflector;
 	}
 
+	/**
+	 * @param other The other entity type to test
+	 * @return Whether this entity type is the same as or a super type of the given type
+	 */
 	public boolean isAssignableFrom(ReflectedEntityValueType<?> other) {
-		return theReflector.getType().isSupertypeOf(other.theReflector.getType());
+		TypeToken<E> myType = theReflector.getType();
+		TypeToken<?> otherType = other.theReflector.getType();
+		return myType.equals(otherType) || myType.isSupertypeOf(otherType);
 	}
 
 	@Override
@@ -151,9 +168,6 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 			}
 		}
 	}
-
-	private static TriFunction<?, ReflectedEntitySet, GenericEntity, ?> G2R_IDENTITY = FunctionUtils.printableTriFn((v, __, ___) -> v,
-		"identity", null);
 
 	<G, R> RealFieldValueProducer<G, R> mapGenericToReal(FieldType<G> genericType, TypeToken<R> realType, EntityField<G> field) {
 		if (genericType instanceof FieldType.SimpleType || genericType == FieldType.BLOB) {

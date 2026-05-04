@@ -32,13 +32,19 @@ import org.qommons.data.types.FieldType;
 
 import com.google.common.reflect.TypeToken;
 
+/** Mapping scheme for QommonData entity mapping that uses {@link EntityReflector} and can be used to create {@link ReflectedEntitySet}s */
 public class ReflectedEntityMappingScheme implements EntityTypeSetMapping.EntityMappingScheme<EntityReflector<?>> {
 	private final Map<TypeToken<?>, EntityReflector<?>> theReflectorCache;
 
+	/** Creates the mapping scheme */
 	public ReflectedEntityMappingScheme() {
 		theReflectorCache = new HashMap<>();
 	}
 
+	/**
+	 * @return This mapping scheme's reflector cache. This cache is populated as entity types are mapped. The returned value is the actual,
+	 *         modifiable cache, and can be pre-populated
+	 */
 	public Map<TypeToken<?>, EntityReflector<?>> getReflectorCache() {
 		return theReflectorCache;
 	}
@@ -97,6 +103,10 @@ public class ReflectedEntityMappingScheme implements EntityTypeSetMapping.Entity
 			return fieldType;
 	}
 
+	/**
+	 * @param types The type set mapping to check against
+	 * @return A list of errors
+	 */
 	public static List<String> checkTypeSet(EntityTypeSetMapping types) {
 		List<String> errors = new ArrayList<>();
 		for (EntityTypeMapping<?> type : types.getEntityTypes().values()) {

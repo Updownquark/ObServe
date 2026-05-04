@@ -15,7 +15,6 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import org.checkerframework.checker.units.qual.K;
 import org.observe.CausableChanging;
 import org.observe.Equivalence;
 import org.observe.Eventable;

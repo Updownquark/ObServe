@@ -605,7 +605,7 @@ public interface ObservableConfigFormat<E> {
 		 * @return The config element where the entity is persisted
 		 */
 		static ObservableConfig getConfig(Object entity) {
-			return (ObservableConfig) EntityReflector.getReflector(entity).getAssociated(entity, ENTITY_CONFIG_KEY);
+			return (ObservableConfig) EntityReflector.getAssociated(entity, ENTITY_CONFIG_KEY);
 		}
 
 		/** @return The configured entity type of the entity persisted by this format */

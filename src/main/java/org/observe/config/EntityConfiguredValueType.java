@@ -110,7 +110,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	 * @return The entity
 	 */
 	public E associate(E entity, Object key, Object associated) {
-		return theReflector.associate(entity, key, associated);
+		return EntityReflector.associate(entity, key, associated);
 	}
 
 	/**
@@ -121,7 +121,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	 * @return The associated data
 	 */
 	public Object getAssociated(E entity, Object key) {
-		return theReflector.getAssociated(entity, key);
+		return EntityReflector.getAssociated(entity, key);
 	}
 
 	private void assertUsableDirectly() {

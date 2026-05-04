@@ -17,8 +17,26 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ModControlledMultiMap;
 import org.qommons.collect.OrderedMultiEntry;
 
+/**
+ * Observable extension of {@link ModControlledMultiMap}
+ *
+ * @param <K> The key type of the multi-map
+ * @param <V> The value type of the multi-map
+ * @param <M> The sub-type of ObservableMultiMap
+ */
 public class ModControlledObservableMultiMap<K, V, M extends ObservableMultiMap<K, V>> extends ModControlledMultiMap<K, V, M>
 implements ObservableMultiMap<K, V> {
+	/**
+	 * Creates a modification-controlled ObservableMultiMap
+	 *
+	 * @param <K> The type of keys in the multi-map
+	 * @param <V> The type of values in the multi-map
+	 * @param <M> The sub type of the multi-map
+	 * @param map The multi-map to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 * @return The modification-controlled ObservableMultiMap
+	 */
 	public static <K, V, M extends ObservableMultiMap<K, V>> M controlMultiMap(M map, MultiMapModificationControl<K, V> control,
 		MultiMapModificationListener<K, V> listener) {
 		if (map instanceof ObservableSortedMultiMap)
@@ -27,6 +45,11 @@ implements ObservableMultiMap<K, V> {
 			return (M) new ModControlledObservableMultiMap<>(map, control, listener);
 	}
 
+	/**
+	 * @param backing The multi-map to control
+	 * @param control The optional modification controller
+	 * @param listener The optional modification listener
+	 */
 	public ModControlledObservableMultiMap(M backing, MultiMapModificationControl<K, V> control,
 		MultiMapModificationListener<K, V> listener) {
 		super(backing, control, listener);
@@ -104,6 +127,10 @@ implements ObservableMultiMap<K, V> {
 			return super.wrapValues(key, values);
 	}
 
+	/**
+	 * @param backingEntry The source {@link ObservableMultiMap.ObservableMultiEntry} to wrap
+	 * @return The modification-controlled wrapping multi-entry
+	 */
 	protected ObservableMultiEntry<K, V> wrapObservableEntry(ObservableMultiEntry<K, V> backingEntry) {
 		ValuesControl control = new ValuesControl(backingEntry.getKey());
 		ValuesListener listener = new ValuesListener(backingEntry.getKey());
@@ -245,8 +272,20 @@ implements ObservableMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * SortedObservableMultiMap implementation for {@link ModControlledObservableMultiMap}
+	 *
+	 * @param <K> The type of keys in the multi-map
+	 * @param <V> The type of values in the multi-map
+	 * @param <M> The sub type of this sorted multi-map
+	 */
 	public static class MCOSortedMultiMap<K, V, M extends ObservableSortedMultiMap<K, V>> extends ModControlledObservableMultiMap<K, V, M>
 	implements ObservableSortedMultiMap<K, V> {
+		/**
+		 * @param backing The multi-map to control
+		 * @param control The optional modification controller
+		 * @param listener The optional modification listener
+		 */
 		public MCOSortedMultiMap(M backing, MultiMapModificationControl<K, V> control, MultiMapModificationListener<K, V> listener) {
 			super(backing, control, listener);
 		}

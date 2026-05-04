@@ -42,7 +42,21 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.fn.FunctionUtils;
 
+/**
+ * A general implementation for {@link ObservableMultiMap#flow()}
+ *
+ * @param <KS> The key type of the source multi-map
+ * @param <KT> The key type of the derived multi-map
+ * @param <VS> The value type of the source multi-map
+ * @param <VT> The value type of the derived multi-map
+ */
 public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT> {
+	/**
+	 * @param <K> The key type of the source multi-map
+	 * @param <V> The value type of the source multi-map
+	 * @param source The source multi-map
+	 * @return The multi-map flow for the map
+	 */
 	public static <K, V> GeneralMultiMapFlow<K, K, V, V> init(ObservableMultiMap<K, V> source) {
 		if (source instanceof ObservableSortedMultiMap)
 			return new GeneralSortedMultiMapFlow<>(source, FunctionUtils.identity(), FunctionUtils.identity(),
@@ -51,6 +65,12 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 			return new GeneralMultiMapFlow<>(source, FunctionUtils.identity(), FunctionUtils.identity(), PassiveFlowSupport.SUPPORT[0]);
 	}
 
+	/**
+	 * @param <K> The key type of the source sorted multi-map
+	 * @param <V> The value type of the source sorted multi-map
+	 * @param source The source sorted multi-map
+	 * @return The sorted multi-map flow for the sorted map
+	 */
 	public static <K, V> GeneralSortedMultiMapFlow<K, K, V, V> init(ObservableSortedMultiMap<K, V> source) {
 		return new GeneralSortedMultiMapFlow<>(source, FunctionUtils.identity(), FunctionUtils.identity(), PassiveFlowSupport.SUPPORT[0]);
 	}
@@ -62,6 +82,12 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 	private final Function<? super CollectionDataFlow<VS, ?, VS>, ? extends CollectionDataFlow<?, ?, VT>> theValueFlow;
 	private final PassiveFlowSupport thePassiveSupport;
 
+	/**
+	 * @param source The source multi-map
+	 * @param keyFlow The function producing key flows from the source key set
+	 * @param valueFlow The function producing value flows from source value collections
+	 * @param passiveSupport The passive support of the flow
+	 */
 	protected GeneralMultiMapFlow(ObservableMultiMap<KS, VS> source,
 		Function<? super DistinctDataFlow<KS, ?, KS>, ? extends DistinctDataFlow<?, ?, KT>> keyFlow,
 			Function<? super CollectionDataFlow<VS, ?, VS>, ? extends CollectionDataFlow<?, ?, VT>> valueFlow,
@@ -72,18 +98,22 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		this.thePassiveSupport = passiveSupport;
 	}
 
+	/** @return The source multi-map that this flow is for */
 	protected ObservableMultiMap<KS, VS> getSource() {
 		return theSource;
 	}
 
+	/** @return The function producing key flows from the source key set */
 	protected Function<? super DistinctDataFlow<KS, KS, KS>, ? extends DistinctDataFlow<?, ?, KT>> getKeyFlow() {
 		return theKeyFlow;
 	}
 
+	/** @return The function producing value flows from source value collections */
 	protected Function<? super CollectionDataFlow<VS, ?, VS>, ? extends CollectionDataFlow<?, ?, VT>> getValueFlow() {
 		return theValueFlow;
 	}
 
+	/** @return The passive support of the flow */
 	protected PassiveFlowSupport getPassiveSupport() {
 		return thePassiveSupport;
 	}
@@ -187,8 +217,22 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 	}
 
+	/**
+	 * Sorted extension of {@link GeneralMultiMapFlow}
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
 	public static class GeneralSortedMultiMapFlow<KS, KT, VS, VT> extends GeneralMultiMapFlow<KS, KT, VS, VT>
 	implements SortedMultiMapFlow<KT, VT> {
+		/**
+		 * @param source The source multi-map
+		 * @param keyFlow The function producing key flows from the source key set
+		 * @param valueFlow The function producing value flows from source value collections
+		 * @param passiveSupport The passive support of the flow
+		 */
 		protected GeneralSortedMultiMapFlow(ObservableMultiMap<KS, VS> source,
 			Function<? super DistinctSortedDataFlow<KS, ?, KS>, ? extends DistinctSortedDataFlow<?, ?, KT>> keyFlow,
 				Function<? super CollectionDataFlow<VS, ?, VS>, ? extends CollectionDataFlow<?, ?, VT>> valueFlow,
@@ -231,12 +275,21 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 	}
 
-	private static final ObservableCollection<?> UNSORTED_EMPTY = ObservableCollection.create();
-	private static final ObservableCollection<?> SORTED_MODIFIABLE_EMPTY = ObservableSortedSet.create((v1, v2) -> 0);
-
+	/**
+	 * Default passive multi-map produced by a {@link GeneralMultiMapFlow}
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
 	public static class GeneralPassiveDerivedMultiMap<KS, KT, VS, VT> extends AbstractPassiveMultiMap<KS, VS, KT, VT> {
 		private final GeneralMultiMapFlow<KS, KT, VS, VT> theMapFlow;
 
+		/**
+		 * @param mapFlow The flow that produce this map
+		 * @param addKey The add key for producing value collections
+		 */
 		public GeneralPassiveDerivedMultiMap(GeneralMultiMapFlow<KS, KT, VS, VT> mapFlow, AddKeyHolder<KT> addKey) {
 			super(mapFlow.getSource(), (DistinctDataFlow<KS, ?, KT>) mapFlow.getKeyFlow().apply(mapFlow.getSource().keySet().flow()),
 				(Function<CollectionDataFlow<VS, ?, VS>, CollectionDataFlow<VS, ?, VT>>) mapFlow.getValueFlow(), addKey);
@@ -249,8 +302,20 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 	}
 
+	/**
+	 * Default passive sorted multi-map produced by a {@link GeneralMultiMapFlow}
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
 	public static class GeneralPassiveDerivedSortedMultiMap<KS, KT, VS, VT> extends GeneralPassiveDerivedMultiMap<KS, KT, VS, VT>
 	implements ObservableSortedMultiMap<KT, VT> {
+		/**
+		 * @param mapFlow The flow that produce this map
+		 * @param addKey The add key for producing value collections
+		 */
 		public GeneralPassiveDerivedSortedMultiMap(GeneralSortedMultiMapFlow<KS, KT, VS, VT> mapFlow, AddKeyHolder<KT> addKey) {
 			super(mapFlow, addKey);
 		}
@@ -272,6 +337,14 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 	}
 
+	/**
+	 * Default active multi-map produced by a {@link GeneralMultiMapFlow}
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
 	public static class GeneralActiveDerivedMultiMap<KS, KT, VS, VT> extends Identifiable.AbstractIdentifiable
 	implements ObservableMultiMap<KT, VT> {
 		class ActiveEntry implements OrderedMultiEntry<KT, VT> {
@@ -346,6 +419,10 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		private final ObservableCollection<VT> theValueTester;
 		private final ListenerList<Consumer<? super ObservableMultiMapEvent<? extends KT, ? extends VT>>> theListeners;
 
+		/**
+		 * @param flow The flow that produce this map
+		 * @param until The observable to destroy this multi-map
+		 */
 		public GeneralActiveDerivedMultiMap(GeneralMultiMapFlow<KS, KT, VS, VT> flow, Observable<?> until) {
 			theFlow = flow;
 			initIdentity(theFlow);
@@ -675,8 +752,20 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 	}
 
+	/**
+	 * Default active sorted multi-map produced by a {@link GeneralMultiMapFlow}
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
 	public static class GeneralActiveDerivedSortedMultiMap<KS, KT, VS, VT> extends GeneralActiveDerivedMultiMap<KS, KT, VS, VT>
-		implements ObservableSortedMultiMap<KT, VT> {
+	implements ObservableSortedMultiMap<KT, VT> {
+		/**
+		 * @param flow The flow that produce this map
+		 * @param until The observable to destroy this multi-map
+		 */
 		public GeneralActiveDerivedSortedMultiMap(GeneralSortedMultiMapFlow<KS, KT, VS, VT> flow, Observable<?> until) {
 			super(flow, until);
 		}

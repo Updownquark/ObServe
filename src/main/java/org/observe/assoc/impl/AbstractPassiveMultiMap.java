@@ -20,6 +20,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
+import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.IterableUtils;
@@ -209,7 +210,8 @@ public abstract class AbstractPassiveMultiMap<K0, V0, K, V> extends Identifiable
 	public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
 		ObservableMultiEntry<K0, V0> sourceEntry = theSourceMap.watchById(keyId);
 		ObservableCollection<V> derivedValues = theValueFlow.apply(sourceEntry.flow()).collectPassive();
-		return new PassivelyDerivedObservableMultiEntry<>(theKeyManager.map().get().apply(sourceEntry.getKey()), sourceEntry, derivedValues);
+		return new PassivelyDerivedObservableMultiEntry<>(theKeyManager.map().get().apply(sourceEntry.getKey()), sourceEntry,
+			derivedValues);
 	}
 
 	@Override
@@ -298,6 +300,54 @@ public abstract class AbstractPassiveMultiMap<K0, V0, K, V> extends Identifiable
 		});
 	}
 
+	/**
+	 * Default {@link AbstractPassiveMultiMap#entryFor(OrderedMultiEntry)} implementation
+	 *
+	 * @param <KS> The key type of the source multi-map
+	 * @param <KT> The key type of the derived multi-map
+	 * @param <VS> The value type of the source multi-map
+	 * @param <VT> The value type of the derived multi-map
+	 */
+	public static class PassivelyDerivedObservableMultiEntry<KS, KT, VS, VT> extends ObservableCollectionWrapper<VT>
+	implements ObservableMultiEntry<KT, VT> {
+		private final KT theKey;
+		private final ObservableMultiEntry<KS, VS> theSourceEntry;
+
+		PassivelyDerivedObservableMultiEntry(KT key, ObservableMultiEntry<KS, VS> sourceEntry, ObservableCollection<VT> derivedValues) {
+			theKey = key;
+			theSourceEntry = sourceEntry;
+			init(derivedValues);
+		}
+
+		@Override
+		public PassivelyDerivedObservableMultiEntry<KS, KT, VS, VT> alias(String alias) {
+			super.alias(alias);
+			return this;
+		}
+
+		@Override
+		public ElementId getKeyId() {
+			return theSourceEntry == null ? null : theSourceEntry.getKeyId();
+		}
+
+		@Override
+		public KT getKey() {
+			return theKey;
+		}
+
+		@Override
+		public String toString() {
+			return theKey + "=" + super.toString();
+		}
+	}
+
+	/**
+	 * {@link ObservableMultiMapEvent} implementation that wraps an {@link ObservableMultiMapEvent} from the source map of a
+	 * passively-derived {@link ObservableMultiMap}
+	 *
+	 * @param <KT> The key type of the derived map
+	 * @param <VT> The value type of the derived map
+	 */
 	public static class PassiveMappedMultiMapEvent<KT, VT> implements ObservableMultiMapEvent<KT, VT> {
 		private final ObservableMultiMapEvent<?, ?> theSourceEvent;
 		private final KT theOldKey;
@@ -305,6 +355,13 @@ public abstract class AbstractPassiveMultiMap<K0, V0, K, V> extends Identifiable
 		private final VT theOldValue;
 		private final VT theNewValue;
 
+		/**
+		 * @param sourceEvent The source multi-map event
+		 * @param oldKey The previous derived key
+		 * @param newKey The new derived key
+		 * @param oldValue The previous derived value
+		 * @param newValue The new derived value
+		 */
 		public PassiveMappedMultiMapEvent(ObservableMultiMapEvent<?, ?> sourceEvent, KT oldKey, KT newKey, VT oldValue, VT newValue) {
 			theSourceEvent = sourceEvent;
 			theOldKey = oldKey;

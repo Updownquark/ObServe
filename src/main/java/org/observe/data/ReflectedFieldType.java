@@ -13,6 +13,14 @@ import org.qommons.data.types.EntityField;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * A {@link ConfiguredValueField} implementation backed by both a generic QommonData {@link EntityField} and a
+ * {@link org.observe.util.EntityReflector.ReflectedField}
+ *
+ * @param <E> The type of this field's owning entity type
+ * @param <G> The generic type of this field
+ * @param <R> The java type of this field's getter
+ */
 public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 	private final ReflectedEntityValueType<E> theOwner;
 	private final EntityField<G> theField;
@@ -44,6 +52,7 @@ public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 		return theOwner;
 	}
 
+	/** @return This field type's generic field */
 	public EntityField<G> getGenericField() {
 		return theField;
 	}

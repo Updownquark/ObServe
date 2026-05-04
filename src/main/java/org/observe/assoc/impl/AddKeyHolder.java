@@ -58,6 +58,11 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 			return theKey;
 		}
 
+		/**
+		 * Same as sequential calls to {@link #get()} and {@link #clear()}
+		 *
+		 * @return The value in this key holder before it was cleared
+		 */
 		public K getAndClear() {
 			K key = theKey;
 			theKey = null;

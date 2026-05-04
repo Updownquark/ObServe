@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SimpleObservable;
 import org.observe.assoc.ModControlledObservableMap;
@@ -36,6 +37,12 @@ import org.qommons.data.types.FieldMapping;
 import org.qommons.data.types.FieldType;
 import org.qommons.data.values.GenericEntity;
 
+/**
+ * Individual entity support for entities in an {@link ReflectedEntitySet}. Instances of this class are the generic entities as well as the
+ * backing for the reflected {@link EntityReflector} proxies.
+ *
+ * @param <E> The type of the entity
+ */
 public class MappedEntity<E> extends AbstractGenericEntity implements EntityReflector.ObservableEntityInstanceBacking<E> {
 	static final Object ENTITY_ASSOC = new SimpleUniqueKey("mappedEntity");
 
@@ -45,6 +52,11 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 	private ListenerList<Consumer<FieldChange<?>>>[] theListeners;
 	private SimpleObservable<Void> theUntil;
 
+	/**
+	 * @param type The entity type of this entity
+	 * @param entitySet The entity set this entity belongs to
+	 * @param id The ID values for this entity
+	 */
 	public MappedEntity(ReflectedEntityValueType<E> type, ReflectedEntitySet entitySet, Object[] id) {
 		super(type.getGenericType(), entitySet, id);
 		theType = type;
@@ -59,11 +71,13 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 		}
 	}
 
+	/** @return The "real" entity proxy that is an instance of this entity's run-time java type */
 	public E getRealEntity() {
 		return theRealEntity;
 	}
 
-	public SimpleObservable<Void> getUntil() {
+	/** @return An observable that will fire when this entity is deleted */
+	public Observable<Void> getUntil() {
 		if (theUntil == null)
 			theUntil = SimpleObservable.create(b -> b.withLocking(getEntitySet()));
 		return theUntil;
