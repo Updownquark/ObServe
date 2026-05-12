@@ -357,7 +357,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
 	@Override
-	default Observable<Causable> simpleChanges() {
+	default Observable<? extends Causable> simpleChanges() {
 		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
 			class SimpleChangesSubscription implements Causable.TerminalAction, Consumer<ObservableCollectionEvent<?>>, Subscription {
 				private final Observer<? super Causable> theObserver;

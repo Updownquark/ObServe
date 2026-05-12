@@ -356,12 +356,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 * @return An observable that fires a value whenever anything in this structure changes. This observable will only fire 1 event per
 	 *         transaction.
 	 */
-	default Observable<Causable> changes() {
+	default Observable<? extends Causable> changes() {
 		return entrySet().simpleChanges();
 	}
 
 	@Override
-	default Observable<Causable> simpleChanges() {
+	default Observable<? extends Causable> simpleChanges() {
 		return changes();
 	}
 

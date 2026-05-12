@@ -1,16 +1,6 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiPredicate;
@@ -36,40 +26,12 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.WeakListening;
-import org.qommons.ArrayUtils;
-import org.qommons.BiTuple;
-import org.qommons.BreakpointHere;
-import org.qommons.Causable;
+import org.qommons.*;
 import org.qommons.Causable.CausableKey;
-import org.qommons.ConcurrentHashSet;
-import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.IdentityKey;
-import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.QommonsUtils;
-import org.qommons.Stamped;
-import org.qommons.Subscription;
-import org.qommons.Ternian;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
-import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterCollections;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.ListenerList;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableListElement;
-import org.qommons.collect.ReentrantNotificationException;
 import org.qommons.debug.Debug;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.fn.FunctionUtils;
@@ -3738,7 +3700,7 @@ public final class ObservableCollectionImpl {
 		public Observable<Causable> simpleChanges() {
 			// We can be more efficient here. Listen to the changes observable of the content collection,
 			// as well as logical changes to the container.
-			ObservableValue<Observable<Causable>> toFlattenChanges = theCollectionObservable.map(FunctionUtils.printableFn(
+			ObservableValue<Observable<? extends Causable>> toFlattenChanges = theCollectionObservable.map(FunctionUtils.printableFn(
 				coll -> coll != null ? coll.simpleChanges() : Observable.<Causable> empty(), "simpleChanges", "simpleChanges"));
 			return Observable.onRootFinish(Observable.or(theCollectionObservable.noInitChanges(), //
 				new ObservableValue.FlattenedValueObservable<Causable>(toFlattenChanges) {
@@ -4234,8 +4196,23 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ListElement<T> getElement(int index) throws IndexOutOfBoundsException {
-			update(null);
-			return theCollection.getElement(index);
+			try (Transaction t = theCollectionValue.lock(false, null)) {
+				if (!update(null)) {
+					Collection<T> cv = theCollectionValue.get();
+					if (cv instanceof List && cv instanceof RandomAccess) {
+						/* This is to accommodate lists whose content is always the same instance.
+						 * Such lists are occasionally nice for very large data sets,
+						 * where storing an independent value for each position would use too much memory.
+						 * These lists modify the internal singleton value based on the index before returning it.
+						 */
+						try {
+							((List<T>) cv).get(index);
+						} catch (IndexOutOfBoundsException e) {
+						}
+					}
+				}
+				return theCollection.getElement(index);
+			}
 		}
 
 		@Override
@@ -4303,8 +4280,39 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int size() {
-			update(null);
-			return theCollection.size();
+			if (isLocked)
+				return theCollection.size();
+			try (Transaction t = theCollectionValue.lock(false, null)) {
+				Collection<T> cv = theCollectionValue.get();
+				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+					int newSize = cv == null ? 0 : cv.size();
+					if (newSize != theCollection.size()) {
+						theStampCopy = getBackingStamp(cv);
+						if (!isModifying)
+							sync(cv, null);
+					}
+					return newSize;
+				}
+			}
+		}
+
+		@Override
+		public Iterator<T> iterator() {
+			try (Transaction t = theCollectionValue.lock(false, null)) {
+				Collection<T> cv = theCollectionValue.get();
+				if (isLocked)
+					return cv == null ? Collections.emptyIterator() : cv.iterator();
+				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+					long newStamp = getBackingStamp(cv);
+					if (newStamp != theStampCopy) {
+						theStampCopy = newStamp;
+						if (!isModifying)
+							sync(cv, null);
+						return ObservableCollection.super.iterator();
+					} else
+						return cv.iterator();
+				}
+			}
 		}
 
 		@Override
@@ -4653,10 +4661,11 @@ public final class ObservableCollectionImpl {
 		 * If the observable value has changed, synchronizes its contents with this collection
 		 *
 		 * @param content An optional containing the known current value of the collection, or null if this is not known
+		 * @return Whether this call resulted in synchronization
 		 */
-		protected void update(Optional<Collection<T>> content) {
+		protected boolean update(Optional<Collection<T>> content) {
 			if (isLocked)
-				return;
+				return false;
 			try (Transaction t = theCollectionValue.lock(false, null)) {
 				Collection<T> cv;
 				if (content != null)
@@ -4667,11 +4676,14 @@ public final class ObservableCollectionImpl {
 					long stamp = getBackingStamp(cv);
 					if (stamp != theStampCopy) {
 						theStampCopy = stamp;
-						if (!isModifying)
+						if (!isModifying) {
 							sync(cv, null);
+							return true;
+						}
 					}
 				}
 			}
+			return false;
 		}
 
 		private long getBackingStamp(Collection<T> content) {
@@ -4717,6 +4729,31 @@ public final class ObservableCollectionImpl {
 					}
 					syncAction.onCommon(el -> theBackingElements.set(el.getTargetIndex(), el.getRightValue().getElementId()));
 					syncAction.adjust();
+				} else if (content != null && content.size() * theBackingElements.size() > 100_000) {
+					// For large collections, the general synchronize method is too slow
+					Iterator<T> newValues = content.iterator();
+					Iterator<? extends CollectionElement<T>> myValues = theCollection.elements().iterator();
+					while (myValues.hasNext()) {
+						CollectionElement<T> myEl = myValues.next();
+						if (newValues.hasNext()) {
+							T newValue = newValues.next();
+							if (updateAll || !equal.test(myEl.get(), newValue))
+								theCollection.mutableElement(myEl.getElementId()).set(newValue);
+						} else {
+							newValues.remove();
+						}
+					}
+					while (myValues.hasNext()) {
+						myValues.remove();
+					}
+					while (newValues.hasNext()) {
+						ListElement<T> newEl = theCollection.addElement(newValues.next(), false);
+						if (newEl == null) {// Nothing to do
+						} else if (newEl.getAdjacent(true) == null)
+							theBackingElements.add(newEl.getElementId());
+						else
+							theBackingElements.add(newEl.getElementsBefore(), newEl.getElementId());
+					}
 				} else {
 					theBackingElements.clear();
 					List<T> list = content instanceof List ? (List<T>) content : QommonsUtils.unmodifiableCopy(content);
@@ -4768,6 +4805,11 @@ public final class ObservableCollectionImpl {
 					theValueSubscription = null;
 				}
 			};
+		}
+
+		@Override
+		public Observable<? extends Causable> simpleChanges() {
+			return theCollectionValue.simpleChanges();
 		}
 
 		@Override

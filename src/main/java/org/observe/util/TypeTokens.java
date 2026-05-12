@@ -9,20 +9,7 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -135,7 +122,7 @@ public class TypeTokens implements TypeParser {
 		 * @throws IllegalArgumentException If the number of parameters does not match this type's parameter count
 		 */
 		public <C extends T> TypeToken<C> parameterized(TypeToken<?>... parameters) {
-			if (typeParameters == 0 || parameters.length != typeParameters)
+			if (parameters.length != typeParameters)
 				throw new IllegalArgumentException("Type " + clazz.getName() + " has " + typeParameters
 					+ " parameters; cannot be parameterized with " + Arrays.toString(parameters));
 			Type[] paramTypes = new Type[parameters.length];
@@ -146,6 +133,8 @@ public class TypeTokens implements TypeParser {
 
 		private <P, C extends T> TypeToken<C> parameterized(Type[] paramTypes, TypeToken<?>[] paramTokens,
 			Function<Type[], TypeToken<?>> creator) {
+			if (typeParameters == 0)
+				return (TypeToken<C>) type;
 			for (int t = 0; t < paramTokens.length; t++) {
 				paramTypes[t] = wrap(paramTypes[t]);
 				paramTokens[t] = wrap(paramTokens[t]);

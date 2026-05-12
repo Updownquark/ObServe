@@ -154,6 +154,8 @@ public class ObservableFile implements BetterFile {
 	private volatile long theCachedSize;
 
 	ObservableFile(ObservableFileSet fileSet, ObservableFile parent, BetterFile file) {
+		if (file == null)
+			throw new NullPointerException();
 		theFileSet = fileSet;
 		theParent = parent;
 		theFile = file;

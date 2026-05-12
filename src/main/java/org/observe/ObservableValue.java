@@ -1810,7 +1810,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					ThreadLocal<Map<CausableKey, Causable.Effect>> effects = theEffects;
 					Map<CausableKey, Causable.Effect> localEffects = effects == null ? null : effects.get();
 					if (localEffects != null)
-						Causable.terminateFull(localEffects, this);
+						Causable.terminate(localEffects.values(), this);
 				}
 			}
 			ContantInitialEvent initialEvent = new ContantInitialEvent();
