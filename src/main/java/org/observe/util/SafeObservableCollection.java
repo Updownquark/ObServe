@@ -23,6 +23,7 @@ import org.qommons.Identifiable;
 import org.qommons.Lockable;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -171,7 +172,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theFlushKey = Causable.key((cause, values) -> {
 			theMidMoveCount = 0;
 			if (threading.isEventThread()) {
-				Transaction t = theSyntheticCollection.tryLock(true, cause);
+				Transaction t = theSyntheticCollection.lockWrite(true, cause);
 				if (t != null) {
 					try {
 						doFlush();
@@ -214,7 +215,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		// Use as light a touch as possible.
 		// It doesn't really matter that we have all the correct data as soon as the constructor exits, though we will if we can.
 		// Try to get a lock on the collection, but if we can't, just try again later
-		Transaction lock = theCollection.tryLock(false, null);
+		Transaction lock = theCollection.lock(true);
 		if (lock == null) {
 			theStamp = -1;
 			// Put an extra sleep in here to avoid thrashing the CPU
@@ -297,7 +298,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			// This feature should make this collection much lighter-weight in the most common case
 			// where the source collection is modified on the event thread.
 			// But we don't want to do this when it's possible this change is part of a move operation
-			try (Transaction t = theSyntheticCollection.lock(true, evt)) { // Link the events
+			try (Transaction t = theSyntheticCollection.lockWrite(false, evt)) { // Link the events
 				switch (evt.getType()) {
 				case add:
 					theSyntheticCollection.add(evt.getIndex(), createElement(evt.getElementId(), evt.getNewValue()));
@@ -376,7 +377,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		// We need to obtain a read lock on the main collection to prevent it from mucking with the state collections we use
 		// to synchronize the state of the safe collection.
 		// But we can afford to wait if it's not immediately available
-		Transaction sourceLock = theCollection.tryLock(false, null);
+		Transaction sourceLock = theCollection.lock(true);
 		if (sourceLock == null)
 			return true;
 		ThreadConstraint.EDT.flush();
@@ -388,7 +389,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				return true;
 		}
 		isFlushing = true;
-		Transaction synthLock = theSyntheticCollection.tryLock(true, null);
+		Transaction synthLock = theSyntheticCollection.lockWrite(true, null);
 		boolean flushed = false;
 		try {
 			if(synthLock==null)
@@ -417,7 +418,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					CollectionElementMove move = moved == null ? null : new CollectionElementMove();
 					if (moved != null) {
 						moves.put(moved, move);
-						try (Transaction t2 = theSyntheticCollection.lock(true, move)) {
+						try (Transaction t2 = theSyntheticCollection.lockWrite(false, move)) {
 							removedEl.getSynthEl().remove();
 						}
 					} else
@@ -450,7 +451,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					ElementRef<E> newEl = createElement(addedEl, theCollection.getElement(addedEl).get());
 					CollectionElementMove move = moves.remove(addedEl);
 					if (move != null) {
-						try (Transaction t2 = theSyntheticCollection.lock(true, move)) {
+						try (Transaction t2 = theSyntheticCollection.lockWrite(false, move)) {
 							if (before == null)
 								theSyntheticCollection.addElement(newEl, false);
 							else
@@ -522,43 +523,29 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return theCollection.isLockSupported();
-	}
-
-	@Override
 	protected Object createIdentity() {
 		return Identifiable.wrap(theCollection.getIdentity(), "safe");
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		if (write && isFinished)
-			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		if (!write)
-			return theSyntheticCollection.lock(write, cause);
-		else if (!theThreadConstraint.isEventThread())
-			throw new IllegalArgumentException(ThreadConstraint.MOD_ON_WRONG_THREAD);
-		// For a write lock, we also need to lock on the source collection, since any modifications will immediately propagate to it
-		Transaction lock = Lockable.lockAll(//
-			Lockable.lockable(theSyntheticCollection, true, cause), //
-			Lockable.lockable(theCollection, true, cause));
-		doFlush();
-		return lock;
+	public Transaction lock(boolean tryOnly) {
+		return theSyntheticCollection.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		if (write && isFinished)
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		if (isFinished)
 			throw new IllegalStateException(StdMsg.UNSUPPORTED_OPERATION);
-		if (!write)
-			return theSyntheticCollection.tryLock(write, cause);
-		else if (!theThreadConstraint.isEventThread())
-			return null; // Can't obtain a write lock except on the safe thread
+		else if (!theThreadConstraint.isEventThread()) { // Can't obtain a write lock except on the safe thread
+			if (tryOnly)
+				return null;
+			else
+				throw new IllegalArgumentException(ThreadConstraint.MOD_ON_WRONG_THREAD);
+		}
 		// For a write lock, we also need to lock on the source collection, since any modifications will immediately propagate to it
-		Transaction lock = Lockable.tryLockAll(//
-			Lockable.lockable(theSyntheticCollection, true, cause), //
-			Lockable.lockable(theCollection, true, cause));
+		Transaction lock = Lockable.lockAll(tryOnly, //
+			Transactable.asWriteLockable(theSyntheticCollection, cause), //
+			Transactable.asWriteLockable(theCollection, cause));
 		if (lock != null)
 			doFlush();
 		return lock;
@@ -581,7 +568,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private BetterList<ElementId> _getElementsBySource(ElementId el, BetterCollection<?> sourceCollection) {
 		if (sourceCollection == this)
 			return BetterList.of(el);
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			BetterList<? extends CollectionElement<? extends E>> els = theCollection.getElementsBySource(el, sourceCollection);
 			return BetterList
 				.of(els.stream().map(srcEl -> findRef(srcEl.getElementId())).filter(ref -> ref != null)
@@ -592,7 +579,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private BetterList<ElementId> _getSourceElements(ElementId localId, BetterCollection<?> collection) {
 		if (collection == this)
 			return BetterList.of(localId);
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			ElementRef<E> ref = theSyntheticBacking.getElement(localId).get();
 			// The source element may have been removed.
 			// Can't decide at the moment whether I should check that and return empty or let it throw the exception
@@ -653,7 +640,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 			@Override
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t2 = lock(true, null)) {
+				try (Transaction t2 = lockWrite(false, null)) {
 					if (theSourceEl == null || !theSourceEl.getElementId().isPresent())
 						throw new UnsupportedOperationException(StdMsg.ELEMENT_REMOVED);
 					theSourceEl.set(value);
@@ -668,14 +655,14 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				try (Transaction t2 = lock(true, null)) {
+				try (Transaction t2 = lockWrite(false, null)) {
 					if (theSourceEl != null && theSourceEl.getElementId().isPresent())
 						theSourceEl.remove();
 					doFlush();
 				}
 			}
 		}
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			ElementRef<E> ref = theSyntheticBacking.getElement(id).get();
 			return new MutableElement(ref);
 		}
@@ -683,7 +670,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
 			if (srcAfter != null && !srcAfter.isPresent())
 				return StdMsg.ELEMENT_REMOVED;
@@ -697,7 +684,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	@Override
 	public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ElementId srcAfter = after == null ? null : theSyntheticBacking.getElement(after).get().sourceId;
 			if (srcAfter != null && !srcAfter.isPresent())
 				throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
@@ -716,7 +703,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
 			if (!srcValue.isPresent())
 				return StdMsg.ELEMENT_REMOVED;
@@ -733,7 +720,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	@Override
 	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ElementId srcValue = theSyntheticBacking.getElement(valueEl).get().sourceId;
 			if (!srcValue.isPresent())
 				throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
@@ -753,7 +740,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public void clear() {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			theCollection.clear();
 			doFlush();
 		}
@@ -761,7 +748,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 
 	@Override
 	public void setValue(Collection<ElementId> elements, E value) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			List<ElementId> srcElements = new ArrayList<>(elements.size());
 			for (ElementId el : elements)
 				srcElements.add(theSyntheticBacking.getElement(el).get().sourceId);

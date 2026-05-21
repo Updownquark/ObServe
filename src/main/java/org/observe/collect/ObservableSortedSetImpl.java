@@ -101,7 +101,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 					private final BetterSortedSet<ElementId> thePresentElements;
 					{
@@ -213,7 +213,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public int indexFor(Comparable<? super E> search) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				int index = getWrapped().indexFor(BetterSortedSet.ReversedSortedSet.reverse(search));
 				if (index >= 0)
 					return size() - index - 1;

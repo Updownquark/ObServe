@@ -22,16 +22,16 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Stamped;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.MutableListElement;
+import org.qommons.fn.FunctionUtils;
 
 /** Contains implementations of {@link PassiveCollectionManager} and its dependencies */
 public class ObservableCollectionPassiveManagers {
@@ -157,18 +157,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theSource.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theSource.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theSource.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theSource.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theSource.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -291,18 +286,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theParent.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theParent.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -419,18 +409,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theParent.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theParent.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -746,18 +731,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported() && theRefresh.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(tryOnly, theParent, theRefresh);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theParent, write, cause), theRefresh);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theRefresh);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Lockable.lockAll(tryOnly, Transactable.asWriteLockable(theParent, cause), theRefresh);
 		}
 
 		@Override
@@ -872,18 +852,13 @@ public class ObservableCollectionPassiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theParent.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theParent.lockWrite(tryOnly, cause);
 		}
 
 		@Override

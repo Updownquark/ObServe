@@ -100,7 +100,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	/** To be called after the initial round of components have been defined */
 	public void init() {
 		Causable cause = Causable.simpleCause(this);
-		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
+		try (Transaction causeT = cause.use(); Transaction t = theComponents.lockWrite(false, cause)) {
 			switch (theStage.get()) {
 			case Initialized:
 				throw new IllegalStateException("This service has already finished initializing");
@@ -188,7 +188,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	@Override
 	public void close() {
 		Causable cause = Causable.simpleCause(this);
-		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
+		try (Transaction causeT = cause.use(); Transaction t = theComponents.lockWrite(false, cause)) {
 			while (!theComponents.isEmpty()) {
 				theComponents.getLast().doRemove(cause);
 			}
@@ -197,7 +197,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 
 	void built(DefaultComponent<C> component) {
 		Causable cause = Causable.simpleCause(component);
-		try (Transaction causeT = cause.use(); Transaction t = theComponents.lock(true, cause)) {
+		try (Transaction causeT = cause.use(); Transaction t = theComponents.lockWrite(false, cause)) {
 			if (isActivating)
 				throw new IllegalStateException("Cannot inject components during initialization or activation");
 			theComponents.add(component);
@@ -211,7 +211,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	}
 
 	Transaction lock(Object cause) {
-		return theComponents.lock(true, cause);
+		return theComponents.lockWrite(false, cause);
 	}
 
 	private boolean isActivating;

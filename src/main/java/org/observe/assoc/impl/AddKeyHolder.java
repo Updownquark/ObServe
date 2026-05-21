@@ -82,22 +82,12 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			theLock.lock();
-			return theLock::unlock;
-		}
-
-		@Override
-		public Transaction tryLock() {
-			if (theLock.tryLock())
-				return theLock::unlock;
-			else
+		public Transaction lock(boolean tryOnly) {
+			if (!tryOnly)
+				theLock.lock();
+			else if (!theLock.tryLock())
 				return null;
+			return theLock::unlock;
 		}
 
 		@Override
@@ -141,18 +131,8 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theSource.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theSource.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theSource.tryLock();
+		public Transaction lock(boolean tryOnly) {
+			return theSource.lock(tryOnly);
 		}
 
 		@Override

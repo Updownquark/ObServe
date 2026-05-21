@@ -876,7 +876,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		if (!createIfAbsent) {
 			return getChildIfPresent(path);
 		}
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableConfig ret = this;
 			for (ObservableConfigPathElement el : path.getElements()) {
 				ObservableConfig found = ret.getChild(el, true, preAddMod);
@@ -1185,6 +1185,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		Consumer<? super Exception> onException) {
 		return observable.subscribe(new Observer<Object>() {
 			private long theLastStamp = getStamp();
+			private Transaction theLock;
 
 			@Override
 			public void onNext(Object value) {
@@ -1199,7 +1200,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 			private void tryPersist(boolean waitForLock) {
 				if (getStamp() == theLastStamp)
 					return; // No changes, don't re-persist
-				Transaction lock = waitForLock ? lock(false, null) : tryLock(false, null);
+				Transaction lock = theLock != null ? Transaction.NONE : lock(!waitForLock);
 				if (lock == null)
 					return;
 				try {
@@ -1209,6 +1210,21 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 					onException.accept(ex);
 				} finally {
 					lock.close();
+				}
+			}
+
+			@Override
+			public boolean tryLock() {
+				if (theLock == null)
+					theLock = lock(true);
+				return theLock != null;
+			}
+
+			@Override
+			public void unlock() {
+				if (theLock != null) {
+					theLock.close();
+					theLock = null;
 				}
 			}
 		});
@@ -1809,7 +1825,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 		}
 		ConfigParser handler = new ConfigParser();
 		new MinML().parseXml(null, in, handler);
-		try (Transaction t = config.lock(true, null)) {
+		try (Transaction t = config.lockWrite(false, null)) {
 			handler.theRoot.pushTo(config);
 		}
 	}
@@ -1823,7 +1839,7 @@ public interface ObservableConfig extends Nameable, CausalLock, Stamped, Eventab
 	 */
 	public static void writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, String indent) throws IOException {
 		out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n");
-		try (Transaction t = config.lock(false, null)) {
+		try (Transaction t = config.lock(false)) {
 			new XmlWriteHelper()._writeXml(config, out, encoding, 0, indent, true);
 		}
 		out.append('\n');

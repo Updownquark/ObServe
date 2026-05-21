@@ -2236,7 +2236,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 					@Override
 					public void inUseChanged(boolean inUse) {
 						if (inUse) {
-							try (Transaction t = lock()) {
+							try (Transaction t = lock(false)) {
 								ObservableValue<?>[] args = theTransformation.getArgs().toArray(//
 									new ObservableValue[theTransformation.getArgs().size()]);
 								long[] stamps = new long[args.length];
@@ -2292,7 +2292,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 						long newArgStamp = arg.getStamp();
 						if (argStamps[argIndex] == newArgStamp)
 							return; // We already noticed
-						try (Transaction t2 = Lockable.lockAll(otherLocks)) {
+						try (Transaction t2 = Lockable.lockAll(false, otherLocks)) {
 							cache = theCachedValues;
 							if (argStamps[argIndex] == newArgStamp)
 								return; // We already noticed
@@ -2353,21 +2353,79 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			for (ObservableValue<?> arg : theTransformation.getArgs())
-				if (arg.isLockSupported())
-					return true;
-			return false;
-		}
+		public Getter<TransformationState> lock(boolean tryOnly) {
+			if (theChanges == null) { // No args to listen to
+				return new Getter<TransformationState>() {
+					@Override
+					public TransformationState get() {
+						return theCachedValues;
+					}
 
-		@Override
-		public Transaction lock() {
-			return Lockable.lockAll(theTransformation.getArgs());
-		}
+					@Override
+					public void close() {
+					}
+				};
+			}
+			Getter<?>[] args = new Getter[theTransformation.getArgs().size()];
+			Transaction fullLock = Transaction.and(args);
+			boolean success = true;
+			do {
+				success = true;
+				boolean complete = false;
+				try {
+					for (int a = 0; success && a < args.length; a++) {
+						Getter<?> arg = theTransformation.getArg(a).lock(true);
+						if (arg == null)
+							success = false;
+						else
+							args[a] = arg;
+					}
+					complete = true;
+				} finally {
+					if (!complete || !success)
+						fullLock.close();
+				}
+			} while (!success && !tryOnly);
+			if (!success)
+				return null;
+			return new Getter<TransformationState>() {
+				@Override
+				public TransformationState get() {
+					StampedArgValues cache = theCachedValues;
+					if (!theChanges.isEmpty() && !isEventing())
+						return cache; // Up-to-date
+					Object[] argValues;
+					long[] argStamps;
+					boolean init = cache == null;
+					if (cache != null) {
+						argValues = cache.argValues;
+						argStamps = cache.argStamps;
+					} else {
+						int argCount = theTransformation.getArgs().size();
+						argValues = new Object[argCount];
+						argStamps = new long[argCount];
+					}
+					boolean anythingChanged = init;
+					for (int a = 0; a < theTransformation.getArgs().size(); a++) {
+						ObservableValue<?> arg = theTransformation.getArg(a);
+						long argStamp = arg.getStamp();
+						if (init || argStamps[a] != argStamp) {
+							anythingChanged = true;
+							argStamps[a] = argStamp;
+							argValues[a] = args[a].get();
+						}
+					}
+					if (anythingChanged)
+						theCachedValues = cache = new StampedArgValues(argValues, argStamps, Stamped.compositeStamp(argStamps));
+					return cache;
+				}
 
-		@Override
-		public Transaction tryLock() {
-			return Lockable.tryLockAll(theTransformation.getArgs());
+				@Override
+				public void close() {
+					for (Getter<?> arg : args)
+						arg.close();
+				}
+			};
 		}
 
 		@Override
@@ -2398,7 +2456,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				return theCachedValues;
 			else if (!theChanges.isEmpty() && !isEventing())
 				return theCachedValues; // Up-to-date
-			try (Transaction t = withLock ? lock() : Transaction.NONE) {
+			try (Transaction t = withLock ? lock(false) : Transaction.NONE) {
 				StampedArgValues cache = theCachedValues;
 				if (!theChanges.isEmpty() && !isEventing())
 					return cache; // Up-to-date
@@ -2448,18 +2506,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				}
 
 				@Override
-				public boolean isSafe() {
-					return EngineImpl.this.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return EngineImpl.this.lock();
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return EngineImpl.this.lock();
+				public Transaction lock(boolean tryOnly) {
+					return EngineImpl.this.lock(tryOnly);
 				}
 
 				@Override

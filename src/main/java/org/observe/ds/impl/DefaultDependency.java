@@ -70,7 +70,7 @@ class DefaultDependency<C, S> implements Dependency<C, S> {
 	}
 
 	boolean satisfy(DSComponent<C> provider, Object cause) {
-		try (Transaction t = theProviders.lock(true, cause)) {
+		try (Transaction t = theProviders.lockWrite(false, cause)) {
 			if (!theProviders.add(provider))
 				return false;
 			if (theProviders.size() == theMinimum)
@@ -82,7 +82,7 @@ class DefaultDependency<C, S> implements Dependency<C, S> {
 	}
 
 	boolean remove(DSComponent<C> provider, Object cause) {
-		try (Transaction t = theProviders.lock(true, cause)) {
+		try (Transaction t = theProviders.lockWrite(false, cause)) {
 			if (!theProviders.remove(provider))
 				return false;
 			if (theProviders.size() == theMinimum - 1)
@@ -94,7 +94,7 @@ class DefaultDependency<C, S> implements Dependency<C, S> {
 	}
 
 	void clear(Causable cause) {
-		try (Transaction t = theProviders.lock(true, cause)) {
+		try (Transaction t = theProviders.lockWrite(false, cause)) {
 			theProviders.clear();
 		}
 	}

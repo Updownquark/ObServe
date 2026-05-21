@@ -28,10 +28,10 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Identifiable;
 import org.qommons.IterableUtils;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Stamped;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -501,7 +501,7 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 					case remove:
 						entry = theEntries.remove(evt.getIndex());
 						if (!theListeners.isEmpty() && !entry.getValues().isEmpty()) {
-							try (Transaction t = entry.getValues().lock(false, null)) {
+							try (Transaction t = entry.getValues().lock(false)) {
 								int valueIdx = entry.getValues().size() - 1;
 								for (CollectionElement<VT> valueEl : entry.getValues().elements().reverse()) {
 									ObservableMultiMapEvent<KT, VT> mapEvt = new ObservableMultiMapEvent.Default<>(//
@@ -594,26 +594,14 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			if (!theKeySet.isLockSupported())
-				return false;
-			for (ActiveEntry entry : theEntries) {
-				if (!entry.getValues().isLockSupported())
-					return false;
-			}
-			return true;
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(theKeySet, () -> theEntries, e -> e.getValues(), tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theKeySet, write, cause), () -> theEntries,
-				e -> Lockable.lockable(e.getValues(), write, cause));
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theKeySet, write, cause), () -> theEntries,
-				e -> Lockable.lockable(e.getValues(), write, cause));
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Lockable.lockAll(Transactable.asWriteLockable(theKeySet, cause), () -> theEntries,
+				e -> Transactable.asWriteLockable(e.getValues(), cause), tryOnly);
 		}
 
 		@Override
@@ -644,7 +632,7 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 
 		@Override
 		public boolean clear() {
-			try (Transaction t = theKeySet.lock(true, null)) {
+			try (Transaction t = theKeySet.lockWrite(false, null)) {
 				int preVS = valueSize();
 				theKeySet.clear();
 				for (ActiveEntry entry : theEntries)
@@ -680,7 +668,7 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 			OrderedMultiEntry<KT, VT> entry = getEntry(key);
 			if (entry != null)
 				return entry;
-			try (Transaction t = theKeySet.lock(true, null)) {
+			try (Transaction t = theKeySet.lockWrite(false, null)) {
 				if (stamp != theKeySet.getStamp()) { // It might have been added while we were waiting for the lock
 					entry = getEntry(key);
 					if (entry != null)

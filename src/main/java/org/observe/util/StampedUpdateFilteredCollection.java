@@ -45,7 +45,7 @@ public class StampedUpdateFilteredCollection<E extends Stamped> extends Observab
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 		LongList stamps = new LongList(size());
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			for (E value : this)
 				stamps.add(value == null ? 0 : value.getStamp());
 			return super.onChange(evt -> {

@@ -1,5 +1,6 @@
 package org.observe.data;
 
+import java.beans.Transient;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,7 +72,7 @@ public class ReflectedEntityMappingScheme implements EntityTypeSetMapping.Entity
 	@Override
 	public String getField(EntityReflector<?> entity, Method getter) {
 		EntityReflector.MethodInterpreter<?, ?> interpreter = entity.getInterpreter(getter);
-		if (interpreter instanceof EntityReflector.FieldGetter<?, ?>)
+		if (interpreter instanceof EntityReflector.FieldGetter<?, ?> && interpreter.getMethod().getAnnotation(Transient.class) == null)
 			return ((EntityReflector.FieldGetter<?, ?>) interpreter).getField().getName();
 		else
 			return null;

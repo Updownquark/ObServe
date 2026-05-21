@@ -62,11 +62,6 @@ implements ObservableMap<K, V> {
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return getBacking().isLockSupported();
-	}
-
-	@Override
 	public Equivalence<? super V> equivalence() {
 		return getBacking().equivalence();
 	}
@@ -135,11 +130,6 @@ implements ObservableMap<K, V> {
 		@Override
 		public boolean isEventing() {
 			return getBacking().isEventing();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getBacking().isLockSupported();
 		}
 
 		@Override

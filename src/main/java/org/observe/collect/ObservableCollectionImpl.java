@@ -29,7 +29,6 @@ import org.observe.util.WeakListening;
 import org.qommons.*;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.debug.Debug;
@@ -50,7 +49,7 @@ public final class ObservableCollectionImpl {
 	 * @return The set
 	 */
 	public static <E> Set<E> toSet(Equivalence<? super E> equiv, Collection<?> c) {
-		try (Transaction t = Transactable.lock(c, false, null)) {
+		try (Transaction t = Lockable.lockLockable(c, false)) {
 			BetterSet<E> set = equiv.createSet();
 			for (Object value : c) {
 				try {
@@ -78,7 +77,7 @@ public final class ObservableCollectionImpl {
 		Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 		boolean[] initialized = new boolean[1];
 		CollectionSubscription sub;
-		try (Transaction t = coll.lock(false, null)) {
+		try (Transaction t = coll.lock(false)) {
 			sub = coll.subscribe(evt -> {
 				if (initialized[0])
 					observer.accept(evt);
@@ -121,18 +120,72 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theCollection.isLockSupported();
+		public Getter<E> lock(boolean tryOnly) {
+			Transaction lock = theCollection.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<E>() {
+				@Override
+				public E get() {
+					if (theCollection.size() == 1)
+						return theCollection.getFirst();
+					else
+						return null;
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.lock(write, cause);
-		}
+		public Setter<E> lockWrite(boolean tryOnly, Object cause) {
+			Transaction lock = theCollection.lockWrite(tryOnly, cause);
+			if (lock == null)
+				return null;
+			return new Setter<E>() {
+				@Override
+				public E get() {
+					if (theCollection.size() == 1)
+						return theCollection.getFirst();
+					else
+						return null;
+				}
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theCollection.tryLock(write, cause);
+				@Override
+				public String isEnabled() {
+					if (theCollection.size() == 1)
+						return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isEnabled();
+					else
+						return COLL_SIZE_NOT_1;
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					if (theCollection.size() == 1)
+						return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isAcceptable(value);
+					else
+						return COLL_SIZE_NOT_1;
+				}
+
+				@Override
+				public E set(E value) {
+					if (theCollection.size() == 1) {
+						CollectionElement<E> firstEl = theCollection.getTerminalElement(true);
+						E oldValue = firstEl.get();
+						theCollection.mutableElement(firstEl.getElementId()).set(value);
+						return oldValue;
+					} else
+						throw new UnsupportedOperationException(COLL_SIZE_NOT_1);
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 
 		@Override
@@ -161,12 +214,33 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public String get() {
-					try (Transaction t = theCollection.lock(false, null)) {
+					try (Transaction t = theCollection.lock(false)) {
 						if (theCollection.size() == 1)
 							return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isEnabled();
 						else
 							return COLL_SIZE_NOT_1;
 					}
+				}
+
+				@Override
+				public Getter<String> lock(boolean tryOnly) {
+					Transaction lock = theCollection.lock(tryOnly);
+					if (lock == null)
+						return null;
+					return new Getter<String>() {
+						@Override
+						public String get() {
+							if (theCollection.size() == 1)
+								return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isEnabled();
+							else
+								return COLL_SIZE_NOT_1;
+						}
+
+						@Override
+						public void close() {
+							lock.close();
+						}
+					};
 				}
 
 				@Override
@@ -188,18 +262,8 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
-						public boolean isSafe() {
-							return theCollection.isLockSupported();
-						}
-
-						@Override
-						public Transaction lock() {
-							return theCollection.lock(false, null);
-						}
-
-						@Override
-						public Transaction tryLock() {
-							return theCollection.tryLock(false, null);
+						public Transaction lock(boolean tryOnly) {
+							return theCollection.lock(tryOnly);
 						}
 
 						@Override
@@ -219,7 +283,7 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
-							try (Transaction t = lock()) {
+							try (Transaction t = lock(false)) {
 								return theCollection.onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 									private String theOldMessage = get();
 
@@ -275,7 +339,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String isAcceptable(E value) {
-			try (Transaction t = theCollection.lock(false, null)) {
+			try (Transaction t = theCollection.lock(false)) {
 				if (theCollection.size() == 1)
 					return theCollection.mutableElement(theCollection.getTerminalElement(true).getElementId()).isAcceptable(value);
 				else
@@ -285,7 +349,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ElementId getElementId() {
-			try (Transaction t = theCollection.lock(false, null)) {
+			try (Transaction t = theCollection.lock(false)) {
 				if (theCollection.size() == 1)
 					return theCollection.getTerminalElement(true).getElementId();
 				else
@@ -295,7 +359,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public E get() {
-			try (Transaction t = theCollection.lock(false, null)) {
+			try (Transaction t = theCollection.lock(false)) {
 				if (theCollection.size() == 1)
 					return theCollection.getFirst();
 				else
@@ -305,7 +369,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theCollection.lock(true, null)) {
+			try (Transaction t = theCollection.lockWrite(false, null)) {
 				if (theCollection.size() == 1) {
 					CollectionElement<E> firstEl = theCollection.getTerminalElement(true);
 					E oldValue = firstEl.get();
@@ -335,18 +399,8 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theCollection.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theCollection.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theCollection.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theCollection.lock(tryOnly);
 				}
 
 				@Override
@@ -407,7 +461,7 @@ public final class ObservableCollectionImpl {
 							}
 						}
 					}
-					try (Transaction t = lock()) {
+					try (Transaction t = lock(false)) {
 						return theCollection.onChange(new OnlySubscriber());
 					}
 				}
@@ -488,7 +542,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ElementId getElementId() {
-			try (Transaction t = getCollection().lock(false, null)) {
+			try (Transaction t = getCollection().lock(false)) {
 				long stamp = getStamp();
 				if (stamp == theLastMatchStamp
 					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
@@ -506,22 +560,49 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public E get() {
-			try (Transaction t = getCollection().lock(false, null)) {
-				long stamp = getStamp();
-				if (stamp == theLastMatchStamp
-					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
-					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
-				theLastMatchStamp = stamp;
-				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-				find(el -> element.accept(new SimpleElement(el, el.get())));
-				if (element.get() != null) {
-					theLastMatch = element.get().getElementId();
-					return element.get().get();
-				} else {
-					theLastMatch = null;
-					return theDefault.get();
+		public Getter<E> lock(boolean tryOnly) {
+			Transaction lock = getCollection().lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<E>() {
+				@Override
+				public E get() {
+					return doGet();
 				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
+		}
+
+		@Override
+		public E get() {
+			try (Transaction t = getCollection().lock(false)) {
+				return doGet();
+			}
+		}
+
+		/**
+		 * Determines the value of this observable <b>WITHOUT OBTAINING A LOCK</b>. Should only be called inside a lock.
+		 *
+		 * @return The current value for this observable
+		 */
+		protected E doGet() {
+			long stamp = getStamp();
+			if (stamp == theLastMatchStamp
+				|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
+				return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
+			theLastMatchStamp = stamp;
+			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+			find(el -> element.accept(new SimpleElement(el, el.get())));
+			if (element.get() != null) {
+				theLastMatch = element.get().getElementId();
+				return element.get().get();
+			} else {
+				theLastMatch = null;
+				return theDefault.get();
 			}
 		}
 
@@ -561,7 +642,7 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
-					try (Transaction t = Lockable.lockAll(theRefresh, Lockable.lockable(theCollection, false, null))) {
+					try (Transaction t = Lockable.lockAll(false, theRefresh, theCollection)) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
 							private final Causable.CausableKey theCollectionCauseKey;
@@ -803,18 +884,8 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theCollection.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theCollection.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theCollection.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theCollection.lock(tryOnly);
 				}
 
 				@Override
@@ -960,23 +1031,65 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getCollection().isLockSupported();
-		}
+		public Setter<E> lockWrite(boolean tryOnly, Object cause) {
+			Transaction lock = getCollection().lockWrite(tryOnly, cause);
+			if (lock == null)
+				return null;
+			return new Setter<E>() {
+				@Override
+				public E get() {
+					return doGet();
+				}
 
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getCollection().lock(write, cause);
-		}
+				@Override
+				public String isEnabled() {
+					return getEnabled();
+				}
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getCollection().tryLock(write, cause);
+				@Override
+				public String isAcceptable(E value) {
+					return getIsAcceptable(value);
+				}
+
+				@Override
+				public E set(E value) {
+					return doSet(value);
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 
 		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return getCollection().getCurrentCauses();
+		}
+
+		String getEnabled() {
+			String msg = null;
+			ElementId lastMatch = getLastMatch();
+			if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+				lastMatch = getElementId();
+			}
+			if (lastMatch != null) {
+				msg = getCollection().mutableElement(lastMatch).isEnabled();
+				if (msg == null)
+					return null;
+			}
+			if (getDefault() != null) {
+				String msg2 = getCollection().canAdd(getDefault().get(), //
+					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+				if (msg2 == null)
+					return null;
+				else if (msg == null)
+					msg = msg2;
+			}
+			if (msg == null)
+				msg = StdMsg.UNSUPPORTED_OPERATION;
+			return msg;
 		}
 
 		@Override
@@ -989,29 +1102,27 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public String get() {
-					String msg = null;
-					try (Transaction t = getCollection().lock(false, null)) {
-						ElementId lastMatch = getLastMatch();
-						if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
-							lastMatch = getElementId();
-						}
-						if (lastMatch != null) {
-							msg = getCollection().mutableElement(lastMatch).isEnabled();
-							if (msg == null)
-								return null;
-						}
-						if (getDefault() != null) {
-							String msg2 = getCollection().canAdd(getDefault().get(), //
-								isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
-							if (msg2 == null)
-								return null;
-							else if (msg == null)
-								msg = msg2;
-						}
+					try (Transaction t = getCollection().lock(false)) {
+						return getEnabled();
 					}
-					if (msg == null)
-						msg = StdMsg.UNSUPPORTED_OPERATION;
-					return msg;
+				}
+
+				@Override
+				public Getter<String> lock(boolean tryOnly) {
+					Transaction lock = getCollection().lock(tryOnly);
+					if (lock == null)
+						return null;
+					return new Getter<String>() {
+						@Override
+						public String get() {
+							return getEnabled();
+						}
+
+						@Override
+						public void close() {
+							lock.close();
+						}
+					};
 				}
 
 				@Override
@@ -1051,18 +1162,8 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
-						public boolean isSafe() {
-							return getCollection().isLockSupported();
-						}
-
-						@Override
-						public Transaction lock() {
-							return getCollection().lock(false, null);
-						}
-
-						@Override
-						public Transaction tryLock() {
-							return getCollection().tryLock(false, null);
+						public Transaction lock(boolean tryOnly) {
+							return getCollection().lock(tryOnly);
 						}
 
 						@Override
@@ -1106,21 +1207,25 @@ public final class ObservableCollectionImpl {
 		public String isAcceptable(E value) {
 			if (!theTest.test(value))
 				return StdMsg.ILLEGAL_ELEMENT;
-			String msg = null;
-			try (Transaction t = getCollection().lock(false, null)) {
-				ElementId lastMatch = getLastMatch();
-				if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
-					lastMatch = getElementId();
-				}
-				if (lastMatch != null) {
-					msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
-					if (msg == null)
-						return null; // We can modify the current match
-				}
-				// Can't modify the current match (or there isn't one), but maybe we can add an element that will then be the match
-				msg = getCollection().canAdd(value, //
-					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+			try (Transaction t = getCollection().lock(false)) {
+				return getIsAcceptable(value);
 			}
+		}
+
+		private String getIsAcceptable(E value) {
+			String msg = null;
+			ElementId lastMatch = getLastMatch();
+			if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+				lastMatch = getElementId();
+			}
+			if (lastMatch != null) {
+				msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
+				if (msg == null)
+					return null; // We can modify the current match
+			}
+			// Can't modify the current match (or there isn't one), but maybe we can add an element that will then be the match
+			msg = getCollection().canAdd(value, //
+				isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
 			return msg;
 		}
 
@@ -1128,28 +1233,32 @@ public final class ObservableCollectionImpl {
 		public E set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 			if (!theTest.test(value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			try (Transaction t = getCollection().lockWrite(false, null)) {
+				return doSet(value);
+			}
+		}
+
+		private E doSet(E value) {
 			String msg = null;
-			try (Transaction t = getCollection().lock(true, null)) {
-				ElementId lastMatch = getLastMatch();
-				if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
-					lastMatch = getElementId();
-				}
-				if (lastMatch != null) {
-					msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
-					if (msg == null) {
-						E oldValue = getCollection().getElement(lastMatch).get();
-						getCollection().mutableElement(lastMatch).set(value);
-						return oldValue;
-					}
-				}
-				msg = getCollection().canAdd(value, //
-					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+			ElementId lastMatch = getLastMatch();
+			if (lastMatch == null || !lastMatch.isPresent() || !theTest.test(getCollection().getElement(lastMatch).get())) {
+				lastMatch = getElementId();
+			}
+			if (lastMatch != null) {
+				msg = getCollection().mutableElement(lastMatch).isAcceptable(value);
 				if (msg == null) {
-					E oldValue = get();
-					getCollection().addElement(value, //
-						isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null, isFirst == Ternian.TRUE);
+					E oldValue = getCollection().getElement(lastMatch).get();
+					getCollection().mutableElement(lastMatch).set(value);
 					return oldValue;
 				}
+			}
+			msg = getCollection().canAdd(value, //
+				isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null);
+			if (msg == null) {
+				E oldValue = get();
+				getCollection().addElement(value, //
+					isFirst == Ternian.FALSE ? lastMatch : null, isFirst == Ternian.TRUE ? lastMatch : null, isFirst == Ternian.TRUE);
+				return oldValue;
 			}
 			if (msg == null || msg.equals(StdMsg.UNSUPPORTED_OPERATION))
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -1335,11 +1444,6 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theCollection.isLockSupported();
-				}
-
-				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					ValueHolder<X> x = new ValueHolder<>();
 					ValueHolder<T> value = new ValueHolder<>();
@@ -1359,7 +1463,7 @@ public final class ObservableCollectionImpl {
 							fireChangeEvent(oldV, v, root, observer::onNext);
 					});
 					Subscription sub;
-					try (Transaction t = theCollection.lock(false, null)) {
+					try (Transaction t = theCollection.lock(false)) {
 						try {
 							x.accept(init());
 						} catch (RuntimeException e) {
@@ -1396,13 +1500,8 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public Transaction lock() {
-					return theCollection.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theCollection.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theCollection.lock(tryOnly);
 				}
 
 				@Override
@@ -1429,6 +1528,32 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction lock = lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<T>() {
+				private long theCacheStamp = -1;
+				private X theValue;
+
+				@Override
+				public T get() {
+					long stamp = getCollection().getStamp();
+					if (stamp != theCacheStamp) {
+						theValue = evaluate();
+						theCacheStamp = stamp;
+					}
+					return getValue(theValue);
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
+		}
+
+		@Override
 		public boolean isEventing() {
 			return theCollection.isEventing();
 		}
@@ -1438,17 +1563,21 @@ public final class ObservableCollectionImpl {
 
 		/** @return The computation value for the collection's current state */
 		protected X getCurrent() {
-			try (Transaction t = theCollection.lock(false, null)) {
-				X value = init();
-				CollectionElement<E> el = getCollection().getTerminalElement(true);
-				int index = 0;
-				while (el != null) {
-					value = update(value, ObservableCollectionEvent.createCollectionEvent(el.getElementId(), index++, //
-						CollectionChangeType.add, null, el.get()));
-					el = el.getAdjacent(true);
-				}
-				return value;
+			try (Transaction t = theCollection.lock(false)) {
+				return evaluate();
 			}
+		}
+
+		private X evaluate() {
+			X value = init();
+			CollectionElement<E> el = getCollection().getTerminalElement(true);
+			int index = 0;
+			while (el != null) {
+				value = update(value, ObservableCollectionEvent.createCollectionEvent(el.getElementId(), index++, //
+					CollectionChangeType.add, null, el.get()));
+				el = el.getAdjacent(true);
+			}
+			return value;
 		}
 
 		/**
@@ -1578,7 +1707,7 @@ public final class ObservableCollectionImpl {
 		public Subscription init(ObservableCollection<E> left, ObservableCollection<X> right, Observable<?> until, boolean weak,
 			Consumer<ValueCounts<E, X>> initAction) {
 			theLock.lock();
-			try (Transaction lt = left.lock(false, null); Transaction rt = right.lock(false, null)) {
+			try (Transaction lt = left.lock(false); Transaction rt = right.lock(false)) {
 				for (E e : left)
 					modify(e, true, true, null);
 				for (X x : right)
@@ -1759,11 +1888,6 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theLeft.isLockSupported() && theRight.isLockSupported();
-				}
-
-				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
 					boolean[] initialized = new boolean[1];
 					boolean[] satisfied = new boolean[1];
@@ -1796,18 +1920,13 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public Transaction lock() {
-					return Lockable.lockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return Lockable.tryLockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
+				public Transaction lock(boolean tryOnly) {
+					return Lockable.lockAll(tryOnly, theLeft, theRight);
 				}
 
 				@Override
 				public CoreId getCoreId() {
-					return Lockable.getCoreId(Lockable.lockable(theLeft), Lockable.lockable(theRight));
+					return Lockable.getCoreId(theLeft, theRight);
 				}
 
 				@Override
@@ -1831,6 +1950,35 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean isEventing() {
 			return theLeft.isEventing() || theRight.isEventing();
+		}
+
+		@Override
+		public Getter<Boolean> lock(boolean tryOnly) {
+			Transaction lock = lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<Boolean>() {
+				private long theLeftStamp = -1;
+				private long theRightStamp = -1;
+				private boolean theCachedValue;
+
+				@Override
+				public Boolean get() {
+					long leftStamp = theLeft.getStamp();
+					long rightStamp = theRight.getStamp();
+					if (theLeftStamp != leftStamp || theRightStamp != rightStamp) {
+						theLeftStamp = leftStamp;
+						theRightStamp = rightStamp;
+						theCachedValue = get();
+					}
+					return theCachedValue;
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 	}
 
@@ -1858,7 +2006,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		private static <T> ObservableCollection<T> toCollection(ObservableValue<T> value) {
-			ObservableValue<ObservableCollection<T>> cv = value.map(v -> ObservableCollection.of(v));
+			ObservableValue<ObservableCollection<T>> cv = value.map(ObservableCollection::of);
 			return ObservableCollection.flattenValue(cv);
 		}
 
@@ -1959,7 +2107,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
 			}
 		}
@@ -2094,22 +2242,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theFlow.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theFlow.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction t = theFlow.lock(write, cause);
-			if (write && isFiring)
-				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
-			return t;
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			Transaction t = theFlow.tryLock(write, cause);
-			if (write && t != null && isFiring)
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			Transaction t = theFlow.lockWrite(tryOnly, cause);
+			if (t != null && isFiring)
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			return t;
 		}
@@ -2170,7 +2310,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				// Lock so the reversed value is consistent until it is added
 				FilterMapResult<T, E> reversed = theFlow.reverse(value, true, false);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
@@ -2218,7 +2358,7 @@ public final class ObservableCollectionImpl {
 				before = temp;
 				first = !first;
 			}
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				return elementFor(theSource.move(mapId(valueEl), after, before, first, afterRemove), null);
 			}
 		}
@@ -2229,7 +2369,7 @@ public final class ObservableCollectionImpl {
 				theSource.clear();
 			else {
 				boolean reverse = isReversed;
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					ListElement<E> lastStatic = null;
 					Function<? super E, ? extends T> map = theFlow.map().get();
 					ListElement<E> el = theSource.getTerminalElement(reverse);
@@ -2247,7 +2387,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, T value) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
 					elements.stream().map(el -> theFlow.map(theSource.mutableElement(mapId(el)), map)).collect(Collectors.toList()), value);
@@ -2263,7 +2403,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ListElement<T> getElement(T value, boolean first) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				boolean forward = first ^ isReversed;
 				if (!theFlow.isManyToOne()) {
@@ -2361,14 +2501,14 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			Subscription sourceSub, mapSub;
-			try (Transaction outerFlowLock = theFlow.lock(false, null)) {
+			try (Transaction outerFlowLock = theFlow.lock(false)) {
 				Function<? super E, ? extends T>[] currentMap = new Function[1];
 				mapSub = theFlow.map().changes().act(evt -> {
 					if (evt.isInitial()) {
 						currentMap[0] = evt.getNewValue();
 						return;
 					}
-					try (Transaction sourceLock = theSource.lock(false, evt)) {
+					try (Transaction sourceLock = theSource.lock(false)) {
 						if (isFiring)
 							throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 						isFiring = true;
@@ -2404,13 +2544,13 @@ public final class ObservableCollectionImpl {
 						}
 					}
 				});
-				try (Transaction sourceT = theSource.lock(false, null)) {
+				try (Transaction sourceT = theSource.lock(false)) {
 					sourceSub = getSource().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 						private int theSize = isReversed ? size() : -1;
 
 						@Override
 						public void accept(ObservableCollectionEvent<? extends E> evt) {
-							try (Transaction t = theFlow.lock(false, evt)) {
+							try (Transaction t = theFlow.lock(false)) {
 								if (isFiring)
 									throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 								isFiring = true;
@@ -2847,22 +2987,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theFlow.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theFlow.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (write && theListeners.isFiring())
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			if (theListeners.isFiring())
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
-			return theFlow.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			if (write && theListeners.isFiring())
-				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
-			return theFlow.tryLock(write, cause);
+			return theFlow.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -2902,7 +3035,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public T get(int index) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return theDerivedElements.get(index).get();
 			}
 		}
@@ -2914,7 +3047,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ListElement<T> getElement(T value, boolean first) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				Comparable<ObservableCollectionActiveManagers.DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
 				if (finder != null) {
 					BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(holder -> finder.compareTo(holder.element), //
@@ -2955,7 +3088,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
 			throws NoSuchElementException {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				if (sourceCollection == this)
 					return BetterList.of(getElement(sourceEl));
 
@@ -2976,7 +3109,7 @@ public final class ObservableCollectionImpl {
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this)
 				return BetterList.of(getElement(localElement).getElementId()); // Verify that it's actually our element
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return theFlow.getSourceElements(((DerivedElementHolder<T>) localElement).element, sourceCollection);
 			}
 		}
@@ -3168,7 +3301,7 @@ public final class ObservableCollectionImpl {
 			if (theListeners.isFiring())
 				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
 			Causable cause = Causable.simpleCause();
-			try (Transaction cst = cause.use(); Transaction t = lock(true, cause)) {
+			try (Transaction cst = cause.use(); Transaction t = lockWrite(false, cause)) {
 				if (!theFlow.clear()) {
 					new ArrayList<>(theDerivedElements).forEach(el -> {
 						if (el.element.canRemove() == null)
@@ -3305,26 +3438,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theCollectionObservable.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(theCollectionObservable, () -> Arrays.asList(theCollectionObservable.get()), FunctionUtils.identity(),
+				tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (write)
-				return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
-			else
-				return Lockable.lockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
-					FunctionUtils.identity());
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			if (write)
-				return Transactable.tryWriteLockWithOwner(theCollectionObservable, theCollectionObservable::get, cause);
-			else
-				return Lockable.tryLockAll(theCollectionObservable, () -> Arrays.asList(Lockable.lockable(theCollectionObservable.get())),
-					FunctionUtils.identity());
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Transactable.writeLockWithOwner(theCollectionObservable, theCollectionObservable::get, tryOnly, cause);
 		}
 
 		@Override
@@ -3335,7 +3456,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), false, null));
+			return Lockable.getCoreId(theCollectionObservable, () -> theCollectionObservable.get());
 		}
 
 		@Override
@@ -3476,7 +3597,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
 				if (coll == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -3497,7 +3618,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
 				if (coll == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
@@ -3508,7 +3629,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
 				if (coll != null)
 					coll.clear();
@@ -3517,7 +3638,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
 				if (coll == null) {
 					if (!elements.isEmpty())
@@ -3553,7 +3674,7 @@ public final class ObservableCollectionImpl {
 								clearAndAdd = !collection.getIdentity().equals(collEvt.getNewValue().getIdentity());
 							if (collection != null) {
 								if (clearAndAdd) {
-									try (Transaction t = collection.lock(false, null)) {
+									try (Transaction t = collection.lock(false)) {
 										collectionSub.unsubscribe();
 										collectionSub = null;
 										if (clearAndAdd) {
@@ -3583,7 +3704,7 @@ public final class ObservableCollectionImpl {
 							if (collection != null) {
 								CollectionChangesObservable<? extends E> changes;
 								if (clearAndAdd) {
-									try (Transaction t = collection.lock(false, null)) {
+									try (Transaction t = collection.lock(false)) {
 										if (!collection.isEmpty()) {
 											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
 											int index = 0;
@@ -3617,6 +3738,16 @@ public final class ObservableCollectionImpl {
 						@Override
 						public void onCompleted(Supplier<Causable> cause) {
 							unsubscribe();
+						}
+
+						@Override
+						public boolean tryLock() {
+							return observer.tryLock();
+						}
+
+						@Override
+						public void unlock() {
+							observer.unlock();
 						}
 
 						void unsubscribe() {
@@ -3659,18 +3790,8 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theCollectionObservable.noInitChanges().isSafe();
-				}
-
-				@Override
-				public Transaction lock() {
-					return FlattenedValueCollection.this.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return FlattenedValueCollection.this.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return FlattenedValueCollection.this.lock(tryOnly);
 				}
 
 				@Override
@@ -3827,10 +3948,29 @@ public final class ObservableCollectionImpl {
 					}
 				}
 			}
-			class ChangesSubscription implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
+			class ChangesSubscription
+				implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
 				ObservableCollection<? extends E> collection;
 				ElementMappingChangeObserver collectionObserver;
 				Subscription collectionSub;
+				private Transaction theLock;
+
+				@Override
+				public boolean tryLock() {
+					if (collection == null)
+						return true;
+					else if (theLock == null)
+						theLock = collection.lock(true);
+					return theLock != null;
+				}
+
+				@Override
+				public void unlock() {
+					if (theLock != null) {
+						theLock.close();
+						theLock = null;
+					}
+				}
 
 				@Override
 				public void onNext(ObservableValueEvent<? extends ObservableCollection<? extends E>> collEvt) {
@@ -3852,7 +3992,7 @@ public final class ObservableCollectionImpl {
 					}
 					// System.out.println(Integer.toHexString(System.identityHashCode(FlattenedValueCollection.this)) + ": switch("
 					// + clearAndAdd + ") " + collection + "->" + collEvt.getNewValue());
-					try (Transaction oldLock = collection == null ? Transaction.NONE : collection.lock(false, null)) {
+					try (Transaction oldLock = collection == null ? Transaction.NONE : collection.lock(false)) {
 						if (collection != null) {
 							// It should be safe to unsubscribe and re-subscribe below because of the lock above
 							collectionSub.unsubscribe();
@@ -3870,7 +4010,7 @@ public final class ObservableCollectionImpl {
 						}
 						collection = collEvt.getNewValue();
 						if (collection != null) {
-							try (Transaction newLock = collection.lock(false, null)) {
+							try (Transaction newLock = collection.lock(false)) {
 								if (collectionObserver == null)
 									collectionObserver = new ElementMappingChangeObserver(collection, observer);
 								collectionObserver.sync(collection, populate || !collEvt.isInitial() ? collEvt : null);
@@ -3890,7 +4030,7 @@ public final class ObservableCollectionImpl {
 						collectionObserver.isActive = false;
 						if (removeAll) {
 							// The collection in the value is not changing--we just don't want it to while we're working
-							try (Transaction t = collection.lock(false, null)) {
+							try (Transaction t = collection.lock(false)) {
 								if (collectionSub != null)
 									collectionSub.unsubscribe();
 								collectionSub = null;
@@ -4196,7 +4336,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ListElement<T> getElement(int index) throws IndexOutOfBoundsException {
-			try (Transaction t = theCollectionValue.lock(false, null)) {
+			try (Transaction t = theCollectionValue.lock(false)) {
 				if (!update(null)) {
 					Collection<T> cv = theCollectionValue.get();
 					if (cv instanceof List && cv instanceof RandomAccess) {
@@ -4221,28 +4361,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction cvT = theCollectionValue.lock(write, cause);
-			Collection<T> cv = theCollectionValue.get();
-			Transaction cT = Transactable.lock(cv, write, cause);
-			Transaction isLockedT;
-			if (!isLocked) {
-				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
-				update(Optional.ofNullable(cv));
-				isLocked = true;
-			} else
-				isLockedT = Transaction.NONE;
-			Transaction collT = theCollection.lock(write, cause);
-			return Transaction.and(cvT, cT, isLockedT, collT);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			Transaction cvT = theCollectionValue.tryLock(write, cause);
+		public Transaction lock(boolean tryOnly) {
+			Transaction cvT = theCollectionValue.lock(tryOnly);
 			if (cvT == null)
 				return null;
 			Collection<T> cv = theCollectionValue.get();
-			Transaction cT = Transactable.tryLock(cv, write, cause);
+			Transaction cT = Lockable.lockLockable(cv, tryOnly);
 			if (cT == null) {
 				cvT.close();
 				return null;
@@ -4254,7 +4378,34 @@ public final class ObservableCollectionImpl {
 				isLocked = true;
 			} else
 				isLockedT = Transaction.NONE;
-			Transaction collT = theCollection.tryLock(write, cause);
+			Transaction collT = theCollection.lock(tryOnly);
+			if (collT == null) {
+				cT.close();
+				cvT.close();
+				isLockedT.close();
+			}
+			return Transaction.and(cvT, cT, isLockedT, collT);
+		}
+
+		@Override
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			Transaction cvT = theCollectionValue.lockWrite(tryOnly, cause);
+			if (cvT == null)
+				return null;
+			Collection<T> cv = theCollectionValue.get();
+			Transaction cT = Transactable.lockWrite(cv, tryOnly, cause);
+			if (cT == null) {
+				cvT.close();
+				return null;
+			}
+			Transaction isLockedT;
+			if (!isLocked) {
+				isLockedT = new Transaction.ReleaseOnceTransaction(() -> isLocked = false);
+				update(Optional.ofNullable(cv));
+				isLocked = true;
+			} else
+				isLockedT = Transaction.NONE;
+			Transaction collT = theCollection.lockWrite(tryOnly, cause);
 			if (collT == null) {
 				cT.close();
 				cvT.close();
@@ -4282,9 +4433,9 @@ public final class ObservableCollectionImpl {
 		public int size() {
 			if (isLocked)
 				return theCollection.size();
-			try (Transaction t = theCollectionValue.lock(false, null)) {
+			try (Transaction t = theCollectionValue.lock(false)) {
 				Collection<T> cv = theCollectionValue.get();
-				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+				try (Transaction t2 = Lockable.lockLockable(cv, false)) {
 					int newSize = cv == null ? 0 : cv.size();
 					if (newSize != theCollection.size()) {
 						theStampCopy = getBackingStamp(cv);
@@ -4298,11 +4449,11 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Iterator<T> iterator() {
-			try (Transaction t = theCollectionValue.lock(false, null)) {
+			try (Transaction t = theCollectionValue.lock(false)) {
 				Collection<T> cv = theCollectionValue.get();
 				if (isLocked)
 					return cv == null ? Collections.emptyIterator() : cv.iterator();
-				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+				try (Transaction t2 = Lockable.lockLockable(cv, false)) {
 					long newStamp = getBackingStamp(cv);
 					if (newStamp != theStampCopy) {
 						theStampCopy = newStamp;
@@ -4372,7 +4523,7 @@ public final class ObservableCollectionImpl {
 				return BetterList.of(getElement(sourceEl));
 			Collection<T> c = theCollectionValue.get();
 			if (c instanceof BetterCollection) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					BetterCollection<T> list = (BetterCollection<T>) c;
 					return BetterList.of2(list.getElementsBySource(sourceEl, sourceCollection).stream(),
 						el -> getElement(getFrontedElement(el.getElementId())));
@@ -4387,7 +4538,7 @@ public final class ObservableCollectionImpl {
 				return BetterList.of(localElement);
 			Collection<T> c = theCollectionValue.get();
 			if (c instanceof BetterCollection && !theCollection.isContentControlled()) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					BetterCollection<T> list = (BetterCollection<T>) c;
 					return BetterList.of2(list.getSourceElements(localElement, sourceCollection).stream(), el -> getFrontedElement(el));
 				}
@@ -4402,7 +4553,7 @@ public final class ObservableCollectionImpl {
 				return result;
 			Collection<T> c = theCollectionValue.get();
 			if (c instanceof BetterList && !theCollection.isContentControlled()) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					BetterList<T> list = (BetterList<T>) c;
 					result = list.getEquivalentElement(equivalentEl);
 					if (result != null)
@@ -4414,7 +4565,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				String error = theCollection.canAdd(value, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
@@ -4433,7 +4584,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ListElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				String error = theCollection.canAdd(value, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
@@ -4492,7 +4643,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				String error = theCollection.canMove(valueEl, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
@@ -4509,7 +4660,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ListElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				String error = theCollection.canMove(valueEl, after, before);
 				if (error != null)
 					throw new IllegalArgumentException(error);
@@ -4557,13 +4708,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theCollectionValue.isLockSupported();
-		}
-
-		@Override
 		public void clear() {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				Collection<T> coll = theCollectionValue.get();
 				if (coll.isEmpty())
 					return;
@@ -4592,7 +4738,7 @@ public final class ObservableCollectionImpl {
 		public void setValue(Collection<ElementId> elements, T value) {
 			if (elements.isEmpty())
 				return;
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				Collection<T> coll = theCollectionValue.get();
 				if (coll instanceof BetterCollection) {
 					BetterCollection<T> bc = (BetterCollection<T>) coll;
@@ -4666,13 +4812,13 @@ public final class ObservableCollectionImpl {
 		protected boolean update(Optional<Collection<T>> content) {
 			if (isLocked)
 				return false;
-			try (Transaction t = theCollectionValue.lock(false, null)) {
+			try (Transaction t = theCollectionValue.lock(false)) {
 				Collection<T> cv;
 				if (content != null)
 					cv = content.orElse(null);
 				else
 					cv = theCollectionValue.get();
-				try (Transaction t2 = Transactable.lock(cv, false, null)) {
+				try (Transaction t2 = Lockable.lockLockable(cv, false)) {
 					long stamp = getBackingStamp(cv);
 					if (stamp != theStampCopy) {
 						theStampCopy = stamp;
@@ -4707,7 +4853,7 @@ public final class ObservableCollectionImpl {
 				equal = (o1, o2) -> o1 == o2;
 			}
 			try (Causable.CausableInUse syncCause = Causable.cause(cause); //
-				Transaction t2 = theCollection.lock(true, syncCause)) {
+				Transaction t2 = theCollection.lockWrite(false, syncCause)) {
 				if (content instanceof BetterCollection && theBackingElements.size() == theCollection.size()) {
 					List<CollectionElement<T>> elements = QommonsUtils.unmodifiableCopy(((BetterCollection<T>) content).elements());
 					CollectionUtils.SimpleAdjustment<T, CollectionElement<T>, RuntimeException> syncAction = CollectionUtils
@@ -4785,7 +4931,7 @@ public final class ObservableCollectionImpl {
 				theValueSubscription = theCollectionValue.noInitChanges().act(evt -> {
 					if (!isModifying) {
 						isModifying = true;
-						try (Transaction t = Transactable.lock(evt.getNewValue(), false, null)) {
+						try (Transaction t = Lockable.lockLockable(evt.getNewValue(), false)) {
 							sync(evt.getNewValue(), evt);
 						} finally {
 							isModifying = false;
@@ -4865,7 +5011,7 @@ public final class ObservableCollectionImpl {
 				String msg = theWrappedEl.isEnabled();
 				if (msg != null)
 					return msg;
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					if (!theWrappedEl.getElementId().isPresent())
 						return StdMsg.ELEMENT_REMOVED;
 					Collection<T> coll = theCollectionValue.get();
@@ -4883,7 +5029,7 @@ public final class ObservableCollectionImpl {
 				String msg = theWrappedEl.isAcceptable(value);
 				if (msg != null)
 					return msg;
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					if (!theWrappedEl.getElementId().isPresent())
 						return StdMsg.ELEMENT_REMOVED;
 					Collection<T> coll = theCollectionValue.get();
@@ -4901,7 +5047,7 @@ public final class ObservableCollectionImpl {
 				String msg = theWrappedEl.isAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					if (!theWrappedEl.getElementId().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					Collection<T> coll = theCollectionValue.get();
@@ -4928,7 +5074,7 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public String canRemove() {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					if (!theWrappedEl.getElementId().isPresent())
 						return StdMsg.ELEMENT_REMOVED;
 					Collection<T> coll = theCollectionValue.get();
@@ -4943,7 +5089,7 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					if (!theWrappedEl.getElementId().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					Collection<T> coll = theCollectionValue.get();
@@ -5050,7 +5196,7 @@ public final class ObservableCollectionImpl {
 					return false;
 			} else
 				now = 0;
-			Transaction lock = getWrapped().tryLock(true, null);
+			Transaction lock = getWrapped().lockWrite(true, null);
 			if (lock == null)
 				return false;
 			theLastRefresh = now;
@@ -5073,7 +5219,7 @@ public final class ObservableCollectionImpl {
 					theBacking.clear();
 					return;
 				}
-				try (Transaction t2 = backing instanceof Transactable ? ((Transactable) backing).lock(false, null) : Transaction.NONE) {
+				try (Transaction t2 = backing instanceof Transactable ? ((Transactable) backing).lock(false) : Transaction.NONE) {
 					CollectionUtils.synchronize(theBacking, backing, theEqualsTester)//
 					.adjust(theSynchronizer, theAdjustmentOrder);
 				} catch (RuntimeException | Error e) {
@@ -5107,32 +5253,25 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean tryOnly) {
 			if (!isRefreshOnAccess)
-				return getWrapped().lock(write, cause);
-			else if (write) {
-				Transaction lock = super.lock(true, cause);
-				doRefresh();
-				return lock;
-			} else {
+				return getWrapped().lock(tryOnly);
+			else {
 				refresh();
-				return super.lock(false, cause);
+				return super.lock(tryOnly);
 			}
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
 			if (!isRefreshOnAccess)
-				return getWrapped().tryLock(write, cause);
-			else if (write) {
-				Transaction lock = super.tryLock(true, cause);
+				return getWrapped().lockWrite(tryOnly, cause);
+			else {
+				Transaction lock = super.lockWrite(tryOnly, cause);
 				if (lock == null)
 					return null;
 				doRefresh();
 				return lock;
-			} else {
-				refresh();
-				return super.tryLock(false, cause);
 			}
 		}
 

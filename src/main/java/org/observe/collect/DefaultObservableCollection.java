@@ -10,7 +10,6 @@ import org.observe.Observable.CoreChangeSources;
 import org.qommons.Causable;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -106,18 +105,13 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return theLock.isLockSupported();
+	public Transaction lock(boolean tryOnly) {
+		return theLock.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theLock.lock(write, cause);
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return theLock.tryLock(write, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return theLock.lockWrite(tryOnly, cause);
 	}
 
 	@Override
@@ -213,7 +207,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	@Override
 	public ListElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ListElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
 				return null;
@@ -236,12 +230,12 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	@Override
 	public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 		throws UnsupportedOperationException, IllegalArgumentException {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ListElement<E> el;
 			CollectionElementMove move = new CollectionElementMove();
 			ListElement<E> targetEl = theValues.getElement(valueEl);
 			E value = targetEl.get();
-			try (Transaction moveT = lock(true, move)) {
+			try (Transaction moveT = lockWrite(false, move)) {
 				el = theValues.move(valueEl, after, before, first, () -> {
 					if (theChanges.isAnyoneListening()) {
 						ObservableCollectionEvent<E> event = ObservableCollectionEvent.createCollectionEvent(valueEl,
@@ -275,7 +269,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 	public void clear() {
 		if (isEmpty())
 			return;
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			CollectionElement<E> el = getTerminalElement(true);
 			while (el != null) {
 				MutableCollectionElement<E> mutable = mutableElement(el.getElementId());
@@ -358,7 +352,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 				// Correct the storage structure
 				boolean[] thisMoved = new boolean[1];
 				RepairOperation op = new RepairOperation(theLock.getUnfinishedCauses());
-				try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
+				try (Transaction opT = op.use(); Transaction vt = lockWrite(false, op)) {
 					((ValueStoredCollection<E>) theValues).repair(theWrapped.getElementId(),
 						new ValueStoredCollection.RepairListener<E, CollectionElementMove>() {
 						@Override
@@ -412,7 +406,7 @@ public class DefaultObservableCollection<E> extends AbstractIdentifiable impleme
 
 		@Override
 		public void remove() throws UnsupportedOperationException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				E old = get();
 				theWrapped.remove();
 				if (theChanges.isAnyoneListening()) {

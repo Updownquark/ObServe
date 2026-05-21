@@ -10,7 +10,6 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -65,18 +64,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
-				public boolean isLockSupported() {
-					return source.isLockSupported();
+				public Getter<N> lock(boolean tryOnly) {
+					return source.lock(tryOnly);
 				}
 
 				@Override
-				public Transaction lock(boolean write, Object cause) {
-					return source.lock(write, cause);
-				}
-
-				@Override
-				public Transaction tryLock(boolean write, Object cause) {
-					return source.tryLock(write, cause);
+				public Setter<N> lockWrite(boolean tryOnly, Object cause) {
+					Getter<N> getter = source.lock(tryOnly);
+					if (getter == null)
+						return null;
+					return new Setter.Unsettable<>(getter, getter, StdMsg.UNSUPPORTED_OPERATION);
 				}
 
 				@Override
@@ -107,11 +104,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Observable<ObservableValueEvent<N>> noInitChanges() {
 					return source.noInitChanges();
-				}
-
-				@Override
-				public Transaction lock() {
-					return source.lock();
 				}
 
 				@Override
@@ -182,18 +174,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				}
 
 				@Override
-				public boolean isLockSupported() {
-					return source.isLockSupported();
+				public Getter<E> lock(boolean tryOnly) {
+					return source.lock(tryOnly);
 				}
 
 				@Override
-				public Transaction lock(boolean write, Object cause) {
-					return source.lock(write, cause);
-				}
-
-				@Override
-				public Transaction tryLock(boolean write, Object cause) {
-					return source.tryLock(write, cause);
+				public Setter<E> lockWrite(boolean tryOnly, Object cause) {
+					Getter<E> getter = source.lock(tryOnly);
+					if (getter == null)
+						return null;
+					return new Setter.Unsettable<>(getter, getter, StdMsg.UNSUPPORTED_OPERATION);
 				}
 
 				@Override
@@ -224,11 +214,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 				@Override
 				public Observable<ObservableValueEvent<E>> noInitChanges() {
 					return source.noInitChanges();
-				}
-
-				@Override
-				public Transaction lock() {
-					return source.lock();
 				}
 
 				@Override
@@ -353,12 +338,12 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E>, Eventabl
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
+			public Transaction lock(boolean tryOnly) {
 				return Transaction.NONE;
 			}
 
 			@Override
-			public Transaction tryLock(boolean write, Object cause) {
+			public Transaction lockWrite(boolean tryOnly, Object cause) {
 				return Transaction.NONE;
 			}
 

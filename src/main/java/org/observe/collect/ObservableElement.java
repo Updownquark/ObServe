@@ -123,8 +123,17 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Transaction lock() {
-				return Transaction.NONE;
+			public Getter<T> lock(boolean tryOnly) {
+				return new Getter<T>() {
+					@Override
+					public T get() {
+						return null;
+					}
+
+					@Override
+					public void close() {
+					}
+				};
 			}
 
 			@Override
@@ -141,11 +150,6 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					}
 
 					@Override
-					public boolean isSafe() {
-						return true;
-					}
-
-					@Override
 					public ThreadConstraint getThreadConstraint() {
 						return ThreadConstraint.NONE;
 					}
@@ -156,12 +160,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 					}
 
 					@Override
-					public Transaction lock() {
-						return Transaction.NONE;
-					}
-
-					@Override
-					public Transaction tryLock() {
+					public Transaction lock(boolean tryOnly) {
 						return Transaction.NONE;
 					}
 

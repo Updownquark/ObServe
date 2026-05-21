@@ -28,7 +28,6 @@ import org.observe.collect.SettableElement;
 import org.observe.util.ObservableUtils.SubscriptionCause;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -44,9 +43,6 @@ import org.qommons.fn.FunctionUtils;
  * @param <V> The type of values this map stores
  */
 public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, CausableChanging {
-	@Override
-	abstract boolean isLockSupported();
-
 	/** @return The {@link Equivalence} that is used by this map's values (for {@link #containsValue(Object)}) */
 	Equivalence<? super V> equivalence();
 
@@ -107,7 +103,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 	 * @return The collection subscription to use to terminate listening
 	 */
 	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			Subscription sub = onChange(action);
 			SubscriptionCause subCause = new SubscriptionCause(null);
 			try (Transaction ct = subCause.use()) {
@@ -130,7 +126,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					sub.unsubscribe();
 					return;
 				}
-				try (Transaction unsubT = lock(false, null)) {
+				try (Transaction unsubT = lock(false)) {
 					sub.unsubscribe();
 					SubscriptionCause unsubCause = new SubscriptionCause(null);
 					try (Transaction ct = unsubCause.use()) {
@@ -179,18 +175,68 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
-			public boolean isLockSupported() {
-				return ObservableMap.this.isLockSupported();
+			public Getter<V> lock(boolean tryOnly) {
+				Transaction lock = ObservableMap.this.lock(tryOnly);
+				if (lock == null)
+					return null;
+				return new Getter<V>() {
+					@Override
+					public V get() {
+						MapEntryHandle<K, V> entry;
+						if (thePreviousElement != null && thePreviousElement.isPresent())
+							entry = getEntryById(thePreviousElement);
+						else {
+							entry = getEntry(key);
+							thePreviousElement = entry == null ? null : entry.getElementId();
+						}
+						return entry == null ? defaultValue : entry.getValue();
+					}
+
+					@Override
+					public void close() {
+						lock.close();
+					}
+				};
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return ObservableMap.this.lock(write, cause);
-			}
+			public Setter<V> lockWrite(boolean tryOnly, Object cause) {
+				Transaction lock = ObservableMap.this.lockWrite(tryOnly, cause);
+				if (lock == null)
+					return null;
+				return new Setter<V>() {
+					@Override
+					public V get() {
+						MapEntryHandle<K, V> entry;
+						if (thePreviousElement != null && thePreviousElement.isPresent())
+							entry = getEntryById(thePreviousElement);
+						else {
+							entry = getEntry(key);
+							thePreviousElement = entry == null ? null : entry.getElementId();
+						}
+						return entry == null ? defaultValue : entry.getValue();
+					}
 
-			@Override
-			public Transaction tryLock(boolean write, Object cause) {
-				return ObservableMap.this.tryLock(write, cause);
+					@Override
+					public String isEnabled() {
+						return getEnabled();
+					}
+
+					@Override
+					public String isAcceptable(V value) {
+						return getIsAcceptable(value);
+					}
+
+					@Override
+					public V set(V value) {
+						return doSet(value);
+					}
+
+					@Override
+					public void close() {
+						lock.close();
+					}
+				};
 			}
 
 			@Override
@@ -200,7 +246,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 			@Override
 			public V get() {
-				try (Transaction t = ObservableMap.this.lock(false, null)) {
+				try (Transaction t = ObservableMap.this.lock(false)) {
 					MapEntryHandle<K, V> entry;
 					if (thePreviousElement != null && thePreviousElement.isPresent())
 						entry = getEntryById(thePreviousElement);
@@ -217,7 +263,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 				class MapValueChanges extends AbstractIdentifiable implements Observable<ObservableElementEvent<V>> {
 					@Override
 					public Subscription subscribe(Observer<? super ObservableElementEvent<V>> observer) {
-						try (Transaction t = lock()) {
+						try (Transaction t = lock(false)) {
 							boolean[] exists = new boolean[1];
 							Subscription sub = onChange(evt -> {
 								if (!keySet().equivalence().elementEquals(evt.getKey(), key))
@@ -258,18 +304,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					}
 
 					@Override
-					public boolean isSafe() {
-						return ObservableMap.this.isLockSupported();
-					}
-
-					@Override
-					public Transaction lock() {
-						return ObservableMap.this.lock(false, null);
-					}
-
-					@Override
-					public Transaction tryLock() {
-						return ObservableMap.this.tryLock(false, null);
+					public Transaction lock(boolean tryOnly) {
+						return ObservableMap.this.lock(tryOnly);
 					}
 
 					@Override
@@ -311,6 +347,20 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 				return this;
 			}
 
+			private String getEnabled() {
+				MapEntryHandle<K, V> entry;
+				if (thePreviousElement != null && thePreviousElement.isPresent())
+					entry = getEntryById(thePreviousElement);
+				else {
+					entry = getEntry(key);
+					thePreviousElement = CollectionElement.getElementId(entry);
+				}
+				if (entry != null)
+					return mutableEntry(entry.getElementId()).isEnabled();
+				else
+					return null; // Without an actual value to test, we can't be sure whether ANY value could be inserted
+			}
+
 			@Override
 			public ObservableValue<String> isEnabled() {
 				class Enabled extends AbstractIdentifiable implements ObservableValue<String> {
@@ -331,19 +381,35 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					}
 
 					@Override
-					public String get() {
-						try (Transaction t = ObservableMap.this.lock(false, null)) {
-							MapEntryHandle<K, V> entry;
-							if (thePreviousElement != null && thePreviousElement.isPresent())
-								entry = getEntryById(thePreviousElement);
-							else {
-								entry = getEntry(key);
-								thePreviousElement = CollectionElement.getElementId(entry);
+					public Getter<String> lock(boolean tryOnly) {
+						Transaction lock = ObservableMap.this.lock(false);
+						return new Getter<String>() {
+							@Override
+							public String get() {
+								MapEntryHandle<K, V> entry;
+								if (thePreviousElement != null && thePreviousElement.isPresent())
+									entry = getEntryById(thePreviousElement);
+								else {
+									entry = getEntry(key);
+									thePreviousElement = CollectionElement.getElementId(entry);
+								}
+								if (entry != null)
+									return mutableEntry(entry.getElementId()).isEnabled();
+								else
+									return null; // Without an actual value to test, we can't be sure whether ANY value could be inserted
 							}
-							if (entry != null)
-								return mutableEntry(entry.getElementId()).isEnabled();
-							else
-								return null; // Without an actual value to test, we can't be sure whether ANY value could be inserted
+
+							@Override
+							public void close() {
+								lock.close();
+							}
+						};
+					}
+
+					@Override
+					public String get() {
+						try (Transaction t = ObservableMap.this.lock(false)) {
+							return getEnabled();
 						}
 					}
 
@@ -377,18 +443,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 							}
 
 							@Override
-							public boolean isSafe() {
-								return Enabled.this.isLockSupported();
-							}
-
-							@Override
-							public Transaction lock() {
-								return ObservableMap.this.lock(false, null);
-							}
-
-							@Override
-							public Transaction tryLock() {
-								return ObservableMap.this.tryLock(false, null);
+							public Transaction lock(boolean tryOnly) {
+								return ObservableMap.this.lock(tryOnly);
 							}
 
 							@Override
@@ -424,52 +480,60 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 			@Override
 			public String isAcceptable(V value) {
-				try (Transaction t = ObservableMap.this.lock(false, null)) {
-					MapEntryHandle<K, V> entry;
-					if (thePreviousElement != null && thePreviousElement.isPresent())
-						entry = getEntryById(thePreviousElement);
-					else {
-						entry = getEntry(key);
-						thePreviousElement = CollectionElement.getElementId(entry);
-					}
-					if (entry != null) {
-						MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
-						String msg = mutableEntry.isAcceptable(value);
-						if (msg != null && equivalence().elementEquals(defaultValue, value)) {
-							String msg2 = mutableEntry.canRemove();
-							if (msg2 == null)
-								return null;
-						}
-						return msg;
-					} else
-						return canPut(key, value);
+				try (Transaction t = ObservableMap.this.lock(false)) {
+					return getIsAcceptable(value);
 				}
+			}
+
+			private String getIsAcceptable(V value) {
+				MapEntryHandle<K, V> entry;
+				if (thePreviousElement != null && thePreviousElement.isPresent())
+					entry = getEntryById(thePreviousElement);
+				else {
+					entry = getEntry(key);
+					thePreviousElement = CollectionElement.getElementId(entry);
+				}
+				if (entry != null) {
+					MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
+					String msg = mutableEntry.isAcceptable(value);
+					if (msg != null && equivalence().elementEquals(defaultValue, value)) {
+						String msg2 = mutableEntry.canRemove();
+						if (msg2 == null)
+							return null;
+					}
+					return msg;
+				} else
+					return canPut(key, value);
 			}
 
 			@Override
 			public V set(V value) throws IllegalArgumentException, UnsupportedOperationException {
-				try (Transaction t = ObservableMap.this.lock(false, null)) {
-					MapEntryHandle<K, V> entry;
-					if (thePreviousElement != null && thePreviousElement.isPresent())
-						entry = getEntryById(thePreviousElement);
-					else {
-						entry = getEntry(key);
-						thePreviousElement = CollectionElement.getElementId(entry);
-					}
-					if (entry != null) {
-						V oldValue = entry.getValue();
-						MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
-						if (mutableEntry.isAcceptable(value) == null) {
-							mutableEntry.set(value);
-						} else if (equivalence().elementEquals(defaultValue, value) && mutableEntry.canRemove() == null)
-							mutableEntry.remove();
-						else // Let the element throw the exception
-							mutableEntry.set(value);
-						return oldValue;
-					} else {
-						putEntry(key, value, false);
-						return null;
-					}
+				try (Transaction t = ObservableMap.this.lockWrite(false, null)) {
+					return doSet(value);
+				}
+			}
+
+			private V doSet(V value) {
+				MapEntryHandle<K, V> entry;
+				if (thePreviousElement != null && thePreviousElement.isPresent())
+					entry = getEntryById(thePreviousElement);
+				else {
+					entry = getEntry(key);
+					thePreviousElement = CollectionElement.getElementId(entry);
+				}
+				if (entry != null) {
+					V oldValue = entry.getValue();
+					MutableMapEntryHandle<K, V> mutableEntry = mutableEntry(entry.getElementId());
+					if (mutableEntry.isAcceptable(value) == null) {
+						mutableEntry.set(value);
+					} else if (equivalence().elementEquals(defaultValue, value) && mutableEntry.canRemove() == null)
+						mutableEntry.remove();
+					else // Let the element throw the exception
+						mutableEntry.set(value);
+					return oldValue;
+				} else {
+					putEntry(key, value, false);
+					return null;
 				}
 			}
 
@@ -485,7 +549,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 					@Override
 					public Subscription subscribe(Observer<? super ObservableElementEvent<V>> observer) {
-						try (Transaction t = ObservableMap.this.lock(false, null)) {
+						try (Transaction t = ObservableMap.this.lock(false)) {
 							MapEntryHandle<K, V> entry;
 							if (thePreviousElement != null && thePreviousElement.isPresent())
 								entry = getEntryById(thePreviousElement);
@@ -514,18 +578,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 					}
 
 					@Override
-					public boolean isSafe() {
-						return changes.isSafe();
-					}
-
-					@Override
-					public Transaction lock() {
-						return changes.lock();
-					}
-
-					@Override
-					public Transaction tryLock() {
-						return changes.tryLock();
+					public Transaction lock(boolean tryOnly) {
+						return changes.lock(tryOnly);
 					}
 
 					@Override
@@ -780,7 +834,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public void setValue(Collection<ElementId> elements, V value) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				for (ElementId entryId : elements) {
 					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
 					entry.set(value);
@@ -891,7 +945,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public void setValue(Collection<ElementId> elements, Map.Entry<K, V> value) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				for (ElementId entryId : elements) {
 					MutableMapEntryHandle<K, V> entry = getMap().mutableEntry(entryId);
 					if (!getMap().keySet().equivalence().elementEquals(entry.getKey(), value.getKey()))
@@ -903,7 +957,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public Map.Entry<K, V>[] toArray() {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				Map.Entry<K, V>[] array = new Map.Entry[size()];
 				CollectionElement<K> keyElement = getMap().keySet().getTerminalElement(true);
 				for (int i = 0; keyElement != null; i++, keyElement = keyElement.getAdjacent(true)) {
@@ -1051,13 +1105,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theEntries.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theEntries.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theEntries.lock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theEntries.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1102,7 +1156,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 		@Override
 		public OrderedMapEntry<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ListElement<Map.Entry<K, V>> entryEl = theEntries.getElement(new SimpleMapEntry<>(key, null), true);
 				if (entryEl != null) {
 					entryEl.get().setValue(value);
@@ -1206,7 +1260,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 
 			@Override
 			public V setValue(V value) {
-				try (Transaction t = theEntries.lock(true, null)) {
+				try (Transaction t = theEntries.lockWrite(false, null)) {
 					V oldValue;
 					synchronized (this) {
 						oldValue = theValue;
@@ -1367,12 +1421,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return true;
+		public Transaction lock(boolean tryOnly) {
+			return Transaction.NONE;
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
 			return Transaction.NONE;
 		}
 
@@ -1514,11 +1568,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		public UnmodifiableObservableMap<K, V> alias(String alias) {
 			super.alias(alias);
 			return this;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
 		}
 
 		@Override
@@ -1686,17 +1735,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean tryOnly) {
 			return Transaction.NONE;
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
 			return Transaction.NONE;
 		}
 
@@ -1756,17 +1800,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 			}
 
 			@Override
-			public boolean isLockSupported() {
-				return true;
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
+			public Transaction lock(boolean tryOnly) {
 				return Transaction.NONE;
 			}
 
 			@Override
-			public Transaction tryLock(boolean write, Object cause) {
+			public Transaction lockWrite(boolean tryOnly, Object cause) {
 				return Transaction.NONE;
 			}
 
@@ -2284,11 +2323,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, Causabl
 		@Override
 		public boolean isEventing() {
 			return theSource.isEventing();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theSource.isLockSupported();
 		}
 
 		@Override

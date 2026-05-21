@@ -26,8 +26,6 @@ import org.observe.config.ObservableConfigPath.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Subscription;
@@ -78,7 +76,7 @@ public class ObservableConfigContent {
 		}
 
 		void setInUse(boolean inUse) {
-			try (Transaction t = theRoot.lock(false, null)) {
+			try (Transaction t = theRoot.lock(false)) {
 				if (inUse) {
 					thePathSubscription = theRoot.watch(ObservableConfigPath.ANY_DEPTH)
 						.act(Observer.<ObservableConfigEvent> printableObserver(evt -> {
@@ -187,6 +185,10 @@ public class ObservableConfigContent {
 
 		@Override
 		public ObservableConfig get() {
+			return get(true);
+		}
+
+		private ObservableConfig get(boolean withLock) {
 			// First, just see if we're already up-to-date so we don't have to do any locking
 			ObservableConfig parent = theRoot;
 			boolean found = true;
@@ -199,10 +201,28 @@ public class ObservableConfigContent {
 			}
 			if (found)
 				return parent;
-			try (Transaction t = lock()) {
+			try (Transaction t = withLock ? lock(false) : Transaction.NONE) {
 				resolvePath(0, false);
 				return thePathElements[thePathElements.length - 1];
 			}
+		}
+
+		@Override
+		public Getter<ObservableConfig> lock(boolean tryOnly) {
+			Transaction lock = theRoot.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<ObservableConfig>() {
+				@Override
+				public ObservableConfig get() {
+					return ObservableConfigChild.this.get(false);
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 
 		boolean resolvePath(int startIndex, boolean createIfAbsent) {
@@ -302,18 +322,8 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theRoot.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theRoot.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theRoot.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theRoot.lock(tryOnly);
 				}
 
 				@Override
@@ -341,34 +351,75 @@ public class ObservableConfigContent {
 	}
 
 	/** Observes the value of a config's path descendant */
-	protected static class ObservableConfigValue extends AbstractIdentifiable implements SettableValue<String> {
+	protected static class ObservableConfigValue extends SettableValue.SettableFlattenedObservableValue<String> {
 		private final ObservableConfigChild theConfigChild;
-		private Object theChangesIdentity;
 
 		/**
 		 * @param root The root config to observe
 		 * @param path The path of the config's descendant to observe the value of
 		 */
 		public ObservableConfigValue(ObservableConfig root, ObservableConfigPath path) {
-			theConfigChild = new ObservableConfigChild(root, path);
+			this(new ObservableConfigChild(root, path));
+		}
+
+		private ObservableConfigValue(ObservableConfigChild configChild) {
+			super(configChild.map(child -> child == null ? null : child.observeValue()), null);
+			theConfigChild = configChild;
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			if (!theConfigChild.isLockSupported())
-				return false;
-			ObservableConfig child = theConfigChild.get();
-			return child.isLockSupported();
+		protected Setter<String> createSetter(Getter<? extends ObservableValue<? extends String>> outer,
+			ObservableValue<? extends String> wrapped, Setter<? extends String> setter, Object cause) {
+			return new ConfigValueSetter(outer, wrapped, setter, cause);
 		}
 
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lock(theConfigChild, () -> Lockable.lockable(theConfigChild.get(), write, cause));
-		}
+		protected class ConfigValueSetter extends FlattenedValueSetter {
+			private final Getter<ObservableConfig> theConfigGetter;
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLock(theConfigChild, () -> Lockable.lockable(theConfigChild.get(), write, cause));
+			protected ConfigValueSetter(Getter<? extends ObservableValue<? extends String>> outerGetter,
+				ObservableValue<? extends String> innerValue, Setter<? extends String> innerGetter, Object cause) {
+				super(outerGetter, innerValue, innerGetter, cause);
+				theConfigGetter = theConfigChild.lock(false);
+			}
+
+			@Override
+			public String isEnabled() {
+				String msg = theConfigChild.canResolvePath(0, true);
+				if (msg == null) {
+					ObservableConfig child = theConfigGetter.get();
+					if (child == null)
+						msg = StdMsg.UNSUPPORTED_OPERATION;
+					if (msg == null)
+						msg = child.canSetValue(child.getValue());
+				}
+				return msg;
+			}
+
+			@Override
+			public String isAcceptable(String value) {
+				String msg = isEnabled();
+				if (msg == null)
+					msg = isValueAcceptable(value);
+				return msg;
+			}
+
+			@Override
+			public String set(String value) {
+				String msg = isValueAcceptable(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				theConfigChild.resolvePath(0, true);
+				ObservableConfig child = theConfigGetter.get();
+				String oldValue = child.getValue();
+				child.setValue(value);
+				return oldValue;
+			}
+
+			@Override
+			public void close() {
+				theConfigGetter.close();
+				super.close();
+			}
 		}
 
 		@Override
@@ -378,126 +429,20 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public long getStamp() {
-			long stamp = theConfigChild.getStamp();
-			ObservableConfig child = theConfigChild.get();
-			if (child != null)
-				stamp = Stamped.compositeOf2Stamps(stamp, child.getStamp());
-			return stamp;
-		}
-
-		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(theConfigChild.getIdentity(), "value");
 		}
 
 		@Override
-		public ObservableConfigValue alias(String alias) {
-			super.alias(alias);
-			return this;
-		}
-
-		@Override
-		public String get() {
-			try (Transaction t = lock()) {
-				return parse(theConfigChild.get());
-			}
-		}
-
-		private String parse(ObservableConfig config) {
-			return config == null ? null : config.getValue();
-		}
-
-		@Override
-		public Observable<ObservableValueEvent<String>> noInitChanges() {
-			class Changes extends AbstractIdentifiable implements Observable<ObservableValueEvent<String>> {
-				@Override
-				protected Object createIdentity() {
-					if (theChangesIdentity == null)
-						theChangesIdentity = Identifiable.wrap(ObservableConfigValue.this.getIdentity(), "noInitChanges");
-					return theChangesIdentity;
-				}
-
-				@Override
-				public ThreadConstraint getThreadConstraint() {
-					return theConfigChild.theRoot.getThreadConstraint();
-				}
-
-				@Override
-				public boolean isEventing() {
-					return theConfigChild.theRoot.isEventing();
-				}
-
-				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					return theConfigChild.theRoot.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theConfigChild.theRoot.tryLock(false, null);
-				}
-
-				@Override
-				public CoreId getCoreId() {
-					return theConfigChild.theRoot.getCoreId();
-				}
-
-				@Override
-				public long getStamp() {
-					return ObservableConfigValue.this.getStamp();
-				}
-
-				@Override
-				public CoreChangeSources getChangeSources() {
-					return theConfigChild.theRoot.getChangeSources();
-				}
-
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
-					try (Transaction t = theConfigChild.theRoot.lock(false, null)) {
-						Subscription[] configSub = new Subscription[1];
-						Subscription valueSub = theConfigChild.changes().act(evt -> {
-							if (configSub[0] != null) {
-								configSub[0].unsubscribe();
-								configSub[0] = null;
-							}
-							ObservableConfig newConfig = evt.getNewValue();
-							try (Transaction configT = newConfig == null ? Transaction.NONE : newConfig.lock(false, null)) {
-								observer.onNext(createChangeEvent(parse(evt.getOldValue()), parse(newConfig), evt));
-								if (newConfig != null)
-									configSub[0] = newConfig.watch("").act(configEvt -> {
-										if (!configEvt.relativePath.isEmpty())
-											return;
-										observer.onNext(createChangeEvent(configEvt.oldValue, parse(newConfig), configEvt));
-									});
-							}
-						});
-						return () -> {
-							valueSub.unsubscribe();
-							if (configSub[0] != null)
-								configSub[0].unsubscribe();
-						};
-					}
-				}
-			}
-			return new Changes();
-		}
-
-		@Override
 		public String set(String value) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theConfigChild.getRoot().lock(true, null)) {
+			try (Transaction t = theConfigChild.getRoot().lockWrite(false, null)) {
 				String msg = isValueAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
 				theConfigChild.resolvePath(0, true);
-				String oldValue = parse(theConfigChild.get());
-				theConfigChild.get().setValue(value);
+				ObservableConfig child = theConfigChild.get();
+				String oldValue = child == null ? null : child.getValue();
+				child.setValue(value);
 				return oldValue;
 			}
 		}
@@ -521,7 +466,7 @@ public class ObservableConfigContent {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			// We'll assume this doesn't change
-			try (Transaction t = theConfigChild.getRoot().lock(false, null)) {
+			try (Transaction t = theConfigChild.getRoot().lock(false)) {
 				String msg = theConfigChild.canResolvePath(0, true);
 				if (msg == null) {
 					ObservableConfig child = theConfigChild.get();
@@ -564,11 +509,6 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theConfig.isLockSupported();
-		}
-
-		@Override
 		public boolean isEventing() {
 			return theConfig.isEventing();
 		}
@@ -584,13 +524,13 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theConfig.lock(write, cause);
+		public Transaction lock(boolean tryOnly) {
+			return theConfig.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theConfig.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theConfig.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -628,7 +568,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public void clear() {
-			try (Transaction t = getConfig().lock(true, null)) {
+			try (Transaction t = getConfig().lockWrite(false, null)) {
 				ObservableConfig lastChild = getConfig().getContent().peekLast();
 				while (lastChild != null) {
 					ObservableConfig nextLast = getConfig().getSibling(false);
@@ -854,21 +794,21 @@ public class ObservableConfigContent {
 
 		@Override
 		public int size() {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				return (int) getConfig().getContent().stream().filter(thePathElement::matches).count();
 			}
 		}
 
 		@Override
 		public boolean isEmpty() {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				return getConfig().getContent().stream().anyMatch(thePathElement::matches);
 			}
 		}
 
 		@Override
 		public ListElement<ObservableConfig> getElement(int index) {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				int i = 0;
 				for (CollectionElement<ObservableConfig> el : getConfig().getContent().elements()) {
 					if (thePathElement.matches(el.get())) {
@@ -885,7 +825,7 @@ public class ObservableConfigContent {
 		public ListElement<ObservableConfig> getElement(ObservableConfig value, boolean first) {
 			if (!thePathElement.matches(value))
 				return null;
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(value, first));
 				return config == null ? null : new ConfigCollectionElement(config);
 			}
@@ -893,7 +833,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public ListElement<ObservableConfig> getElement(ElementId id) {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
 				if (!thePathElement.matches(config))
 					throw new NoSuchElementException();
@@ -930,7 +870,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public ListElement<ObservableConfig> getTerminalElement(boolean first) {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getTerminalElement(first));
 				while (config != null && !thePathElement.matches(config))
 					config = config.getSibling(first);
@@ -940,7 +880,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public MutableListElement<ObservableConfig> mutableElement(ElementId id) {
-			try (Transaction t = getConfig().lock(false, null)) {
+			try (Transaction t = getConfig().lock(false)) {
 				ObservableConfig config = CollectionElement.get(getConfig().getContent().getElement(id));
 				if (!thePathElement.matches(config))
 					throw new NoSuchElementException();
@@ -984,7 +924,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public void clear() {
-			try (Transaction t = getConfig().lock(true, null)) {
+			try (Transaction t = getConfig().lockWrite(false, null)) {
 				for (CollectionElement<ObservableConfig> el : getConfig().getContent().elements()) {
 					if (thePathElement.matches(el.get()))
 						el.get().remove();
@@ -1174,7 +1114,7 @@ public class ObservableConfigContent {
 				public String canCreate() {
 					ObservableConfig afterChild = theAfter == null ? null : theChildren.getElement(theAfter).get();
 					ObservableConfig beforeChild = theBefore == null ? null : theChildren.getElement(theBefore).get();
-					try (Transaction t = theRoot.lock(true, null)) {
+					try (Transaction t = theRoot.lockWrite(false, null)) {
 						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
 						return parent.canAddChild(afterChild, beforeChild);
 					}
@@ -1185,7 +1125,7 @@ public class ObservableConfigContent {
 					ObservableConfig afterChild = theAfter == null ? null : theChildren.getElement(theAfter).get();
 					ObservableConfig beforeChild = theBefore == null ? null : theChildren.getElement(theBefore).get();
 					ElementId newChildId;
-					try (Transaction t = theRoot.lock(true, null)) {
+					try (Transaction t = theRoot.lockWrite(false, null)) {
 						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
 						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, isTowardBeginning,
 							thePath.getLastElement().getName(), cfg -> {

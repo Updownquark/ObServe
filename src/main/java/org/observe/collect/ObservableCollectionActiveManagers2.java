@@ -1,17 +1,6 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -39,7 +28,6 @@ import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstrained;
@@ -57,8 +45,8 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.fn.FunctionUtils;
 import org.qommons.collect.OptimisticContext;
+import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
@@ -305,21 +293,13 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported() || theFilter.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(tryOnly, theParent, theFilter);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(
-				Lockable.lockable(theParent, write, cause),
-				Lockable.lockable(theFilter));
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(
-				Lockable.lockable(theParent, write, cause), Lockable.lockable(theFilter));
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Lockable.lockAll(tryOnly, Transactable.asWriteLockable(theParent, cause), theFilter);
 		}
 
 		@Override
@@ -330,8 +310,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(theParent, false, null),
-				Lockable.lockable(theFilter));
+			return theParent.getCoreId().and(theFilter.getCoreId());
 		}
 
 		@Override
@@ -365,7 +344,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return BetterList.of(Stream.concat(//
 					theParent.getElementsBySource(sourceEl, sourceCollection).stream()
 					.map(el -> new IntersectedCollectionElement(el, null, true)), //
@@ -458,7 +437,7 @@ public class ObservableCollectionActiveManagers2 {
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
-				try (Transaction t = theParent.lock(true, evt)) {
+				try (Transaction t = theParent.lockWrite(false, evt)) {
 					IntersectionElement element;
 					switch (evt.getType()) {
 					case add:
@@ -560,42 +539,44 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
+		public Transaction lock(boolean tryOnly) {
 			if (theLock == null)
-				return getParent().tryLock(write, cause);
-			if (write) {
-				if (getParent().getThreadConstraint().isEventThread()) {
-					Transaction sourceWrite = getParent().tryLock(true, cause);
-					if (sourceWrite != null) {
-						theLock.lock();
-						return () -> {
-							sourceWrite.close();
-							theLock.unlock();
-						};
-					} else if (theConstraint.isEventThread()) {
-						Transaction sourceRead = getParent().tryLock(false, cause);
-						if (sourceRead == null)
-							return null;
-						theLock.lock();
-						return () -> {
-							sourceRead.close();
-							theLock.unlock();
-						};
-					} else
-						throw new IllegalStateException(WRONG_THREAD_MESSAGE);
+				return getParent().lock(tryOnly);
+			Transaction t = getParent().lock(tryOnly);
+			if (t == null)
+				return null;
+			theLock.lock();
+			return () -> {
+				t.close();
+				theLock.unlock();
+			};
+		}
+
+		@Override
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			if (theLock == null)
+				return getParent().lockWrite(tryOnly, cause);
+			if (getParent().getThreadConstraint().isEventThread()) {
+				Transaction sourceWrite = getParent().lockWrite(tryOnly, cause);
+				if (sourceWrite != null) {
+					theLock.lock();
+					return () -> {
+						sourceWrite.close();
+						theLock.unlock();
+					};
 				} else if (theConstraint.isEventThread()) {
-					Transaction t = getParent().tryLock(false, cause);
-					if (t == null)
+					Transaction sourceRead = getParent().lock(tryOnly);
+					if (sourceRead == null)
 						return null;
 					theLock.lock();
 					return () -> {
-						t.close();
+						sourceRead.close();
 						theLock.unlock();
 					};
 				} else
 					throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-			} else {
-				Transaction t = getParent().tryLock(false, cause);
+			} else if (theConstraint.isEventThread()) {
+				Transaction t = getParent().lock(tryOnly);
 				if (t == null)
 					return null;
 				theLock.lock();
@@ -603,48 +584,8 @@ public class ObservableCollectionActiveManagers2 {
 					t.close();
 					theLock.unlock();
 				};
-			}
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (theLock == null)
-				return getParent().lock(write, cause);
-			if (write) {
-				if (getParent().getThreadConstraint().isEventThread()) {
-					Transaction sourceWrite = getParent().tryLock(true, cause);
-					if (sourceWrite != null) {
-						theLock.lock();
-						return () -> {
-							sourceWrite.close();
-							theLock.unlock();
-						};
-					} else if (theConstraint.isEventThread()) {
-						Transaction sourceRead = getParent().lock(false, cause);
-						theLock.lock();
-						return () -> {
-							sourceRead.close();
-							theLock.unlock();
-						};
-					} else
-						throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-				} else if (theConstraint.isEventThread()) {
-					Transaction t = getParent().lock(false, cause);
-					theLock.lock();
-					return () -> {
-						t.close();
-						theLock.unlock();
-					};
-				} else
-					throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-			} else {
-				Transaction t = getParent().lock(false, cause);
-				theLock.lock();
-				return () -> {
-					t.close();
-					theLock.unlock();
-				};
-			}
+			} else
+				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
 		}
 
 		@Override
@@ -685,7 +626,7 @@ public class ObservableCollectionActiveManagers2 {
 				super.setValues(elements, newValue);
 			else {
 				Causable cause = Causable.simpleCause();
-				try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
+				try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false)) {
 					if (theLock != null)
 						theLock.lock();
 					try {
@@ -716,7 +657,7 @@ public class ObservableCollectionActiveManagers2 {
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (value == get() && theConstraint.isEventThread()) {
 					Causable cause = Causable.simpleCause();
-					try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false, cause)) {
+					try (Transaction causeT = cause.use(); Transaction t = getParent().lock(false)) {
 						if (theLock == null)
 							update(value, cause);
 						else {
@@ -924,23 +865,18 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getParent().isLockSupported() && theRefresh.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(tryOnly, getParent(), theRefresh);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(getParent(), write, cause), theRefresh);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause), theRefresh);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Lockable.lockAll(tryOnly, Transactable.asWriteLockable(getParent(), cause), theRefresh);
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), theRefresh);
+			return getParent().getCoreId().and(theRefresh.getCoreId());
 		}
 
 		@Override
@@ -973,7 +909,7 @@ public class ObservableCollectionActiveManagers2 {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			getParent().begin(fromStart, (parentEl, cause) -> {
 				// Make sure the refresh doesn't fire while we're firing notifications from the parent change
-				try (Transaction t = theRefresh.lock()) {
+				try (Transaction t = theRefresh.lock(false)) {
 					onElement.accept(new RefreshingElement(parentEl, false), cause);
 				}
 			}, listening);
@@ -985,7 +921,7 @@ public class ObservableCollectionActiveManagers2 {
 					r = Causable.simpleCause(r);
 					extraT = ((Causable) r).use();
 				}
-				try (Transaction t = getParent().lock(false, r)) {
+				try (Transaction t = getParent().lock(false)) {
 					// Refreshing should be done in element order
 					Collections.sort(theElements);
 					CollectionElement<RefreshingElement> el = theElements.getTerminalElement(true);
@@ -1013,7 +949,7 @@ public class ObservableCollectionActiveManagers2 {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
-							try (Transaction t = theRefresh.lock()) {
+							try (Transaction t = theRefresh.lock(false)) {
 								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, causes);
 							}
 						}
@@ -1021,7 +957,7 @@ public class ObservableCollectionActiveManagers2 {
 						@Override
 						public void removed(T value, Object... causes) {
 							theElements.mutableElement(theElementId).remove();
-							try (Transaction t = theRefresh.lock()) {
+							try (Transaction t = theRefresh.lock(false)) {
 								ObservableCollectionActiveManagers.removed(theListener, value, causes);
 							}
 						}
@@ -1052,9 +988,9 @@ public class ObservableCollectionActiveManagers2 {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = BetterTreeSet.<RefreshingElement> buildTreeSet(RefreshingElement::compareTo).build();
 				theSub = theListening.withObserver(r -> {
-					try (Transaction t = Lockable.lockAll(
+					try (Transaction t = Lockable.lockAll(false,
 						Lockable.lockable(theLock, ElementRefreshingCollectionManager.this, ThreadConstraint.ANY),
-						Lockable.lockable(getParent(), false, null))) {
+						getParent())) {
 						RefreshingElement setting = (RefreshingElement) theSettingElement.get();
 						if (setting != null && elements.contains(setting))
 							setting.refresh(r);
@@ -1115,39 +1051,26 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean tryOnly) {
 			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
 			// or any refresh events that would violate the contract of a held lock
 			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
 			// because incoming refresh updates obtain a read lock on the parent
-			if (write)
-				return getParent().lock(write, cause);
-			else
-				return Lockable.lockAll(Lockable.lockable(getParent(), write, cause),
-					Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+			return Lockable.lockAll(tryOnly, getParent(), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
 			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
 			// or any refresh events that would violate the contract of a held lock
 			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
 			// because incoming refresh updates obtain a read lock on the parent
-			if (write)
-				return getParent().tryLock(write, cause);
-			else
-				return Lockable.tryLockAll(Lockable.lockable(getParent(), write, cause),
-					Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+			return getParent().lockWrite(tryOnly, cause);
 		}
 
 		@Override
 		public CoreId getCoreId() {
-			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+			return Lockable.getCoreId(getParent(), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
 		}
 
 		@Override
@@ -1162,7 +1085,7 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		Transaction lockRefresh() {
-			return Lockable.lock(theLock, this);
+			return Lockable.lock(theLock, false);
 		}
 
 		@Override
@@ -1327,11 +1250,6 @@ public class ObservableCollectionActiveManagers2 {
 				return ThreadConstraint.ANY; // Can't know
 		}
 
-		@Override
-		public boolean isLockSupported() {
-			return true; // No way to know if any of the outer collection's elements will ever support locking
-		}
-
 		Transaction lockLocal() {
 			Lock localLock = theLock.writeLock();
 			localLock.lock();
@@ -1339,17 +1257,17 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean tryOnly) {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
-			return Lockable.lockAll(Lockable.lockable(theParent), () -> theOuterElements, //
-				oe -> Lockable.lockable(oe.manager, write, cause));
+			return Lockable.lockAll(theParent, () -> theOuterElements, //
+				oe -> oe.manager, tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
-			return Lockable.tryLockAll(Lockable.lockable(theParent), () -> theOuterElements, //
-				oe -> Lockable.lockable(oe.manager, write, cause));
+			return Lockable.lockAll(theParent, () -> theOuterElements, //
+				oe -> Transactable.asWriteLockable(oe.manager, cause), tryOnly);
 		}
 
 		@Override
@@ -1359,7 +1277,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public CoreId getCoreId() {
-			return Transactable.getCoreId(theParent, () -> theOuterElements, oe -> oe.manager);
+			return Lockable.getCoreId(theParent, () -> theOuterElements, oe -> oe.manager);
 		}
 
 		@Override
@@ -1407,7 +1325,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				List<DerivedCollectionElement<T>> elements = new LinkedList<>();
 
 				BetterList<DerivedCollectionElement<I>> parentEBS = theParent.getElementsBySource(sourceEl, sourceCollection);
@@ -1470,7 +1388,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		@Override
 		public boolean clear() {
-			try (Transaction t = theParent.lock(false, null)) {
+			try (Transaction t = theParent.lock(false)) {
 				boolean allCleared = true;
 				for (FlattenedHolder outerEl : theOuterElements) {
 					if (outerEl.manager == null)
@@ -1567,7 +1485,7 @@ public class ObservableCollectionActiveManagers2 {
 			if (theOptions != null && theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
 			String firstMsg = null;
-			try (Transaction t = theParent.lock(false, null)) {
+			try (Transaction t = theParent.lock(false)) {
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
 					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
 					if (theOptions == null)
@@ -1600,7 +1518,7 @@ public class ObservableCollectionActiveManagers2 {
 			boolean first) {
 			if (theOptions != null && theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			try (Transaction t = theParent.lock(false, null)) {
+			try (Transaction t = theParent.lock(false)) {
 				String firstMsg = null;
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, first)) {
 					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
@@ -1637,7 +1555,7 @@ public class ObservableCollectionActiveManagers2 {
 		public String canMove(DerivedCollectionElement<T> valueEl, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			FlattenedElement flatV = (FlattenedManager<E, I, V, T>.FlattenedElement) valueEl;
 			String firstMsg = null;
-			try (Transaction t = theParent.lock(false, null)) {
+			try (Transaction t = theParent.lock(false)) {
 				String removable = flatV.theParentEl.canRemove();
 				V value = flatV.theParentEl.get();
 				for (FlattenedHolderIter holder : new InterElementIterable(after, before, true)) {
@@ -1673,7 +1591,7 @@ public class ObservableCollectionActiveManagers2 {
 				return valueEl;
 			FlattenedElement flatV = (FlattenedElement) valueEl;
 			String firstMsg = null;
-			try (Transaction t = theParent.lock(false, null)) {
+			try (Transaction t = theParent.lock(false)) {
 				String removable = flatV.theParentEl.canRemove();
 				V value = flatV.theParentEl.get();
 				DerivedCollectionElement<V> moved = null;
@@ -1831,7 +1749,7 @@ public class ObservableCollectionActiveManagers2 {
 						@Override
 						public Transaction lock() {
 							// Should not be called, though
-							return Lockable.lockable(manager, false, null).lock();
+							return manager.lock(false);
 						}
 
 						@Override
@@ -1853,7 +1771,7 @@ public class ObservableCollectionActiveManagers2 {
 
 					@Override
 					public void removed(I value, Object... innerCauses) {
-						try (Transaction parentT = theParent.lock(false, null); Transaction innerT = lockLocal()) {
+						try (Transaction parentT = theParent.lock(false); Transaction innerT = lockLocal()) {
 							clearSubElements(innerCauses);
 							theOuterElements.mutableElement(holderElement.getElementId()).remove();
 						}
@@ -1873,11 +1791,11 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			void updated(I oldValue, I newValue, Object cause, boolean internalOnly) {
-				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
+				try (Transaction parentT = theParent.lock(false); Transaction t = lockLocal()) {
 					if (internalOnly) {
 						if (manager == null)
 							return;
-						try (Transaction flatT = manager.lock(false, null)) {
+						try (Transaction flatT = manager.lock(false)) {
 							for (FlattenedElement flatEl : theElements) {
 								V elValue = flatEl.getParentValue();
 								flatEl.valueUpdated(elValue, elValue, cause, true);
@@ -1893,7 +1811,7 @@ public class ObservableCollectionActiveManagers2 {
 						manager = newManager;
 						if (manager != null) {
 							manager.begin(isFromStart, (childEl, innerCause) -> {
-								try (Transaction innerParentT = theParent.lock(false, null); Transaction innerLocalT = lockLocal()) {
+								try (Transaction innerParentT = theParent.lock(false); Transaction innerLocalT = lockLocal()) {
 									FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
 									theAccepter.accept(flatEl, innerCause);
 								}
@@ -1904,7 +1822,7 @@ public class ObservableCollectionActiveManagers2 {
 						Ternian update = theCacheHandler.isSourceUpdate(oldValue, newValue);
 						if (update == Ternian.NONE)
 							return; // No change, no event
-						try (Transaction flatT = manager.lock(false, null)) {
+						try (Transaction flatT = manager.lock(false)) {
 							for (FlattenedElement flatEl : theElements)
 								flatEl.sourceUpdated(oldSource, newValue, update.value, cause, false);
 						}
@@ -1917,13 +1835,13 @@ public class ObservableCollectionActiveManagers2 {
 					return;
 				Transaction t;
 				if (causes.length == 0)
-					t = manager.lock(false, null);
+					t = manager.lock(false);
 				else if (causes.length == 1)
-					t = manager.lock(false, causes[0]);
+					t = manager.lock(false);
 				else {
 					Transaction[] ts = new Transaction[causes.length];
 					for (int i = 0; i < ts.length; i++)
-						ts[i] = manager.lock(false, causes[i]);
+						ts[i] = manager.lock(false);
 					t = Transaction.and(ts);
 				}
 				try {
@@ -1942,9 +1860,13 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
+			public Transaction lock(boolean tryOnly) {
 				Transaction local = lockLocal();
-				Transaction flowLock = manager.lock(write, cause);
+				Transaction flowLock = manager.lock(tryOnly);
+				if (flowLock == null) {
+					local.close();
+					return null;
+				}
 				return () -> {
 					flowLock.close();
 					local.close();
@@ -1952,9 +1874,9 @@ public class ObservableCollectionActiveManagers2 {
 			}
 
 			@Override
-			public Transaction tryLock(boolean write, Object cause) {
+			public Transaction lockWrite(boolean tryOnly, Object cause) {
 				Transaction local = lockLocal();
-				Transaction flowLock = manager.tryLock(write, cause);
+				Transaction flowLock = manager.lockWrite(tryOnly, cause);
 				if (flowLock == null) {
 					local.close();
 					return null;
@@ -2029,8 +1951,8 @@ public class ObservableCollectionActiveManagers2 {
 					@Override
 					public void update(X oldValue, X newValue, boolean internalOnly, Object... causes) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-						try (Transaction parentT = Lockable.lockAll(Lockable.lockable(theParent),
-							() -> Arrays.asList(Lockable.lockable(theHolder)), FunctionUtils.identity())) {
+						try (Transaction parentT = Lockable.lockAll(theParent, () -> Arrays.asList(theHolder), FunctionUtils.identity(),
+							false)) {
 							if (internalOnly) {
 								valueUpdated(oldValue, newValue, causes, true);
 								return;
@@ -2048,7 +1970,7 @@ public class ObservableCollectionActiveManagers2 {
 					public void removed(X value, Object... causes) {
 						theHolder.theElements.mutableElement(theElementId).remove();
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
+						try (Transaction parentT = theParent.lock(false); Transaction localT = lockLocal()) {
 							T val;
 							if (theOptions == null)
 								val = (T) value;
@@ -2172,7 +2094,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t = FlattenedManager.this.lock(true, null)) {
+				try (Transaction t = FlattenedManager.this.lockWrite(false, null)) {
 					FlatMapOptions.FlatMapReverseQueryResult<I, V> result;
 					if (theOptions == null)
 						result = FlatMapOptions.FlatMapReverseQueryResult.value((V) value);

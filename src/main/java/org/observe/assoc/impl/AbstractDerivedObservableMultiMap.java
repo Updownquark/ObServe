@@ -12,9 +12,9 @@ import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMultiMap;
 
@@ -93,20 +93,14 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> extends Abstrac
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return getKeyLocker().isLockSupported() && getValueManager().isLockSupported();
+	public Transaction lock(boolean tryOnly) {
+		return Lockable.lockAll(tryOnly, getKeyLocker(), getValueManager());
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return Lockable.lockAll(//
-			Lockable.lockable(getKeyLocker(), write, cause), Lockable.lockable(getValueManager(), write, cause));
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return Lockable.tryLockAll(//
-			Lockable.lockable(getKeyLocker(), write, cause), Lockable.lockable(getValueManager(), write, cause));
+	public Transaction lockWrite(boolean tryLock, Object cause) {
+		return Lockable.lockAll(tryLock, //
+			Transactable.asWriteLockable(getKeyLocker(), cause), Transactable.asWriteLockable(getValueManager(), cause));
 	}
 
 	@Override
@@ -116,8 +110,7 @@ public abstract class AbstractDerivedObservableMultiMap<S, K, V> extends Abstrac
 
 	@Override
 	public CoreId getCoreId() {
-		return Lockable.getCoreId(//
-			Lockable.lockable(getKeyLocker(), false, null), Lockable.lockable(getValueManager(), false, null));
+		return Lockable.getCoreId(getKeyLocker(), getValueManager());
 	}
 
 

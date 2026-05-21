@@ -9,7 +9,6 @@ import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
 import org.observe.SettableValue;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -68,13 +67,13 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theValue.lock(write, cause);
+	public Transaction lock(boolean tryOnly) {
+		return theValue.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return theValue.tryLock(write, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return theValue.lockWrite(tryOnly, cause);
 	}
 
 	@Override
@@ -111,11 +110,6 @@ public class SingletonObservableSet<T> extends AbstractIdentifiable implements O
 	@Override
 	public long getStamp() {
 		return theValue.getStamp();
-	}
-
-	@Override
-	public boolean isLockSupported() {
-		return theValue.isLockSupported();
 	}
 
 	@Override

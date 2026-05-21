@@ -7,8 +7,8 @@ import java.util.Map;
 
 import org.observe.collect.ObservableCollection;
 import org.qommons.Causable;
-import org.qommons.Subscription;
 import org.qommons.Causable.CausableKey;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSortedSet;
@@ -85,8 +85,8 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 		theRightElements = CircularArrayList.build().build();
 		Causable syncCause = Causable.simpleCause(this);
 		try (Transaction causeT = syncCause.use();
-			Transaction leftT = theLeft.lock(true, syncCause); //
-			Transaction rightT = theRight.lock(true, syncCause)) {
+			Transaction leftT = theLeft.lockWrite(false, syncCause); //
+			Transaction rightT = theRight.lockWrite(false, syncCause)) {
 			// Populate the left elements first with no modifications to the right collection, as if right were empty and immutable
 			CommonElement<V> prevLeft = null;
 			for (ListElement<V> leftEl : theLeft.elements()) {
@@ -161,13 +161,13 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 					__ -> new ObservableCollectionLinkEvent(theLeft, evt.getRootCausable()));
 				data.computeIfAbsent("rightTransaction", k -> {
 					Transaction linkEvtT = linkEvt.use();
-					Transaction cTrans = theRight.lock(true, linkEvt);
+					Transaction cTrans = theRight.lockWrite(false, linkEvt);
 					return Transaction.and(cTrans, linkEvtT);
 				});
 				// The inner transaction is so that each left change is causably linked to a particular right change
 				ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(theLeft, evt);
 				try (Transaction linkEvtT = innerLinkEvt.use(); //
-					Transaction evtT = theRight.lock(true, innerLinkEvt)) {
+					Transaction evtT = theRight.lockWrite(false, innerLinkEvt)) {
 					theCallbackLock = !theRight.isEventing();
 					switch (evt.getType()) {
 					case add:
@@ -201,13 +201,13 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 					__ -> new ObservableCollectionLinkEvent(theRight, evt.getRootCausable()));
 				data.computeIfAbsent("leftTransaction", k -> {
 					Transaction linkEvtT = linkEvt.use();
-					Transaction cTrans = theLeft.lock(true, linkEvt);
+					Transaction cTrans = theLeft.lockWrite(false, linkEvt);
 					return Transaction.and(cTrans, linkEvtT);
 				});
 				// The inner transaction is so that each right change is causably linked to a particular left change
 				ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(theRight, evt);
 				try (Transaction linkEvtT = innerLinkEvt.use(); //
-					Transaction evtT = theLeft.lock(true, innerLinkEvt)) {
+					Transaction evtT = theLeft.lockWrite(false, innerLinkEvt)) {
 					theCallbackLock = !theLeft.isEventing();
 					switch (evt.getType()) {
 					case add:

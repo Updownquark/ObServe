@@ -409,30 +409,27 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 	}
 
 	public Transaction lockForMod(ObservableServiceClient actor, Instant timeStamp, int changeId, byte[] signature, Object cause) {
-		Transaction lockT = super.lock(true, cause);
+		Transaction lockT = super.lockWrite(false, cause);
 		return theRootData.lockForExternalMod(lockT, actor, timeStamp, changeId, signature);
 	}
 
 	public Transaction tryLockForMod(ObservableServiceClient actor, Instant timeStamp, int changeId, byte[] signature, Object cause) {
-		Transaction lockT = super.tryLock(true, cause);
+		Transaction lockT = super.lockWrite(true, cause);
 		if (lockT == null)
 			return null;
 		return theRootData.lockForExternalMod(lockT, actor, timeStamp, changeId, signature);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		Transaction lockT = super.lock(write, cause);
-		if (write)
-			return theRootData.lockForMod(lockT);
-		else
-			return lockT;
+	public Transaction lock(boolean tryOnly) {
+		Transaction lockT = super.lock(tryOnly);
+		return lockT;
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		Transaction lockT = super.tryLock(write, cause);
-		if (write && lockT != null)
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		Transaction lockT = super.lockWrite(tryOnly, cause);
+		if (lockT != null)
 			return theRootData.lockForMod(lockT);
 		else
 			return lockT;
@@ -505,7 +502,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 
 	@Override
 	public ServiceObservableConfig setName(String name) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableServiceClient actor = theRootData.getModificationActor();
 			if (!can(actor, ConfigModificationType.Rename))
 				throw new UnsupportedOperationException(
@@ -523,7 +520,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 
 	@Override
 	public ServiceObservableConfig setValue(String value) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableServiceClient actor = theRootData.getModificationActor();
 			if (!can(actor, ConfigModificationType.Modify))
 				throw new UnsupportedOperationException(
@@ -542,7 +539,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 	@Override
 	public ServiceObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		Runnable afterRemove) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableServiceClient actor = theRootData.getModificationActor();
 			if (actor != theRootData.getLocalClient())
 				throw new UnsupportedOperationException(
@@ -561,7 +558,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 
 	@Override
 	public void remove() {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableServiceClient actor = theRootData.getModificationActor();
 			if (!can(actor, ConfigModificationType.Delete))
 				throw new UnsupportedOperationException(
@@ -670,7 +667,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 
 	@Override
 	protected AbstractObservableConfig createChild(String name) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ObservableServiceClient actor = theRootData.getModificationActor();
 			if (!can(actor, ConfigModificationType.Add))
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION + ": " + actor

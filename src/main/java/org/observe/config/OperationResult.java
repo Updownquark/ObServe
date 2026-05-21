@@ -436,12 +436,11 @@ public interface OperationResult<T> {
 				}
 
 				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
+				public Transaction lock(boolean tryOnly) {
+					if (tryOnly) {
+						OperationResult<? extends S> wrapped = theWrapped;
+						return wrapped == null ? null : wrapped.watchStatus().lock(true);
+					}
 					synchronized (WrapperResult.this) {
 						OperationResult<? extends S> wrapped = theWrapped;
 						while (wrapped == null) {
@@ -452,14 +451,8 @@ public interface OperationResult<T> {
 							}
 							wrapped = theWrapped;
 						}
-						return wrapped.watchStatus().lock();
+						return wrapped.watchStatus().lock(false);
 					}
-				}
-
-				@Override
-				public Transaction tryLock() {
-					OperationResult<? extends S> wrapped = theWrapped;
-					return wrapped == null ? null : wrapped.watchStatus().tryLock();
 				}
 
 				@Override

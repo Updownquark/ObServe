@@ -67,11 +67,6 @@ implements ObservableMultiMap<K, V> {
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return getBacking().isLockSupported();
-	}
-
-	@Override
 	public ObservableSet<K> keySet() {
 		return (ObservableSet<K>) super.keySet();
 	}

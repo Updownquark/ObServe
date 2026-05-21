@@ -118,8 +118,7 @@ public class WeakListening {
 	}
 
 	// This a utility method, not public, as weakMaker must produce an X that is also an extension of WeakAction
-	private <X> Subscription with(X action, WeakActionMaker<X> weakMaker,
-		Function<? super X, ? extends Subscription> subscribe) {
+	private <X> Subscription with(X action, WeakActionMaker<X> weakMaker, Function<? super X, ? extends Subscription> subscribe) {
 		WeakActionKey actionKey = new WeakActionKey();
 		X weak = weakMaker.make(this, actionKey);
 		ActionStruct as = new ActionStruct(action);
@@ -358,23 +357,8 @@ public class WeakListening {
 			}
 
 			@Override
-			public boolean isSafe() {
-				return observable.isSafe();
-			}
-
-			@Override
-			public boolean isLockSupported() {
-				return observable.isLockSupported();
-			}
-
-			@Override
-			public Transaction lock() {
-				return observable.lock();
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return observable.tryLock();
+			public Transaction lock(boolean tryOnly) {
+				return observable.lock(tryOnly);
 			}
 
 			@Override
@@ -421,6 +405,25 @@ public class WeakListening {
 		StandaloneWeakObserver(Observer<? super T> strongListener, Subscription[] sub) {
 			theListenerRef = new WeakReference<>(strongListener);
 			theSubscription = sub;
+		}
+
+		@Override
+		public boolean tryLock() {
+			Observer<? super T> listener = theListenerRef.get();
+			if (listener == null) {
+				theSubscription[0].unsubscribe();
+				return true;
+			} else
+				return listener.tryLock();
+		}
+
+		@Override
+		public void unlock() {
+			Observer<? super T> listener = theListenerRef.get();
+			if (listener == null) {
+				theSubscription[0].unsubscribe();
+			} else
+				listener.unlock();
 		}
 
 		@Override

@@ -199,24 +199,13 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		return new SkippingObservable<>(this, times);
 	}
 
-	/** @return Whether this observable is thread-safe, meaning it is constrained to only fire values on a single thread at a time */
-	boolean isSafe();
-
-	@Override
-	default boolean isLockSupported() {
-		return isSafe();
-	}
-
 	/**
 	 * Prevents this observable from firing while the lock is held. The lock is not exclusive.
 	 *
 	 * @return The transaction to close to release the lock
 	 */
 	@Override
-	Transaction lock();
-
-	@Override
-	Transaction tryLock();
+	Transaction lock(boolean tryOnly);
 
 	/**
 	 * @param threading The thread constraint for the new observable to obey
@@ -315,17 +304,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 			}
 
 			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Transaction.NONE;
-			}
-
-			@Override
-			public Transaction tryLock() {
+			public Transaction lock(boolean tryOnly) {
 				return Transaction.NONE;
 			}
 
@@ -395,17 +374,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public Transaction tryLock() {
+		public Transaction lock(boolean tryOnly) {
 			return Transaction.NONE;
 		}
 
@@ -538,18 +507,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
+		public Transaction lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override
@@ -585,6 +544,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 
 				CompleteObserver(Observer<? super Causable> wrap) {
 					wrapped = wrap;
+				}
+
+				@Override
+				public boolean tryLock() {
+					return wrapped.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					wrapped.unlock();
 				}
 
 				@Override
@@ -635,6 +604,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 				public void onCompleted(Supplier<Causable> cause) {
 					observer.onCompleted(cause);
 				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
+				}
 			});
 			initialized[0] = true;
 			return ret;
@@ -684,22 +663,22 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 				public void onCompleted(Supplier<Causable> cause) {
 					observer.onCompleted(cause);
 				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
+				}
 			});
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
+		public Transaction lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override
@@ -762,6 +741,15 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 										fireCompleted(cause);
 								}
 
+								@Override
+								public boolean tryLock() {
+									return true;
+								}
+
+								@Override
+								public void unlock() {
+								}
+
 								private Object getNext() {
 									Object[] args = values.clone();
 									for (Object value : args)
@@ -821,21 +809,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			for (Observable<?> o : theComposed)
-				if (!o.isSafe())
-					return false;
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Lockable.lockAll(theComposed);
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return Lockable.tryLockAll(theComposed);
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(tryOnly, theComposed);
 		}
 
 		@Override
@@ -924,6 +899,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 					}
 
 					@Override
+					public boolean tryLock() {
+						return wrappedObserver.tryLock();
+					}
+
+					@Override
+					public void unlock() {
+						wrappedObserver.unlock();
+					}
+
+					@Override
 					public String toString() {
 						return theWrappedObserver + ".until(" + theUntil + ")";
 					}
@@ -955,6 +940,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 			public void onCompleted(Supplier<Causable> cause) {
 				// A terminated until just means we'll listen to the target forever
 				theUntilSub = null;
+			}
+
+			@Override
+			public boolean tryLock() {
+				return theWrappedObserver.tryLock();
+			}
+
+			@Override
+			public void unlock() {
+				theWrappedObserver.unlock();
 			}
 
 			@Override
@@ -1037,6 +1032,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 			}
 
 			@Override
+			public boolean tryLock() {
+				return theWrappedObserver.tryLock();
+			}
+
+			@Override
+			public void unlock() {
+				theWrappedObserver.unlock();
+			}
+
+			@Override
 			public void unsubscribe() {
 				Subscription sub = theSubscription;
 				theSubscription = null;
@@ -1115,6 +1120,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 			}
 
 			@Override
+			public boolean tryLock() {
+				return theWrappedObserver.tryLock();
+			}
+
+			@Override
+			public void unlock() {
+				theWrappedObserver.unlock();
+			}
+
+			@Override
 			public void unsubscribe() {
 				Subscription sub = theSubscription;
 				theSubscription = null;
@@ -1160,6 +1175,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 				@Override
 				public void onCompleted(Supplier<Causable> cause) {
 					observer.onCompleted(cause);
+				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
 				}
 			});
 		}
@@ -1211,6 +1236,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 						});
 					}
 				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
+				}
 			});
 		}
 
@@ -1220,18 +1255,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			return theLocking.lock(false, null);
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theLocking.tryLock(false, null);
+		public Transaction lock(boolean tryOnly) {
+			return theLocking.lock(tryOnly);
 		}
 
 		@Override
@@ -1302,16 +1327,18 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 						others[j - 1] = components[j];
 				}
 				subs[i] = components[i] == null ? Subscription.NONE : components[i].subscribe(new Observer<V>() {
+					private Transaction theLock;
+
 					@Override
 					public void onNext(V value) {
-						try (Transaction t = Lockable.lockAll(others)) {
+						try (Transaction t = theLock != null ? Transaction.NONE : Lockable.lockAll(true, others)) {
 							observer.onNext(value);
 						}
 					}
 
 					@Override
 					public void onCompleted(Supplier<Causable> cause) {
-						try (Transaction t = Lockable.lockAll(others)) {
+						try (Transaction t = theLock != null ? Transaction.NONE : Lockable.lockAll(true, others)) {
 							subs[index] = null;
 							boolean allDone = !init[0];
 							for (int j = 0; allDone && j < subs.length; j++)
@@ -1319,6 +1346,27 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 									allDone = false;
 							if (allDone)
 								observer.onCompleted(cause);
+						}
+					}
+
+					@Override
+					public boolean tryLock() {
+						if (theLock == null) {
+							theLock = Lockable.lockAll(true, others);
+							if (theLock != null && !observer.tryLock()) {
+								theLock.close();
+								theLock = null;
+							}
+						}
+						return theLock != null;
+					}
+
+					@Override
+					public void unlock() {
+						if (theLock != null) {
+							theLock.close();
+							theLock = null;
+							observer.unlock();
 						}
 					}
 				});
@@ -1334,21 +1382,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			for (Observable<?> o : getComponents())
-				if (o != null && !o.isSafe())
-					return false;
-			return true;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Lockable.lockAll(getComponents());
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return Lockable.tryLockAll(getComponents());
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(getComponents(), tryOnly);
 		}
 
 		@Override
@@ -1380,7 +1415,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 
 		@Override
 		protected List<Observable<? extends V>> getComponents() {
-			return Arrays.asList(theObservables);
+			return BetterList.of(theObservables);
 		}
 
 		@Override
@@ -1414,6 +1449,16 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 				@Override
 				public void onCompleted(Supplier<Causable> cause) {
 					observer.onCompleted(cause);
+				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
 				}
 			});
 		}
@@ -1458,22 +1503,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return false;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public Transaction tryLock() {
+		public Transaction lock(boolean tryOnly) {
 			return Transaction.NONE;
 		}
 
@@ -1610,22 +1640,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable, Stampe
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return false;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public Transaction tryLock() {
+		public Transaction lock(boolean tryOnly) {
 			return Transaction.NONE;
 		}
 

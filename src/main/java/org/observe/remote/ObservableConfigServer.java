@@ -161,7 +161,7 @@ public class ObservableConfigServer {
 	 * @return All changes that have occurred on this client (locally for from other sources) that the other client doesn't know about
 	 */
 	public NavigableSet<ObservableServiceChange> pollChanges(Map<ObservableServiceClient.ClientId, ChangeId> knownChanges) {
-		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(false, null)) {
+		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(false)) {
 			NavigableSet<ObservableServiceChange> changes = theConfig == null ? new TreeSet<>()
 				: theConfig.getRootData().pollChanges(knownChanges);
 			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> roleChange : theRoleChanges
@@ -189,7 +189,7 @@ public class ObservableConfigServer {
 	 */
 	public void applyChanges(List<SerializedObservableServerChangeSet> changes) {
 		List<SerializedObservableServerChangeSet.Change> addChanges = new ArrayList<>();
-		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(true, null)) {
+		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lockWrite(false, null)) {
 			for (SerializedObservableServerChangeSet changeSet : changes) {
 				ObservableServiceClient actor = getOrCreateClient(changeSet.getActorId());
 				if (actor == null)

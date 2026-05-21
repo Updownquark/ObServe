@@ -177,13 +177,13 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return getWrapped().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -212,7 +212,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 					private final BetterSortedSet<ElementId> thePresentElements;
 					{
@@ -323,7 +323,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public int indexFor(Comparable<? super E> search) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				int index = getWrapped().indexFor(BetterSortedList.ReversedSortedList.reverse(search));
 				if (index >= 0)
 					return size() - index - 1;
@@ -1092,42 +1092,42 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public ListElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().search(search, filter);
 			}
 		}
 
 		@Override
 		public int indexFor(Comparable<? super E> search) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().indexFor(search);
 			}
 		}
 
 		@Override
 		public boolean isConsistent(ElementId element) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().isConsistent(element);
 			}
 		}
 
 		@Override
 		public boolean checkConsistency() {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().checkConsistency();
 			}
 		}
 
 		@Override
 		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().repair(element, listener);
 			}
 		}
 
 		@Override
 		public <X> boolean repair(RepairListener<E, X> listener) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().repair(listener);
 			}
 		}

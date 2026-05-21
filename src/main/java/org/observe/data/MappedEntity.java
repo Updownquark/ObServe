@@ -1,12 +1,15 @@
 package org.observe.data;
 
 import java.util.Comparator;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValue.Getter;
+import org.observe.Observer;
+import org.observe.SettableValue.Setter;
+import org.observe.SettableValueListening;
 import org.observe.SimpleObservable;
 import org.observe.assoc.ModControlledObservableMap;
 import org.observe.assoc.ModControlledObservableMultiMap;
@@ -49,7 +52,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 	private final ReflectedEntityValueType<E> theType;
 	private final Object[] theRealFieldValues;
 	private final E theRealEntity;
-	private ListenerList<Consumer<FieldChange<?>>>[] theListeners;
+	private SettableValueListening<FieldChange<?>>[] theListeners;
 	private SimpleObservable<Void> theUntil;
 
 	/**
@@ -60,15 +63,16 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 	public MappedEntity(ReflectedEntityValueType<E> type, ReflectedEntitySet entitySet, Object[] id) {
 		super(type.getGenericType(), entitySet, id);
 		theType = type;
-		theRealFieldValues = new Object[type.getFields().keySize()];
-		theRealEntity = theType.getReflector().newInstance(this);
-		EntityReflector.associate(theRealEntity, ENTITY_ASSOC, this);
+		theRealFieldValues = new Object[type.getReflector().getFields().keySize()];
 		int f = 0;
-		for (ReflectedFieldType<E, ?, ?> field : theType.getFields().values()) {
-			theRealFieldValues[f] = ((RealFieldValueProducer<Object, ?>) field.getRealMapping()).genericToReal(//
+		for (ReflectedFieldType<E, ?, ?> field : theType.getFields().allValues()) {
+			int reflectedIndex = theType.genericToReflected().toDest(f);
+			theRealFieldValues[reflectedIndex] = ((RealFieldValueProducer<Object, ?>) field.getRealMapping()).genericToReal(//
 				get(field.getGenericField()), entitySet, this);
 			f++;
 		}
+		theRealEntity = theType.getReflector().newInstance(this);
+		EntityReflector.associate(theRealEntity, ENTITY_ASSOC, this);
 	}
 
 	/** @return The "real" entity proxy that is an instance of this entity's run-time java type */
@@ -90,24 +94,110 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 
 	@Override
 	public MappedEntity<E> set(EntityField<?> field, Object value) {
-		try (Transaction t = getEntitySet().lock(true, null)) {
+		try (Transaction t = getEntitySet().lockWrite(false, null)) {
 			super.set(field, value);
-			int index = theType.getGenericType().indexOf(field);
-			Object oldValue = theRealFieldValues[index];
-			Object newValue = ((RealFieldValueProducer<Object, Object>) theType.getFields().get(index).getRealMapping()).asFunction()
+			int genericIndex = theType.getGenericType().indexOf(field);
+			int reflectedIndex = theType.genericToReflected().toDest(genericIndex);
+			Object oldValue = theRealFieldValues[reflectedIndex];
+			Object newValue = ((RealFieldValueProducer<Object, Object>) theType.getFields().get(genericIndex).getRealMapping()).asFunction()
 				.apply(value);
-			theRealFieldValues[index] = newValue;
+			theRealFieldValues[reflectedIndex] = newValue;
 			if (theListeners != null) {
-				ListenerList<Consumer<FieldChange<?>>> listeners = theListeners[index];
+				SettableValueListening<FieldChange<?>> listeners = theListeners[reflectedIndex];
 				if (listeners != null) {
 					FieldChange<Object> change = new FieldChange<>(oldValue, newValue, getEntitySet().getLock().getRootCausable());
-					listeners.forEach(//
-						l -> l.accept(change));
+					listeners.fire(change);
 				}
 			}
 			getEntitySet().entityAffected(this);
 		}
 		return this;
+	}
+
+	@Override
+	public Getter<?> getter(int fieldIndex, boolean tryOnly) {
+		Transaction esLock = getEntitySet().lock(tryOnly);
+		if (esLock == null)
+			return null;
+		return new Getter<Object>() {
+			@Override
+			public Object get() {
+				return theRealFieldValues[fieldIndex];
+			}
+
+			@Override
+			public void close() {
+				esLock.close();
+			}
+		};
+	}
+
+	@Override
+	public Setter<?> setter(int fieldIndex, boolean tryOnly, Object cause) {
+		Transaction esLock = getEntitySet().lockWrite(tryOnly, cause);
+		if (esLock == null)
+			return null;
+		int genericIndex = theType.genericToReflected().toSource(fieldIndex);
+		SettableValueListening<FieldChange<?>> listeners = theListeners[fieldIndex];
+		Transaction listenerLock;
+		if (listeners != null) {
+			Transaction listenerLock0 = listeners.lockWrite(true, cause);
+			if (listenerLock0 == null) {
+				if (tryOnly) {
+					esLock.close();
+					return null;
+				}
+				do {
+					esLock.close();
+					esLock = getEntitySet().lockWrite(false, cause);
+					listenerLock0 = listeners.lockWrite(true, cause);
+				} while (listenerLock0 == null);
+			}
+			listenerLock = listenerLock0;
+		} else
+			listenerLock = Transaction.NONE;
+		Transaction fEsLock = esLock;
+		EntityField<?> field = theType.getGenericType().getFields().get(genericIndex);
+		return new Setter<Object>() {
+			@Override
+			public Object get() {
+				return theRealFieldValues[fieldIndex];
+			}
+
+			@Override
+			public String isEnabled() {
+				return MappedEntity.this.isEnabled(field);
+			}
+
+			@Override
+			public String isAcceptable(Object value) {
+				return MappedEntity.this.isAcceptable(field, value);
+			}
+
+			@Override
+			public Object set(Object value) {
+				MappedEntity.super.set(field, value);
+				Object oldValue = theRealFieldValues[fieldIndex];
+				Object newValue = ((RealFieldValueProducer<Object, Object>) theType.getFields().get(genericIndex).getRealMapping())
+					.asFunction().apply(value);
+				theRealFieldValues[fieldIndex] = newValue;
+				if (theListeners != null) {
+					SettableValueListening<FieldChange<?>> innerListeners = theListeners[fieldIndex];
+					if (innerListeners != null) {
+						FieldChange<Object> change = new FieldChange<>(oldValue, newValue, getEntitySet().getLock().getRootCausable());
+						innerListeners.fire(change);
+					}
+				}
+				getEntitySet().entityAffected(MappedEntity.this);
+				return oldValue;
+			}
+
+			@Override
+			public void close() {
+				listenerLock.close();
+				fEsLock.close();
+			}
+		};
 	}
 
 	@Override
@@ -213,6 +303,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 	@Override
 	protected void deleted() {
 		getEntitySet().deleteEntity(this);
+		EntityReflector.destroyEntity(theRealEntity);
 	}
 
 	@Override
@@ -222,24 +313,29 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 
 	@Override
 	public void set(int fieldIndex, Object newValue) {
-		ReflectedFieldType<E, ?, ?> field = theType.getFields().get(fieldIndex);
+		int genericIndex = theType.genericToReflected().toSource(fieldIndex);
+		if (genericIndex < 0) {
+			theRealFieldValues[fieldIndex] = newValue;
+			return;
+		}
+		ReflectedFieldType<E, ?, ?> field = theType.getFields().get(genericIndex);
 		Function<?, ?> reverse = field.getGenericMapping();
 		if (reverse == null)
 			throw new IllegalArgumentException(isEnabled(fieldIndex).get());
 		set(field.getGenericField(), ((Function<Object, ?>) reverse).apply(newValue));
 	}
 
-	private ListenerList<Consumer<FieldChange<?>>> getListeners(int fieldIndex) {
+	private SettableValueListening<FieldChange<?>> getListeners(int fieldIndex) {
 		if (theListeners == null)
-			theListeners = new ListenerList[getType().getFields().size()];
+			theListeners = new SettableValueListening[getType().getFields().size()];
 		if (theListeners[fieldIndex] == null)
-			theListeners[fieldIndex] = ListenerList.build().build();
+			theListeners[fieldIndex] = new SettableValueListening<>(null, null, ListenerList.build().build());
 		return theListeners[fieldIndex];
 	}
 
 	@Override
-	public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
-		return getListeners(fieldIndex).add(listener, true);
+	public Subscription addListener(E entity, int fieldIndex, Observer<FieldChange<?>> listener) {
+		return getListeners(fieldIndex).subscribe(listener);
 	}
 
 	@Override
@@ -249,7 +345,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 
 	@Override
 	public boolean isEventing(int fieldIndex) {
-		return theListeners != null && theListeners[fieldIndex] != null && theListeners[fieldIndex].isFiring();
+		return theListeners != null && theListeners[fieldIndex] != null && theListeners[fieldIndex].isEventing();
 	}
 
 	@Override

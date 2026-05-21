@@ -441,7 +441,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getSource().onChange(evt -> {
 					int keySize = keySet().size();
 					if (keySize == 0)
@@ -503,11 +503,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public CoreChangeSources getChangeSources() {
 			return getWrapped().getChangeSources();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
 		}
 
 		@Override

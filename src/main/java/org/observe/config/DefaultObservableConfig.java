@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.LightWeightObservable;
 import org.observe.Observable;
@@ -14,9 +15,8 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionElementMove;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
-import org.qommons.Subscription;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
+import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
@@ -144,18 +144,13 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return theContent.isLockSupported();
+	public Transaction lock(boolean tryOnly) {
+		return theContent.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return withCause(theContent.lock(write, cause), cause);
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return withCause(theContent.tryLock(write, cause), cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return withCause(theContent.lockWrite(tryOnly, cause), cause);
 	}
 
 	@Override
@@ -232,7 +227,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 			throw new NullPointerException("Name must not be null");
 		else if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			String oldName = theName;
 			theName = name;
 			fire(CollectionChangeType.set, null, BetterList.empty(), oldName, theValue);
@@ -242,7 +237,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 
 	@Override
 	public ObservableConfig setValue(String value) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			String oldValue = theValue;
 			theValue = value;
 			fire(CollectionChangeType.set, null, //
@@ -325,7 +320,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		return BetterList.of(array);
 	}
 
-	private static class InternalObservableConfigListener implements Observer.SimpleObserver<ObservableConfigEvent> {
+	private static class InternalObservableConfigListener implements Observer<ObservableConfigEvent> {
 		final ObservableConfigPath path;
 		final Observer<? super ObservableConfigEvent> listener;
 
@@ -342,6 +337,20 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 				listener.onCompleted(() -> value);
 			else
 				listener.onNext(value);
+		}
+
+		@Override
+		public void onCompleted(Supplier<Causable> cause) {
+		}
+
+		@Override
+		public boolean tryLock() {
+			return listener.tryLock();
+		}
+
+		@Override
+		public void unlock() {
+			listener.unlock();
 		}
 
 		@Override
@@ -366,7 +375,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableConfigEvent> observer) {
-			return theConfig.theChanges.act(new InternalObservableConfigListener(thePath, observer));
+			return theConfig.theChanges.subscribe(new InternalObservableConfigListener(thePath, observer));
 		}
 
 		@Override
@@ -380,19 +389,10 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theConfig.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theConfig.lock(tryOnly);
 		}
 
-		@Override
-		public Transaction lock() {
-			return theConfig.lock(false, null);
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theConfig.tryLock(false, null);
-		}
 
 		@Override
 		public CoreId getCoreId() {

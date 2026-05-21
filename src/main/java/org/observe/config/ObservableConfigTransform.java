@@ -17,6 +17,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
+import org.observe.SettableValueListening;
 import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMapEvent;
@@ -36,27 +37,15 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.ListenerList;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.fn.FunctionUtils;
-import org.qommons.collect.MutableListElement;
-import org.qommons.collect.MutableOrderedMapEntry;
-import org.qommons.collect.OrderedMapEntry;
-import org.qommons.collect.OrderedMultiEntry;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
@@ -119,7 +108,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				ObservableConfig newParent = evt.getNewValue();
 				if (newParent != null && publishSelf())
 					newParent.withParsedItem(theSession, this);
-				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
+				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false)) {
 					initConfig(evt.getNewValue(), evt, initialized[0] ? Observable.constant(null) : findRefs);
 					if (listen && newParent != null)
 						newParent.watch("").takeUntil(theUntil).act(Observer.printableObserver(this::onChange, //
@@ -168,7 +157,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		if (!createIfAbsent && parentAction == null) {
 			return theParent.get();
 		}
-		Transaction parentLock = lock(createIfAbsent, null);
+		Transaction parentLock = createIfAbsent ? lockWrite(false, null) : lock(false);
 		try {
 			ObservableConfig parent = theParent.get();
 			while (parent == null && createIfAbsent) {
@@ -204,18 +193,13 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return true;
+	public Transaction lock(boolean tryOnly) {
+		return theLock.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theLock.lock(write, cause);
-	}
-
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return theLock.tryLock(write, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return theLock.lockWrite(tryOnly, cause);
 	}
 
 	@Override
@@ -262,7 +246,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 	static class ObservableConfigValue<E> extends ObservableConfigTransform implements SettableValue<E> {
 		private final ObservableConfigFormat<E> theFormat;
 
-		private final ListenerList<Observer<? super ObservableValueEvent<E>>> theListeners;
+		private final SettableValueListening<ObservableValueEvent<E>> theListeners;
 
 		private E theValue;
 		private final ValueHolder<E> theModifyingValue;
@@ -273,7 +257,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			super(lock, session, parent, ceCreate, until);
 			theFormat = format;
 
-			theListeners = ListenerList.build().withFastSize(false).build();
+			theListeners = new SettableValueListening<>(null, null, ListenerList.build().withFastSize(false).build());
 			theModifyingValue = new ValueHolder<>();
 
 			init(until == null ? Observable.empty() : until, listen, findRefs);
@@ -293,6 +277,100 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		public ObservableConfigValue<E> alias(String alias) {
 			super.alias(alias);
 			return this;
+		}
+
+		@Override
+		public Getter<E> lock(boolean tryOnly) {
+			Transaction lock = super.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<E>() {
+				@Override
+				public E get() {
+					return theValue;
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
+		}
+
+		@Override
+		public Setter<E> lockWrite(boolean tryOnly, Object cause) {
+			Transaction superLock = super.lockWrite(tryOnly, cause);
+			if (superLock == null)
+				return null;
+			Transaction listenerLock = theListeners.lockWrite(true, cause);
+			if (listenerLock == null) {
+				if (tryOnly) {
+					superLock.close();
+					return null;
+				}
+				do {
+					superLock.close();
+					superLock = super.lockWrite(false, cause);
+					listenerLock = theListeners.lockWrite(true, cause);
+				} while (listenerLock == null);
+			}
+			Transaction fSuperLock = superLock;
+			Transaction fListenerLock = listenerLock;
+			Getter<Boolean> connected = isConnected().lock(false);
+			return new Setter<E>() {
+				@Override
+				public E get() {
+					return theValue;
+				}
+
+				@Override
+				public String isEnabled() {
+					if (connected.get())
+						return null;
+					else
+						return "Not connected";
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					return isEnabled();
+				}
+
+				@Override
+				public E set(E value) {
+					isSetting = true;
+					Object[] oldValue = new Object[1];
+					boolean[] changed = new boolean[1];
+					try {
+						getParent(true, false, parent -> {
+							try (Transaction parentT = parent.lockWrite(false, null)) {
+								E oldV = theValue;
+								oldValue[0] = oldV;
+								changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, false,
+									getUntil());
+							} finally {
+								theModifyingValue.clear();
+							}
+						});
+						if (!changed[0]) {// If there was no change by the format, we need to fire an event ourselves
+							ObservableValueEvent<E> evt = createChangeEvent((E) oldValue[0], value, getCurrentCauses());
+							try (Transaction t = evt.use()) {
+								theListeners.fire(evt);
+							}
+						}
+					} finally {
+						isSetting = false;
+					}
+					return (E) oldValue[0];
+				}
+
+				@Override
+				public void close() {
+					connected.close();
+					fListenerLock.close();
+					fSuperLock.close();
+				}
+			};
 		}
 
 		@Override
@@ -319,23 +397,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				}
 
 				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public boolean isLockSupported() {
-					return ObservableConfigValue.this.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return ObservableConfigValue.this.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return ObservableConfigValue.this.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return ObservableConfigValue.this.lock(tryOnly);
 				}
 
 				@Override
@@ -355,7 +418,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-					return theListeners.add(observer, true);
+					return theListeners.subscribe(observer);
 				}
 			}
 			return new OCVChanges();
@@ -371,11 +434,11 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
 			Object[] oldValue = new Object[1];
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				isSetting = true;
 				boolean[] changed = new boolean[1];
 				getParent(true, false, parent -> {
-					try (Transaction parentT = parent.lock(true, null)) {
+					try (Transaction parentT = parent.lockWrite(false, null)) {
 						E oldV = theValue;
 						oldValue[0] = oldV;
 						changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, false,
@@ -440,8 +503,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 		private void fire(ObservableValueEvent<E> event) {
 			try (Transaction t = event.use()) {
-				theListeners.forEach(//
-					listener -> listener.onNext(event));
+				theListeners.fire(event);
 			}
 		}
 
@@ -646,7 +708,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 				throw new UnsupportedOperationException("Not connected");
 			ConfigElement[] cve = new ObservableConfigBackedCollection.ConfigElement[1];
 			getParent(true, true, parent -> {
-				try (Transaction t = parent.lock(true, null)) {
+				try (Transaction t = parent.lockWrite(false, null)) {
 					if (after != null && !after.isPresent())
 						throw new IllegalStateException("Collection has changed: " + after + " is no longer present");
 					if (before != null && !before.isPresent())
@@ -776,7 +838,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			protected void setOp(E value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (!isConnected().get())
 					throw new UnsupportedOperationException("Not connected");
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					if (!theConfig.getParentChildRef().getElementId().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					modifying = new ValueHolder<>(value);
@@ -874,18 +936,13 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			}
 
 			@Override
-			public boolean isLockSupported() {
-				return true;
+			public Transaction lock(boolean tryOnly) {
+				return ObservableConfigBackedCollection.this.lock(tryOnly);
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return ObservableConfigBackedCollection.this.lock(write, cause);
-			}
-
-			@Override
-			public Transaction tryLock(boolean write, Object cause) {
-				return ObservableConfigBackedCollection.this.tryLock(write, cause);
+			public Transaction lockWrite(boolean tryOnly, Object cause) {
+				return ObservableConfigBackedCollection.this.lockWrite(tryOnly, cause);
 			}
 
 			@Override
@@ -920,14 +977,14 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public ListElement<E> getElement(int index) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					return theElements.getEntryById(theElements.keySet().getElement(index).getElementId()).get();
 				}
 			}
 
 			@Override
 			public ListElement<E> getElement(E value, boolean first) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					ListElement<E> el = getTerminalElement(first);
 					while (el != null && !Objects.equals(el.get(), value))
 						el = el.getAdjacent(first);
@@ -982,7 +1039,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-				try (Transaction t = lock(false, null)) {
+				try (Transaction t = lock(false)) {
 					ObservableConfig valueConfig = theElements.getEntryById(valueEl).get().theConfig;
 					ObservableConfig afterConfig = after == null ? null : theElements.getEntryById(after).get().theConfig;
 					ObservableConfig beforeConfig = before == null ? null : theElements.getEntryById(before).get().theConfig;
@@ -993,7 +1050,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			@Override
 			public ListElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 				throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					ObservableConfig valueConfig = theElements.getEntryById(valueEl).get().theConfig;
 					ObservableConfig afterConfig = after == null ? null : theElements.getEntryById(after).get().theConfig;
 					ObservableConfig beforeConfig = before == null ? null : theElements.getEntryById(before).get().theConfig;
@@ -1010,7 +1067,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public void clear() {
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					for (CollectionElement<ConfigElement> el : theElements.values().reverse().elements()) {
 						el.get().remove();
 					}
@@ -1024,7 +1081,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 
 			@Override
 			public void setValue(Collection<ElementId> elements, E value) {
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					for (ElementId el : elements) {
 						theElements.getEntryById(el).get().set(value);
 					}
@@ -1345,18 +1402,13 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theCollection.getBacking().isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theCollection.getBacking().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.getBacking().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theCollection.getBacking().tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theCollection.getBacking().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1475,18 +1527,13 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theCollection.getBacking().isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theCollection.getBacking().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.getBacking().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theCollection.getBacking().tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theCollection.getBacking().lockWrite(tryOnly, cause);
 		}
 
 		@Override

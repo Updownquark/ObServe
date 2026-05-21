@@ -7,7 +7,6 @@ import org.observe.Observable;
 import org.observe.Observable.CoreChangeSources;
 import org.observe.collect.CollectionElementMove;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -50,13 +49,13 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theWrapped.lock(false, cause);
+	public Transaction lock(boolean tryOnly) {
+		return theWrapped.lock(tryOnly);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return theWrapped.tryLock(false, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return theWrapped.lock(tryOnly);
 	}
 
 	@Override
@@ -294,13 +293,13 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theBacking.lock(false, cause);
+		public Transaction lock(boolean tryOnly) {
+			return theBacking.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theBacking.tryLock(false, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theBacking.lock(tryOnly);
 		}
 
 		@Override

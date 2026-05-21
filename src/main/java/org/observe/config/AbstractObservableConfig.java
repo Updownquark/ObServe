@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 
 import org.observe.collect.CollectionElementMove;
 import org.qommons.Lockable;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -80,7 +81,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 
 	private AbstractObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<? super AbstractObservableConfig> preAddMod, CollectionElementMove move) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			AbstractObservableConfig child = createChild(name);
 			child.theParent = this;
 			if (preAddMod != null)
@@ -104,7 +105,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	@Override
 	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
 		Runnable afterRemove) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			if (child.getParent() != this)
 				throw new NoSuchElementException("Config is not a child of this config");
 			if (!child.getParentChildRef().getElementId().isPresent())
@@ -123,9 +124,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 
 	@Override
 	public ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras) {
-		try (Transaction t = Lockable.lockAll(//
-			Lockable.lockable(source, false, null), //
-			Lockable.lockable(this, true, null))) {
+		try (Transaction t = Lockable.lockAll(false, source, Transactable.asWriteLockable(this, null))) {
 			_copyFrom(source, removeExtras, false);
 		}
 		return this;
@@ -180,7 +179,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	}
 
 	private void _remove(CollectionElementMove move) {
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			ListElement<ObservableConfig> pcr = getParentChildRef();
 			if (pcr == null || !pcr.getElementId().isPresent())
 				return;

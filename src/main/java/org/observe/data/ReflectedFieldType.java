@@ -32,7 +32,7 @@ public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 	ReflectedFieldType(ReflectedEntityValueType<E> owner, EntityField<G> field) {
 		theOwner = owner;
 		theField = field;
-		theReflector = (EntityReflector.ReflectedField<E, R>) owner.getReflector().getFields().get(owner.getGenericType().indexOf(field));
+		theReflector = (EntityReflector.ReflectedField<E, R>) owner.getReflector().getFields().get(field.getName());
 		List<ReflectedFieldType<? super E, G, R>> overrides = Collections.emptyList();
 		for (ReflectedEntityValueType<? super E> superType : theOwner.getSupers()) {
 			ReflectedFieldType<?, ?, ?> override = superType.getFields().get(theReflector.getName());
@@ -84,7 +84,7 @@ public class ReflectedFieldType<E, G, R> implements ConfiguredValueField<E, R> {
 
 	@Override
 	public int getIndex() {
-		return theReflector.getFieldIndex();
+		return theOwner.getGenericType().indexOf(theField);
 	}
 
 	@Override

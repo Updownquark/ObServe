@@ -54,6 +54,63 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	@Override
 	T get();
 
+	public interface Getter<T> extends Supplier<T>, Transaction {
+		@Override
+		default Getter<T> combine(Transaction... others) {
+			if (others.length == 0 || Arrays.stream(others).allMatch(Objects::isNull))
+				return this;
+			return new CombinedGetter<>(this, others);
+		}
+
+		static <T> Getter<T> of(Supplier<? extends T> value, Transaction transaction) {
+			return new ConstantGetter<>(value, transaction);
+		}
+
+		static class ConstantGetter<T> implements Getter<T> {
+			private final Supplier<? extends T> theValue;
+			private final Transaction theTransaction;
+
+			public ConstantGetter(Supplier<? extends T> value, Transaction transaction) {
+				theValue = value;
+				theTransaction = transaction;
+			}
+
+			@Override
+			public T get() {
+				return theValue == null ? null : theValue.get();
+			}
+
+			@Override
+			public void close() {
+				theTransaction.close();
+			}
+		}
+
+		static class CombinedGetter<T> implements Getter<T> {
+			private final Getter<T> theSource;
+			private final Transaction theTransaction;
+
+			public CombinedGetter(Getter<T> source, Transaction... transactions) {
+				theSource = source;
+				theTransaction = Transaction.and(transactions);
+			}
+
+			@Override
+			public T get() {
+				return theSource.get();
+			}
+
+			@Override
+			public void close() {
+				theTransaction.close();
+				theSource.close();
+			}
+		}
+	}
+
+	@Override
+	Getter<T> lock(boolean tryOnly);
+
 	/**
 	 * @return An observable that fires an {@link ObservableValueEvent#isInitial() initial} event for the current value when subscribed, and
 	 *         subsequent change events when this value changes
@@ -86,21 +143,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	}
 
 	@Override
-	default boolean isLockSupported() {
-		return changes().isLockSupported();
-	}
-
-	@Override
-	default Transaction lock() {
-		return noInitChanges().lock();
-	}
-
-	@Override
-	default Transaction tryLock() {
-		return noInitChanges().tryLock();
-	}
-
-	@Override
 	default CoreId getCoreId() {
 		return noInitChanges().getCoreId();
 	}
@@ -126,6 +168,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					public void onCompleted(Supplier<Causable> cause) {
 						observer.onCompleted(cause);
 					}
+
+					@Override
+					public boolean tryLock() {
+						return observer.tryLock();
+					}
+
+					@Override
+					public void unlock() {
+						observer.unlock();
+					}
 				});
 			}
 
@@ -140,18 +192,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public boolean isSafe() {
-				return ObservableValue.this.noInitChanges().isSafe();
-			}
-
-			@Override
-			public Transaction lock() {
-				return ObservableValue.this.lock();
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return ObservableValue.this.tryLock();
+			public Transaction lock(boolean tryOnly) {
+				return ObservableValue.this.lock(tryOnly);
 			}
 
 			@Override
@@ -231,6 +273,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ObservableValueEvent<T>> eventMap) {
 		return new WrappingObservableValue<T, T>(this) {
+			@Override
+			public Getter<T> lock(boolean tryOnly) {
+				return getWrapped().lock(tryOnly);
+			}
+
 			@Override
 			public CoreId getCoreId() {
 				return getWrapped().getCoreId();
@@ -681,6 +728,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
+		}
+
+		@Override
 		public boolean isEventing() {
 			return getWrapped().isEventing();
 		}
@@ -728,7 +780,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			try (Transaction t = theNoInitChanges.lock()) {
+			try (Transaction t = theNoInitChanges.lock(false)) {
 				// Subscribe first, then fire the initial event.
 				// One would think this doesn't matter since we've got a lock,
 				// but it affects the order in which listeners are registered, e.g. for flattened values
@@ -754,18 +806,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theNoInitChanges.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theNoInitChanges.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theNoInitChanges.tryLock();
+		public Transaction lock(boolean tryOnly) {
+			return theNoInitChanges.lock(tryOnly);
 		}
 
 		@Override
@@ -818,7 +860,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		private final TransformedElement<S, T> theElement;
 		private volatile long theSourceStamp;
 		private S theCachedSource;
-		private final ListenerList<Observer<? super ObservableValueEvent<T>>> theObservers;
+		private final SettableValueListening<ObservableValueEvent<T>> theObservers;
 
 		/**
 		 * @param source The source value to be transformed
@@ -833,7 +875,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			});
 			theElement = theEngine.createElement(FunctionUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
-			theObservers = ListenerList.build()//
+			theObservers = new SettableValueListening<>(null, null, ListenerList.build()//
 				.reentrancyError(() -> "Reentrancy not allowed: " + toString())//
 				.withInUse(new ListenerList.InUseListener() {
 					private Subscription theSourceSub;
@@ -861,55 +903,120 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							theTransformSub = null;
 							return;
 						}
-						try (Transaction t = Lockable.lockAll(theSource, theEngine)) {
-							theSourceSub = theSource.changes().act(evt -> {
-								try (Transaction t2 = theEngine.lock()) {
-									if (getTransformation().isCached())
-										theCachedSource = evt.getNewValue();
-									if (evt.isInitial()) {
-										// This call just makes sure the internal state is up-to-date,
-										// we don't have to do anything with the return values
-										getState(false, true);
-									} else {
-										BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(),
-											theEngine.get(false));
-										if (!evt.isInitial() && change != null)
-											fire(change.getValue1(), change.getValue2(), evt);
+						try (Transaction t = Lockable.lockAll(false, theSource, theEngine)) {
+							theSourceSub = theSource.changes().subscribe(new Observer<ObservableValueEvent<S>>() {
+								private Getter<TransformationState> theLock;
+
+								@Override
+								public void onNext(ObservableValueEvent<S> evt) {
+									boolean myLock = theLock == null;
+									Getter<TransformationState> engine = myLock ? theEngine.lock(false) : theLock;
+									try {
+										if (getTransformation().isCached())
+											theCachedSource = evt.getNewValue();
+										if (evt.isInitial()) {
+											// This call just makes sure the internal state is up-to-date,
+											// we don't have to do anything with the return values
+											getState(evt::getNewValue, engine, true);
+										} else {
+											BiTuple<T, T> change = theElement.sourceChanged(evt.getOldValue(), evt.getNewValue(),
+												theEngine.get(false));
+											if (!evt.isInitial() && change != null)
+												fire(change.getValue1(), change.getValue2(), evt);
+										}
+									} finally {
+										if (myLock)
+											engine.close();
+									}
+								}
+
+								@Override
+								public void onCompleted(Supplier<Causable> cause) {
+								}
+
+								@Override
+								public boolean tryLock() {
+									if (theLock == null) {
+										theLock = theEngine.lock(true);
+										if (theLock != null)
+											theLock = theLock.combine(lockListeners(true, null));
+									}
+									return theLock != null;
+								}
+
+								@Override
+								public void unlock() {
+									if (theLock != null) {
+										theLock.close();
+										theLock = null;
 									}
 								}
 							});
-							theTransformSub = theEngine.noInitChanges().act(evt -> {
-								try (Transaction t2 = theSource.lock()) {
-									BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(), evt.getNewValue());
-									if (change == null)
-										return;
-									T oldValue = change.getValue1();
-									T newValue;
-									// Check to see if the source is also changed such that we may not have received the change yet
-									if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
-										if (checkSourceChanged(evt.getNewValue()))
-											newValue = theElement.getCurrentValue(theEngine.getCachedState());
-										else
-											newValue = change.getValue2();
-									} else
-										newValue = change.getValue2();
-									if (change != null)
-										fire(oldValue, newValue, evt);
-								}
-							});
+							theTransformSub = theEngine.noInitChanges()
+								.subscribe(new Observer<ObservableValueEvent<TransformationState>>() {
+									private Getter<S> theLock;
+
+									@Override
+									public void onNext(ObservableValueEvent<TransformationState> evt) {
+										boolean myLock = theLock == null;
+										Getter<S> sourceGetter = myLock ? theSource.lock(false) : theLock;
+										try {
+											BiTuple<T, T> change = theElement.transformationStateChanged(evt.getOldValue(),
+												evt.getNewValue());
+											if (change == null)
+												return;
+											T oldValue = change.getValue1();
+											T newValue;
+											// Check to see if the source is also changed such that we may not have received the change yet
+											if (theTransformation.isCached() && (theSource.isEventing() || theObservers.isEmpty())) {
+												if (checkSourceChanged(sourceGetter, evt.getNewValue()))
+													newValue = theElement.getCurrentValue(theEngine.getCachedState());
+												else
+													newValue = change.getValue2();
+											} else
+												newValue = change.getValue2();
+											if (change != null)
+												fire(oldValue, newValue, evt);
+										} finally {
+											if (myLock)
+												sourceGetter.close();
+										}
+									}
+
+									@Override
+									public void onCompleted(Supplier<Causable> cause) {
+									}
+
+									@Override
+									public boolean tryLock() {
+										if (theLock == null) {
+											theLock = theSource.lock(true);
+											if (theLock != null)
+												theLock = theLock.combine(lockListeners(true, null));
+										}
+										return theLock != null;
+									}
+
+									@Override
+									public void unlock() {
+										if (theLock != null) {
+											theLock.close();
+											theLock = null;
+										}
+									}
+								});
 						}
 					}
 
-					private void fire(T oldValue, T newValue, Object cause) {
-						if (oldValue == newValue && theObservers.isFiring())
+					void fire(T oldValue, T newValue, Object cause) {
+						if (oldValue == newValue && theObservers.isEventing())
 							return; // Avoid reentrancy error
 						ObservableValueEvent<T> evt = createChangeEvent(oldValue, newValue, cause);
 						try (Transaction t = evt.use()) {
-							theObservers.forEach(//
-								obs -> obs.onNext(evt));
+							theObservers.fire(evt);
 						}
 					}
-				}).build();
+				}).build());
 		}
 
 		/** @return The source value being transformed */
@@ -931,13 +1038,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		 * Ensures that this value's state is up-to-date with any changes that may have occurred since the last poll, and returns the state
 		 * of this transformed value.
 		 *
-		 * @param withLock Whether a lock needs to be
+		 * @param source The source value supplier to use
+		 * @param engine The transformation state supplier to use
 		 * @param init Whether this call is from the initialization of listening
 		 * @return A tuple containing the current transformed element and transformation state of the engine
 		 */
-		protected BiTuple<TransformedElement<S, T>, TransformationState> getState(boolean withLock, boolean init) {
+		protected BiTuple<TransformedElement<S, T>, TransformationState> getState(Supplier<S> source, Supplier<TransformationState> engine,
+			boolean init) {
 			Transformation.TransformationState cachedState = theEngine.getCachedState();
-			Transformation.TransformationState state = theEngine.get(withLock);
+			Transformation.TransformationState state = theEngine.get();
 			if (state != cachedState)
 				theElement.transformationStateChanged(cachedState, state);
 			boolean checkSource;
@@ -951,18 +1060,18 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			} else
 				checkSource = false;
 			if (checkSource)
-				checkSourceChanged(state);
+				checkSourceChanged(source, state);
 			return new BiTuple<>(theElement, state);
 		}
 
-		boolean checkSourceChanged(Transformation.TransformationState state) {
+		boolean checkSourceChanged(Supplier<S> source, Transformation.TransformationState state) {
 			if (theSourceStamp == -1 || theSource.getStamp() != theSourceStamp) {
-				try (Transaction t = lock()) {
+				try (Transaction t = Lockable.lockLockable(source, false)) {
 					theSourceStamp = theSource.getStamp();
-					S source = theSource.get();
+					S sourceV = source.get();
 					S oldSource = theCachedSource;
-					theCachedSource = source;
-					theElement.sourceChanged(oldSource, source, state);
+					theCachedSource = sourceV;
+					theElement.sourceChanged(oldSource, sourceV, state);
 				}
 				return true;
 			} else
@@ -1006,11 +1115,6 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theSource.isLockSupported() || theEngine.isLockSupported();
-		}
-
-		@Override
 		public boolean isEventing() {
 			return theSource.isEventing() || theEngine.isEventing();
 		}
@@ -1022,10 +1126,67 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public T get() {
-			BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
+			BiTuple<TransformedElement<S, T>, TransformationState> state = getState(theSource, theEngine, false);
 			TransformedElement<S, T> el = state.getValue1();
 			TransformationState tx = state.getValue2();
 			return el.getCurrentValue(tx);
+		}
+
+		class TransformedValueGetter implements Getter<T> {
+			private final Getter<S> theSourceGetter;
+			private final Getter<TransformationState> theTxState;
+
+			protected TransformedValueGetter(Getter<S> source, Getter<TransformationState> txState) {
+				theSourceGetter = source;
+				theTxState = txState;
+			}
+
+			protected S getSource() {
+				return theSourceGetter.get();
+			}
+
+			protected TransformationState getTxState() {
+				return theTxState.get();
+			}
+
+			protected BiTuple<TransformedElement<S, T>, TransformationState> getState() {
+				return TransformedObservableValue.this.getState(theSourceGetter, theTxState, false);
+			}
+
+			@Override
+			public T get() {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
+				return state.getValue1().getCurrentValue(state.getValue2());
+			}
+
+			@Override
+			public void close() {
+				theTxState.close();
+				theSourceGetter.close();
+			}
+		}
+
+		@Override
+		public TransformedValueGetter lock(boolean tryOnly) {
+			Getter<S> source;
+			Getter<TransformationState> engineLock;
+			while (true) {
+				source = theSource.lock(tryOnly);
+				if (source == null)
+					return null;
+				engineLock = theEngine.lock(true);
+				if (engineLock == null) {
+					source.close();
+					if (tryOnly)
+						return null;
+				} else
+					break;
+			}
+			return new TransformedValueGetter(source, engineLock);
+		}
+
+		protected Transaction lockListeners(boolean tryOnly, Object cause) {
+			return theObservers.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1043,12 +1204,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					return theObservers.add(observer, true);
-				}
-
-				@Override
-				public boolean isSafe() {
-					return theSource.isLockSupported() || theEngine.isLockSupported();
+					return theObservers.subscribe(observer);
 				}
 
 				@Override
@@ -1057,13 +1213,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public Transaction lock() {
-					return Lockable.lockAll(theSource, theEngine);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return Lockable.tryLockAll(theSource, theEngine);
+				public Transaction lock(boolean tryOnly) {
+					return Lockable.lockAll(tryOnly, theSource, theEngine);
 				}
 
 				@Override
@@ -1116,6 +1267,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
+		}
+
+		@Override
 		public T get() {
 			return theWrapped.get();
 		}
@@ -1147,6 +1303,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(getWrapped().getIdentity(), "refresh", theRefresh.getIdentity());
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		protected Observable<?> getRefresh() {
@@ -1187,6 +1348,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							if (completed[1])
 								observer.onCompleted(cause);
 						}
+
+						@Override
+						public boolean tryLock() {
+							return observer.tryLock();
+						}
+
+						@Override
+						public void unlock() {
+							observer.unlock();
+						}
 					});
 					Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
 						@Override
@@ -1204,6 +1375,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							if (completed[0])
 								observer.onCompleted(cause);
 						}
+
+						@Override
+						public boolean tryLock() {
+							return observer.tryLock();
+						}
+
+						@Override
+						public void unlock() {
+							observer.unlock();
+						}
 					});
 					return () -> {
 						outerSub.unsubscribe();
@@ -1217,18 +1398,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theWrapped.changes().isSafe() && theRefresh.isSafe();
-				}
-
-				@Override
-				public Transaction lock() {
-					return Lockable.lockAll(theWrapped, theRefresh);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return Lockable.tryLockAll(theWrapped, theRefresh);
+				public Transaction lock(boolean tryOnly) {
+					return RefreshingObservableValue.this.lock(tryOnly);
 				}
 
 				@Override
@@ -1272,12 +1443,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 */
 	class RefreshEachValue<T> extends WrappingObservableValue<T, T> {
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
-		private final ReentrantLock theLock;
 
 		protected RefreshEachValue(ObservableValue<T> wrapped, Function<? super T, ? extends Observable<?>> refresh) {
 			super(wrapped);
 			theRefresh = refresh;
-			theLock = new ReentrantLock();
 		}
 
 		protected Function<? super T, ? extends Observable<?>> getRefresh() {
@@ -1285,30 +1454,34 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			Getter<T> source = getWrapped().lock(tryOnly);
+			if (source == null)
+				return null;
+			Observable<?> refresh = theRefresh.apply(source.get());
+			Transaction refreshLock = refresh == null ? Transaction.NONE : refresh.lock(true);
+			if (refreshLock == null) {
+				if (tryOnly) {
+					source.close();
+					return null;
+				}
+				do {
+					source.close();
+					source = getWrapped().lock(false);
+					refresh = theRefresh.apply(source.get());
+					refreshLock = refresh == null ? Transaction.NONE : refresh.lock(true);
+				} while (refreshLock == null);
+			}
+			return source.combine(refreshLock);
+		}
+
+		@Override
 		public T get() {
 			return getWrapped().get();
-		}
-
-		@Override
-		public Transaction lock() {
-			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
-			// or any refresh events that would violate the contract of a held lock
-			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
-			// because incoming refresh updates obtain a read lock on the parent
-			return Lockable.lockAll(getWrapped(), getRefreshLock());
-		}
-
-		@Override
-		public Transaction tryLock() {
-			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
-			// or any refresh events that would violate the contract of a held lock
-			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
-			// because incoming refresh updates obtain a read lock on the parent
-			return Lockable.tryLockAll(getWrapped(), getRefreshLock());
-		}
-
-		protected Lockable getRefreshLock() {
-			return Lockable.lockable(theLock, this, ThreadConstraint.ANY);
 		}
 
 		@Override
@@ -1344,6 +1517,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						private Subscription theRefreshSub;
 
 						@Override
+						public boolean tryLock() {
+							return observer.tryLock();
+						}
+
+						@Override
+						public void unlock() {
+							observer.unlock();
+						}
+
+						@Override
 						public void onNext(ObservableValueEvent<T> value) {
 							if (theRefreshSub != null && !Objects.equals(thePreviousValue, value.getNewValue())) {
 								theRefreshSub.unsubscribe();
@@ -1362,6 +1545,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 										@Override
 										public void onCompleted(Supplier<Causable> cause) {
 											refresh(cause);
+										}
+
+										@Override
+										public boolean tryLock() {
+											return observer.tryLock();
+										}
+
+										@Override
+										public void unlock() {
+											observer.unlock();
 										}
 									});
 							}
@@ -1396,18 +1589,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return wrappedChanges.isSafe();
-				}
-
-				@Override
-				public Transaction lock() {
-					return RefreshEachValue.this.lock();
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return RefreshEachValue.this.tryLock();
+				public Transaction lock(boolean tryOnly) {
+					return RefreshEachValue.this.lock(tryOnly);
 				}
 
 				@Override
@@ -1440,7 +1623,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		@Override
 		public long getStamp() {
-			try (Transaction t = lock()) {
+			try (Transaction t = lock(false)) {
 				T value = get();
 				Observable<?> refresh = theRefresh.apply(value);
 				if (refresh == null)
@@ -1527,6 +1710,11 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
+		}
+
+		@Override
 		public T get() {
 			return theLastEventedValue;
 		}
@@ -1555,18 +1743,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					return theLocking.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theLocking.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theLocking.lock(tryOnly);
 				}
 
 				@Override
@@ -1604,7 +1782,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	 *
 	 * @param <T> The type of this value
 	 */
-	class ConstantObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
+	class ConstantObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T>, Getter<T> {
 		private final T theValue;
 
 		/** @param value This observable value's value */
@@ -1616,6 +1794,15 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		protected Object createIdentity() {
 			return Identifiable.idFor(theValue, () -> String.valueOf(theValue), () -> Objects.hashCode(theValue),
 				other -> Objects.equals(theValue, other));
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return this;
+		}
+
+		@Override
+		public void close() {
 		}
 
 		@Override
@@ -1666,17 +1853,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					return Transaction.NONE;
-				}
-
-				@Override
-				public Transaction tryLock() {
+				public Transaction lock(boolean tryOnly) {
 					return Transaction.NONE;
 				}
 
@@ -1847,17 +2024,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					return Transaction.NONE;
-				}
-
-				@Override
-				public Transaction tryLock() {
+				public Transaction lock(boolean tryOnly) {
 					return Transaction.NONE;
 				}
 
@@ -1911,6 +2078,24 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			theStamp = stamp;
 			theChanges = changes;
 			theIdentity = identity;
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction lock = theChanges.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Getter<T>() {
+				@Override
+				public T get() {
+					return theValue.get();
+				}
+
+				@Override
+				public void close() {
+					lock.close();
+				}
+			};
 		}
 
 		@Override
@@ -1977,6 +2162,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						}
 
 						@Override
+						public boolean tryLock() {
+							return observer.tryLock();
+						}
+
+						@Override
+						public void unlock() {
+							observer.unlock();
+						}
+
+						@Override
 						public void onNext(Object value) {
 							boolean init = !isInitialized;
 							T newValue = theValue.get();
@@ -2005,7 +2200,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 					SyntheticChanges changes = new SyntheticChanges();
 					Subscription sub = theChanges.subscribe(changes);
 					if (!changes.isInitialized) {
-						try (Transaction t = theChanges.lock()) {
+						try (Transaction t = theChanges.lock(false)) {
 							if (!changes.isInitialized) {
 								changes.initialize();
 							}
@@ -2025,18 +2220,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theChanges.isSafe();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theChanges.lock();
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theChanges.tryLock();
+				public Transaction lock(boolean tryOnly) {
+					return theChanges.lock(tryOnly);
 				}
 
 				@Override
@@ -2072,15 +2257,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 		static class CachedSyntheticObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 			private final SyntheticObservable<T> theValue;
-			private final ListenerList<Observer<? super ObservableValueEvent<T>>> theListeners;
+			private final SettableValueListening<ObservableValueEvent<T>> theListeners;
 			private volatile T theCachedValue;
 			private volatile long theCachedStamp;
 
 			public CachedSyntheticObservableValue(SyntheticObservable<T> value) {
 				theValue = value;
-				theListeners = ListenerList.build()//
+				theListeners = new SettableValueListening<>(null, null, ListenerList.build()//
 					.withInUse(new ListenerList.InUseListener() {
 						private Subscription theChangesSub;
+						private Transaction theLock;
 
 						@Override
 						public void inUseChanged(boolean inUse) {
@@ -2090,21 +2276,60 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 								return;
 							}
 							get(); // Update for initial value
-							theChangesSub = theValue.theChanges.act(cause -> {
-								ObservableValueEvent<T> evt = createChangeEvent(theCachedValue, get(), cause);
-								try (Transaction t = evt.use()) {
-									theListeners.forEach(//
-										l -> l.onNext(evt));
+							theChangesSub = theValue.theChanges.subscribe(new Observer<Object>() {
+								@Override
+								public void onNext(Object cause) {
+									ObservableValueEvent<T> evt = createChangeEvent(theCachedValue, get(), cause);
+									try (Transaction t = evt.use()) {
+										theListeners.fire(evt);
+									}
+								}
+
+								@Override
+								public void onCompleted(Supplier<Causable> cause) {
+								}
+
+								@Override
+								public boolean tryLock() {
+									if (theLock == null)
+										theLock = theListeners.lockWrite(true, null);
+									return theLock != null;
+								}
+
+								@Override
+								public void unlock() {
+									if (theLock != null) {
+										theLock.close();
+										theLock = null;
+									}
 								}
 							});
 						}
-					}).build();
+					}).build());
 				theCachedStamp = -1;
 			}
 
 			@Override
 			protected Object createIdentity() {
 				return theValue.getIdentity();
+			}
+
+			@Override
+			public Getter<T> lock(boolean tryOnly) {
+				Transaction lock = theValue.theChanges.lock(tryOnly);
+				if (lock == null)
+					return null;
+				return new Getter<T>() {
+					@Override
+					public T get() {
+						return CachedSyntheticObservableValue.this.get();
+					}
+
+					@Override
+					public void close() {
+						lock.close();
+					}
+				};
 			}
 
 			@Override
@@ -2133,7 +2358,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				class CachedSyntheticChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 					@Override
 					public boolean isEventing() {
-						return theListeners.isFiring();
+						return theListeners.isEventing();
 					}
 
 					@Override
@@ -2158,22 +2383,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-						return theListeners.add(observer, true);
+						return theListeners.subscribe(observer);
 					}
 
 					@Override
-					public boolean isSafe() {
-						return theValue.theChanges.isSafe();
-					}
-
-					@Override
-					public Transaction lock() {
-						return theValue.lock();
-					}
-
-					@Override
-					public Transaction tryLock() {
-						return theValue.tryLock();
+					public Transaction lock(boolean tryOnly) {
+						return theValue.lock(tryOnly);
 					}
 
 					@Override
@@ -2235,6 +2450,78 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		protected Object createIdentity() {
 			return Identifiable.wrap(theValue.getIdentity(), "flat");
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction outerLock = theValue.lock(tryOnly);
+			if (outerLock == null)
+				return null;
+			ObservableValue<? extends T> value = theValue.get();
+			Getter<? extends T> innerLock = value == null ? Getter.of(theDefaultValue, outerLock) : value.lock(true);
+			if (innerLock == null) {
+				if (tryOnly)
+					return null;
+				do {
+					outerLock.close();
+					outerLock = theValue.lock(false);
+					value = theValue.get();
+					innerLock = value == null ? Getter.of(theDefaultValue, outerLock) : value.lock(true);
+				} while (innerLock == null);
+			}
+			return ((Getter<T>) innerLock).combine(outerLock);
+		}
+
+		protected class FlattenedValueGetter implements Getter<T> {
+			private final Getter<? extends ObservableValue<? extends T>> theOuterGetter;
+			private final Subscription theValueSubscription;
+			private ObservableValue<? extends T> theInnerValue;
+			private Getter<? extends T> theInnerGetter;
+
+			protected FlattenedValueGetter(Getter<? extends ObservableValue<? extends T>> outerGetter,
+				ObservableValue<? extends T> innerValue, Getter<? extends T> innerGetter) {
+				theOuterGetter = outerGetter;
+				theInnerValue = innerValue;
+				theInnerGetter = innerGetter;
+				theValueSubscription = theValue.noInitChanges().act(evt -> {
+					if (evt.getNewValue() != theInnerValue) {
+						if (theInnerGetter != null)
+							theInnerGetter.close();
+						theInnerValue = evt.getNewValue();
+						theInnerGetter = createInnerGetter(theInnerValue);
+					}
+				});
+			}
+
+			protected Getter<? extends T> createInnerGetter(ObservableValue<? extends T> value) {
+				return value == null ? null : value.lock(true);
+			}
+
+			protected ObservableValue<? extends T> getInnerValue() {
+				return theInnerValue;
+			}
+
+			protected Getter<? extends T> getInnerGetter() {
+				return theInnerGetter;
+			}
+
+			@Override
+			public T get() {
+				if (theInnerGetter != null)
+					return theInnerGetter.get();
+				else if (theInnerValue != null)
+					return theInnerValue.get();
+				else
+					return getDefaultValue() == null ? null : getDefaultValue().get();
+			}
+
+			@Override
+			public void close() {
+				theValueSubscription.close();
+				if (theInnerGetter != null)
+					theInnerGetter.close();
+				theOuterGetter.close();
+			}
 		}
 
 		@Override
@@ -2327,12 +2614,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				Subscription outerSub = theValue.changes()
 					.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 						private final ReentrantLock theLock = new ReentrantLock();
+						private boolean isLocked;
 						private ObservableValue<? extends T> theInnerObservable;
 
 						@Override
 						public void onNext(ObservableValueEvent<? extends ObservableValue<? extends T>> event) {
 							firedInit[0] = true;
-							theLock.lock();
+							if (!isLocked)
+								theLock.lock();
 							try {
 								final ObservableValue<? extends T> innerObs = event.getNewValue();
 								// Shouldn't have 2 inner observables potentially generating events at the same time
@@ -2347,7 +2636,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 										@Override
 										public void onNext(ObservableValueEvent<? extends T> event2) {
 											firedInit2[0] = true;
-											theLock.lock();
+											if (!isLocked)
+												theLock.lock();
 											try {
 												T innerOld;
 												if (event2.isInitial())
@@ -2367,12 +2657,23 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 												}
 												old[0] = event2.getNewValue();
 											} finally {
-												theLock.unlock();
+												if (!isLocked)
+													theLock.unlock();
 											}
 										}
 
 										@Override
 										public void onCompleted(Supplier<Causable> cause) {
+										}
+
+										@Override
+										public boolean tryLock() {
+											return tryLock0();
+										}
+
+										@Override
+										public void unlock() {
+											unlock0();
 										}
 									}));
 									if (!firedInit2[0])
@@ -2392,7 +2693,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									}
 								}
 							} finally {
-								theLock.unlock();
+								if (!isLocked)
+									theLock.unlock();
 							}
 						}
 
@@ -2408,6 +2710,35 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							// } finally {
 							// theLock.unlock();
 							// }
+						}
+
+						@Override
+						public boolean tryLock() {
+							return tryLock0();
+						}
+
+						boolean tryLock0() {
+							if (!isLocked) {
+								isLocked = theLock.tryLock();
+								if (isLocked && !observer.tryLock()) {
+									theLock.unlock();
+									isLocked = false;
+								}
+							}
+							return isLocked;
+						}
+
+						@Override
+						public void unlock() {
+							unlock0();
+						}
+
+						void unlock0() {
+							if (isLocked) {
+								theLock.unlock();
+								isLocked = false;
+								observer.unlock();
+							}
 						}
 					});
 				if (!firedInit[0])
@@ -2432,24 +2763,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public boolean isSafe() {
-				return false;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lock(theValue, theValue::get);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLock(theValue, theValue::get);
+			public Transaction lock(boolean tryOnly) {
+				return Lockable.lock(theValue, theValue::get, tryOnly);
 			}
 
 			@Override
 			public CoreId getCoreId() {
 				// Best we can do is a snapshot
-				try (Transaction t = theValue.lock()) {
+				try (Transaction t = theValue.lock(false)) {
 					return Lockable.getCoreId(theValue, theValue::get);
 				}
 			}
@@ -2527,6 +2848,51 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			// A naive interpretation of this would only lock values until a passing value was found,
+			// but this "lock" may be obtained beneath a write lock in which some of the component values may be modified.
+			// So we need to lock them all.
+			Getter<? extends T>[] locks = new Getter[theValues.length];
+			Transaction fullLock = Transaction.and(locks);
+			boolean success;
+			do {
+				success = true;
+				boolean complete = false;
+				try {
+					for (int i = 0; success && i < locks.length; i++) {
+						Getter<? extends T> lock = theValues[i].lock(true);
+						if (lock == null)
+							success = false;
+						else
+							locks[i] = lock;
+					}
+					complete = true;
+				} finally {
+					if (!success || !complete)
+						fullLock.close();
+				}
+			} while (!success && !tryOnly);
+			if (!success)
+				return null;
+			return new Getter<T>() {
+				@Override
+				public T get() {
+					for (Getter<? extends T> getter : locks) {
+						T value = getter.get();
+						if (test(value))
+							return value;
+					}
+					return theDefault == null ? null : theDefault.get();
+				}
+
+				@Override
+				public void close() {
+					fullLock.close();
+				}
+			};
+		}
+
+		@Override
 		public FirstObservableValue<T> alias(String alias) {
 			super.alias(alias);
 			return this;
@@ -2549,7 +2915,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return null;
 		}
 
-		private boolean test(T value) {
+		protected boolean test(T value) {
 			if (theTest != null)
 				return theTest.test(value);
 			else
@@ -2591,7 +2957,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {
-					T defaultV=theDefault==null ? null : theDefault.get();
+					T defaultV = theDefault == null ? null : theDefault.get();
 					ObservableValueEvent<T> evt = createInitialEvent(defaultV, null);
 					try (Transaction t = evt.use()) {
 						observer.onNext(evt);
@@ -2606,6 +2972,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
 					private final int index;
 					private boolean isFound;
+					private boolean isLocked;
 
 					ElementFirstObserver(int idx) {
 						index = idx;
@@ -2692,6 +3059,26 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							observer.onCompleted(cause);
 					}
 
+					@Override
+					public boolean tryLock() {
+						if (!isLocked) {
+							isLocked = lock.tryLock();
+							if (isLocked && !observer.tryLock()) {
+								lock.unlock();
+								isLocked = false;
+							}
+						}
+						return isLocked;
+					}
+
+					@Override
+					public void unlock() {
+						if (isLocked) {
+							lock.unlock();
+							observer.unlock();
+						}
+					}
+
 					private boolean allCompleted() {
 						for (boolean f : finished)
 							if (!f)
@@ -2720,18 +3107,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 
 			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
+			public Transaction lock(boolean tryOnly) {
+				return Lockable.lockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges, tryOnly);
 			}
 
 			@Override
@@ -2794,6 +3171,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							public void onCompleted(Supplier<Causable> cause) {
 								// Don't use the completed events because the contents of this observable may be replaced
 							}
+
+							@Override
+							public boolean tryLock() {
+								return observer.tryLock();
+							}
+
+							@Override
+							public void unlock() {
+								observer.unlock();
+							}
 						});
 					}
 				}
@@ -2802,27 +3189,22 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				public void onCompleted(Supplier<Causable> cause) {
 					observer.onCompleted(cause);
 				}
+
+				@Override
+				public boolean tryLock() {
+					return observer.tryLock();
+				}
+
+				@Override
+				public void unlock() {
+					observer.unlock();
+				}
 			});
 		}
 
 		@Override
-		public boolean isSafe() {
-			return false; // Can't guarantee that the contents will always be safe
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theValue.changes().isLockSupported();
-		}
-
-		@Override
-		public Transaction lock() {
-			return Lockable.lock(theValue.changes(), theValue::get);
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return Lockable.tryLock(theValue.changes(), theValue::get);
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lock(theValue.changes(), theValue::get, tryOnly);
 		}
 
 		@Override
@@ -2920,6 +3302,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction lock = theLock.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return Getter.of(this, lock);
+		}
+
+		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			class LOVChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
 				@Override
@@ -2943,18 +3333,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theLock.isLockSupported();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theLock.lock(false, null);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theLock.tryLock(false, null);
+				public Transaction lock(boolean tryOnly) {
+					return theLock.lock(tryOnly);
 				}
 
 				@Override
@@ -3021,7 +3401,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							theChangesSub = null;
 							return;
 						}
-						try (Transaction t = theValue.lock()) {
+						try (Transaction t = theValue.lock(false)) {
 							get(); // Update for initial value
 							theChangesSub = theValue.noInitChanges().act(evt -> theListeners.forEach(//
 								l -> l.onNext(evt)));
@@ -3034,6 +3414,14 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 		@Override
 		protected Object createIdentity() {
 			return theValue.getIdentity();
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction lock = theValue.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return Getter.of(this, lock);
 		}
 
 		@Override
@@ -3091,18 +3479,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 				}
 
 				@Override
-				public boolean isSafe() {
-					return theValue.noInitChanges().isSafe();
-				}
-
-				@Override
-				public Transaction lock() {
-					return theValue.lock();
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return theValue.tryLock();
+				public Transaction lock(boolean tryOnly) {
+					return theValue.lock(tryOnly);
 				}
 
 				@Override

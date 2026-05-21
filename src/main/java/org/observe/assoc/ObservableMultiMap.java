@@ -142,9 +142,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 	}
 
-	@Override
-	abstract boolean isLockSupported();
-
 	/** @return The keys that have least one value in this map */
 	@Override
 	ObservableSet<K> keySet();
@@ -185,7 +182,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 
 	@Override
 	default OrderedMultiEntry<K, V> getEntry(K key) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			CollectionElement<K> keyElement = keySet().getElement(key, true);
 			return keyElement == null ? null : getEntryById(keyElement.getElementId());
 		}
@@ -212,7 +209,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 */
 	default CollectionSubscription subscribe(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action, boolean keyForward,
 		boolean valueForward) {
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			Subscription sub = onChange(action);
 			SubscriptionCause subCause = new SubscriptionCause(null);
 			try (Transaction ct = subCause.use()) {
@@ -241,7 +238,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					sub.unsubscribe();
 					return;
 				}
-				try (Transaction unsubT = lock(false, null)) {
+				try (Transaction unsubT = lock(false)) {
 					sub.unsubscribe();
 					SubscriptionCause unsubCause = new SubscriptionCause(null);
 					try (Transaction ct = unsubCause.use()) {
@@ -300,8 +297,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		Subscription sub = subscribe(evt -> {
 			if (evt.getElementId() == null)
 				return; // Key update only, no effect on values
-			try (Transaction t = values.lock(true, evt); //
-				Transaction moveT = evt.getMovement() != null ? values.lock(true, evt.getMovement()) : Transaction.NONE) {
+			try (Transaction t = values.lockWrite(false, evt); //
+				Transaction moveT = evt.getMovement() != null ? values.lockWrite(false, evt.getMovement()) : Transaction.NONE) {
 				switch (evt.getType()) {
 				case add:
 					ListElement<BiTuple<ElementId, ElementId>> el = elements
@@ -773,11 +770,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getMap().isLockSupported();
-		}
-
-		@Override
 		public boolean isContentControlled() {
 			return true;
 		}
@@ -1229,11 +1221,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getSource().isLockSupported();
-		}
-
-		@Override
 		public OrderedMultiEntry<K, V> getEntryById(ElementId keyId) {
 			return OrderedMultiEntry.reverse(getSource().getEntryById(keyId));
 		}
@@ -1277,7 +1264,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMultiMapEvent<? extends K, ? extends V>> action) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getSource().onChange(evt -> {
 					int keySize = keySet().size();
 					if (keySize == 0)
@@ -1580,11 +1567,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		@Override
 		public boolean isEventing() {
 			return theMultiMap.isEventing();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theMultiMap.isLockSupported();
 		}
 
 		@Override

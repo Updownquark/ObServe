@@ -76,11 +76,6 @@ implements ObservableCollection<E> {
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return getBacking().isLockSupported();
-	}
-
-	@Override
 	public boolean isEventing() {
 		return getBacking().isEventing();
 	}
@@ -144,7 +139,7 @@ implements ObservableCollection<E> {
 			CollectionModificationListener<E> listener = getListener();
 			if (control == null && listener == null)
 				return getBacking().getOrAdd(value, after, before, first, preAdd, postAdd);
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ListElement<E> found = getElement(value, first);
 				if (found != null)
 					return found;
@@ -216,11 +211,6 @@ implements ObservableCollection<E> {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getBacking().isLockSupported();
-		}
-
-		@Override
 		public boolean isEventing() {
 			return getBacking().isEventing();
 		}
@@ -262,11 +252,6 @@ implements ObservableCollection<E> {
 		public MCOSortedSet<E, C> alias(String alias) {
 			super.alias(alias);
 			return this;
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getBacking().isLockSupported();
 		}
 
 		@Override

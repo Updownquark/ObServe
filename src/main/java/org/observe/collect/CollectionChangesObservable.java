@@ -752,18 +752,8 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	}
 
 	@Override
-	public boolean isSafe() {
-		return collection.isLockSupported();
-	}
-
-	@Override
-	public Transaction lock() {
-		return collection.lock(false, null);
-	}
-
-	@Override
-	public Transaction tryLock() {
-		return collection.tryLock(false, null);
+	public Transaction lock(boolean tryOnly) {
+		return collection.lock(tryOnly);
 	}
 
 	@Override

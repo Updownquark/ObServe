@@ -40,10 +40,10 @@ import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.CollectionElement;
@@ -1321,18 +1321,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported() || theEngine.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return Lockable.lockAll(tryOnly, theParent, theEngine);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(theParent, write, cause), theEngine);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(theParent, write, cause), theEngine);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return Lockable.lockAll(tryOnly, Transactable.asWriteLockable(theParent, cause), theEngine);
 		}
 
 		@Override

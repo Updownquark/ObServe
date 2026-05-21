@@ -118,7 +118,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		theExposedEdges = theEdges.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		theNodes.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.remove) {
-				try (Transaction t = theEdges.lock(true, evt)) {
+				try (Transaction t = theEdges.lockWrite(false, evt)) {
 					evt.getOldValue().getOutward().clear();
 					evt.getOldValue().getInward().clear();
 				}
@@ -180,13 +180,13 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public ObservableGraph.Edge<N, E> addEdge(Graph.Node<N, E> start, Graph.Node<N, E> end, boolean directed, E value) {
-		try (Transaction nodeT = theNodes.lock(false, null)) {
+		try (Transaction nodeT = theNodes.lock(false)) {
 			if (!theNodes.contains(start) || !theNodes.contains(end))
 				throw new IllegalArgumentException("Edges may only be created between nodes already present in the graph");
 			if (start.equals(end))
 				throw new IllegalArgumentException("An edge may not start and end at the same node");
 			DefaultNode s = (DefaultNode) start;
-			try (Transaction edgeT = s.theOutgoingEdges.lock(true, null)) {
+			try (Transaction edgeT = s.theOutgoingEdges.lockWrite(false, null)) {
 				DefaultEdge edge = new DefaultEdge(this, (ObservableGraph.Node<N, E>) start, (ObservableGraph.Node<N, E>) end, directed,
 					value);
 				((DefaultNode) start).theOutgoingEdges.add(edge);
@@ -245,7 +245,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public void clear() {
-		try (Transaction trans = theNodes.lock(true, null)) {
+		try (Transaction trans = theNodes.lockWrite(false, null)) {
 			theEdges.clear();
 			theNodes.clear();
 		}

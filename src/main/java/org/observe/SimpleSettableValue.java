@@ -18,7 +18,7 @@ import org.qommons.collect.ListenerList;
  * @param <T> The type of the value
  */
 public class SimpleSettableValue<T> extends AbstractIdentifiable implements SettableValue<T> {
-	private final SimpleObservable<ObservableValueEvent<T>> theEventer;
+	private final SettableValueListening<ObservableValueEvent<T>> theEventer;
 	private final CausalLock theLock;
 
 	private final boolean isNullable;
@@ -79,23 +79,66 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	}
 
 	@Override
-	public boolean isLockSupported() {
-		return theEventer.isLockSupported();
+	public Getter<T> lock(boolean tryOnly) {
+		Transaction lock = theEventer.lock(tryOnly);
+		return Getter.of(this, lock);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return Transactable.lock(theEventer.getLock(), write, cause);
-	}
+	public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+		Transaction lock = theEventer.lockWrite(tryOnly, cause);
+		if (lock == null)
+			return null;
+		return new Setter<T>() {
+			@Override
+			public T get() {
+				return theValue;
+			}
 
-	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return Transactable.tryLock(theEventer.getLock(), write, cause);
+			@Override
+			public String isEnabled() {
+				return null;
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				if (value == null && !isNullable)
+					return "Null values not acceptable for this value";
+				return null;
+			}
+
+			@Override
+			public T set(T value) {
+				String msg = isAcceptable(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				T old = theValue;
+				theValue = value;
+				if (!theEventer.isAnyoneListening()) { // Don't bother creating the event
+					theValue = value;
+					theEventer.incrementStamp();
+				} else if (value == old && theEventer.isEventing()) { // Don't throw errors on recursive updates
+					theEventer.incrementStamp();
+				} else {
+					theValue = value;
+					ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
+					try (Transaction evtT = evt.use()) {
+						theEventer.fire(evt);
+					}
+				}
+				return old;
+			}
+
+			@Override
+			public void close() {
+				lock.close();
+			}
+		};
 	}
 
 	@Override
 	public Observable<ObservableValueEvent<T>> noInitChanges() {
-		return theEventer.readOnly();
+		return theEventer;
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -146,7 +189,7 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 		// If the value changes before we obtain the lock, we'll have to create another event
 		if (getCurrentCauses().isEmpty()) {
 			ObservableValueEvent<T> evt = createChangeEvent(theValue, value, getCurrentCauses());
-			try (Transaction evtT = evt.use(); Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, evt)) {
+			try (Transaction evtT = evt.use(); Transaction t = theLock == null ? Transaction.NONE : theLock.lockWrite(false, evt)) {
 				T old = theValue;
 				if (value == old && theEventer.isEventing()) {
 					theEventer.incrementStamp();
@@ -155,17 +198,17 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 				theValue = value;
 				Collection<Cause> causes = getUnfinishedCauses();
 				if (old == evt.getOldValue() && causes.size() == 1 && causes.iterator().next() == evt)
-					theEventer.onNext(evt);
+					theEventer.fire(evt);
 				else {
 					ObservableValueEvent<T> evt2 = createChangeEvent(old, value, getUnfinishedCauses());
 					try (Transaction evt2T = evt2.use()) {
-						theEventer.onNext(evt2);
+						theEventer.fire(evt2);
 					}
 				}
 				return old;
 			}
 		} else {
-			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, null)) {
+			try (Transaction t = theLock == null ? Transaction.NONE : theLock.lockWrite(false, null)) {
 				T old = theValue;
 				if (value == old && theEventer.isEventing()) {
 					theEventer.incrementStamp();
@@ -174,7 +217,7 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 				theValue = value;
 				ObservableValueEvent<T> evt = createChangeEvent(old, value, getUnfinishedCauses());
 				try (Transaction evtT = evt.use()) {
-					theEventer.onNext(evt);
+					theEventer.fire(evt);
 				}
 				return old;
 			}
@@ -198,10 +241,11 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	 * @param listening Listening options for this value
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock,
+	protected SettableValueListening<ObservableValueEvent<T>> createEventer(Transactable lock,
 		Function<? super SettableValue<T>, ListenerList.Builder> listening) {
-		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock,
-			listening == null ? null : listening.apply(this));
+		ListenerList.Builder listenerBuilder = listening == null ? ListenerList.build() : listening.apply(this);
+		listenerBuilder.skipAddByDefault(true);
+		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock, listenerBuilder.build());
 	}
 
 	/**
@@ -209,10 +253,10 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	 * @param eventableData The lock/listener data for the value
 	 * @return The observable for this value to use to fire its initial and change events
 	 */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer(Transactable lock,
+	protected SettableValueListening<ObservableValueEvent<T>> createEventer(Transactable lock,
 		AbstractEventableBuilder.EventableData<? super SimpleSettableValue<T>> eventableData) {
-		return new SimpleObservable<>(null, Identifiable.wrap(getIdentity(), "noInitChanges"), null, true, __ -> lock,
-			eventableData.getListening(this));
+		ListenerList.Builder listenerBuilder = eventableData.getListening(this);
+		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock, listenerBuilder.build());
 	}
 
 	@Override

@@ -24,7 +24,11 @@ import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValue.Getter;
+import org.observe.Observer;
 import org.observe.SettableValue;
+import org.observe.SettableValue.Setter;
+import org.observe.SettableValueListening;
 import org.observe.SimpleObservable;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
@@ -2197,7 +2201,7 @@ public interface ObservableConfigFormat<E> {
 				boolean[] added = new boolean[1];
 				boolean[] changed = new boolean[1];
 				FormatEvent formatCause = new FormatEvent(cause, value, field.index);
-				try (Transaction causeT = Causable.use(formatCause); Transaction t = entityConfig.lock(true, formatCause)) {
+				try (Transaction causeT = Causable.use(formatCause); Transaction t = entityConfig.lockWrite(false, formatCause)) {
 					if (fieldValue != null || field.childName == null) {
 						ObservableConfig fieldConfig;
 						if (field.childName == null) {
@@ -2350,7 +2354,7 @@ public interface ObservableConfigFormat<E> {
 			class EntityConfigInstanceBacking implements EntityReflector.ObservableEntityInstanceBacking<E> {
 				private final ObservableConfigParseContext<E> theContext;
 				private final QuickMap<String, Object> theFieldValues;
-				private QuickMap<String, ListenerList<? extends Consumer<EntityReflector.FieldChange<?>>>> theListeners;
+				private QuickMap<String, SettableValueListening<? extends FieldChange<?>>> theListeners;
 				private E theEntity;
 				private final BitSet isInvokingSet;
 
@@ -2366,8 +2370,8 @@ public interface ObservableConfigFormat<E> {
 				}
 
 				<F> void invokeSet(EntityConfiguredValueField<E, F> field, F fieldValue, ObservableConfigEvent change) {
-					ListenerList<Consumer<FieldChange<F>>> listeners = theListeners == null ? null
-						: (ListenerList<Consumer<FieldChange<F>>>) theListeners.get(field.getIndex());
+					SettableValueListening<FieldChange<F>> listeners = theListeners == null ? null
+						: (SettableValueListening<FieldChange<F>>) theListeners.get(field.getIndex());
 					FieldChange<F> fieldChange;
 					if (listeners != null) {
 						F oldValue = field.get(theEntity);
@@ -2388,8 +2392,7 @@ public interface ObservableConfigFormat<E> {
 						theFieldValues.put(field.getIndex(), fieldValue);
 					}
 					if (fieldChange != null)
-						listeners.forEach(//
-							l -> l.accept(fieldChange));
+						listeners.fire(fieldChange);
 				}
 
 				@Override
@@ -2411,16 +2414,114 @@ public interface ObservableConfigFormat<E> {
 				}
 
 				@Override
-				public Subscription addListener(E entity, int fieldIndex, Consumer<FieldChange<?>> listener) {
+				public Getter<?> getter(int fieldIndex, boolean tryOnly) {
+					CausalLock myLock = theContext.getLock();
+					Transaction lock = myLock.lock(tryOnly);
+					if (lock == null)
+						return null;
+					return new Getter<Object>() {
+						@Override
+						public Object get() {
+							return theFieldValues.get(fieldIndex);
+						}
+
+						@Override
+						public void close() {
+							lock.close();
+						}
+					};
+				}
+
+				@Override
+				public Setter<?> setter(int fieldIndex, boolean tryOnly, Object cause) {
+					return _setter(fieldIndex, tryOnly, cause);
+				}
+
+				private <F> Setter<F> _setter(int fieldIndex, boolean tryOnly, Object cause) {
+					CausalLock myLock = theContext.getLock();
+					Transaction lock = myLock.lockWrite(tryOnly, cause);
+					if (lock == null)
+						return null;
 					Object key = getFields().get(fieldIndex).setter;
-					try (Transaction t = getLock(fieldIndex).lock(false, null)) {
-						ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
+					SettableValueListening<FieldChange<F>> listeners = (SettableValueListening<FieldChange<F>>) theEntityType
+						.getAssociated(theEntity, key);
+					Transaction listenerLock = listeners == null ? Transaction.NONE : listeners.lockWrite(true, null);
+					if (listenerLock == null) {
+						if (tryOnly) {
+							lock.close();
+							return null;
+						}
+						do {
+							lock.close();
+							lock = myLock.lockWrite(false, cause);
+							listenerLock = listeners.lockWrite(true, null);
+						} while (listenerLock == null);
+					}
+					Causable rootCause = myLock.getRootCausable();
+					EntityConfiguredValueField<E, F> field = (EntityConfiguredValueField<E, F>) theEntityType.getFields().get(fieldIndex);
+					Transaction fLock = lock;
+					Transaction fListenerLock = listenerLock;
+					return new Setter<F>() {
+						@Override
+						public F get() {
+							return (F) theFieldValues.get(fieldIndex);
+						}
+
+						@Override
+						public String isEnabled() {
+							return null; // No enablement mechanism
+						}
+
+						@Override
+						public String isAcceptable(F value) {
+							return null; // No filter mechanism available
+						}
+
+						@Override
+						public F set(F value) {
+							FieldChange<F> fieldChange;
+							F oldValue = field.get(theEntity);
+							if (listeners != null) {
+								fieldChange = new FieldChange<>(oldValue, value, rootCause);
+							} else
+								fieldChange = null;
+							if (field.isSettable(theEntity)) {
+								isInvokingSet.set(field.getIndex());
+								try {
+									field.set(theEntity, value);
+								} finally {
+									isInvokingSet.clear(field.getIndex());
+								}
+							} else {
+								if (value != null && !TypeTokens.get().isInstance(field.getFieldType(), value))
+									throw new IllegalArgumentException(
+										"Cannot set field " + field + " with value " + value + ", type " + value.getClass());
+								theFieldValues.put(field.getIndex(), value);
+							}
+							if (fieldChange != null && listeners != null)
+								listeners.fire(fieldChange);
+							return oldValue;
+						}
+
+						@Override
+						public void close() {
+							fListenerLock.close();
+							fLock.close();
+						}
+					};
+				}
+
+				@Override
+				public Subscription addListener(E entity, int fieldIndex, Observer<FieldChange<?>> listener) {
+					Object key = getFields().get(fieldIndex).setter;
+					try (Transaction t = getLock(fieldIndex).lock(false)) {
+						SettableValueListening<FieldChange<?>> listeners = (SettableValueListening<FieldChange<?>>) theEntityType
 							.getAssociated(entity, key);
 						if (listeners == null) {
-							listeners = ListenerList.build().build();
+							listeners = new SettableValueListening<>(null, null, ListenerList.build().build());
 							theEntityType.associate(entity, key, listeners);
 						}
-						return listeners.add(listener, true);
+						return listeners.subscribe(listener);
 					}
 				}
 

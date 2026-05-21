@@ -18,7 +18,7 @@ import org.qommons.collect.ListenerList;
  *
  * @param <T> The type of values from this observable
  */
-public class SimpleObservable<T> extends LightWeightObservable<T> {
+public class SimpleObservable<T> extends LightWeightObservable<T> implements Transactable {
 	/** @return A builder for a {@link SimpleObservable} */
 	public static Builder build() {
 		return new Builder();
@@ -103,7 +103,12 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	 */
 	SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, Object identity, String description, boolean internalState,
 		ReentrantReadWriteLock lock, ListenerList.Builder listening) {
-		this(onSubscribe, identity, description, internalState, o -> Transactable.transactable(lock, o, ThreadConstraint.ANY), listening);
+		this(onSubscribe, identity, description, internalState, o -> {
+			if (lock == null)
+				return Transactable.NONE;
+			else
+				return Transactable.transactable(lock, ThreadConstraint.ANY);
+		}, listening);
 	}
 
 	/**
@@ -162,21 +167,16 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 
 	@Override
 	public void onNext(T value) {
-		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lockWrite(false, value)) {
 			super.onNext(value);
 		}
 	}
 
 	@Override
 	public void onCompleted(Supplier<Causable> cause) {
-		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lockWrite(false, cause)) {
 			super.onCompleted(cause);
 		}
-	}
-
-	@Override
-	public boolean isSafe() {
-		return theLock != null;
 	}
 
 	/**
@@ -185,18 +185,14 @@ public class SimpleObservable<T> extends LightWeightObservable<T> {
 	 *
 	 * @return The transaction to close to release the lock
 	 */
-	public Transaction lockWrite() {
-		return theLock == null ? Transaction.NONE : theLock.lock(true, null);
+	@Override
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return theLock == null ? Transaction.NONE : theLock.lockWrite(tryOnly, cause);
 	}
 
 	@Override
-	public Transaction lock() {
-		return theLock == null ? Transaction.NONE : theLock.lock(false, null);
-	}
-
-	@Override
-	public Transaction tryLock() {
-		return theLock == null ? Transaction.NONE : theLock.tryLock(false, null);
+	public Transaction lock(boolean tryOnly) {
+		return theLock == null ? Transaction.NONE : theLock.lock(tryOnly);
 	}
 
 	@Override

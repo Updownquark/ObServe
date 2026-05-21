@@ -385,11 +385,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
-		}
-
-		@Override
 		public Equivalence<? super V> equivalence() {
 			return theWrapped.equivalence();
 		}
@@ -473,7 +468,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				int[] size = new int[] { size() };
 				return theWrapped.onChange(evt -> {
 					if (evt.getType() == CollectionChangeType.add)
@@ -531,11 +526,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public CoreChangeSources getChangeSources() {
 			return getSource().getChangeSources();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getSource().isLockSupported();
 		}
 
 		@Override
@@ -715,11 +705,6 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public CoreChangeSources getChangeSources() {
 			return CoreChangeSources.empty();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return true;
 		}
 
 		@Override

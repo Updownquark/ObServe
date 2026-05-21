@@ -11,24 +11,12 @@ import java.util.function.ToIntFunction;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
+import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.ReversedComparator;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterHashMap;
-import org.qommons.collect.BetterHashSet;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.MutableMapEntryHandle;
-import org.qommons.collect.ValueStoredCollection;
+import org.qommons.collect.*;
 import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
@@ -483,18 +471,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theWrapped.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theWrapped.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -691,7 +674,7 @@ public interface Equivalence<E> {
 
 		@Override
 		public boolean addAll(Collection<? extends T2> c) {
-			try (Transaction t = lock(true, null); Transaction ct = Transactable.lock(c, false, null)) {
+			try (Transaction t = lockWrite(false, null); Transaction ct = Lockable.lockLockable(c, false)) {
 				for (T2 e : c)
 					add(e);
 				return !c.isEmpty();

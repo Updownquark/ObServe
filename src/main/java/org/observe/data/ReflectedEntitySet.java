@@ -22,7 +22,6 @@ import org.observe.config.SyncValueSet;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
@@ -73,9 +72,19 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		theValueSets = new HashMap<>();
 		theChangeListeners = ListenerList.build().build();
 		theUntil = until == null ? Observable.empty : until;
+		// Persistence (the most common listener) may cause changes in the entities such as replacing blobs with persistent instances.
+		// These events can be ignored.
+		boolean[] persisting = new boolean[1];
 		theChangeKey = Causable.key((cause, data) -> {
-			theChangeListeners.forEach(//
-				l -> l.accept(cause));
+			if (!persisting[0]) {
+				persisting[0] = true;
+				try {
+					theChangeListeners.forEach(//
+						l -> l.accept(cause));
+				} finally {
+					persisting[0] = false;
+				}
+			}
 		});
 
 		for (EntityTypeMapping<?> type : dataTypes.getEntityTypes().values())
@@ -134,13 +143,13 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return getLock().lock(write, cause);
+	public Transaction lock(boolean tryOnly) {
+		return getLock().lock(tryOnly);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return getLock().tryLock(write, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return getLock().lockWrite(tryOnly, cause);
 	}
 
 	@Override
@@ -194,7 +203,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		ReflectedEntityValueType<E> valueType = getType(type);
 		if (valueType == null)
 			throw new IllegalArgumentException("No such entity type: " + type.getName());
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			return (SyncValueSet<E>) theValueSets.computeIfAbsent(type, __ -> new ReflectedRootValueSet<>(this, valueType));
 		}
 	}
@@ -210,7 +219,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 		ReflectedEntityValueType<E> valueType = getType(type);
 		if (valueType == null)
 			throw new IllegalArgumentException("No such entity type: " + type.getName());
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			int f = 0;
 			for (EntityField<?> field : valueType.getGenericType().getIdFields()) {
 				if (field.getType() instanceof EntityType && id[f] != null)
@@ -434,7 +443,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 			public <F> SyncValueCreator<E, E2> with(ConfiguredValueField<E2, F> field, F value) throws IllegalArgumentException {
 				String msg = isAcceptable(field, value);
 				if (msg != null)
-					throw new IllegalAccessError(msg);
+					throw new IllegalArgumentException(msg);
 				theFieldValues[field.getIndex()] = new ValueHolder<>(value);
 				return this;
 			}
@@ -457,7 +466,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 						continue;
 					ValueHolder<?> holder = theFieldValues[f];
 					if (holder != null)
-						entity.set(f, holder.get());
+						entity.set(theSubType.genericToReflected().toDest(f), holder.get());
 				}
 				if (preAddAction != null)
 					preAddAction.accept(entity.getRealEntity());

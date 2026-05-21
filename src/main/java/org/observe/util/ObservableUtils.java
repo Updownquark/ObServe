@@ -11,8 +11,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.util.ObservableCollectionSynchronization.ObservableCollectionLinkEvent;
 import org.qommons.Causable;
-import org.qommons.Subscription;
 import org.qommons.Causable.CausableKey;
+import org.qommons.Subscription;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 
@@ -130,14 +130,14 @@ public class ObservableUtils {
 	 */
 	public static <T> Subscription link(SettableValue<T> v1, SettableValue<T> v2) {
 		Subscription sub1;
-		try (Transaction initT = v2.lock(true, null)) {
+		try (Transaction initT = v2.lockWrite(false, null)) {
 			sub1 = v1.changes().act(evt -> {
 				if (evt
 					.hasCauseLike(c -> c instanceof ObservableValueLinkEvent && ((ObservableValueLinkEvent<?>) c).matches(v1, v2)) != null)
 					return;
 				ObservableValueLinkEvent<T> link = new ObservableValueLinkEvent<>(v1, v2, evt);
 				try (Transaction linkT = link.use(); //
-					Transaction t = v2.lock(true, link)) {
+					Transaction t = v2.lockWrite(false, link)) {
 					if (!v2.isEventing() || v2.get() != evt.getNewValue())
 						v2.set(evt.getNewValue());
 				}
@@ -148,7 +148,7 @@ public class ObservableUtils {
 				return;
 			ObservableValueLinkEvent<T> link = new ObservableValueLinkEvent<>(v2, v1, evt);
 			try (Transaction linkT = link.use(); //
-				Transaction t = v1.lock(true, link)) {
+				Transaction t = v1.lockWrite(false, link)) {
 				if (!v1.isEventing() || v1.get() != evt.getNewValue())
 					v1.set(evt.getNewValue());
 			}
@@ -218,13 +218,13 @@ public class ObservableUtils {
 				__ -> new ObservableCollectionLinkEvent(c1, evt.getRootCausable()));
 			data.computeIfAbsent("c2Transaction", k -> {
 				Transaction linkEvtT = linkEvt.use();
-				Transaction cTrans = c2.lock(true, linkEvt);
+				Transaction cTrans = c2.lockWrite(false, linkEvt);
 				return Transaction.and(cTrans, linkEvtT);
 			});
 			// The inner transaction is so that each c1 change is causably linked to a particular c2 change
 			ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(c1, evt);
 			try (Transaction linkEvtT = innerLinkEvt.use(); //
-				Transaction evtT = c2.lock(true, innerLinkEvt)) {
+				Transaction evtT = c2.lockWrite(false, innerLinkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {
@@ -256,13 +256,13 @@ public class ObservableUtils {
 				__ -> new ObservableCollectionLinkEvent(c1, evt.getRootCausable()));
 			data.computeIfAbsent("c1Transaction", k -> {
 				Transaction linkEvtT = linkEvt.use();
-				Transaction cTrans = c1.lock(true, linkEvt);
+				Transaction cTrans = c1.lockWrite(false, linkEvt);
 				return Transaction.and(cTrans, linkEvtT);
 			});
 			// The inner transaction is so that each c2 change is causably linked to a particular c1 change
 			ObservableCollectionLinkEvent innerLinkEvt = new ObservableCollectionLinkEvent(c2, evt);
 			try (Transaction linkEvtT = innerLinkEvt.use(); //
-				Transaction evtT = c1.lock(true, innerLinkEvt)) {
+				Transaction evtT = c1.lockWrite(false, innerLinkEvt)) {
 				isLinkChanging[0] = true;
 				try {
 					switch (evt.getType()) {
@@ -287,8 +287,8 @@ public class ObservableUtils {
 		Subscription sub1, sub2;
 		Causable cause = Causable.simpleCause();
 		try (Transaction ct = Causable.use(cause); //
-			Transaction t1 = c1.lock(true, cause); //
-			Transaction t2 = c2.lock(true, cause)) {
+			Transaction t1 = c1.lockWrite(false, cause); //
+			Transaction t2 = c2.lockWrite(false, cause)) {
 			if (c2.isEmpty()) {
 				sub1 = c1.subscribe(listener1, true);
 				sub2 = c2.onChange(listener2);

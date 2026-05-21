@@ -42,25 +42,14 @@ import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.WeakListening;
 import org.qommons.Identifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.Ternian;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterCollections;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.CollectionUtils.AdjustmentOrder;
 import org.qommons.collect.CollectionUtils.CollectionSynchronizerX;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.ListElement;
-import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.OptimisticContext;
-import org.qommons.collect.ValueStoredCollection;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.BetterTreeList;
@@ -337,18 +326,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theWrapped.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theWrapped.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -707,18 +691,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theParent.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theParent.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theParent.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -814,7 +793,7 @@ public class ObservableSetImpl {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				String msg = theElementsByValue.keySet().canAdd(value, valueElement(after), valueElement(before));
 				if (StdMsg.ELEMENT_EXISTS.equals(msg))
 					return null;
@@ -884,7 +863,7 @@ public class ObservableSetImpl {
 			if (isPreservingSourceOrder) {
 				throw new UnsupportedOperationException("Not Implemented");
 			} else {
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					UniqueElement ue = (UniqueElement) valueEl;
 					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
 						after == null ? null : ((UniqueElement) after).theValueId,
@@ -1336,7 +1315,7 @@ public class ObservableSetImpl {
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				// A replacement operation involves replacing the values for each element composing this unique element
-				try (Transaction t = lock(true, null)) {
+				try (Transaction t = lockWrite(false, null)) {
 					String msg = isEnabled();
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
@@ -1449,7 +1428,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				// Lock so the reversed value is consistent until it is added
 				FilterMapResult<T, E> reversed = getFlow().reverse(value, true, false);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
@@ -1575,7 +1554,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ListElement<T> getElement(T value, boolean first) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				if(theElementsByValue==null)
 					return null;
 				DerivedElementHolder<T> element = theElementsByValue.get(value);
@@ -1597,7 +1576,7 @@ public class ObservableSetImpl {
 		@Override
 		public ListElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ListElement<T> element = getElement(value, first);
 				if (element == null) {
 					if (preAdd != null && canAdd(value) == null)
@@ -1723,7 +1702,7 @@ public class ObservableSetImpl {
 		@Override
 		public ListElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// *Possibly* could figure out how to do this more efficiently, but for the moment this will work
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				ListElement<E> element = getElement(value, first);
 				if (element == null) {
 					if (preAdd != null && canAdd(value) == null)
@@ -1816,28 +1795,28 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean isConsistent(ElementId element) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().isConsistent(element);
 			}
 		}
 
 		@Override
 		public boolean checkConsistency() {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().checkConsistency();
 			}
 		}
 
 		@Override
 		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().repair(element, listener);
 			}
 		}
 
 		@Override
 		public <X> boolean repair(RepairListener<E, X> listener) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getWrapped().repair(listener);
 			}
 		}

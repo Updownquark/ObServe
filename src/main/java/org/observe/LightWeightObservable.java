@@ -17,7 +17,7 @@ import org.qommons.collect.ListenerQueue;
  *
  * @param <T> The type of values from this observable
  */
-public class LightWeightObservable<T> extends AbstractIdentifiable implements Observable<T>, Observer<T> {
+public class LightWeightObservable<T> extends AbstractIdentifiable implements Observable<T> {
 	private boolean isAlive = true;
 	private final ListenerQueue<Observer<? super T>> theListeners;
 
@@ -57,12 +57,7 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 	}
 
 	@Override
-	public Transaction lock() {
-		return Transaction.NONE;
-	}
-
-	@Override
-	public Transaction tryLock() {
+	public Transaction lock(boolean tryOnly) {
 		return Transaction.NONE;
 	}
 
@@ -96,7 +91,7 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		}
 	}
 
-	@Override
+	/** @param value The value to fire in this observable */
 	public void onNext(T value) {
 		if (!isAlive)
 			throw new IllegalStateException("Firing a value on a completed observable");
@@ -104,7 +99,10 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 			observer -> observer.onNext(value));
 	}
 
-	@Override
+	/**
+	 * @param cause The cause of the completion
+	 * @see Observer#onCompleted(Supplier)
+	 */
 	public void onCompleted(Supplier<Causable> cause) {
 		if (!isAlive)
 			return;
@@ -117,11 +115,6 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 	/** Resets this observable so that it can be used again after {@link #onCompleted(Supplier)} is called */
 	public void reUse() {
 		isAlive = true;
-	}
-
-	@Override
-	public boolean isSafe() {
-		return false;
 	}
 
 	/** @return Whether anyone is listening to this observable */
@@ -172,18 +165,8 @@ public class LightWeightObservable<T> extends AbstractIdentifiable implements Ob
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
-		}
-
-		@Override
-		public Transaction tryLock() {
-			return theWrapped.tryLock();
+		public Transaction lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override

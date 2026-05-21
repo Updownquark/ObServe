@@ -79,21 +79,6 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 	 */
 	class EmptyElement<E> extends AbstractIdentifiable implements SettableElement<E> {
 		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Transaction.NONE;
-		}
-
-		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return Collections.emptyList();
 		}
@@ -126,6 +111,25 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 		@Override
 		public E get() {
 			return null;
+		}
+
+		@Override
+		public Setter<E> lockWrite(boolean tryOnly, Object cause) {
+			return new Setter.Unsettable<>(null, Transaction.NONE, StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public Getter<E> lock(boolean tryOnly) {
+			return new Getter<E>() {
+				@Override
+				public E get() {
+					return null;
+				}
+
+				@Override
+				public void close() {
+				}
+			};
 		}
 
 		@Override

@@ -20,7 +20,6 @@ import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -423,18 +422,13 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theSource.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return theSource.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theSource.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theSource.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theSource.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -664,13 +658,13 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean tryOnly) {
+			return theParent.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theParent.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return theParent.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1737,13 +1731,13 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			listening.withObserver((ObservableValueEvent<Transformation.TransformationState> evt) -> {
-				try (Transaction t = getParent().lock(false, null)) {
+				try (Transaction t = getParent().lock(false)) {
 					for (TransformedElement el : theElements)
 						el.updated(evt.getOldValue(), evt.getNewValue(), evt);
 				}
 			}, action -> getEngine().noInitChanges().act(action));
 			getParent().begin(fromStart, (parentEl, cause) -> {
-				try (Transaction t = getEngine().lock()) {
+				try (Transaction t = getEngine().lock(false)) {
 					TransformedElement el = new TransformedElement(parentEl, false);
 					onElement.accept(el, cause);
 				}

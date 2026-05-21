@@ -18,11 +18,9 @@ import org.observe.collect.ObservableCollection;
 import org.qommons.BiTuple;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
-import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -40,8 +38,82 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	/** A string-typed observable that always returns {@link org.qommons.collect.MutableCollectionElement.StdMsg#UNSUPPORTED_OPERATION} */
 	ObservableValue<String> ALWAYS_DISABLED = ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
 
-	@Override
-	boolean isLockSupported();
+	public interface Setter<T> extends Getter<T> {
+		String isEnabled();
+
+		String isAcceptable(T value);
+
+		T set(T value);
+
+		@Override
+		default Setter<T> combine(Transaction... t) {
+			return new CombinedSetter<>(this, t);
+		}
+
+		static class CombinedSetter<T> implements Setter<T> {
+			private final Setter<T> theSource;
+			private final Transaction theTransaction;
+
+			public CombinedSetter(Setter<T> source, Transaction... transactions) {
+				theSource = source;
+				theTransaction = Transaction.and(transactions);
+			}
+
+			@Override
+			public T get() {
+				return theSource.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theSource.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return theSource.isAcceptable(value);
+			}
+
+			@Override
+			public T set(T value) {
+				return theSource.set(value);
+			}
+
+			@Override
+			public void close() {
+				theTransaction.close();
+				theSource.close();
+			}
+		}
+
+		static class Unsettable<T> extends Getter.ConstantGetter<T> implements Setter<T> {
+			private final Supplier<String> theMessage;
+
+			public Unsettable(Supplier<? extends T> value, Transaction transaction, String message) {
+				this(value, transaction, FunctionUtils.constantSupplier(message));
+			}
+
+			public Unsettable(Supplier<? extends T> value, Transaction transaction, Supplier<String> message) {
+				super(value, transaction);
+				theMessage = message;
+			}
+
+			@Override
+			public String isEnabled() {
+				return theMessage.get();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return theMessage.get();
+			}
+
+			@Override
+			public T set(T value) {
+				throw new UnsupportedOperationException(theMessage.get());
+			}
+		}
+	}
 
 	/**
 	 * @param value The value to assign to this value
@@ -61,10 +133,13 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	default T set(T value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 		if (cause == null)
 			return set(value);
-		try (Transaction t = lock(true, cause)) {
+		try (Transaction t = lockWrite(false, cause)) {
 			return set(value);
 		}
 	}
+
+	@Override
+	Setter<T> lockWrite(boolean tryOnly, Object cause);
 
 	/**
 	 * @param value The value to assign to this value
@@ -91,16 +166,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 	@Override
 	SettableValue<T> alias(String alias);
-
-	@Override
-	default Transaction lock() {
-		return lock(false, null);
-	}
-
-	@Override
-	default Transaction tryLock() {
-		return tryLock(false, null);
-	}
 
 	@Override
 	default CoreId getCoreId() {
@@ -137,7 +202,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 					V newValue = value.get();
 					set(newValue, cause);
 				} catch (IllegalArgumentException e) {
-					if(onError!=null)
+					if (onError != null)
 						onError.accept(e);
 					throw e;
 				}
@@ -197,7 +262,47 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @return The settable
 	 */
 	default SettableValue<T> onSet(Consumer<T> onSetAction) {
+		SettableValue<T> source = this;
 		return new WrappingSettableValue<T>(this) {
+			@Override
+			public Getter<T> lock(boolean tryOnly) {
+				return source.lock(tryOnly);
+			}
+
+			@Override
+			public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+				Setter<T> sourceSetter = source.lockWrite(tryOnly, cause);
+				if (sourceSetter == null)
+					return null;
+				return new Setter<T>() {
+					@Override
+					public T get() {
+						return sourceSetter.get();
+					}
+
+					@Override
+					public String isEnabled() {
+						return sourceSetter.isEnabled();
+					}
+
+					@Override
+					public String isAcceptable(T value) {
+						return sourceSetter.isAcceptable(value);
+					}
+
+					@Override
+					public T set(T value) {
+						onSetAction.accept(value);
+						return sourceSetter.set(value);
+					}
+
+					@Override
+					public void close() {
+						sourceSetter.close();
+					}
+				};
+			}
+
 			@Override
 			public T set(T value) throws IllegalArgumentException {
 				onSetAction.accept(value);
@@ -269,8 +374,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	default <R> SettableValue<R> map(Function<? super T, ? extends R> function,
-		BiFunction<? super T, ? super R, ? extends T> reverse, Consumer<XformOptions> options) {
+	default <R> SettableValue<R> map(Function<? super T, ? extends R> function, BiFunction<? super T, ? super R, ? extends T> reverse,
+		Consumer<XformOptions> options) {
 		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
@@ -289,8 +394,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options for the returned value--may be null
 	 * @return The field value
 	 */
-	default <F> SettableValue<F> asFieldEditor(Function<? super T, ? extends F> getter,
-		BiConsumer<? super T, ? super F> setter, Consumer<XformOptions> options) {
+	default <F> SettableValue<F> asFieldEditor(Function<? super T, ? extends F> getter, BiConsumer<? super T, ? super F> setter,
+		Consumer<XformOptions> options) {
 		return transformReversible(tx -> {
 			tx.nullToNull(true);
 			if (options != null)
@@ -388,9 +493,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function,
-		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
-		Consumer<XformOptions> options) {
+	default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse, Consumer<XformOptions> options) {
 		return transformReversible(tx -> {
 			if (options != null)
 				options.accept(tx);
@@ -473,7 +577,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param disabled The message to report for the disablement of the value
 	 * @return A SettableValue that reflects the given value and is always disabled
 	 */
-	public static <T> SettableValue<T> asSettable(ObservableValue<T> value, Function<? super T, String> disabled){
+	public static <T> SettableValue<T> asSettable(ObservableValue<T> value, Function<? super T, String> disabled) {
 		return new AlwaysDisabledValue<>(value, disabled);
 	}
 
@@ -541,6 +645,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return theSource.lock(tryOnly);
+		}
+
+		@Override
 		public ThreadConstraint getThreadConstraint() {
 			return theSource.getThreadConstraint();
 		}
@@ -592,11 +701,11 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 *
 	 * @param <T> The type of the value
 	 */
-	public class WrappingSettableValue<T> extends AbstractIdentifiable implements SettableValue<T> {
+	public abstract class WrappingSettableValue<T> extends AbstractIdentifiable implements SettableValue<T> {
 		private final SettableValue<T> theWrapped;
 
 		/** @param wrapped The wrapped value */
-		public WrappingSettableValue(SettableValue<T> wrapped) {
+		protected WrappingSettableValue(SettableValue<T> wrapped) {
 			theWrapped = wrapped;
 		}
 
@@ -611,18 +720,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theWrapped.tryLock(write, cause);
+		public Getter<T> lock(boolean tryOnly) {
+			return theWrapped.lock(tryOnly);
 		}
 
 		@Override
@@ -659,11 +758,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		public WrappingSettableValue<T> alias(String alias) {
 			super.alias(alias);
 			return this;
-		}
-
-		@Override
-		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
-			return theWrapped.set(value);
 		}
 
 		@Override
@@ -710,6 +804,50 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
+		}
+
+		@Override
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Setter<T> wrapped = getWrapped().lockWrite(tryOnly, cause);
+			if (wrapped == null)
+				return null;
+			return new Setter<T>() {
+				@Override
+				public T get() {
+					return wrapped.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return wrapped.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					String error = theFilter.apply(value);
+					if (error != null)
+						return error;
+					return wrapped.isAcceptable(value);
+				}
+
+				@Override
+				public T set(T value) {
+					String error = theFilter.apply(value);
+					if (error != null)
+						throw new IllegalArgumentException(error);
+					return wrapped.set(value);
+				}
+
+				@Override
+				public void close() {
+					wrapped.close();
+				}
+			};
+		}
+
+		@Override
 		public T set(T value) throws IllegalArgumentException {
 			String error = theFilter.apply(value);
 			if (error != null)
@@ -742,8 +880,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		 * @param source The source value to combine
 		 * @param combination The definition of the combination operation
 		 */
-		public TransformedSettableValue(SettableValue<S> source,
-			Transformation.ReversibleTransformation<S, T> combination) {
+		public TransformedSettableValue(SettableValue<S> source, Transformation.ReversibleTransformation<S, T> combination) {
 			super(source, combination);
 		}
 
@@ -764,13 +901,104 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Lockable.lockAll(Lockable.lockable(getSource(), write, cause), getEngine());
-		}
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Setter<S> sourceLock = getSource().lockWrite(tryOnly, cause);
+			if (sourceLock == null)
+				return null;
+			Getter<TransformationState> engineLock = getEngine().lock(true);
+			Transaction listenerLock = engineLock == null ? null : super.lockListeners(true, cause);
+			if (listenerLock == null) {
+				if (tryOnly) {
+					if (engineLock != null)
+						engineLock.close();
+					sourceLock.close();
+					return null;
+				}
+				do {
+					if (engineLock != null)
+						engineLock.close();
+					sourceLock.close();
+					sourceLock = getSource().lockWrite(false, cause);
+					engineLock = getEngine().lock(true);
+					listenerLock = engineLock == null ? null : super.lockListeners(true, cause);
+				} while (listenerLock == null);
+			}
+			Setter<S> fSource = sourceLock;
+			Getter<TransformationState> fEngineLock = engineLock;
+			Transaction fListenerLock = listenerLock;
+			// BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false, false);
+			return new Setter<T>() {
+				@Override
+				public T get() {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(fSource, fEngineLock, false);
+					return state.getValue1().getCurrentValue(state.getValue2());
+				}
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Lockable.tryLockAll(Lockable.lockable(getSource(), write, cause), getEngine());
+				@Override
+				public String isEnabled() {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(fSource, fEngineLock, false);
+					return state.getValue1().isEnabled(state.getValue2());
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(fSource, fEngineLock, false);
+					ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
+					if (rq.getError() != null)
+						return rq.getError();
+					return getSource().isAcceptable(rq.getReversed());
+				}
+
+				@Override
+				public T set(T value) {
+					BiTuple<TransformedElement<S, T>, TransformationState> state = getState(fSource, fEngineLock, false);
+					S source = state.getValue1()//
+						.set(//
+							value, state.getValue2(), false)
+						.getReversed();
+					T prevResult = getTransformation().isCached() ? get() : null;
+					S oldSource = getSource().set(source);
+					return getTransformation().getCombination().apply(oldSource, new Transformation.TransformationValues<S, T>() {
+						@Override
+						public boolean isSourceChange() {
+							return false;
+						}
+
+						@Override
+						public S getCurrentSource() {
+							return oldSource;
+						}
+
+						@Override
+						public boolean hasPreviousResult() {
+							return getTransformation().isCached();
+						}
+
+						@Override
+						public T getPreviousResult() {
+							return prevResult;
+						}
+
+						@Override
+						public boolean has(ObservableValue<?> arg) {
+							return getTransformation().hasArg(arg);
+						}
+
+						@Override
+						public <V2> V2 get(ObservableValue<V2> arg) throws IllegalArgumentException {
+							int index = getTransformation().getArgIndex(arg);
+							return state.getValue2().get(index);
+						}
+					});
+				}
+
+				@Override
+				public void close() {
+					fListenerLock.close();
+					fEngineLock.close();
+					fSource.close();
+				}
+			};
 		}
 
 		@Override
@@ -781,7 +1009,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			ObservableValue<String> txEnabled = transform(tx -> tx.cache(true).map(FunctionUtils.printableFn(__ -> {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(true, false);
+				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(getSource(), getEngine(), false);
 				return state.getValue1().isEnabled(state.getValue2());
 			}, "enabled", "enabled")));
 			if (getTransformation().getReverse().requiresSourceModification()) {
@@ -792,8 +1020,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public String isAcceptable(T value) {
-			try (Transaction t = lock()) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false, false);
+			try (TransformedValueGetter t = lock(false)) {
+				BiTuple<TransformedElement<S, T>, TransformationState> state = t.getState();
 				ReverseQueryResult<S> rq = state.getValue1().set(value, state.getValue2(), true);
 				if (rq.getError() != null)
 					return rq.getError();
@@ -803,46 +1031,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock(true, null)) {
-				BiTuple<TransformedElement<S, T>, TransformationState> state = getState(false, false);
-				S source = state.getValue1()//
-					.set(//
-						value, state.getValue2(), false)
-					.getReversed();
-				T prevResult = getTransformation().isCached() ? get() : null;
-				S oldSource = getSource().set(source);
-				return getTransformation().getCombination().apply(oldSource, new Transformation.TransformationValues<S, T>() {
-					@Override
-					public boolean isSourceChange() {
-						return false;
-					}
-
-					@Override
-					public S getCurrentSource() {
-						return oldSource;
-					}
-
-					@Override
-					public boolean hasPreviousResult() {
-						return getTransformation().isCached();
-					}
-
-					@Override
-					public T getPreviousResult() {
-						return prevResult;
-					}
-
-					@Override
-					public boolean has(ObservableValue<?> arg) {
-						return getTransformation().hasArg(arg);
-					}
-
-					@Override
-					public <V2> V2 get(ObservableValue<V2> arg) throws IllegalArgumentException {
-						int index = getTransformation().getArgIndex(arg);
-						return state.getValue2().get(index);
-					}
-				});
+			try (Setter<T> setter = lockWrite(false, null)) {
+				return setter.set(value);
 			}
 		}
 	}
@@ -869,23 +1059,18 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getWrapped().tryLock(write, cause);
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			return getWrapped().lockWrite(tryOnly, cause);
 		}
 
 		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return getWrapped().getCurrentCauses();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
 		}
 
 		@Override
@@ -929,18 +1114,13 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getWrapped().tryLock(write, cause);
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			return getWrapped().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -986,18 +1166,13 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getWrapped().tryLock(write, cause);
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			return getWrapped().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1043,32 +1218,29 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return super.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
 			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
 			// or any refresh events that would violate the contract of a held lock
 			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
 			// because incoming refresh updates obtain a read lock on the parent
-			if (write)
-				return getWrapped().lock(write, cause);
-			else
-				return Lockable.lockAll(Lockable.lockable(getWrapped(), write, cause), getRefreshLock());
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
-			// or any refresh events that would violate the contract of a held lock
-			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
-			// because incoming refresh updates obtain a read lock on the parent
-			if (write)
-				return getWrapped().tryLock(write, cause);
-			else
-				return Lockable.tryLockAll(Lockable.lockable(getWrapped(), write, cause), getRefreshLock());
+			Setter<T> source = getWrapped().lockWrite(tryOnly, cause);
+			if (source == null)
+				return null;
+			Observable<?> refresh = getRefresh().apply(source.get());
+			Transaction refreshLock = refresh == null ? Transaction.NONE : refresh.lock(true);
+			if (refreshLock == null) {
+				if (tryOnly) {
+					source.close();
+					return null;
+				}
+				do {
+					source.close();
+					source = getWrapped().lockWrite(false, cause);
+					refresh = getRefresh().apply(source.get());
+					refreshLock = refresh == null ? Transaction.NONE : refresh.lock(true);
+				} while (refreshLock == null);
+			}
+			return source.combine(refreshLock);
 		}
 
 		@Override
@@ -1116,22 +1288,18 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (write && !getThreadConstraint().isEventThread())
-				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-			return getWrapped().lock(write, cause);
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			if (write && !getThreadConstraint().isEventThread())
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			if (!getThreadConstraint().isEventThread()) {
+				if (tryOnly)
+					return null;
 				throw new IllegalStateException(WRONG_THREAD_MESSAGE);
-			return getWrapped().tryLock(write, cause);
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
+			}
+			return getWrapped().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1183,84 +1351,90 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			if (!getWrapped().isLockSupported())
-				return false;
-			ObservableValue<? extends T> value = getWrapped().get();
-			if (value == null)
-				return false;
-			else
-				return value.isLockSupported();
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Getter<? extends ObservableValue<? extends T>> outer = getWrapped().lock(tryOnly);
+			if (outer == null)
+				return null;
+			ObservableValue<? extends T> wrapped = outer.get();
+			Setter<? extends T> setter;
+			if (wrapped instanceof SettableValue)
+				setter = ((SettableValue<T>) wrapped).lockWrite(true, cause);
+			else {
+				Getter<? extends T> getter = wrapped == null ? null : wrapped.lock(true);
+				setter = getter == null ? null : new Setter.Unsettable<>(getter, getter, StdMsg.UNSUPPORTED_OPERATION);
+			}
+			if (setter == null) {
+				if (tryOnly) {
+					outer.close();
+					return null;
+				}
+				do {
+					outer.close();
+					outer = getWrapped().lock(false);
+					wrapped = getWrapped().get();
+					if (wrapped instanceof SettableValue)
+						setter = ((SettableValue<T>) wrapped).lockWrite(true, cause);
+					else {
+						Getter<? extends T> getter = wrapped == null ? null : wrapped.lock(true);
+						setter = getter == null ? null : new Setter.Unsettable<>(getter, getter, StdMsg.UNSUPPORTED_OPERATION);
+					}
+				} while (setter == null);
+			}
+			return createSetter(outer, wrapped, setter, cause);
 		}
 
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (!write)
-				return Lockable.lock(getWrapped(), getWrapped()::get);
-			return Transactable.writeLockWithOwner(getWrapped(), () -> {
-				ObservableValue<? extends T> value = getWrapped().get();
-				if (value == null)
-					return null;
-				else if (value instanceof SettableValue)
-					return (SettableValue<? extends T>) value;
-				else
-					return new Transactable() {
-					@Override
-					public ThreadConstraint getThreadConstraint() {
-						return value.getThreadConstraint();
-					}
-
-					@Override
-					public Transaction lock(boolean w, Object c) {
-						return value.lock();
-					}
-
-					@Override
-					public Transaction tryLock(boolean w, Object c) {
-						return value.tryLock();
-					}
-
-					@Override
-					public CoreId getCoreId() {
-						return value.getCoreId();
-					}
-				};
-			}, cause);
+		protected Setter<T> createSetter(Getter<? extends ObservableValue<? extends T>> outer, ObservableValue<? extends T> wrapped,
+			Setter<? extends T> setter, Object cause) {
+			return new FlattenedValueSetter(outer, wrapped, setter, cause);
 		}
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			if (!write)
-				return Lockable.tryLock(getWrapped(), getWrapped()::get);
-			return Transactable.tryWriteLockWithOwner(getWrapped(), () -> {
-				ObservableValue<? extends T> value = getWrapped().get();
-				if (value == null)
+		protected class FlattenedValueSetter extends FlattenedValueGetter implements Setter<T> {
+			private final Object theCause;
+
+			public FlattenedValueSetter(Getter<? extends ObservableValue<? extends T>> outerGetter, ObservableValue<? extends T> innerValue,
+				Setter<? extends T> innerGetter, Object cause) {
+				super(outerGetter, innerValue, innerGetter);
+				theCause = cause;
+			}
+
+			@Override
+			protected Setter<? extends T> createInnerGetter(ObservableValue<? extends T> value) {
+				if (value instanceof SettableValue)
+					return ((SettableValue<? extends T>) value).lockWrite(true, theCause);
+				else if (value != null) {
+					Getter<? extends T> getter = value.lock(true);
+					if (getter == null)
+						return null;
+					else
+						return new Setter.Unsettable<>(getter, getter, StdMsg.UNSUPPORTED_OPERATION);
+				} else
 					return null;
-				else if (value instanceof SettableValue)
-					return (SettableValue<? extends T>) value;
-				else
-					return new Transactable() {
-					@Override
-					public ThreadConstraint getThreadConstraint() {
-						return value.getThreadConstraint();
-					}
+			}
 
-					@Override
-					public Transaction lock(boolean w, Object c) {
-						return value.lock();
-					}
+			@Override
+			protected Setter<T> getInnerGetter() {
+				return (Setter<T>) super.getInnerGetter();
+			}
 
-					@Override
-					public Transaction tryLock(boolean w, Object c) {
-						return value.tryLock();
-					}
+			@Override
+			public String isEnabled() {
+				Setter<T> innerSetter = getInnerGetter();
+				return innerSetter == null ? StdMsg.UNSUPPORTED_OPERATION : innerSetter.isEnabled();
+			}
 
-					@Override
-					public CoreId getCoreId() {
-						return value.getCoreId();
-					}
-				};
-			}, cause);
+			@Override
+			public String isAcceptable(T value) {
+				Setter<T> innerSetter = getInnerGetter();
+				return innerSetter == null ? StdMsg.UNSUPPORTED_OPERATION : innerSetter.isAcceptable(value);
+			}
+
+			@Override
+			public T set(T value) {
+				Setter<T> innerSetter = getInnerGetter();
+				if (innerSetter == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return innerSetter.set(value);
+			}
 		}
 
 		@Override
@@ -1335,13 +1509,16 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theValue.lock();
+		public Getter<T> lock(boolean tryOnly) {
+			return theValue.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theValue.tryLock();
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Getter<T> lock = theValue.lock(tryOnly);
+			if (lock == null)
+				return null;
+			return new Setter.Unsettable<>(lock, Transaction.NONE, () -> theDisablement.apply(lock.get()));
 		}
 
 		@Override
@@ -1383,11 +1560,6 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		@Override
 		public Set<String> getAliases() {
 			return theValue.getAliases();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theValue.isLockSupported();
 		}
 
 		@Override
@@ -1441,6 +1613,76 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		protected ObservableValue<String> getEnabled() {
 			return isEnabled;
+		}
+
+		@Override
+		public Getter<T> lock(boolean tryOnly) {
+			return getWrapped().lock(tryOnly);
+		}
+
+		@Override
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Setter<T> wrapped = getWrapped().lockWrite(tryOnly, cause);
+			if (wrapped == null)
+				return null;
+			Getter<String> enabled = isEnabled.lock(true);
+			if (enabled == null) {
+				if (tryOnly) {
+					wrapped.close();
+					return null;
+				}
+				do {
+					wrapped.close();
+					wrapped = getWrapped().lockWrite(false, cause);
+					enabled = isEnabled.lock(true);
+				} while (enabled == null);
+			}
+			return new DVSetter<>(wrapped, enabled);
+		}
+
+		static class DVSetter<T> implements Setter<T> {
+			private final Setter<T> theSource;
+			private final Getter<String> theEnabled;
+
+			DVSetter(Setter<T> source, Getter<String> enabled) {
+				theSource = source;
+				theEnabled = enabled;
+			}
+
+			@Override
+			public T get() {
+				return theSource.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				String msg = theEnabled.get();
+				if (msg == null)
+					msg = theSource.isEnabled();
+				return msg;
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = theEnabled.get();
+				if (msg == null)
+					msg = theSource.isAcceptable(value);
+				return msg;
+			}
+
+			@Override
+			public T set(T value) {
+				String msg = theEnabled.get();
+				if (msg != null)
+					throw new UnsupportedOperationException(msg);
+				return theSource.set(value);
+			}
+
+			@Override
+			public void close() {
+				theEnabled.close();
+				theSource.close();
+			}
 		}
 
 		@Override
@@ -1512,23 +1754,87 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theLock.lock(write, cause);
+		public Getter<T> lock(boolean tryOnly) {
+			Transaction lock = theLock.lock(tryOnly);
+			if (lock == null)
+				return null;
+			Getter<T> getter = getWrapped().lock(true);
+			if (getter == null) {
+				if (tryOnly) {
+					lock.close();
+					return null;
+				}
+				do {
+					lock.close();
+					lock = theLock.lock(false);
+					getter = getWrapped().lock(true);
+				} while (getter == null);
+			}
+			return Getter.of(getter, lock);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return theLock.tryLock(write, cause);
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Transaction lock = theLock.lockWrite(tryOnly, cause);
+			if (lock == null)
+				return null;
+			Getter<T> getter = getWrapped().lock(true);
+			if (getter == null) {
+				if (tryOnly) {
+					lock.close();
+					return null;
+				}
+				do {
+					lock.close();
+					lock = theLock.lock(false);
+					getter = getWrapped().lock(true);
+				} while (getter == null);
+			}
+			return new SSVSetter<>(getter, lock, theSet);
 		}
 
-		@Override
-		public boolean isLockSupported() {
-			return theLock.isLockSupported();
+		static class SSVSetter<T> implements Setter<T> {
+			private final Getter<T> theGetter;
+			private final Transaction theLock;
+			private final Consumer<? super T> theSet;
+
+			SSVSetter(Getter<T> getter, Transaction lock, Consumer<? super T> set) {
+				theGetter = getter;
+				theLock = lock;
+				theSet = set;
+			}
+
+			@Override
+			public T get() {
+				return theGetter.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return null;
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return null;
+			}
+
+			@Override
+			public T set(T value) {
+				T prev = get();
+				theSet.accept(value);
+				return prev;
+			}
+
+			@Override
+			public void close() {
+				theLock.close();
+			}
 		}
 
 		@Override
 		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				T old = get();
 				theSet.accept(value);
 				return old;
@@ -1553,8 +1859,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 	 * @param <T> The type of the value
 	 */
 	class FirstSettableValue<T> extends FirstObservableValue<T> implements SettableValue<T> {
-		public FirstSettableValue(SettableValue<? extends T>[] values, Predicate<? super T> test,
-			Supplier<? extends T> def) {
+		public FirstSettableValue(SettableValue<? extends T>[] values, Predicate<? super T> test, Supplier<? extends T> def) {
 			super(values, test, def);
 		}
 
@@ -1570,23 +1875,112 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Transactable.combine(getValues()).lock(write, cause);
+		public Setter<T> lockWrite(boolean tryOnly, Object cause) {
+			Setter<? extends T>[] locks = new Setter[getValues().size()];
+			Transaction fullLock = Transaction.and(locks);
+			boolean success;
+			do {
+				success = true;
+				boolean complete = false;
+				try {
+					for (int i = 0; success && i < locks.length; i++) {
+						Setter<? extends T> lock = getValues().get(i).lockWrite(true, cause);
+						if (lock == null)
+							success = false;
+						else
+							locks[i] = lock;
+					}
+					complete = true;
+				} finally {
+					if (!success || !complete)
+						fullLock.close();
+				}
+			} while (!success && !tryOnly);
+			if (!success)
+				return null;
+			return new FSVSetter(locks, fullLock);
 		}
 
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return Transactable.combine(getValues()).tryLock(write, cause);
+		class FSVSetter implements Setter<T> {
+			private final Setter<? extends T>[] theComponents;
+			private final Transaction theFullLock;
+
+			FSVSetter(Setter<? extends T>[] components, Transaction fullLock) {
+				theComponents = components;
+				theFullLock = fullLock;
+			}
+
+			@Override
+			public T get() {
+				for (Setter<? extends T> getter : theComponents) {
+					T value = getter.get();
+					if (test(value))
+						return value;
+				}
+				return getDefault() == null ? null : getDefault().get();
+			}
+
+			@Override
+			public String isEnabled() {
+				for (Setter<? extends T> getter : theComponents) {
+					String enabled = getter.isEnabled();
+					if (enabled == null)
+						return null;
+					T value = getter.get();
+					if (test(value))
+						return enabled;
+				}
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				if (!test(value))
+					return StdMsg.ILLEGAL_ELEMENT;
+				for (Setter<? extends T> getter : theComponents) {
+					String enabled = ((Setter<T>) getter).isAcceptable(value);
+					if (enabled == null)
+						return null;
+					T valueI = getter.get();
+					if (test(valueI))
+						return enabled;
+				}
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public T set(T value) {
+				if (!test(value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				boolean isSet = false;
+				for (Setter<? extends T> getter : theComponents) {
+					String enabled = ((Setter<T>) getter).isAcceptable(value);
+					T valueI;
+					if (enabled == null) {
+						isSet = true;
+						valueI = ((Setter<T>) getter).set(value);
+					} else
+						valueI = getter.get();
+					if (test(valueI)) {
+						if (isSet)
+							return valueI;
+					}
+				}
+				if (isSet)
+					return getDefault() == null ? null : getDefault().get();
+				else
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public void close() {
+				theFullLock.close();
+			}
 		}
 
 		@Override
 		public Collection<Cause> getCurrentCauses() {
 			return CollectionUtils.concat(QommonsUtils.filterMap(getValues(), null, v -> v.getCurrentCauses()));
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return Transactable.combine(getValues()).isLockSupported();
 		}
 
 		@Override
@@ -1608,6 +2002,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public String isAcceptable(T value) {
+			if (!test(value))
+				return StdMsg.ILLEGAL_ELEMENT;
 			String enabled = null;
 			for (SettableValue<? extends T> v : getValues()) {
 				String msg = ((SettableValue<T>) v).isAcceptable(value);
@@ -1625,6 +2021,8 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 		@Override
 		public T set(T value) throws IllegalArgumentException, UnsupportedOperationException {
+			if (!test(value))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			String enabled = null;
 			boolean set = false;
 			T setValue = null;
@@ -1694,18 +2092,12 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 
 	/** @param <T> The type for the settable value */
 	class Builder<T> extends AbstractEventableBuilder<SettableValue<T>, Builder<T>> {
-		private boolean isVetoable;
 		private T theInitialValue;
 		private boolean isNullable;
 
 		Builder() {
 			super("settable-value");
 			isNullable = true;
-		}
-
-		public Builder<T> vetoable() {
-			isVetoable = true;
-			return this;
 		}
 
 		public Builder<T> nullable(boolean nullable) {
@@ -1723,10 +2115,7 @@ public interface SettableValue<T> extends ObservableValue<T>, CausalLock {
 		public SettableValue<T> build() {
 			if (!isNullable && theInitialValue == null)
 				throw new IllegalArgumentException("This value cannot be null.  Provide an initial value.");
-			if (isVetoable)
-				return new VetoableSettableValue<>(getDescription(), isNullable, buildData(), theInitialValue);
-			else
-				return new SimpleSettableValue<>(getDescription(), isNullable, buildData(), theInitialValue);
+			return new SimpleSettableValue<>(getDescription(), isNullable, buildData(), theInitialValue);
 		}
 	}
 }

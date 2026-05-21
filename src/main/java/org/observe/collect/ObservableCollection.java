@@ -33,7 +33,16 @@ import org.observe.collect.ObservableCollectionActiveManagers.ActiveValueStoredM
 import org.observe.collect.ObservableCollectionPassiveManagers.PassiveCollectionManager;
 import org.observe.util.ObservableUtils;
 import org.observe.util.SafeObservableCollection;
-import org.qommons.*;
+import org.qommons.Betterable;
+import org.qommons.Causable;
+import org.qommons.Identifiable;
+import org.qommons.Lockable;
+import org.qommons.Stamped;
+import org.qommons.Subscription;
+import org.qommons.Ternian;
+import org.qommons.ThreadConstrained;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
@@ -63,8 +72,7 @@ import org.qommons.tree.BetterTreeList;
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
- * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
- * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
+ * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this.</li>
  * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
  * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
  * {@link #contains(Object)} and {@link #remove()}.</li>
@@ -85,9 +93,6 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	// Additional contract methods
 
-	@Override
-	abstract boolean isLockSupported();
-
 	/**
 	 * Registers a listener for changes to this collection
 	 *
@@ -99,7 +104,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	@Override
 	default boolean containsAny(Collection<?> c) {
 		BetterSet<E> myValuesSet;
-		try (Transaction ct = Transactable.lock(c, false, null)) {
+		try (Transaction ct = Lockable.lockLockable(c, false)) {
 			if (c.isEmpty())
 				return false;
 			boolean cSet = c instanceof Set;
@@ -109,7 +114,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 				testArgValues = c.size() < size();
 			else
 				testArgValues = !cSet;
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				if (testArgValues) { // Likely faster to test the argument's elements against this collection
 					for (Object o : c)
 						if (contains(o))
@@ -147,10 +152,10 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	@Override
 	default boolean containsAll(Collection<?> c) {
-		try (Transaction ct = Transactable.lock(c, false, null)) {
+		try (Transaction ct = Lockable.lockLockable(c, false)) {
 			if (c.isEmpty())
 				return true;
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				if (this instanceof Set || c.size() < size()) { // Likely faster to test the argument's elements against this collection
 					for (Object o : c)
 						if (!contains(o))
@@ -191,14 +196,14 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	 */
 	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
 		Subscription changeSub;
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			// Initial events
 			ObservableUtils.populateValues(this, observer, forward, null);
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
 		return removeAll -> {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				// Unsubscribe changes
 				changeSub.unsubscribe();
 				if (removeAll) {
@@ -246,7 +251,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	@Override
 	default Object[] toArray() {
 		Object[] array;
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			array = new Object[size()];
 			return toArray(array);
 		}
@@ -260,7 +265,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			return;
 		else if (toIndex < fromIndex)
 			throw new IndexOutOfBoundsException(fromIndex + " to " + toIndex);
-		try (Transaction t = lock(true, null)) {
+		try (Transaction t = lockWrite(false, null)) {
 			if (fromIndex == size())
 				return;
 			CollectionElement<E>[] next = new CollectionElement[] { getElement(fromIndex) };
@@ -286,7 +291,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 	@Override
 	default <T> T[] toArray(T[] a) {
 		ArrayList<E> ret;
-		try (Transaction t = lock(false, null)) {
+		try (Transaction t = lock(false)) {
 			if (size() > a.length) { // Don't want to mess with this--let ArrayList do it
 				ret = new ArrayList<>(size());
 				ret.addAll(this);
@@ -453,18 +458,8 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			}
 
 			@Override
-			public boolean isSafe() {
-				return ObservableCollection.this.isLockSupported();
-			}
-
-			@Override
-			public Transaction lock() {
-				return ObservableCollection.this.lock(false, null);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return ObservableCollection.this.tryLock(false, null);
+			public Transaction lock(boolean tryOnly) {
+				return ObservableCollection.this.lock(tryOnly);
 			}
 
 			@Override
@@ -852,7 +847,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			public boolean isEventing() {
 				if (coll.isEventing())
 					return true;
-				try (Transaction t = coll.lock(false, null)) {
+				try (Transaction t = coll.lock(false)) {
 					for (Observable<? extends T> obs : coll) {
 						if (obs.isEventing())
 							return true;
@@ -862,28 +857,18 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			}
 
 			@Override
-			public boolean isSafe() {
-				return false;
-			}
-
-			@Override
-			public Transaction lock() {
-				return Lockable.lockAll(Lockable.lockable(coll), coll);
-			}
-
-			@Override
-			public Transaction tryLock() {
-				return Lockable.tryLockAll(Lockable.lockable(coll), coll);
+			public Transaction lock(boolean tryOnly) {
+				return Lockable.lockAll(coll, coll, tryOnly);
 			}
 
 			@Override
 			public CoreId getCoreId() {
-				return Lockable.getCoreId(Lockable.lockable(coll), coll);
+				return Lockable.getCoreId(coll, coll);
 			}
 
 			@Override
 			public long getStamp() {
-				try (Transaction t = lock()) {
+				try (Transaction t = lock(false)) {
 					return Stamped.compositeOf2Stamps(coll.getStamp(), Stamped.compositeStamp(coll));
 				}
 			}
@@ -908,7 +893,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 			return false;
 		Collection<?> c = (Collection<?>) o;
 
-		try (Transaction t1 = coll.lock(false, null); Transaction t2 = Transactable.lock(c, false, null)) {
+		try (Transaction t1 = coll.lock(false); Transaction t2 = Lockable.lockLockable(c, false)) {
 			Iterator<E> e1 = coll.iterator();
 			Iterator<?> e2 = c.iterator();
 			while (e1.hasNext() && e2.hasNext()) {

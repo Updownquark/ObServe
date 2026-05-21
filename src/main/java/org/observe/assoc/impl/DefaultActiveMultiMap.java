@@ -30,9 +30,9 @@ import org.qommons.ArrayUtils;
 import org.qommons.CausalLock;
 import org.qommons.Identifiable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.*;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
@@ -205,8 +205,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		OrderedMultiEntry<K, V> found = getEntry(key);
 		if (found != null)
 			return found;
-		try (Transaction t = Lockable.lockAll(//
-			Lockable.lockable(this, true, null), getAddKey())) {
+		try (Transaction t = Lockable.lockAll(false, //
+			Transactable.asWriteLockable(this, null), getAddKey())) {
 			if (stamp != theStamp) {
 				// Need to try again since someone else could have done it while we were waiting for the lock
 				found = getEntry(key);
@@ -850,18 +850,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getValueManager().isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return getValueManager().lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getValueManager().lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return getValueManager().tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return getValueManager().lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -979,7 +974,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				: theValues.getElement(getValueId(after)).get().theValueElement;
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
 				: theValues.getElement(getValueId(before)).get().theValueElement;
-			try (Transaction t = getAddKey().lock()) {
+			try (Transaction t = getAddKey().lock(false)) {
 				getAddKey().accept(theKeyEntry.getKey());
 				return getValueManager().canAdd(value, afterEl, beforeEl);
 			}
@@ -992,8 +987,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				: theValues.getElement(getValueId(after)).get().theValueElement;
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
 				: theValues.getElement(getValueId(before)).get().theValueElement;
-			try (Transaction t = Lockable.lockAll(//
-				Lockable.lockable(DefaultActiveMultiMap.this, true, null), getAddKey())) {
+			try (Transaction t = Lockable.lockAll(false, //
+				Transactable.asWriteLockable(DefaultActiveMultiMap.this, null), getAddKey())) {
 				getAddKey().accept(theKeyEntry.getKey());
 				return elementFor(getValueManager().addElement(value, afterEl, beforeEl, first));
 			}
@@ -1007,7 +1002,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				: theValues.getElement(getValueId(after)).get().theValueElement;
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
 				: theValues.getElement(getValueId(before)).get().theValueElement;
-			try (Transaction t = getAddKey().lock()) {
+			try (Transaction t = getAddKey().lock(false)) {
 				getAddKey().accept(theKeyEntry.getKey());
 				return getValueManager().canMove(valueEl2, afterEl, beforeEl);
 			}
@@ -1022,8 +1017,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				: theValues.getElement(getValueId(after)).get().theValueElement;
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
 				: theValues.getElement(getValueId(before)).get().theValueElement;
-			try (Transaction t = Lockable.lockAll(//
-				Lockable.lockable(DefaultActiveMultiMap.this, true, null), getAddKey())) {
+			try (Transaction t = Lockable.lockAll(false, //
+				Transactable.asWriteLockable(DefaultActiveMultiMap.this, null), getAddKey())) {
 				getAddKey().accept(theKeyEntry.getKey());
 				return elementFor(getValueManager().move(valueEl2, afterEl, beforeEl, first, afterRemove));
 			}
@@ -1031,7 +1026,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public void clear() {
-			try (Transaction t = DefaultActiveMultiMap.this.lock(true, null)) {
+			try (Transaction t = DefaultActiveMultiMap.this.lockWrite(false, null)) {
 				for (ValueRef value : theValues.reverse()) {
 					if (value.theValueElement.canRemove() == null)
 						value.theValueElement.remove();
@@ -1237,18 +1232,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return DefaultActiveMultiMap.this.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return DefaultActiveMultiMap.this.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return DefaultActiveMultiMap.this.tryLock(write, cause);
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return DefaultActiveMultiMap.this.lock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return DefaultActiveMultiMap.this.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1517,18 +1507,13 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return DefaultActiveMultiMap.this.isLockSupported();
+		public Transaction lock(boolean tryOnly) {
+			return DefaultActiveMultiMap.this.lock(tryOnly);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return DefaultActiveMultiMap.this.lock(write, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, Object cause) {
-			return DefaultActiveMultiMap.this.tryLock(write, cause);
+		public Transaction lockWrite(boolean tryOnly, Object cause) {
+			return DefaultActiveMultiMap.this.lockWrite(tryOnly, cause);
 		}
 
 		@Override
@@ -1567,7 +1552,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public int size() {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				return entry == null ? 0 : entry.getValues().size();
 			}
@@ -1575,14 +1560,14 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public boolean isEmpty() {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				return getCurrentEntry(false) == null;
 			}
 		}
 
 		@Override
 		public ListElement<V> getTerminalElement(boolean first) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				return entry == null ? null : entry.getValues().getTerminalElement(first);
 			}
@@ -1590,7 +1575,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public ListElement<V> getElement(V value, boolean first) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				return entry == null ? null : entry.getValues().getElement(value, first);
 			}
@@ -1598,7 +1583,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public ListElement<V> getElement(ElementId id) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(true);
 				return entry.getValues().getElement(id);
 			}
@@ -1606,7 +1591,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public MutableListElement<V> mutableElement(ElementId id) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(true);
 				return entry.getValues().mutableElement(id);
 			}
@@ -1614,7 +1599,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public ListElement<V> getElement(int index) throws IndexOutOfBoundsException {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				if (entry == null)
 					throw new IndexOutOfBoundsException(index + " of 0");
@@ -1624,7 +1609,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				if (sourceCollection == this)
 					return BetterList.of(getElement(sourceEl));
 				KeyEntry entry = getCurrentEntry(true);
@@ -1636,7 +1621,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this)
 				return BetterList.of(localElement);
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(true);
 				return entry.getValues().getSourceElements(localElement, sourceCollection);
 			}
@@ -1644,7 +1629,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public ElementId getEquivalentElement(ElementId equivalentEl) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(true);
 				return entry.getValues().getEquivalentElement(equivalentEl);
 			}
@@ -1652,8 +1637,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public String canAdd(V value, ElementId after, ElementId before) {
-			try (Transaction t = Lockable.lockAll(//
-				Lockable.lockable(this, false, null), getAddKey())) {
+			try (Transaction t = Lockable.lockAll(false, //
+				this, getAddKey())) {
 				getAddKey().accept(theKey);
 				if (after != null || before != null) {
 					KeyEntry entry = getCurrentEntry(true);
@@ -1668,8 +1653,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public ListElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = Lockable.lockAll(//
-				Lockable.lockable(this, true, null), getAddKey())) {
+			try (Transaction t = Lockable.lockAll(false, //
+				this, getAddKey())) {
 				getAddKey().accept(theKey);
 				if (after != null || before != null) {
 					KeyEntry entry = getCurrentEntry(true);
@@ -1702,7 +1687,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		public void setValue(Collection<ElementId> elements, V value) {
 			if (elements.isEmpty())
 				return;
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				KeyEntry entry = getCurrentEntry(true);
 				for (ElementId el : elements)
 					entry.theValues.mutableElement(el).set(value);
@@ -1711,7 +1696,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public void clear() {
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = lockWrite(false, null)) {
 				KeyEntry entry = getCurrentEntry(false);
 				if (entry == null)
 					return;
@@ -1759,7 +1744,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public ListElement<V> search(Comparable<? super V> search, SortedSearchFilter filter) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				if (entry == null)
 					return null;
@@ -1782,7 +1767,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public int indexFor(Comparable<? super V> search) {
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(false)) {
 				KeyEntry entry = getCurrentEntry(false);
 				return entry == null ? -1 : entry.getValues().theValues.indexFor(ref -> search.compareTo(ref.get()));
 			}

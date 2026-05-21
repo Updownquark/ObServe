@@ -25,10 +25,10 @@ import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.IterableUtils;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstrained;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -119,25 +119,19 @@ public abstract class AbstractPassiveMultiMap<K0, V0, K, V> extends Identifiable
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return Lockable.lockAll(//
-			Lockable.lockable(theKeyManager, write, cause), Lockable.lockable(theValueManager, write, cause));
+	public Transaction lock(boolean tryOnly) {
+		return Lockable.lockAll(tryOnly, theKeyManager, theValueManager);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return Lockable.tryLockAll(//
-			Lockable.lockable(theKeyManager, write, cause), Lockable.lockable(theValueManager, write, cause));
+	public Transaction lockWrite(boolean tryLock, Object cause) {
+		return Lockable.lockAll(tryLock, //
+			Transactable.asWriteLockable(theKeyManager, cause), Transactable.asWriteLockable(theValueManager, cause));
 	}
 
 	@Override
 	public CoreId getCoreId() {
 		return theKeyManager.getCoreId().and(theValueManager.getCoreId());
-	}
-
-	@Override
-	public boolean isLockSupported() {
-		return theKeyManager.isLockSupported() && theValueManager.isLockSupported();
 	}
 
 	@Override

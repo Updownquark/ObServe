@@ -8,7 +8,6 @@ import org.observe.Observable.CoreChangeSources;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.Lockable.CoreId;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -157,13 +156,13 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return getWrapped().lock(write, cause);
+	public Transaction lock(boolean tryOnly) {
+		return getWrapped().lock(tryOnly);
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
-		return getWrapped().tryLock(write, cause);
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
+		return getWrapped().lockWrite(tryOnly, cause);
 	}
 
 	@Override
@@ -179,11 +178,6 @@ public abstract class ObservableCollectionWrapper<E> extends AbstractIdentifiabl
 	@Override
 	public CoreChangeSources getChangeSources() {
 		return getWrapped().getChangeSources();
-	}
-
-	@Override
-	public boolean isLockSupported() {
-		return getWrapped().isLockSupported();
 	}
 
 	@Override

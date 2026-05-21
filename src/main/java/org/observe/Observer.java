@@ -23,6 +23,27 @@ public interface Observer<T> {
 	 */
 	void onCompleted(Supplier<Causable> cause);
 
+	/**
+	 * <p>
+	 * Attempts a lock on this observer. "Locked" for an observer means that when its {@link #onNext(Object)} or
+	 * {@link #onCompleted(Supplier)} methods are called, no new locks need to be obtained.
+	 * </p>
+	 * <p>
+	 * This method (and {@link #unlock()}) is protected externally such that thread safety does not need to be considered in this method
+	 * itself.
+	 * </p>
+	 *
+	 * @param locked Whether this observer should be locked or not.
+	 * @return True if the lock was successfully obtained or if this observer was already locked. False if the observer was not locked and
+	 *         the lock could not be obtained.
+	 */
+	boolean tryLock();
+
+	/**
+	 * Unlocks the observer if a lock was successfully obtained via {@link #tryLock()}. Does nothing if this observer was not locked.
+	 */
+	void unlock();
+
 	/** @return A {@link CompletedCause} that supplies a fresh, root-level {@link Causable} */
 	static CompletedCause completion() {
 		return new UnlinkedCompletedCause();
@@ -46,6 +67,15 @@ public interface Observer<T> {
 	interface SimpleObserver<T> extends Observer<T> {
 		@Override
 		default void onCompleted(Supplier<Causable> cause) {
+		}
+
+		@Override
+		default boolean tryLock() {
+			return true;
+		}
+
+		@Override
+		default void unlock() {
 		}
 	}
 

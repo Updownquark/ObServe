@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
@@ -18,6 +19,9 @@ import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
+import org.qommons.Named;
+import org.qommons.collect.IndexMapping;
+import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.data.types.EntityField;
 import org.qommons.data.types.EntityType;
@@ -39,6 +43,7 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 	private final EntityType theGenericType;
 	private final EntityReflector<E> theReflector;
 	private final QuickMap<String, ReflectedFieldType<E, ?, ?>> theFields;
+	private final IndexMapping theGenericToReflectedIndexes;
 
 	/**
 	 * @param supers The super types of this type
@@ -49,11 +54,20 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 		theSupers = supers;
 		theGenericType = type;
 		theReflector = reflector;
-		QuickMap<String, ReflectedFieldType<E, ?, ?>> fields = reflector.getFields().keySet().createMap();
-		int f = 0;
-		for (EntityField<?> field : type.getFields()) {
-			fields.put(f, new ReflectedFieldType<>(this, field));
-			f++;
+		QuickMap<String, ReflectedFieldType<E, ?, ?>> fields;
+		if (type.getFields().size() == reflector.getFields().keySize()) {
+			// No transient fields or anything, so the indexes match up perfectly
+			fields = reflector.getFields().keySet().createMap();
+			int f = 0;
+			for (EntityField<?> field : type.getFields())
+				fields.put(f++, new ReflectedFieldType<>(this, field));
+			theGenericToReflectedIndexes = IndexMapping.unity(f);
+		} else {
+			fields = QuickSet.of(type.getFields().stream().map(Named::getName).collect(Collectors.toList())).createMap();
+			for (EntityField<?> field : type.getFields())
+				fields.put(field.getName(), new ReflectedFieldType<>(this, field));
+			theGenericToReflectedIndexes = IndexMapping.of(type.getFields().size(), reflector.getFields().keySize(), //
+				f -> reflector.getFields().keyIndex(type.getFields().get(f).getName()));
 		}
 		theFields = fields.unmodifiable();
 	}
@@ -93,10 +107,17 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 		return theFields;
 	}
 
+	public IndexMapping genericToReflected() {
+		return theGenericToReflectedIndexes;
+	}
+
 	@Override
 	public <F> ReflectedFieldType<E, ?, F> getField(Function<? super E, F> fieldGetter) throws IllegalArgumentException {
 		EntityReflector.ReflectedField<E, F> field = theReflector.getField(fieldGetter);
-		return (ReflectedFieldType<E, ?, F>) theFields.get(field.getFieldIndex());
+		int genericIndex = theGenericToReflectedIndexes.toSource(field.getFieldIndex());
+		if (genericIndex < 0)
+			throw new IllegalArgumentException("Field " + field + " is transient and has no persisted component");
+		return (ReflectedFieldType<E, ?, F>) theFields.get(genericIndex);
 	}
 
 	@Override

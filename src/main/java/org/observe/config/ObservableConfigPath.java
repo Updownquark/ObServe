@@ -226,7 +226,7 @@ public class ObservableConfigPath {
 			if (!isMulti && !theName.equals(config.getName()))
 				return false;
 			if (!theAttributes.isEmpty()) {
-				try (Transaction t = config.lock(false, null)) {
+				try (Transaction t = config.lock(false)) {
 					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
 						boolean found = false;
 						for (ObservableConfig child : config.getContent()) {
@@ -259,7 +259,7 @@ public class ObservableConfigPath {
 					return false;
 			}
 			if (!theAttributes.isEmpty()) {
-				try (Transaction t = config.lock(false, null)) {
+				try (Transaction t = config.lock(false)) {
 					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
 						boolean found = false;
 
