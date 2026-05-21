@@ -879,14 +879,14 @@ public class ObservableCollectionsTest {
 		tester.check(true, 0);
 		list1.remove(Integer.valueOf(8));
 		tester.check(false, 1);
-		try (Transaction t = list1.lock(true, null)) {
+		try (Transaction t = list1.lockWrite(false, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 		}
 		tester.check(false, 0);
-		try (Transaction t = list1.lock(true, null)) {
+		try (Transaction t = list1.lockWrite(false, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
@@ -971,7 +971,7 @@ public class ObservableCollectionsTest {
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
 		.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
-			.<Integer> transform(tx -> tx.map(value -> value / 2))//
+		.<Integer> transform(tx -> tx.map(value -> value / 2))//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
@@ -1007,7 +1007,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
-			.<Integer> transform(combine -> {
+		.<Integer> transform(combine -> {
 			return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1)).withTesting(true);
 		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 		.collect().subscribe(evt -> {
@@ -1262,7 +1262,7 @@ public class ObservableCollectionsTest {
 		set.add(obs2);
 		Observable<Integer> folded = ObservableCollection
 			.fold(set.flow().<Observable<Integer>> transform(tx -> tx.cache(false).map(value -> value.value()))
-			.collectPassive());
+				.collectPassive());
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
 
@@ -1426,7 +1426,7 @@ public class ObservableCollectionsTest {
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("filterMap",
 			list.flow()//
 			.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
-				.map(value -> value / 2)//
+			.map(value -> value / 2)//
 			.collect());
 
 		for(int i = 0; i < 30; i++) {
@@ -1690,7 +1690,7 @@ public class ObservableCollectionsTest {
 		tester.check(firstList);
 		listVal.set(secondList, null);
 		tester.check(secondList);
-		try (Transaction t = firstList.lock(true, null)) {
+		try (Transaction t = firstList.lockWrite(false, null)) {
 			for (int i = firstList.size() - 1; i > 10; i--)
 				firstList.remove(i);
 		}
@@ -1894,7 +1894,7 @@ public class ObservableCollectionsTest {
 		tester.check(9, 1);
 		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
-			Transaction trans = controller.lock(true, cause);
+			Transaction trans = controller.lockWrite(false, cause);
 			tester.checkOps(0);
 			controller.add(0, 4);
 			tester.checkOps(0);
@@ -1948,7 +1948,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correctChanges[0], changeCount[0]);
 
 		Causable cause = Causable.simpleCause();
-		try (Transaction t = cause.use(); Transaction trans = controller.lock(true, cause)) {
+		try (Transaction t = cause.use(); Transaction trans = controller.lockWrite(false, cause)) {
 			controller.clear();
 			correct.clear();
 			correct.addAll(observable);
@@ -1994,7 +1994,7 @@ public class ObservableCollectionsTest {
 
 		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
-			Transaction trans = list.lock(true, cause);
+			Transaction trans = list.lockWrite(false, cause);
 			refresh.onNext(cause);
 			refresh.onNext(cause);
 			trans.close();
@@ -2003,7 +2003,7 @@ public class ObservableCollectionsTest {
 
 		cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
-			Transaction trans = list.lock(true, cause);
+			Transaction trans = list.lockWrite(false, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);
 			refresh.onNext(cause);
@@ -2054,7 +2054,7 @@ public class ObservableCollectionsTest {
 
 		Causable cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
-			Transaction trans = list.lock(true, cause);
+			Transaction trans = list.lockWrite(false, cause);
 			mult.set(3, cause);
 			mult.set(4, cause);
 			trans.close();
@@ -2064,7 +2064,7 @@ public class ObservableCollectionsTest {
 
 		cause = Causable.simpleCause();
 		try (Transaction t = cause.use()) {
-			Transaction trans = list.lock(true, cause);
+			Transaction trans = list.lockWrite(false, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);
 			mult.set(5, cause);

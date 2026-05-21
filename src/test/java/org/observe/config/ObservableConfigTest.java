@@ -550,7 +550,7 @@ public class ObservableConfigTest {
 					}
 				}
 
-				try (Transaction t = theConfig.lock(true, null)) {
+				try (Transaction t = theConfig.lockWrite(false, null)) {
 					helper.doAction(1, () -> { // Add element
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();

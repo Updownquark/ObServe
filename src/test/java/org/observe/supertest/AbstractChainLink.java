@@ -6,11 +6,10 @@ import java.util.List;
 import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.qommons.Lockable;
-import org.qommons.Lockable.CoreId;
-import org.qommons.testing.TestHelper;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.testing.TestHelper;
 
 /**
  * {@link ObservableChainLink} implementation that takes care of a few low-level things
@@ -84,17 +83,16 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
+	public Transaction lock(boolean tryOnly) {
 		Transactable locking = getLocking();
-		return Lockable.lockAll(//
-			Lockable.lockable(locking, write, cause), Lockable.lockable(getSourceLink(), write, cause));
+		return Lockable.lockAll(tryOnly, locking, getSourceLink());
 	}
 
 	@Override
-	public Transaction tryLock(boolean write, Object cause) {
+	public Transaction lockWrite(boolean tryOnly, Object cause) {
 		Transactable locking = getLocking();
-		return Lockable.tryLockAll(//
-			Lockable.lockable(locking, write, cause), Lockable.lockable(getSourceLink(), write, cause));
+		return Lockable.lockAll(tryOnly, //
+			Transactable.asWriteLockable(locking, cause), Transactable.asWriteLockable(getSourceLink(), cause));
 	}
 
 	@Override

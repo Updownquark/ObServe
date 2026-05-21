@@ -265,7 +265,7 @@ public class ObservableChainTester implements Testable {
 			LinkStruct targetLink = randomModLink.get(null);
 			boolean finished = false;
 			boolean useTransaction = helper.getBoolean(.75);
-			try (Transaction t = useTransaction ? targetLink.link.lock(true, null) : Transaction.NONE) {
+			try (Transaction t = useTransaction ? targetLink.link.lockWrite(false, null) : Transaction.NONE) {
 				int transactionMods = (int) helper.getDouble(1, 10, 26);
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
