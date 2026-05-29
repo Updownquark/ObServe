@@ -558,7 +558,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 				}
 				if (isTowardBeginning == null || !isTowardBeginning) {
 					if (beforeBound == null) {
-						id[missingIdx] = entities.getLast().get(theType.getFields().get(missingIdx).getGenericField());
+						id[missingIdx] = entities.getLast().get(theSubType.getGenericType().getIdFields().get(missingIdx));
 						if (isAvailable(entities, id))
 							return null;
 						Object[] adj = getAdjacentAvailableId(entities, id, missingIdx, missingIdFieldType, true, null, false);
@@ -588,7 +588,7 @@ public class ReflectedEntitySet extends InMemoryEntitySet implements ObservableE
 					}
 				} else {
 					if (afterBound == null) {
-						id[missingIdx] = entities.getFirst().get(theSubType.getFields().get(missingIdx).getGenericField());
+						id[missingIdx] = entities.getFirst().get(theSubType.getGenericType().getIdFields().get(missingIdx));
 						if (isAvailable(entities, id))
 							return null;
 						Object[] adj = getAdjacentAvailableId(entities, id, missingIdx, missingIdFieldType, false, null, false);

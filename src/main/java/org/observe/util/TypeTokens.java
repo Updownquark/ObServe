@@ -1708,7 +1708,7 @@ public class TypeTokens implements TypeParser {
 		// Now neither type is primitive or a wrapper
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
 			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
-		if (source.getType() instanceof WildcardType && ((WildcardType) source.getType()).getLowerBounds().length == 0) {
+		if (source.getType() instanceof WildcardType && ((WildcardType) source.getType()).getUpperBounds().length == 0) {
 			// As far as I can tell, Google seems to have broken this.
 			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
 			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
@@ -1846,7 +1846,11 @@ public class TypeTokens implements TypeParser {
 				TypeToken<?>[] params = new TypeToken[extType.getTypeParameters().length];
 				for (int p = 0; p < params.length; p++) {
 					Type param = extType.getTypeParameters()[p];
-					params[p] = _commonType(QommonsUtils.map(types, t -> t.resolveType(param), false));
+					List<TypeToken<?>> parameterized = QommonsUtils.map(types, t -> t.resolveType(param), false);
+					if (parameterized.equals(types))
+						return OBJECT;
+					else
+						params[p] = _commonType(parameterized);
 				}
 				return keyFor(extType).parameterized(params);
 			}

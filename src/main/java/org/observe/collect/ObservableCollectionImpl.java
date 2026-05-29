@@ -1529,7 +1529,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Getter<T> lock(boolean tryOnly) {
-			Transaction lock = lock(tryOnly);
+			Transaction lock = theCollection.lock(tryOnly);
 			if (lock == null)
 				return null;
 			return new Getter<T>() {
@@ -3949,7 +3949,7 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			class ChangesSubscription
-				implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
+			implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
 				ObservableCollection<? extends E> collection;
 				ElementMappingChangeObserver collectionObserver;
 				Subscription collectionSub;

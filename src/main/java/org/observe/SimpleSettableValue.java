@@ -244,8 +244,8 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	protected SettableValueListening<ObservableValueEvent<T>> createEventer(Transactable lock,
 		Function<? super SettableValue<T>, ListenerList.Builder> listening) {
 		ListenerList.Builder listenerBuilder = listening == null ? ListenerList.build() : listening.apply(this);
-		listenerBuilder.skipAddByDefault(true);
-		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock, listenerBuilder.build());
+		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock,
+			listenerBuilder.skipAddByDefault(true).build());
 	}
 
 	/**
@@ -256,7 +256,8 @@ public class SimpleSettableValue<T> extends AbstractIdentifiable implements Sett
 	protected SettableValueListening<ObservableValueEvent<T>> createEventer(Transactable lock,
 		AbstractEventableBuilder.EventableData<? super SimpleSettableValue<T>> eventableData) {
 		ListenerList.Builder listenerBuilder = eventableData.getListening(this);
-		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock, listenerBuilder.build());
+		return new SettableValueListening<>(Identifiable.wrap(getIdentity(), "noInitChanges"), lock,
+			listenerBuilder.skipAddByDefault(true).build());
 	}
 
 	@Override

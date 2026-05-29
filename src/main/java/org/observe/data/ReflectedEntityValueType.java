@@ -330,7 +330,7 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 		if (genericType instanceof FieldType.SimpleType || genericType == FieldType.BLOB) {
 			return (Function<R, G>) FunctionUtils.identity();
 		} else if (genericType instanceof EntityType) {
-			return realValue -> (G) EntityReflector.getAssociated(realValue, MappedEntity.ENTITY_ASSOC);
+			return realValue -> realValue == null ? null : (G) EntityReflector.getAssociated(realValue, MappedEntity.ENTITY_ASSOC);
 		} else if (genericType instanceof EnumType) {
 			return realValue -> realValue == null ? null : (G) ((EnumType) genericType).getValue(((Enum<?>) realValue).name());
 		} else

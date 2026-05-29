@@ -329,7 +329,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 		if (theListeners == null)
 			theListeners = new SettableValueListening[getType().getFields().size()];
 		if (theListeners[fieldIndex] == null)
-			theListeners[fieldIndex] = new SettableValueListening<>(null, null, ListenerList.build().build());
+			theListeners[fieldIndex] = new SettableValueListening<>(null, null, ListenerList.build().skipAddByDefault(true).build());
 		return theListeners[fieldIndex];
 	}
 

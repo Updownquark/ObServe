@@ -2388,8 +2388,10 @@ public class EntityReflector<E> {
 			return null;
 		ReflectedField<? super E, ?> field = fields.getIfPresent(fieldName);
 		if (field == null) {
-			errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
-				"No getter found for setter " + m + " of field " + fieldName));
+			if (defaultMethod == null) {
+				errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
+					"No getter found for setter " + m + " of field " + fieldName));
+			}
 			return null;
 		}
 		if (!m.getParameterTypes()[0].isAssignableFrom(TypeTokens.getRawType(field.getGetter().getReturnType()))) {

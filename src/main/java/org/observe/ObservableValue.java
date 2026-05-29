@@ -876,6 +876,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			theElement = theEngine.createElement(FunctionUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
 			theObservers = new SettableValueListening<>(null, null, ListenerList.build()//
+				.skipAddByDefault(true)//
 				.reentrancyError(() -> "Reentrancy not allowed: " + toString())//
 				.withInUse(new ListenerList.InUseListener() {
 					private Subscription theSourceSub;
@@ -2263,7 +2264,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 			public CachedSyntheticObservableValue(SyntheticObservable<T> value) {
 				theValue = value;
-				theListeners = new SettableValueListening<>(null, null, ListenerList.build()//
+				theListeners = new SettableValueListening<>(null, Transactable.transactable(theValue), ListenerList.build()//
+					.skipAddByDefault(true)//
 					.withInUse(new ListenerList.InUseListener() {
 						private Subscription theChangesSub;
 						private Transaction theLock;
@@ -2273,6 +2275,10 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 							if (!inUse) {
 								theChangesSub.unsubscribe();
 								theChangesSub = null;
+								if (theLock != null) {
+									theLock.close();
+									theLock = null;
+								}
 								return;
 							}
 							get(); // Update for initial value
@@ -2620,7 +2626,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						@Override
 						public void onNext(ObservableValueEvent<? extends ObservableValue<? extends T>> event) {
 							firedInit[0] = true;
-							if (!isLocked)
+							boolean lockOwner = !isLocked;
+							if (lockOwner)
 								theLock.lock();
 							try {
 								final ObservableValue<? extends T> innerObs = event.getNewValue();
@@ -2636,7 +2643,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 										@Override
 										public void onNext(ObservableValueEvent<? extends T> event2) {
 											firedInit2[0] = true;
-											if (!isLocked)
+											boolean innerLockOwner = !isLocked;
+											if (innerLockOwner)
 												theLock.lock();
 											try {
 												T innerOld;
@@ -2657,7 +2665,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 												}
 												old[0] = event2.getNewValue();
 											} finally {
-												if (!isLocked)
+												if (innerLockOwner)
 													theLock.unlock();
 											}
 										}
@@ -2693,7 +2701,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 									}
 								}
 							} finally {
-								if (!isLocked)
+								if (lockOwner)
 									theLock.unlock();
 							}
 						}
@@ -2980,7 +2988,9 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 
 					@Override
 					public void onNext(ObservableValueEvent<? extends T> event) {
-						lock.lock();
+						boolean didILock = !isLocked;
+						if (didILock)
+							lock.lock();
 						try {
 							if (valueSubs[index] == null && !event.isInitial()) {
 								// This may happen if two values fire events on different threads
@@ -3047,7 +3057,8 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 								}
 							}
 						} finally {
-							lock.unlock();
+							if (didILock)
+								lock.unlock();
 						}
 					}
 
@@ -3076,6 +3087,7 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 						if (isLocked) {
 							lock.unlock();
 							observer.unlock();
+							isLocked = false;
 						}
 					}
 

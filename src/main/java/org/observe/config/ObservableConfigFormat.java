@@ -2518,7 +2518,7 @@ public interface ObservableConfigFormat<E> {
 						SettableValueListening<FieldChange<?>> listeners = (SettableValueListening<FieldChange<?>>) theEntityType
 							.getAssociated(entity, key);
 						if (listeners == null) {
-							listeners = new SettableValueListening<>(null, null, ListenerList.build().build());
+							listeners = new SettableValueListening<>(null, null, ListenerList.build().skipAddByDefault(true).build());
 							theEntityType.associate(entity, key, listeners);
 						}
 						return listeners.subscribe(listener);

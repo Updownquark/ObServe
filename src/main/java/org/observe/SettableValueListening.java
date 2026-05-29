@@ -124,7 +124,7 @@ public class SettableValueListening<T> implements Observable<T> {
 				return null;
 		} else
 			lock.close();
-		return this::unlock;
+		return new Transaction.ReleaseOnceTransaction(this::unlock);
 	}
 
 	private Transaction innerWriteLock(boolean tryOnly, Object cause) {
@@ -168,7 +168,10 @@ public class SettableValueListening<T> implements Observable<T> {
 			theListeners.visitEach(Observer::unlock);
 			Transaction wl = theWriteLock;
 			theWriteLock = null;
-			wl.close();
+			if (wl == null)
+				System.err.println("No write lock");
+			else
+				wl.close();
 		}
 	}
 

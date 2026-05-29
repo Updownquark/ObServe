@@ -257,7 +257,8 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			super(lock, session, parent, ceCreate, until);
 			theFormat = format;
 
-			theListeners = new SettableValueListening<>(null, null, ListenerList.build().withFastSize(false).build());
+			theListeners = new SettableValueListening<>(null, null,
+				ListenerList.build().withFastSize(false).skipAddByDefault(true).build());
 			theModifyingValue = new ValueHolder<>();
 
 			init(until == null ? Observable.empty() : until, listen, findRefs);
