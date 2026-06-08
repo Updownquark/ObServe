@@ -950,12 +950,12 @@ public class ObservableCollectionDataFlowImpl {
 					Equivalence<T> mappedEquivalence = sourceEquivalence.map( //
 						FunctionUtils.printablePred(v -> {
 							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
-							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
+							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, true, true);
 							return rq.getError() == null;
 						}, def + ".filter", def), map, //
 						FunctionUtils.printableFn(v -> {
 							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence, null);
-							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
+							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, true, true);
 							return rq.getReversed();
 						}, reverse::toString, reverse));
 					return mappedEquivalence;

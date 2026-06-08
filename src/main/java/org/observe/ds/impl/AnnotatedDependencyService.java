@@ -14,20 +14,7 @@ import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
@@ -353,7 +340,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 
 	/** Creates a dependency service with standard {@link ReentrantReadWriteLock} locking */
 	public AnnotatedDependencyService() {
-		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), "DS", ThreadConstraint.ANY));
+		this(new RRWLockingStrategy(new ReentrantReadWriteLock(), ThreadConstraint.ANY));
 	}
 
 	/**
