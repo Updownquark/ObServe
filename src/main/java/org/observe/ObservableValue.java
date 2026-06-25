@@ -54,6 +54,12 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 	@Override
 	T get();
 
+	/**
+	 * The result of a {@link ObservableValue#lock(boolean)} call, this interface provides the ability to obtain the value of the
+	 * ObservableValue without reentrantly locking it again, as well as the ability to release the lock.
+	 *
+	 * @param <T> The type of the value
+	 */
 	public interface Getter<T> extends Supplier<T>, Transaction {
 		@Override
 		default Getter<T> combine(Transaction... others) {
@@ -62,15 +68,26 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return new CombinedGetter<>(this, others);
 		}
 
+		/**
+		 * @param <T> The type of the value
+		 * @param value The simple supplier for the value to implement the getter functionality
+		 * @param transaction The transaction to implement the transaction functionality
+		 * @return The getter that integrates the two component features
+		 */
 		static <T> Getter<T> of(Supplier<? extends T> value, Transaction transaction) {
 			return new ConstantGetter<>(value, transaction);
 		}
 
+		/**
+		 * Implements {@link Getter#of(Supplier, Transaction)}
+		 *
+		 * @param <T> The type of value returned by the getter
+		 */
 		static class ConstantGetter<T> implements Getter<T> {
 			private final Supplier<? extends T> theValue;
 			private final Transaction theTransaction;
 
-			public ConstantGetter(Supplier<? extends T> value, Transaction transaction) {
+			protected ConstantGetter(Supplier<? extends T> value, Transaction transaction) {
 				theValue = value;
 				theTransaction = transaction;
 			}
@@ -86,11 +103,16 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			}
 		}
 
+		/**
+		 * Implements {@link Getter#combine(Transaction...)}
+		 *
+		 * @param <T> The type of value returned by the getter
+		 */
 		static class CombinedGetter<T> implements Getter<T> {
 			private final Getter<T> theSource;
 			private final Transaction theTransaction;
 
-			public CombinedGetter(Getter<T> source, Transaction... transactions) {
+			protected CombinedGetter(Getter<T> source, Transaction... transactions) {
 				theSource = source;
 				theTransaction = Transaction.and(transactions);
 			}
@@ -1186,6 +1208,13 @@ public interface ObservableValue<T> extends Supplier<T>, Lockable, Stamped, Iden
 			return new TransformedValueGetter(source, engineLock);
 		}
 
+		/**
+		 * Locks the listeners in this value in preparation for a value event
+		 *
+		 * @param tryOnly Whether to abandon the lock attempt if it cannot be immediately fulfilled
+		 * @param cause The cause of the imminent change
+		 * @return The transaction to close to unlock the listeners, or null if the lock attempt was abandoned
+		 */
 		protected Transaction lockListeners(boolean tryOnly, Object cause) {
 			return theObservers.lockWrite(tryOnly, cause);
 		}

@@ -1840,7 +1840,7 @@ public class TypeTokens implements TypeParser {
 		}
 		if (firstIsCommon)
 			return firstType;
-		List<Class<?>> rawTypes = decompose(getRawType(firstType));
+		List<Class<?>> rawTypes = decompose(getRawType(firstType), new ArrayList<>());
 		Collections.sort(rawTypes, CLASS_PRIORITY);
 		for (Class<?> extType : rawTypes) {
 			first = true;
@@ -1871,7 +1871,7 @@ public class TypeTokens implements TypeParser {
 		return OBJECT;
 	}
 
-	private List<Class<?>> decompose(Class<?> type) {
+	private List<Class<?>> decompose(Class<?> type, List<Class<?>> decomposed) {
 		Class<?> prim, wrapper;
 		if (type.isPrimitive()) {
 			prim = type;
@@ -1880,7 +1880,6 @@ public class TypeTokens implements TypeParser {
 			prim = unwrap(type);
 			wrapper = type;
 		}
-		List<Class<?>> decomposed = new LinkedList<>();
 		if (prim.isPrimitive()) {
 			decomposed.add(prim);
 			if (prim != boolean.class && prim != char.class)
@@ -1888,9 +1887,9 @@ public class TypeTokens implements TypeParser {
 		}
 		if (!prim.isInterface()) {
 			Class<?> c = prim.getSuperclass();
-			while (c != null && c != Object.class) {
+			if (c != null && c != Object.class) {
 				decomposed.add(c);
-				c = c.getSuperclass();
+				decompose(c, decomposed);
 			}
 		}
 

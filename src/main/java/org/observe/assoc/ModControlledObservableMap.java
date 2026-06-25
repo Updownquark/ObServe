@@ -8,7 +8,9 @@ import org.observe.collect.ModControlledObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Subscription;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ModControlledCollection;
 import org.qommons.collect.ModControlledMap;
 import org.qommons.collect.MutableOrderedMapEntry;
 import org.qommons.collect.OrderedMapEntry;
@@ -143,9 +145,19 @@ implements ObservableMap<K, V> {
 		}
 
 		@Override
+		protected BetterSet<K> createKeySet() {
+			if (getControl() == null && getListener() == null)
+				return getBacking().keySet();
+			ModControlledCollection.CollectionModificationControl<K> keyControl = createKeyControl();
+			ModControlledCollection.CollectionModificationListener<K> keyListener = createKeyModListener();
+			if (keyControl == null && keyListener == null)
+				return getBacking().keySet();
+			return ModControlledObservableCollection.controlCollection(getBacking().keySet(), keyControl, keyListener);
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return getBacking().onChange(action);
 		}
-
 	}
 }

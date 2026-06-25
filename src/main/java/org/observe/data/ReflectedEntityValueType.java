@@ -20,6 +20,7 @@ import org.observe.config.SyncValueSet;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.Named;
+import org.qommons.StringUtils;
 import org.qommons.collect.IndexMapping;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -63,7 +64,9 @@ public class ReflectedEntityValueType<E> implements ConfiguredValueType<E> {
 				fields.put(f++, new ReflectedFieldType<>(this, field));
 			theGenericToReflectedIndexes = IndexMapping.unity(f);
 		} else {
-			fields = QuickSet.of(type.getFields().stream().map(Named::getName).collect(Collectors.toList())).createMap();
+			fields = QuickSet
+				.of(StringUtils.DISTINCT_NUMBER_TOLERANT, type.getFields().stream().map(Named::getName).collect(Collectors.toList()))
+				.createMap();
 			for (EntityField<?> field : type.getFields())
 				fields.put(field.getName(), new ReflectedFieldType<>(this, field));
 			theGenericToReflectedIndexes = IndexMapping.of(type.getFields().size(), reflector.getFields().keySize(), //

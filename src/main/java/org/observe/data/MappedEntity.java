@@ -242,7 +242,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 				builder = ObservableSortedMap.build(mapType.keyType);
 			else
 				builder = ObservableMap.build();
-			return (T) builder.withLocking(getEntitySet().getLock()).withDescription(this + "." + field.getName()).build();
+			return (T) builder.withLocking(getEntitySet().getLock()).withDescription(this + "." + field.getName()).buildMap();
 		} else if (type instanceof FieldType.MultiMapType) {
 			ObservableMultiMap.Builder<?, ?, ?> builder;
 			FieldType.MultiMapType<?, ?, ?> mapType = (FieldType.MultiMapType<?, ?, ?>) type;

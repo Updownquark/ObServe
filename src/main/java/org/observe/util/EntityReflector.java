@@ -2050,7 +2050,8 @@ public class EntityReflector<E> {
 		Map<String, Method> fieldGetters = new LinkedHashMap<>();
 		findFields(type, getterFilter, fieldGetters, customMethods == null ? Collections.emptySet() : customMethods.keySet(),
 			new HashSet<>());
-		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
+		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(StringUtils.DISTINCT_NUMBER_TOLERANT, fieldGetters.keySet())
+			.createMap();
 		Set<Integer> idFields = new LinkedHashSet<>();
 		// Find ID fields
 		if (!theSupers.isEmpty()) {
