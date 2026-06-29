@@ -64,6 +64,7 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 		super(type.getGenericType(), entitySet, id);
 		theType = type;
 		theRealFieldValues = new Object[type.getReflector().getFields().keySize()];
+		theRealEntity = theType.getReflector().newInstance(this);
 		int f = 0;
 		for (ReflectedFieldType<E, ?, ?> field : theType.getFields().allValues()) {
 			int reflectedIndex = theType.genericToReflected().toDest(f);
@@ -71,8 +72,8 @@ public class MappedEntity<E> extends AbstractGenericEntity implements EntityRefl
 				get(field.getGenericField()), entitySet, this);
 			f++;
 		}
-		theRealEntity = theType.getReflector().newInstance(this);
 		EntityReflector.associate(theRealEntity, ENTITY_ASSOC, this);
+		theType.getReflector().init(theRealEntity);
 	}
 
 	/** @return The "real" entity proxy that is an instance of this entity's run-time java type */

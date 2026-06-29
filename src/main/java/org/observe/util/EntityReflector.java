@@ -2693,8 +2693,12 @@ public class EntityReflector<E> {
 			handler = new ProxyMethodHandler(backing);
 			entity = (E) Proxy.newProxyInstance(theRawType.getClassLoader(), new Class[] { theRawType }, handler);
 		}
-		handler.init(entity);
 		return entity;
+	}
+
+	public void init(E entity) {
+		EntityReflector<E>.ProxyMethodHandler handler = getHandler(entity);
+		handler.init(entity);
 	}
 
 	/**
