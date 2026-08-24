@@ -41,8 +41,29 @@ import org.qommons.QommonsUtils;
 import org.qommons.Subscription;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.*;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMultiMap;
+import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.CollectionBuilder;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionLockingStrategy;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.ListElement;
+import org.qommons.collect.ListenerList;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MultiEntryValueHandle;
+import org.qommons.collect.MultiMap;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableListElement;
+import org.qommons.collect.MutableMultiMapHandle;
+import org.qommons.collect.MutableOrderedMapEntry;
+import org.qommons.collect.OrderedMapEntry;
+import org.qommons.collect.OrderedMultiEntry;
+import org.qommons.collect.SimpleMapEntry;
+import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.fn.FunctionUtils;
 import org.qommons.tree.BetterTreeSet;
 
@@ -65,7 +86,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		ElementId getKeyId();
 
 		@Override
-		default ObservableMultiEntry<K, V> reverse() {
+		default ObservableMultiEntry<K, V> reversed() {
 			return new ReversedObservableMultiEntry<>(this);
 		}
 
@@ -74,7 +95,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		}
 
 		/**
-		 * Implements {@link ObservableMultiMap.ObservableMultiEntry#reverse()}
+		 * Implements {@link ObservableMultiMap.ObservableMultiEntry#reversed()}
 		 *
 		 * @param <K> The key type of the map
 		 * @param <V> The value type of the map
@@ -106,7 +127,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			}
 
 			@Override
-			public ObservableMultiEntry<K, V> reverse() {
+			public ObservableMultiEntry<K, V> reversed() {
 				return getWrapped();
 			}
 		}
@@ -542,7 +563,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 * @param <V> The value type of the map
 	 */
 	class ObservableMultiMapEntrySet<K, V> extends BetterMultiMapEntrySet<K, V> implements ObservableSet<MultiEntryHandle<K, V>> {
-		private Equivalence<? super MultiMap.MultiEntry<? extends K, ?>> theEquivalence;
+		private Equivalence<MultiMap.MultiEntry<K, ?>> theEquivalence;
 
 		public ObservableMultiMapEntrySet(ObservableMultiMap<K, V> map) {
 			super(map);
@@ -572,7 +593,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		@Override
 		public Equivalence<? super MultiEntryHandle<K, V>> equivalence() {
 			if (theEquivalence == null)
-				theEquivalence = getMap().keySet().equivalence().map(null, key -> new SimpleMultiEntry<>(key, false),
+				theEquivalence = getMap().keySet().equivalence().<K, MultiMap.MultiEntry<K, ?>> map(null,
+					key -> new SimpleMultiEntry<>(key, false),
 					MultiMap.MultiEntry::getKey);
 			return theEquivalence;
 		}
@@ -941,7 +963,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 */
 	class ObservableSingleEntryCollection<K, V> extends BetterMapSingleEntryCollection<K, V>
 	implements ObservableCollection<MultiEntryValueHandle<K, V>> {
-		private Equivalence<? super Map.Entry<? extends K, ?>> theEquivalence;
+		private Equivalence<Map.Entry<K, ?>> theEquivalence;
 
 		public ObservableSingleEntryCollection(ObservableMultiMap<K, V> map) {
 			super(map);
@@ -971,7 +993,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		@Override
 		public Equivalence<? super MultiEntryValueHandle<K, V>> equivalence() {
 			if (theEquivalence == null)
-				theEquivalence = getMap().keySet().equivalence().map(null, key -> new SimpleMapEntry<>(key, null), Map.Entry::getKey);
+				theEquivalence = getMap().keySet().equivalence().<K, Map.Entry<K, ?>> map(null, key -> new SimpleMapEntry<>(key, null),
+					Map.Entry::getKey);
 			return theEquivalence;
 		}
 
@@ -1227,27 +1250,27 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 
 		@Override
 		public ObservableSet<K> keySet() {
-			return getSource().keySet().reverse();
+			return getSource().keySet().reversed();
 		}
 
 		@Override
 		public ObservableSet<? extends MultiEntryHandle<K, V>> entrySet() {
-			return getSource().entrySet().reverse();
+			return getSource().entrySet().reversed();
 		}
 
 		@Override
 		public ObservableMultiEntry<K, V> watchById(ElementId keyId) {
-			return getSource().watchById(keyId).reverse();
+			return getSource().watchById(keyId).reversed();
 		}
 
 		@Override
 		public ObservableMultiEntry<K, V> watch(K key) {
-			return getSource().watch(key).reverse();
+			return getSource().watch(key).reversed();
 		}
 
 		@Override
 		public ObservableCollection<V> get(K key) {
-			return getSource().get(key).reverse();
+			return getSource().get(key).reversed();
 		}
 
 		@Override
@@ -1275,7 +1298,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						valueSize++; // May have just been removed
 					int valueIndex = valueSize - evt.getIndex() - 1;
 					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent.Default<>(//
-						evt.getKeyElement().reverse(), evt.getElementId().reverse(), keyIndex, valueIndex, evt.getType(), evt.getOldKey(),
+						evt.getKeyElement().reversed(), evt.getElementId().reversed(), keyIndex, valueIndex, evt.getType(), evt.getOldKey(),
 						evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 					try (Transaction mt = event.use()) {
 						action.accept(event);

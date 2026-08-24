@@ -9,7 +9,7 @@ import org.observe.supertest.TestValueType;
 import org.qommons.testing.TestHelper;
 
 /**
- * Tests {@link ObservableCollection#reverse()} and {@link org.observe.collect.ObservableCollection.CollectionDataFlow#reverse()}
+ * Tests {@link ObservableCollection#reversed()} and {@link org.observe.collect.ObservableCollection.CollectionDataFlow#reverse()}
  *
  * @param <T> The type of values in the collection
  */
@@ -31,7 +31,7 @@ public class ReversedCollectionLink<T> extends OneToOneCollectionLink<T, T> {
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			CollectionDataFlow<?, ?, T> oneStepFlow;
 			if (helper.getBoolean())
-				oneStepFlow = sourceCL.getCollection().reverse().flow();
+				oneStepFlow = sourceCL.getCollection().reversed().flow();
 			else
 				oneStepFlow = sourceCL.getCollection().flow().reverse();
 			CollectionDataFlow<?, ?, T> multiStepFlow = sourceCL.getDef().multiStepFlow.reverse();

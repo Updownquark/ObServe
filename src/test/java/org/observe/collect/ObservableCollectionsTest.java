@@ -683,8 +683,8 @@ public class ObservableCollectionsTest {
 			ObservableCollectionTester<Integer> tester;
 			BetterList<Integer> expected = BetterTreeList.<Integer> build().build();
 			if (helper.getBoolean()) {
-				derived = derived.reverse();
-				tester = new ObservableCollectionTester<>("reversed", derived, expected.reverse());
+				derived = derived.reversed();
+				tester = new ObservableCollectionTester<>("reversed", derived, expected.reversed());
 			} else
 				tester = new ObservableCollectionTester<>("base", derived, expected);
 

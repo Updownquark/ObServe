@@ -570,7 +570,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 		@Override
 		protected void initConfig(ObservableConfig collectionElement, Object cause, Observable<?> findRefs) {
 			if (!theElements.isEmpty()) {
-				Iterator<ConfigElement> cveIter = theElements.values().reverse().iterator();
+				Iterator<ConfigElement> cveIter = theElements.values().reversed().iterator();
 				while (cveIter.hasNext()) {
 					ConfigElement cve = cveIter.next();
 					cveIter.remove();
@@ -1069,7 +1069,7 @@ public abstract class ObservableConfigTransform extends AbstractIdentifiable imp
 			@Override
 			public void clear() {
 				try (Transaction t = lockWrite(false, null)) {
-					for (CollectionElement<ConfigElement> el : theElements.values().reverse().elements()) {
+					for (CollectionElement<ConfigElement> el : theElements.values().reversed().elements()) {
 						el.get().remove();
 					}
 				}

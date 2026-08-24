@@ -177,7 +177,7 @@ public class ObservableSortedSetImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSortedSet#reverse()}
+	 * Implements {@link ObservableSortedSet#reversed()}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
@@ -231,11 +231,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<E> reverse() {
+		public ObservableSortedSet<E> reversed() {
 			if (BetterCollections.simplifyDuplicateOperations())
 				return getWrapped();
 			else
-				return ObservableSortedSet.super.reverse();
+				return ObservableSortedSet.super.reversed();
 		}
 	}
 

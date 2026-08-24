@@ -452,7 +452,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 						valueSize++; // May have just been removed
 					int valueIndex = valueSize - evt.getIndex() - 1;
 					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent.Default<>(//
-						evt.getKeyElement().reverse(), evt.getElementId().reverse(), //
+						evt.getKeyElement().reversed(), evt.getElementId().reversed(), //
 						keyIndex, valueIndex, evt.getType(), //
 						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 					try (Transaction mt = event.use()) {
@@ -518,7 +518,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableSortedSet<? extends MultiEntryHandle<K, V>> entrySet() {
 			Function<MultiEntryHandle<K, V>, MultiEntryHandle<K, V>> map = entry -> entry.reverse();
-			return ((ObservableSortedSet<MultiEntryHandle<K, V>>) getWrapped().entrySet()).reverse().flow()
+			return ((ObservableSortedSet<MultiEntryHandle<K, V>>) getWrapped().entrySet()).reversed().flow()
 				.<MultiEntryHandle<K, V>> transformEquivalent(tx -> tx.cache(false).map(map).withReverse(map)).collectPassive();
 		}
 

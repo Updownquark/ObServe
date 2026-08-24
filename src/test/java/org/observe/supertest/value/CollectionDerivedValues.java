@@ -553,7 +553,7 @@ public class CollectionDerivedValues {
 					Assert.assertEquals(found.getElementId(), getValue().getElementId());
 			} else {
 				found = null;
-				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reverse()) {
+				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reversed()) {
 					if (getSourceLink().getCollection().equivalence().elementEquals(el.get(), theValue)) {
 						found = el;
 						break;
@@ -666,7 +666,7 @@ public class CollectionDerivedValues {
 				break;
 			case FALSE:
 				found = null;
-				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reverse()) {
+				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reversed()) {
 					if (theConditionValue.get().apply(el.get()) == null) {
 						found = el;
 						break;
@@ -709,7 +709,7 @@ public class CollectionDerivedValues {
 				}
 				break;
 			case FALSE:
-				for (CollectionLinkElement<?, T> el : getSourceLink().getElements().reverse()) {
+				for (CollectionLinkElement<?, T> el : getSourceLink().getElements().reversed()) {
 					if (!el.wasAdded() && theConditionValue.get().apply(el.getValue()) == null) {
 						found = el;
 						break;
@@ -886,7 +886,7 @@ public class CollectionDerivedValues {
 					Assert.assertEquals(element.getElementId(), getValue().getElementId());
 				break;
 			case FALSE:
-				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reverse()) {
+				for (CollectionElement<T> el : getSourceLink().getCollection().elements().reversed()) {
 					if (element == null)
 						element = el;
 					else {

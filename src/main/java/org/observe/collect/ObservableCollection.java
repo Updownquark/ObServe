@@ -220,7 +220,7 @@ public interface ObservableCollection<E> extends BetterList<E>, Eventable, Causa
 
 	/** @return A collection that is identical to this one, but with its elements reversed */
 	@Override
-	default ObservableCollection<E> reverse() {
+	default ObservableCollection<E> reversed() {
 		return new ObservableCollectionImpl.ReversedObservableCollection<>(this);
 	}
 

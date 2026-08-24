@@ -487,7 +487,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 						ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners = theValueListeners.get(oldKey);
 						if (listeners != null) {
 							int index = theValues.theValues.size() - 1;
-							for (CollectionElement<ValueRef> value : theValues.theValues.elements().reverse()) {
+							for (CollectionElement<ValueRef> value : theValues.theValues.elements().reversed()) {
 								V v = value.get().get();
 								ObservableCollectionEvent<V> event = ObservableCollectionEvent.createCollectionEvent(value.getElementId(),
 									index--, //
@@ -905,7 +905,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				return elementFor(found);
 			} else {
 				Equivalence<? super V> equivalence = getValueManager().equivalence();
-				for (ListElement<ValueRef> val : (first ? theValues.elements() : theValues.elements().reverse()))
+				for (ListElement<ValueRef> val : (first ? theValues.elements() : theValues.elements().reversed()))
 					if (equivalence.elementEquals(val.get().get(), value))
 						return elementFor(val);
 				return null;
@@ -1027,7 +1027,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public void clear() {
 			try (Transaction t = DefaultActiveMultiMap.this.lockWrite(false, null)) {
-				for (ValueRef value : theValues.reverse()) {
+				for (ValueRef value : theValues.reversed()) {
 					if (value.theValueElement.canRemove() == null)
 						value.theValueElement.remove();
 				}
@@ -1794,7 +1794,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public ReversedSortedObservableMultiEntry<K, V> reverse() {
+		public ReversedSortedObservableMultiEntry<K, V> reversed() {
 			return new ReversedSortedObservableMultiEntry<>(this);
 		}
 	}
@@ -1827,7 +1827,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection reverse() {
+		public DefaultActiveMultiMap<?, K, V>.SortedKeyValueCollection reversed() {
 			return getWrapped();
 		}
 	}

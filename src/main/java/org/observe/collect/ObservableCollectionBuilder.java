@@ -386,7 +386,9 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			if (backing == null) {
 				RedBlackNodeList.RBNLBuilder<E, ?, ?> builder = theSorting != null ? SortedTreeList.buildTreeList(theSorting)
 					: BetterTreeList.build();
-				backing = builder.withDescription(getDescription()).withCollectionLocking(getLocker()).build();
+				builder = builder.withDescription(getDescription());
+				builder = builder.withCollectionLocking(getLocker());
+				backing = builder.build();
 			}
 			return new DefaultObservableCollection<>(backing, theElementSource, theSourceElements, theEquivalence);
 		}
@@ -561,11 +563,12 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		@Override
 		public ObservableSortedCollection<E> build() {
 			BetterList<E> backing = getBacking();
-			if (backing == null)
-				backing = SortedTreeList.<E> buildTreeList(getSorting()).withDescription(getDescription())
-				.withCollectionLocking(getLocker())
-				.build();
-			else if (!(backing instanceof BetterSortedList))
+			if (backing == null) {
+				SortedTreeList.Builder<E, ?, ?> builder = SortedTreeList.buildTreeList(getSorting());
+				builder.withDescription(getDescription());
+				builder.withCollectionLocking(getLocker());
+				backing = builder.build();
+			} else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
 			return new DefaultObservableSortedCollection<>((BetterSortedList<E>) backing, getElementsBySource(), getSourceElements());
 		}
@@ -704,10 +707,12 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		@Override
 		public ObservableSortedSet<E> build() {
 			BetterList<E> backing = getBacking();
-			if (backing == null)
-				backing = BetterTreeSet.<E> buildTreeSet(getSorting()).withDescription(getDescription()).withCollectionLocking(getLocker())
-				.build();
-			else if (!(backing instanceof BetterSortedSet))
+			if (backing == null) {
+				BetterTreeSet.Builder<E, ?, ?> builder = BetterTreeSet.buildTreeSet(getSorting());
+				builder.withDescription(getDescription());
+				builder.withCollectionLocking(getLocker());
+				backing = builder.build();
+			} else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
 			return new DefaultObservableSortedSet<>((BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements());
 		}

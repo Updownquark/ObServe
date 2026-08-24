@@ -369,8 +369,8 @@ public class ObservableFile implements BetterFile {
 		DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?> dataBuilder;
 		dataBuilder = (DataControlledCollectionBuilderImpl<ObservableFile, ? extends BetterFile, ?>) builder
 			.withData(() -> BetterFile.getRoots(dataSource));
-		dataBuilder = dataBuilder.autoRefreshWith(ObservableFile.getDefaultFileSet().getRefresher()).refreshOnAccess(false);
-		dataBuilder = dataBuilder.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5);
+		dataBuilder.autoRefreshWith(ObservableFile.getDefaultFileSet().getRefresher()).refreshOnAccess(false);
+		dataBuilder.withEquals((f1, f2) -> f1.getName().equals(f2.getName())).withMaxRefreshFrequency(5);
 		return dataBuilder.build(b -> ObservableFile.observe(b), adjustment -> adjustment.commonUsesLeft((of, f) -> of.checkChanged()));
 	}
 }

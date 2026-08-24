@@ -116,18 +116,18 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableSort
 	}
 
 	@Override
-	default ObservableSortedSet<E> reverse() {
+	default ObservableSortedSet<E> reversed() {
 		return new ObservableSortedSetImpl.ReversedSortedSet<>(this);
 	}
 
 	@Override
 	default ObservableSortedSet<E> descendingSet() {
-		return reverse();
+		return reversed();
 	}
 
 	@Override
 	default Iterator<E> descendingIterator() {
-		return reverse().iterator();
+		return reversed().iterator();
 	}
 
 	@Override

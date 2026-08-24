@@ -2113,17 +2113,17 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableCollection<E> reverse() {
+		public ObservableCollection<E> reversed() {
 			if (BetterCollections.simplifyDuplicateOperations())
 				return getWrapped();
 			else
-				return ObservableCollection.super.reverse();
+				return ObservableCollection.super.reversed();
 		}
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
 			getWrapped().setValue(//
-				elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
+				elements.stream().map(el -> el.reversed()).collect(Collectors.toList()), value);
 		}
 
 		@Override
@@ -2152,7 +2152,7 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
-				ObservableCollectionEvent<E> reversed = (ObservableCollectionEvent<E>) evt.derive(evt.getElementId().reverse(), index);
+				ObservableCollectionEvent<E> reversed = (ObservableCollectionEvent<E>) evt.derive(evt.getElementId().reversed(), index);
 				theObserver.accept(reversed);
 			}
 		}
@@ -2291,7 +2291,7 @@ public final class ObservableCollectionImpl {
 		protected ElementId mapId(ElementId source) {
 			if (source == null)
 				return null;
-			return isReversed ? source.reverse() : source;
+			return isReversed ? source.reversed() : source;
 		}
 
 		@Override
@@ -2449,7 +2449,7 @@ public final class ObservableCollectionImpl {
 		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection)
 			throws NoSuchElementException {
 			if (isReversed)
-				sourceEl = sourceEl.reverse();
+				sourceEl = sourceEl.reversed();
 			if (sourceCollection == this)
 				sourceCollection = theSource;
 			return QommonsUtils.map2(theSource.getElementsBySource(sourceEl, sourceCollection),
@@ -2459,7 +2459,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 			if (isReversed)
-				localElement = localElement.reverse();
+				localElement = localElement.reversed();
 			if (sourceCollection == this)
 				return QommonsUtils.map2(theSource.getSourceElements(localElement, theSource), this::mapId);
 			return theSource.getSourceElements(localElement, sourceCollection);
@@ -2468,7 +2468,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ElementId getEquivalentElement(ElementId equivalentEl) {
 			if (isReversed)
-				equivalentEl = equivalentEl.reverse();
+				equivalentEl = equivalentEl.reversed();
 			ElementId found = theSource.getEquivalentElement(equivalentEl);
 			if (isReversed)
 				found = ElementId.reverse(found);
@@ -3059,7 +3059,7 @@ public final class ObservableCollectionImpl {
 						found = found.getAdjacent(!first);
 					return elementFor(found.get());
 				}
-				for (DerivedElementHolder<T> el : (first ? theDerivedElements : theDerivedElements.reverse()))
+				for (DerivedElementHolder<T> el : (first ? theDerivedElements : theDerivedElements.reversed()))
 					if (equivalence().elementEquals(el.get(), value))
 						return elementFor(el);
 				return null;

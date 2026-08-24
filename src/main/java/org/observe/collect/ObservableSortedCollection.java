@@ -157,7 +157,7 @@ public interface ObservableSortedCollection<E> extends ObservableCollection<E>, 
 	}
 
 	@Override
-	default ObservableSortedCollection<E> reverse() {
+	default ObservableSortedCollection<E> reversed() {
 		return new ObservableSortedCollectionImpl.ReversedSortedCollection<>(this);
 	}
 

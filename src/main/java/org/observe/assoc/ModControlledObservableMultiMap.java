@@ -173,7 +173,7 @@ implements ObservableMultiMap<K, V> {
 		}
 
 		@Override
-		public ReversedSortedObservableMultiEntry<K, V> reverse() {
+		public ReversedSortedObservableMultiEntry<K, V> reversed() {
 			return new ReversedSortedObservableMultiEntry<>(this);
 		}
 	}
@@ -206,7 +206,7 @@ implements ObservableMultiMap<K, V> {
 		}
 
 		@Override
-		public MCOSortedObservableEntry<K, V> reverse() {
+		public MCOSortedObservableEntry<K, V> reversed() {
 			return getWrapped();
 		}
 	}
@@ -229,7 +229,7 @@ implements ObservableMultiMap<K, V> {
 		}
 
 		@Override
-		public ReversedSortedObservableSetMultiEntry<K, V> reverse() {
+		public ReversedSortedObservableSetMultiEntry<K, V> reversed() {
 			return new ReversedSortedObservableSetMultiEntry<>(this);
 		}
 	}
@@ -262,7 +262,7 @@ implements ObservableMultiMap<K, V> {
 		}
 
 		@Override
-		public MCOSortedObservableSetEntry<K, V> reverse() {
+		public MCOSortedObservableSetEntry<K, V> reversed() {
 			return getWrapped();
 		}
 	}

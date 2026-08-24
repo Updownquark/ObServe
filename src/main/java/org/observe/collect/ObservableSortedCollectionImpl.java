@@ -283,7 +283,7 @@ public class ObservableSortedCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSortedCollection#reverse()}
+	 * Implements {@link ObservableSortedCollection#reversed()}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
@@ -341,16 +341,16 @@ public class ObservableSortedCollectionImpl {
 		}
 
 		@Override
-		public ObservableSortedCollection<E> reverse() {
+		public ObservableSortedCollection<E> reversed() {
 			if (BetterCollections.simplifyDuplicateOperations())
 				return getWrapped();
 			else
-				return ObservableSortedCollection.super.reverse();
+				return ObservableSortedCollection.super.reversed();
 		}
 
 		@Override
 		public boolean isConsistent(ElementId element) {
-			return getWrapped().isConsistent(element.reverse());
+			return getWrapped().isConsistent(element.reversed());
 		}
 
 		@Override
@@ -360,7 +360,7 @@ public class ObservableSortedCollectionImpl {
 
 		@Override
 		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
-			return getWrapped().repair(element.reverse(),
+			return getWrapped().repair(element.reversed(),
 				listener == null ? null : new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener));
 		}
 

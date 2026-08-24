@@ -62,7 +62,7 @@ public class ObservableSetImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSet#reverse()}
+	 * Implements {@link ObservableSet#reversed()}
 	 *
 	 * @param <E> The type of the set
 	 */
@@ -91,7 +91,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean isConsistent(ElementId element) {
-			return getWrapped().isConsistent(element.reverse());
+			return getWrapped().isConsistent(element.reversed());
 		}
 
 		@Override
@@ -101,7 +101,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
-			return getWrapped().repair(element.reverse(),
+			return getWrapped().repair(element.reversed(),
 				listener == null ? null : new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener));
 		}
 
@@ -111,11 +111,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<E> reverse() {
+		public ObservableSet<E> reversed() {
 			if (BetterCollections.simplifyDuplicateOperations())
 				return getWrapped();
 			else
-				return ObservableSet.super.reverse();
+				return ObservableSet.super.reversed();
 		}
 
 		@Override

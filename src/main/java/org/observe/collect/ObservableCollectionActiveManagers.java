@@ -921,7 +921,7 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public BetterList<DerivedCollectionElement<T>> getElementsBySource(ElementId sourceEl,
 			BetterCollection<?> sourceCollection) {
-			return QommonsUtils.map2(getParent().getElementsBySource(sourceEl.reverse(), sourceCollection), el -> el.reverse());
+			return QommonsUtils.map2(getParent().getElementsBySource(sourceEl.reversed(), sourceCollection), el -> el.reverse());
 		}
 
 		@Override

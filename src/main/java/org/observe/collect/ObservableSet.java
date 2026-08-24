@@ -42,7 +42,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	@Override
-	default ObservableSet<E> reverse() {
+	default ObservableSet<E> reversed() {
 		return new ObservableSetImpl.ReversedSet<>(this);
 	}
 

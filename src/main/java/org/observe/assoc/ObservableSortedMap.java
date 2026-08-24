@@ -391,12 +391,12 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public ObservableSortedSet<K> keySet() {
-			return theWrapped.keySet().reverse();
+			return theWrapped.keySet().reversed();
 		}
 
 		@Override
 		public ObservableSortedSet<Entry<K, V>> entrySet() {
-			return theWrapped.entrySet().reverse();
+			return theWrapped.entrySet().reversed();
 		}
 
 		@Override
@@ -428,7 +428,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public OrderedMapEntry<K, V> getEntryById(ElementId entryId) {
-			return OrderedMapEntry.reverse(theWrapped.getEntryById(entryId.reverse()));
+			return OrderedMapEntry.reverse(theWrapped.getEntryById(entryId.reversed()));
 		}
 
 		@Override
@@ -438,7 +438,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public MutableOrderedMapEntry<K, V> mutableEntry(ElementId entryId) {
-			return MutableOrderedMapEntry.reverse(theWrapped.mutableEntry(entryId.reverse()));
+			return MutableOrderedMapEntry.reverse(theWrapped.mutableEntry(entryId.reversed()));
 		}
 
 		@Override
@@ -476,7 +476,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 					int index = size[0] - evt.getIndex() - 1;
 					if (evt.getType() == CollectionChangeType.remove)
 						size[0]--;
-					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId().reverse(), index, evt.getType(),
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent.Default<>(evt.getElementId().reversed(), index, evt.getType(),
 						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);

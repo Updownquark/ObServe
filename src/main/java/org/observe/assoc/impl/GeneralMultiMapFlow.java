@@ -503,7 +503,7 @@ public class GeneralMultiMapFlow<KS, KT, VS, VT> implements MultiMapFlow<KT, VT>
 						if (!theListeners.isEmpty() && !entry.getValues().isEmpty()) {
 							try (Transaction t = entry.getValues().lock(false)) {
 								int valueIdx = entry.getValues().size() - 1;
-								for (CollectionElement<VT> valueEl : entry.getValues().elements().reverse()) {
+								for (CollectionElement<VT> valueEl : entry.getValues().elements().reversed()) {
 									ObservableMultiMapEvent<KT, VT> mapEvt = new ObservableMultiMapEvent.Default<>(//
 										entry.getElementId(), valueEl.getElementId(), evt.getIndex(), valueIdx, evt.getType(), //
 										entry.getKey(), entry.getKey(), valueEl.get(), valueEl.get(), evt);
